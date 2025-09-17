@@ -1,0 +1,120 @@
+import React, { useEffect, useState } from 'react';
+import { Line } from 'react-chartjs-2';
+import axios from 'axios';
+
+const FinancialDashboard = () => {
+  const [metrics, setMetrics] = useState(null);
+  const [insights, setInsights] = useState([]);
+  const [forecasts, setForecasts] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch financial metrics
+        const metricsResponse = await axios.get('/api/finance/analyze');
+        setMetrics(metricsResponse.data);
+        
+        // Fetch business insights
+        const insightsResponse = await axios.get('/api/insights/analyze');
+        setInsights(insightsResponse.data);
+        
+        // Fetch forecasts
+        const forecastsResponse = await axios.get('/api/forecasting/forecast');
+        setForecasts(forecastsResponse.data);
+        
+        setLoading(false);
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
+  if (error) return <div className="text-red-500">Error: {error}</div>;
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-8">Financial Insights Dashboard</h1>
+      
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {metrics && Object.entries(metrics).map(([key, value]) => (
+          <div key={key} className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-2 capitalize">{key.replace('_', ' ')}</h3>
+            <p className="text-2xl">{typeof value === 'number' ? value.toFixed(2) : value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Business Insights */}
+      <div className="bg-white rounded-lg shadow p-6 mb-8">
+        <h2 className="text-2xl font-bold mb-4">Business Insights</h2>
+        <div className="space-y-4">
+          {insights.map((insight, index) => (
+            <div key={index} className="border-l-4 border-blue-500 pl-4">
+              <h3 className="font-semibold">{insight.insight_type}</h3>
+              <p className="text-gray-600">{insight.description}</p>
+              <ul className="list-disc list-inside mt-2">
+                {insight.recommendations.map((rec, idx) => (
+                  <li key={idx} className="text-sm text-gray-500">{rec}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Forecasting Chart */}
+      {forecasts && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-2xl font-bold mb-4">Revenue Forecast</h2>
+          <div className="h-96">
+            <Line
+              data={{
+                labels: forecasts.dates,
+                datasets: [
+                  {
+                    label: 'Predicted Revenue',
+                    data: forecasts.predictions,
+                    borderColor: 'rgb(75, 192, 192)',
+                    fill: false,
+                  },
+                  {
+                    label: 'Lower Bound',
+                    data: forecasts.lower_bounds,
+                    borderColor: 'rgba(75, 192, 192, 0.2)',
+                    fill: false,
+                  },
+                  {
+                    label: 'Upper Bound',
+                    data: forecasts.upper_bounds,
+                    borderColor: 'rgba(75, 192, 192, 0.2)',
+                    fill: '-1',
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                  },
+                },
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default FinancialDashboard;

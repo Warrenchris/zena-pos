@@ -1,0 +1,18 @@
+# Node
+backend/node_modules/
+backend/.env
+
+# React
+frontend/node_modules/
+frontend/.env
+
+# Python
+ai_service/__pycache__/
+ai_service/.env
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# VS Code
+.vscode/
