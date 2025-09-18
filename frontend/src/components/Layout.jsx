@@ -75,6 +75,14 @@ export default function Layout() {
       badge: '',
       description: 'Product Groups'
     }
+    ,
+    {
+      name: 'Reports',
+      href: '/reports',
+      icon: ChartBarIcon,
+      badge: '',
+      description: 'Sales, P&L, Tax'
+    }
   ]
 
   const handleLogout = () => {
@@ -177,6 +185,17 @@ export default function Layout() {
           <div className="flex flex-1 flex-col overflow-y-auto">
             <nav className="flex-1 px-4 space-y-2 py-4">
               {navigation.map(renderNavLink)}
+
+              {user?.role === 'admin' && adminNavigation.length > 0 && (
+                <>
+                  <div className="mt-8 mb-4 px-2">
+                    <h3 className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Admin
+                    </h3>
+                  </div>
+                  {adminNavigation.map(renderNavLink)}
+                </>
+              )}
             </nav>
           </div>
 

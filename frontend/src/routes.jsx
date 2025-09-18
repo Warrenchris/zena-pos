@@ -16,6 +16,7 @@ const Expenses = lazy(() => import('./pages/Expenses'))
 const Users = lazy(() => import('./pages/Users'))
 const CompanySettings = lazy(() => import('./pages/CompanySettings'))
 const Employees = lazy(() => import('./pages/Employees'))
+const Reports = lazy(() => import('./pages/Reports'))
 
 export default function AppRoutes() {
   const { token } = useSelector((state) => state.auth)
@@ -44,6 +45,7 @@ export default function AppRoutes() {
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/employees" element={<Employees />} />
           <Route path="/admin/company" element={<CompanySettings />} />
+          <Route path="/reports" element={<Reports />} />
           <Route index element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

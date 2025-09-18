@@ -21,3 +21,22 @@ Cloud-based POS, ERM, CRM, and Financial Helper for African SMEs.
 - AI Service: `ai_service/`
 
 See copilot-instructions.md for setup checklist and progress tracking.
+
+## Environment setup (AI integration)
+
+Create `.env` files:
+
+Backend (`backend/.env`):
+
+```
+AI_SERVICE_URL=http://localhost:8000
+MARKET_ALERTS_ENABLED=false
+MARKET_ALERTS_URL=
+```
+
+Frontend (`frontend/.env`):
+
+```
+VITE_API_URL=http://localhost:3000
+VITE_AI_SERVICE_URL=http://localhost:8000
+```

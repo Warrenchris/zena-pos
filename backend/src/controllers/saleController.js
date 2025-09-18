@@ -5,6 +5,7 @@ const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const sequelize = require('../config/database');
+const { logActivity } = require('../middleware/logger');
 
 // Get all sales with pagination
 exports.getAllSales = async (req, res) => {
@@ -201,6 +202,9 @@ exports.createSale = async (req, res) => {
     }
 
     await t.commit();
+
+    // Log activity
+    try { await logActivity(req, 'SALE_CREATED', 'Sale', sale.id, { total }); } catch (_) {}
 
     // Fetch complete sale with relations
     const completeSale = await Sale.findOne({

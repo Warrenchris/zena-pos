@@ -5,9 +5,9 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // Add proper error handling
+  // Only treat 2xx as success to surface 401/403/4xx to .catch
   validateStatus: function (status) {
-    return status >= 200 && status < 500; // Don't reject if status is less than 500
+    return status >= 200 && status < 300;
   }
 });
 
@@ -50,7 +50,7 @@ export const productsAPI = {
   create: (productData) => api.post('/api/products', productData),
   update: (id, productData) => api.put(`/api/products/${id}`, productData),
   delete: (id) => api.delete(`/api/products/${id}`),
-  updateStock: (id, quantity) => api.put(`/api/products/${id}/stock`, { quantity }),
+  updateStock: (id, quantity) => api.patch(`/api/products/${id}/stock`, { quantity }),
 };
 
 // Categories API
@@ -113,6 +113,22 @@ export const usersAPI = {
 export const shopAPI = {
   getMine: () => api.get('/api/shop/me'),
   updateMine: (payload) => api.put('/api/shop/me', payload),
+};
+
+// Employees (admin only)
+export const employeesAPI = {
+  getAll: (params) => api.get('/api/employees', { params }),
+  getById: (id) => api.get(`/api/employees/${id}`),
+  create: (payload) => api.post('/api/employees', payload),
+  update: (id, payload) => api.put(`/api/employees/${id}`, payload),
+  delete: (id) => api.delete(`/api/employees/${id}`),
+};
+
+// Reports (admin/manager)
+export const reportsAPI = {
+  salesSummary: (params) => api.get('/api/reports/sales-summary', { params }),
+  profitAndLoss: (params) => api.get('/api/reports/profit-loss', { params }),
+  taxEstimate: (params) => api.get('/api/reports/tax-estimate', { params }),
 };
 
 export default api;

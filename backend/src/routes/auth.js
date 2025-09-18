@@ -16,6 +16,8 @@ router.post(
       .optional()
       .isIn(['admin', 'cashier', 'manager'])
       .withMessage('Invalid role')
+    ,
+    body('shop.name').notEmpty().withMessage('Shop name is required')
   ],
   authController.register
 );

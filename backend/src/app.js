@@ -14,6 +14,11 @@ const customerRoutes = require('./routes/customers');
 const expenseRoutes = require('./routes/expenses');
 const userRoutes = require('./routes/users');
 const shopRoutes = require('./routes/shop');
+const employeeRoutes = require('./routes/employees');
+const insightsRoutes = require('./routes/insights');
+const reportsRoutes = require('./routes/reports');
+const activityRoutes = require('./routes/activity');
+const insightRoutes = require('./routes/insights');
 
 const app = express();
 
@@ -38,6 +43,11 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/shop', shopRoutes);
+app.use('/api/employees', employeeRoutes);
+app.use('/api/insights', insightsRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/activity', activityRoutes);
+app.use('/api/insights', insightRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

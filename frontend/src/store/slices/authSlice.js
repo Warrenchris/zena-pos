@@ -10,18 +10,31 @@ const initialState = {
 
 export const login = createAsyncThunk(
   'auth/login',
-  async (credentials) => {
-    const response = await authAPI.login(credentials)
-    localStorage.setItem('token', response.data.token)
-    return response.data
+  async (credentials, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.login(credentials)
+      localStorage.setItem('token', response.data.token)
+      return response.data
+    } catch (error) {
+      return rejectWithValue(
+        error?.response?.data?.error ||
+        'Invalid email or password'
+      )
+    }
   }
 )
 
 export const getCurrentUser = createAsyncThunk(
   'auth/getCurrentUser',
-  async () => {
-    const response = await authAPI.getProfile()
-    return response.data
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.getProfile()
+      return response.data
+    } catch (error) {
+      return rejectWithValue(
+        error?.response?.data?.error || 'Your session has expired. Please sign in again.'
+      )
+    }
   }
 )
 
@@ -58,7 +71,7 @@ const authSlice = createSlice({
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false
-        state.error = action.error.message || 'Failed to login'
+        state.error = action.payload || action.error.message || 'Failed to login'
       })
       .addCase(getCurrentUser.pending, (state) => {
         state.loading = true
@@ -67,11 +80,12 @@ const authSlice = createSlice({
         state.loading = false
         state.user = action.payload
       })
-      .addCase(getCurrentUser.rejected, (state) => {
+      .addCase(getCurrentUser.rejected, (state, action) => {
         state.loading = false
         state.user = null
         state.token = null
         localStorage.removeItem('token')
+        state.error = action.payload || null
       })
   },
 })

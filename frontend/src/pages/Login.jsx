@@ -42,7 +42,7 @@ export default function Login() {
       if (login.fulfilled.match(resultAction)) {
         navigate('/dashboard')
       } else if (login.rejected.match(resultAction)) {
-        setLoginError(resultAction.error?.message || 'Login failed')
+        setLoginError(resultAction.payload || resultAction.error?.message || 'Invalid email or password')
       }
     } catch (error) {
       console.error('Login failed:', error)

@@ -1,3 +1,4 @@
+const { logActivity } = require('../middleware/logger');
 const { validationResult } = require('express-validator');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
@@ -71,6 +72,7 @@ exports.createProduct = async (req, res) => {
     });
 
     res.status(201).json(productWithCategory);
+    try { await logActivity(req, 'PRODUCT_CREATED', 'Product', product.id, { sku }); } catch (_) {}
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(400).json({ error: 'SKU or barcode already exists' });
@@ -125,6 +127,7 @@ exports.updateProduct = async (req, res) => {
     });
 
     res.json(updatedProduct);
+    try { await logActivity(req, 'PRODUCT_UPDATED', 'Product', product.id, {}); } catch (_) {}
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(400).json({ error: 'SKU or barcode already exists' });
@@ -146,6 +149,7 @@ exports.deleteProduct = async (req, res) => {
 
     await product.update({ active: false });
     res.json({ message: 'Product deleted successfully' });
+    try { await logActivity(req, 'PRODUCT_DELETED', 'Product', product.id, {}); } catch (_) {}
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete product' });
   }
@@ -175,6 +179,7 @@ exports.updateStock = async (req, res) => {
 
     await product.update({ stockQuantity: newQuantity });
     res.json(product);
+    try { await logActivity(req, 'STOCK_ADJUSTED', 'Product', product.id, { delta: parseInt(quantity) }); } catch (_) {}
   } catch (error) {
     res.status(500).json({ error: 'Failed to update stock' });
   }

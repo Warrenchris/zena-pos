@@ -33,7 +33,7 @@ exports.register = async (req, res) => {
       email,
       password,
       role: role || 'admin',
-      shopId: createdShop?.id || null,
+      shopId: createdShop?.id,
     });
 
     const token = jwt.sign(
@@ -64,7 +64,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name'] }] });
     
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -85,7 +85,7 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, shopId: user.shopId },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
@@ -95,7 +95,8 @@ exports.login = async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        shop: user.Shop ? { id: user.Shop.id, name: user.Shop.name } : null,
       },
       token
     });

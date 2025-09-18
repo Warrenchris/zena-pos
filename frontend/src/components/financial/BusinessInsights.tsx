@@ -1,52 +1,89 @@
 import React from 'react';
-import { LightBulbIcon } from '@heroicons/react/24/outline';
+import { LightBulbIcon, ExclamationTriangleIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { BusinessInsights as BusinessInsightsType, BusinessAlert, BusinessRecommendation, SalesTrend } from '../../types/insights';
 
-interface Insight {
-  type: 'warning' | 'success' | 'danger' | 'info';
-  category: string;
-  description: string;
-  recommendations?: string[];
+interface RecommendationCardProps {
+  recommendation: BusinessRecommendation;
 }
 
-interface InsightCardProps {
-  insight: Insight;
+interface AlertCardProps {
+  alert: BusinessAlert;
+}
+
+interface TrendCardProps {
+  trends: SalesTrend[];
 }
 
 interface BusinessInsightsProps {
-  insights: Insight[];
+  insights: BusinessInsightsType;
 }
 
-const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
-  const getBorderColor = (type: Insight['type']) => {
-    switch (type.toLowerCase()) {
-      case 'warning':
-        return 'border-yellow-500';
-      case 'success':
-        return 'border-green-500';
-      case 'danger':
+const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation }) => {
+  const getBorderColor = (priority: BusinessRecommendation['priority']) => {
+    switch (priority) {
+      case 'HIGH':
         return 'border-red-500';
+      case 'MEDIUM':
+        return 'border-yellow-500';
+      case 'LOW':
+        return 'border-green-500';
       default:
         return 'border-blue-500';
     }
   };
 
   return (
-    <div className={`border-l-4 ${getBorderColor(insight.type)} bg-white rounded-lg shadow p-6 mb-4`}>
+    <div className={`p-4 mb-4 border-l-4 ${getBorderColor(recommendation.priority)} bg-white rounded-lg shadow`}>
       <div className="flex items-start">
-        <div className="flex-shrink-0">
-          <LightBulbIcon className="h-6 w-6 text-yellow-500" />
+        <LightBulbIcon className="h-6 w-6 mr-3 text-yellow-500" />
+        <div>
+          <h3 className="text-lg font-semibold">{recommendation.type}</h3>
+          <p className="text-gray-600 mt-1">{recommendation.message}</p>
+          {Array.isArray(recommendation.details) && (
+            <ul className="mt-2 space-y-1">
+              {recommendation.details.map((detail: any, index: number) => (
+                <li key={index} className="text-sm text-gray-500">
+                  {detail.name ? `${detail.name}: ${detail.currentStock} units` : 
+                   detail.category ? `${detail.category}: $${detail.amount}` : 
+                   JSON.stringify(detail)}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <div className="ml-4">
-          <h3 className="text-lg font-semibold">{insight.category}</h3>
-          <p className="mt-1 text-gray-600">{insight.description}</p>
-          {insight.recommendations && insight.recommendations.length > 0 && (
-            <div className="mt-3">
-              <h4 className="text-sm font-semibold text-gray-700">Recommendations:</h4>
-              <ul className="mt-2 list-disc list-inside text-sm text-gray-600">
-                {insight.recommendations.map((recommendation, index) => (
-                  <li key={index}>{recommendation}</li>
-                ))}
-              </ul>
+      </div>
+    </div>
+  );
+};
+
+const AlertCard: React.FC<AlertCardProps> = ({ alert }) => {
+  const getAlertColor = (severity: BusinessAlert['severity']) => {
+    switch (severity) {
+      case 'HIGH':
+        return 'text-red-600 bg-red-50';
+      case 'MEDIUM':
+        return 'text-yellow-600 bg-yellow-50';
+      case 'LOW':
+        return 'text-blue-600 bg-blue-50';
+      default:
+        return 'text-gray-600 bg-gray-50';
+    }
+  };
+
+  return (
+    <div className={`p-4 mb-4 rounded-lg ${getAlertColor(alert.severity)}`}>
+      <div className="flex items-start">
+        <ExclamationTriangleIcon className="h-6 w-6 mr-3" />
+        <div>
+          <h3 className="font-semibold">{alert.type}</h3>
+          <p className="mt-1">{alert.message}</p>
+          {alert.details && (
+            <div className="mt-2 text-sm">
+              {typeof alert.details === 'object' && (
+                Object.entries(alert.details).map(([key, value]) => (
+                  <p key={key}>{`${key}: ${value}`}</p>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -55,15 +92,60 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
   );
 };
 
-const BusinessInsights: React.FC<BusinessInsightsProps> = ({ insights }) => {
+const TrendCard: React.FC<TrendCardProps> = ({ trends }) => {
+  if (!trends.length) return null;
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString();
+  };
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Business Insights</h2>
-      <div className="grid grid-cols-1 gap-6">
-        {insights.map((insight: Insight, index: number) => (
-          <InsightCard key={index} insight={insight} />
+    <div className="p-4 mb-4 bg-white rounded-lg shadow">
+      <div className="flex items-center mb-4">
+        <ChartBarIcon className="h-6 w-6 mr-2 text-blue-500" />
+        <h3 className="text-lg font-semibold">Sales Trends</h3>
+      </div>
+      <div className="space-y-2">
+        {trends.map((trend, index) => (
+          <div key={index} className="flex justify-between items-center">
+            <span className="text-sm text-gray-600">{formatDate(trend.date)}</span>
+            <span className="font-medium">${trend.totalSales.toFixed(2)}</span>
+          </div>
         ))}
       </div>
+    </div>
+  );
+};
+
+const BusinessInsights: React.FC<BusinessInsightsProps> = ({ insights }) => {
+  if (!insights) return null;
+
+  return (
+    <div className="space-y-6">
+      {insights.alerts.length > 0 && (
+        <div>
+          <h2 className="text-xl font-bold mb-4">Alerts</h2>
+          {insights.alerts.map((alert, index) => (
+            <AlertCard key={index} alert={alert} />
+          ))}
+        </div>
+      )}
+
+      {insights.recommendations.length > 0 && (
+        <div>
+          <h2 className="text-xl font-bold mb-4">Recommendations</h2>
+          {insights.recommendations.map((recommendation, index) => (
+            <RecommendationCard key={index} recommendation={recommendation} />
+          ))}
+        </div>
+      )}
+
+      {insights.trends.length > 0 && (
+        <div>
+          <h2 className="text-xl font-bold mb-4">Trends</h2>
+          <TrendCard trends={insights.trends} />
+        </div>
+      )}
     </div>
   );
 };

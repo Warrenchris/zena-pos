@@ -14,11 +14,13 @@ const Product = sequelize.define('Product', {
   },
   sku: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
+    unique: true
   },
   barcode: {
     type: DataTypes.STRING,
-    allowNull: true
+    allowNull: true,
+    unique: true
   },
   description: {
     type: DataTypes.TEXT,
@@ -47,22 +49,7 @@ const Product = sequelize.define('Product', {
     defaultValue: true
   }
 }, {
-  timestamps: true,
-  indexes: [
-    {
-      unique: true,
-      fields: ['sku']
-    },
-    {
-      unique: true,
-      fields: ['barcode'],
-      where: {
-        barcode: {
-          [Op.ne]: null
-        }
-      }
-    }
-  ]
+  timestamps: true
 });
 
 // Relationships

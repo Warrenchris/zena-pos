@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { User, Category, Product, Customer, Sale, SaleItem, Expense } = require('../models');
+const { User, Category, Product, Customer, Sale, SaleItem, Expense, Shop } = require('../models');
 
 const seedDatabase = async () => {
   try {
@@ -10,25 +10,35 @@ const seedDatabase = async () => {
       return;
     }
 
-    // Create users
+    // Create a default shop/company
+    const defaultShop = await Shop.create({
+      name: 'Default Shop',
+      address: 'Nairobi, Kenya',
+      phone: '+254700000000',
+    });
+
+    // Create users and associate to the default shop
     const users = await User.bulkCreate([
       {
         name: 'Admin User',
         email: 'admin@example.com',
         password: await bcrypt.hash('admin123', 8),
-        role: 'admin'
+        role: 'admin',
+        shopId: defaultShop.id
       },
       {
         name: 'Manager User',
         email: 'manager@example.com',
         password: await bcrypt.hash('manager123', 8),
-        role: 'manager'
+        role: 'manager',
+        shopId: defaultShop.id
       },
       {
         name: 'Cashier User',
         email: 'cashier@example.com',
         password: await bcrypt.hash('cashier123', 8),
-        role: 'cashier'
+        role: 'cashier',
+        shopId: defaultShop.id
       }
     ]);
 

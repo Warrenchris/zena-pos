@@ -46,7 +46,7 @@ const Employee = sequelize.define('Employee', {
     allowNull: false
   },
   shopId: {
-    type: DataTypes.UUID,
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: {
       model: 'Shops',

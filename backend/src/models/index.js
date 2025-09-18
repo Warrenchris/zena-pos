@@ -9,6 +9,7 @@ const Sale = require('./Sale');
 const SaleItem = require('./SaleItem');
 const Expense = require('./Expense');
 const Shop = require('./Shop');
+const ActivityLog = require('./ActivityLog');
 
 // Define model associations
 Product.belongsTo(Category);
@@ -41,5 +42,6 @@ module.exports = {
   Sale,
   SaleItem,
   Expense
-  , Shop
+  , Shop,
+  ActivityLog
 };

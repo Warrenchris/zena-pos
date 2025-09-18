@@ -19,6 +19,7 @@ import { fetchSalesStatistics, fetchSales } from '../store/slices/salesSlice'
 import { fetchCustomers } from '../store/slices/customersSlice'
 import { fetchProducts } from '../store/slices/productsSlice'
 import SalesChart from '../components/SalesChart'
+import api from '../services/api'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import BusinessInsights from '../components/financial/BusinessInsights'
 
@@ -108,6 +109,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('')
   const [insights, setInsights] = useState([])
   const [insightsLoading, setInsightsLoading] = useState(true)
+  const [forecast, setForecast] = useState(null)
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -129,34 +131,54 @@ export default function Dashboard() {
     // Fetch AI insights
     const fetchInsights = async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error('No auth token found');
-          return;
-        }
-
-        const response = await fetch('/api/insights', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setInsights(Array.isArray(data) ? data : []);
+        const response = await api.get('/api/insights');
+        const data = response?.data || {};
+        const normalized = {
+          alerts: Array.isArray(data.alerts) ? data.alerts : [],
+          recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
+          trends: Array.isArray(data.trends) ? data.trends : [],
+        };
+        setInsights(normalized);
       } catch (error) {
         console.error('Error fetching insights:', error);
-        setInsights([]);
+        setInsights({ alerts: [], recommendations: [], trends: [] });
       } finally {
         setInsightsLoading(false);
       }
     };
 
     fetchInsights();
+
+    // Fetch short-term forecast from AI service (if configured)
+    const fetchForecast = async () => {
+      try {
+        const aiUrl = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:8000'
+        const dates = []
+        const values = []
+        // Simple: use last 30 days sales totals
+        const end = new Date()
+        for (let i=29;i>=0;i--) {
+          const d = new Date(end)
+          d.setDate(end.getDate()-i)
+          dates.push(d.toISOString())
+          // approximate: reuse statistics totalRevenue/totalSales for demo
+          // In a real case, call a dedicated daily sales endpoint
+          const dayValue = i===0 ? statistics?.totalRevenue || 0 : 0
+          values.push(dayValue)
+        }
+        const resp = await fetch(`${aiUrl}/api/forecasting/forecast`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dates, values })
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          setForecast({ next: data?.predictions?.[0] || 0 })
+        }
+      } catch (_) {}
+    }
+
+    fetchForecast()
   }, [dispatch])
 
   const statsCards = [
@@ -394,6 +416,12 @@ export default function Dashboard() {
             View All
           </button>
         </div>
+        {forecast && (
+          <div className="mb-4 p-4 rounded border border-blue-200 bg-blue-50">
+            <div className="text-sm text-gray-600">Forecast</div>
+            <div className="text-xl font-semibold">Next period expected sales: {Number(forecast.next||0).toLocaleString(undefined,{style:'currency',currency:'USD'})}</div>
+          </div>
+        )}
         {insightsLoading ? (
           <div className="flex justify-center items-center h-32">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
