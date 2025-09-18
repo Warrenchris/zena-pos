@@ -9,6 +9,11 @@ export interface User {
   id: number;
   email: string;
   name: string;
+  role: string;
+  shop?: {
+    id: number;
+    name: string;
+  };
 }
 
 export const authService = {

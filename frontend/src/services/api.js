@@ -98,6 +98,13 @@ export const expensesAPI = {
   create: (expenseData) => api.post('/api/expenses', expenseData),
   update: (id, expenseData) => api.put(`/api/expenses/${id}`, expenseData),
   delete: (id) => api.delete(`/api/expenses/${id}`),
+};
+
+// Settings API
+export const settingsAPI = {
+  getAll: () => api.get('/api/settings'),
+  updateTheme: (data) => api.put('/api/settings/theme', data),
+  updateRegional: (data) => api.put('/api/settings/regional', data),
   getStatistics: (params) =>
     api.get('/api/expenses/statistics', { params }),
 };

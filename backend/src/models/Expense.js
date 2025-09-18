@@ -44,6 +44,14 @@ const Expense = sequelize.define('Expense', {
   notes: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  shopId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Shops',
+      key: 'id'
+    }
   }
 });
 

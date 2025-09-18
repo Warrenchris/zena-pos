@@ -1,9 +1,10 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
-import BusinessInsights from '../../src/components/financial/BusinessInsights';
+import '@testing-library/jest-dom';
+import BusinessInsights from './BusinessInsights';
+import { type Insight } from './types';
 
 describe('BusinessInsights', () => {
-  const mockInsights = {
+  const mockInsights: Insight = {
     trends: [
       { date: '2023-09-17', totalSales: 1500 }
     ],

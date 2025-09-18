@@ -32,6 +32,22 @@ const UserModel = User; // keep naming explicit
 UserModel.belongsTo(Shop, { foreignKey: 'shopId' });
 Shop.hasMany(UserModel, { foreignKey: 'shopId' });
 
+// Multi-tenant associations - all entities belong to a shop
+Product.belongsTo(Shop, { foreignKey: 'shopId' });
+Category.belongsTo(Shop, { foreignKey: 'shopId' });
+Customer.belongsTo(Shop, { foreignKey: 'shopId' });
+Sale.belongsTo(Shop, { foreignKey: 'shopId' });
+Expense.belongsTo(Shop, { foreignKey: 'shopId' });
+ActivityLog.belongsTo(Shop, { foreignKey: 'shopId' });
+
+// Shop has many of each entity
+Shop.hasMany(Product, { foreignKey: 'shopId' });
+Shop.hasMany(Category, { foreignKey: 'shopId' });
+Shop.hasMany(Customer, { foreignKey: 'shopId' });
+Shop.hasMany(Sale, { foreignKey: 'shopId' });
+Shop.hasMany(Expense, { foreignKey: 'shopId' });
+Shop.hasMany(ActivityLog, { foreignKey: 'shopId' });
+
 // Export models and sequelize instance
 module.exports = {
   sequelize,

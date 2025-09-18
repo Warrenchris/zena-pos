@@ -47,6 +47,14 @@ const Product = sequelize.define('Product', {
   active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
+  },
+  shopId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Shops',
+      key: 'id'
+    }
   }
 }, {
   timestamps: true

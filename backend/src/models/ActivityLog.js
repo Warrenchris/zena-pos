@@ -9,6 +9,14 @@ const ActivityLog = sequelize.define('ActivityLog', {
   entity: { type: DataTypes.STRING, allowNull: true },
   entityId: { type: DataTypes.STRING, allowNull: true },
   metadata: { type: DataTypes.JSON, allowNull: true },
+  shopId: { 
+    type: DataTypes.INTEGER, 
+    allowNull: false,
+    references: {
+      model: 'Shops',
+      key: 'id'
+    }
+  },
 }, { timestamps: true });
 
 ActivityLog.belongsTo(User, { foreignKey: 'userId' });

@@ -3,6 +3,7 @@ import { authAPI } from '../../services/api'
 
 const initialState = {
   user: null,
+  shop: null,
   token: localStorage.getItem('token'),
   loading: false,
   error: null,
@@ -44,6 +45,7 @@ const authSlice = createSlice({
   reducers: {
     logout: (state) => {
       state.user = null
+      state.shop = null
       state.token = null
       localStorage.removeItem('token')
     },
@@ -52,6 +54,7 @@ const authSlice = createSlice({
     },
     setCredentials: (state, action) => {
       state.user = action.payload.user || null
+      state.shop = action.payload.user?.shop || null
       state.token = action.payload.token || null
       if (action.payload.token) {
         localStorage.setItem('token', action.payload.token)
@@ -67,6 +70,7 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.loading = false
         state.user = action.payload.user
+        state.shop = action.payload.user?.shop || null
         state.token = action.payload.token
       })
       .addCase(login.rejected, (state, action) => {
@@ -79,10 +83,12 @@ const authSlice = createSlice({
       .addCase(getCurrentUser.fulfilled, (state, action) => {
         state.loading = false
         state.user = action.payload
+        state.shop = action.payload?.Shop || null
       })
       .addCase(getCurrentUser.rejected, (state, action) => {
         state.loading = false
         state.user = null
+        state.shop = null
         state.token = null
         localStorage.removeItem('token')
         state.error = action.payload || null

@@ -6,30 +6,38 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.4",
+    "@headlessui/react": "^1.7.17",
     "@heroicons/react": "^2.0.18",
     "@reduxjs/toolkit": "^1.9.5",
-    "@tailwindcss/postcss": "^4.1.13",
-    "autoprefixer": "^10.4.21",
-    "axios": "^1.12.2",
-    "postcss": "^8.5.6",
+    "@tailwindcss/forms": "^0.5.6",
+    "autoprefixer": "^10.4.15",
+    "axios": "^1.5.1",
+    "country-flag-icons": "^1.5.7",
+    "date-fns": "^2.30.0",
+    "postcss": "^8.4.31",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-icons": "^4.11.0",
     "react-redux": "^8.1.2",
     "react-router-dom": "^6.14.2",
-    "tailwindcss": "^4.1.13"
+    "recharts": "^2.8.0",
+    "tailwindcss": "^3.3.3"
   },
   "devDependencies": {
-    "@eslint/js": "^9.33.0",
-    "@vitejs/plugin-react-swc": "^4.0.0",
-    "eslint": "^9.33.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
-    "globals": "^16.3.0",
-    "vite": "^7.1.2"
+    "@eslint/js": "^8.49.0",
+    "@vitejs/plugin-react-swc": "^3.3.2",
+    "eslint": "^8.49.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.3",
+    "globals": "^13.22.0",
+    "vite": "^4.4.9"
   }
 }

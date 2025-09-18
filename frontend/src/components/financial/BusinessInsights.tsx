@@ -1,25 +1,24 @@
-import React from 'react';
 import { LightBulbIcon, ExclamationTriangleIcon, ChartBarIcon } from '@heroicons/react/24/outline';
-import { BusinessInsights as BusinessInsightsType, BusinessAlert, BusinessRecommendation, SalesTrend } from '../../types/insights';
+import { type Insight, type Alert, type Recommendation, type TrendData } from './types';
 
 interface RecommendationCardProps {
-  recommendation: BusinessRecommendation;
+  recommendation: Recommendation;
 }
 
 interface AlertCardProps {
-  alert: BusinessAlert;
+  alert: Alert;
 }
 
 interface TrendCardProps {
-  trends: SalesTrend[];
+  trends: TrendData[];
 }
 
 interface BusinessInsightsProps {
-  insights: BusinessInsightsType;
+  insights: Insight | null;
 }
 
-const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation }) => {
-  const getBorderColor = (priority: BusinessRecommendation['priority']) => {
+const RecommendationCard = ({ recommendation }: RecommendationCardProps): JSX.Element => {
+  const getBorderColor = (priority: Recommendation['priority']) => {
     switch (priority) {
       case 'HIGH':
         return 'border-red-500';
@@ -56,8 +55,8 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
   );
 };
 
-const AlertCard: React.FC<AlertCardProps> = ({ alert }) => {
-  const getAlertColor = (severity: BusinessAlert['severity']) => {
+const AlertCard = ({ alert }: AlertCardProps): JSX.Element => {
+  const getAlertColor = (severity: Alert['severity']) => {
     switch (severity) {
       case 'HIGH':
         return 'text-red-600 bg-red-50';
@@ -92,7 +91,7 @@ const AlertCard: React.FC<AlertCardProps> = ({ alert }) => {
   );
 };
 
-const TrendCard: React.FC<TrendCardProps> = ({ trends }) => {
+const TrendCard = ({ trends }: TrendCardProps): JSX.Element | null => {
   if (!trends.length) return null;
 
   const formatDate = (dateStr: string) => {
@@ -109,7 +108,11 @@ const TrendCard: React.FC<TrendCardProps> = ({ trends }) => {
         {trends.map((trend, index) => (
           <div key={index} className="flex justify-between items-center">
             <span className="text-sm text-gray-600">{formatDate(trend.date)}</span>
-            <span className="font-medium">${trend.totalSales.toFixed(2)}</span>
+            <span className="font-medium">
+              ${typeof trend.totalSales === 'string' 
+                ? parseFloat(trend.totalSales).toFixed(2) 
+                : Number(trend.totalSales).toFixed(2)}
+            </span>
           </div>
         ))}
       </div>

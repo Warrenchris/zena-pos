@@ -43,6 +43,14 @@ const Sale = sequelize.define('Sale', {
   notes: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  shopId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Shops',
+      key: 'id'
+    }
   }
 });
 

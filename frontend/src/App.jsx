@@ -6,6 +6,7 @@ import { useEffect } from 'react'
 import { useDispatch } from 'react-redux'
 import { getCurrentUser } from './store/slices/authSlice'
 import ErrorBoundary from './components/ErrorBoundary'
+import { routerConfig } from './router.config'
 
 function AppContent() {
   const dispatch = useDispatch()
@@ -27,7 +28,7 @@ function AppContent() {
 function App() {
   return (
     <Provider store={store}>
-      <Router>
+      <Router {...routerConfig}>
         <ErrorBoundary>
           <AppContent />
         </ErrorBoundary>

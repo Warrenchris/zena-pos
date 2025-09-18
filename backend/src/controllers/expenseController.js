@@ -14,7 +14,7 @@ exports.getAllExpenses = async (req, res) => {
     const { startDate, endDate, category } = req.query;
     
     // Build where clause based on filters
-    const whereClause = {};
+    const whereClause = { shopId: req.shopId };
     if (startDate && endDate) {
       whereClause.date = {
         [Op.between]: [new Date(startDate), new Date(endDate)]
@@ -29,7 +29,8 @@ exports.getAllExpenses = async (req, res) => {
       include: [{
         model: User,
         as: 'recordedBy',
-        attributes: ['id', 'name', 'email']
+        attributes: ['id', 'name', 'email'],
+        where: { shopId: req.shopId }
       }],
       order: [['date', 'DESC']],
       limit,
@@ -50,11 +51,13 @@ exports.getAllExpenses = async (req, res) => {
 // Get expense by ID
 exports.getExpenseById = async (req, res) => {
   try {
-    const expense = await Expense.findByPk(req.params.id, {
+    const expense = await Expense.findOne({
+      where: { id: req.params.id, shopId: req.shopId },
       include: [{
         model: User,
         as: 'recordedBy',
-        attributes: ['id', 'name', 'email']
+        attributes: ['id', 'name', 'email'],
+        where: { shopId: req.shopId }
       }]
     });
 
@@ -94,7 +97,8 @@ exports.createExpense = async (req, res) => {
       paymentMethod,
       reference,
       notes,
-      userId: req.user.id
+      userId: req.user.id,
+      shopId: req.shopId
     });
 
     const expenseWithUser = await Expense.findByPk(expense.id, {
@@ -119,7 +123,9 @@ exports.updateExpense = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const expense = await Expense.findByPk(req.params.id);
+    const expense = await Expense.findOne({
+      where: { id: req.params.id, shopId: req.shopId }
+    });
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
     }
@@ -161,7 +167,9 @@ exports.updateExpense = async (req, res) => {
 // Delete expense
 exports.deleteExpense = async (req, res) => {
   try {
-    const expense = await Expense.findByPk(req.params.id);
+    const expense = await Expense.findOne({
+      where: { id: req.params.id, shopId: req.shopId }
+    });
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
     }

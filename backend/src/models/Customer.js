@@ -46,6 +46,14 @@ const Customer = sequelize.define('Customer', {
   active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
+  },
+  shopId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Shops',
+      key: 'id'
+    }
   }
 });
 

@@ -21,13 +21,19 @@ const calculateTrends = async () => {
     },
     attributes: [
       [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-      [sequelize.fn('SUM', sequelize.col('total')), 'totalSales']
+      [sequelize.cast(sequelize.fn('SUM', sequelize.col('total')), 'DECIMAL(10,2)'), 'totalSales']
     ],
     group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
     order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']]
   });
 
-  return salesTrends;
+  // Convert to plain objects and ensure totalSales is a number
+  const formattedTrends = salesTrends.map(trend => ({
+    date: trend.get('date'),
+    totalSales: parseFloat(trend.get('totalSales') || 0)
+  }));
+
+  return formattedTrends;
 };
 
 /**

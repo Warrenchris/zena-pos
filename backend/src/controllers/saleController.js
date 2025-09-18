@@ -15,17 +15,20 @@ exports.getAllSales = async (req, res) => {
     const offset = (page - 1) * limit;
 
     const sales = await Sale.findAndCountAll({
+      where: { shopId: req.shopId },
       include: [
         { 
           model: SaleItem,
           include: [{ 
             model: Product,
-            attributes: ['id', 'name', 'sku']
+            attributes: ['id', 'name', 'sku'],
+            where: { shopId: req.shopId }
           }]
         },
         {
           model: Customer,
-          attributes: ['id', 'name', 'email', 'phone']
+          attributes: ['id', 'name', 'email', 'phone'],
+          where: { shopId: req.shopId }
         }
       ],
       order: [['createdAt', 'DESC']],
@@ -48,18 +51,20 @@ exports.getAllSales = async (req, res) => {
 exports.getSaleById = async (req, res) => {
   try {
     const sale = await Sale.findOne({
-      where: { id: req.params.id },
+      where: { id: req.params.id, shopId: req.shopId },
       include: [
         {
           model: SaleItem,
           include: [{ 
             model: Product,
-            attributes: ['id', 'name', 'sku', 'price']
+            attributes: ['id', 'name', 'sku', 'price'],
+            where: { shopId: req.shopId }
           }]
         },
         {
           model: Customer,
-          attributes: ['id', 'name', 'email', 'phone', 'loyaltyPoints']
+          attributes: ['id', 'name', 'email', 'phone', 'loyaltyPoints'],
+          where: { shopId: req.shopId }
         }
       ]
     });
@@ -105,7 +110,7 @@ exports.createSale = async (req, res) => {
 
     for (const item of items) {
       const product = await Product.findOne({
-        where: { id: item.productId, active: true }
+        where: { id: item.productId, active: true, shopId: req.shopId }
       });
 
       if (!product) {
@@ -146,7 +151,8 @@ exports.createSale = async (req, res) => {
       where: {
         invoiceNumber: {
           [Op.like]: `${dateStr}-%`
-        }
+        },
+        shopId: req.shopId
       },
       order: [['invoiceNumber', 'DESC']]
     });
@@ -169,7 +175,8 @@ exports.createSale = async (req, res) => {
       paymentStatus: 'completed',
       customerId,
       userId: req.user.id,
-      notes
+      notes,
+      shopId: req.shopId
     }, { transaction: t });
 
     // Create sale items

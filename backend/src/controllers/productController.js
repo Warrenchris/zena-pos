@@ -7,8 +7,8 @@ const Category = require('../models/Category');
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.findAll({
-      where: { active: true },
-      include: [{ model: Category, attributes: ['id', 'name'] }]
+      where: { active: true, shopId: req.shopId },
+      include: [{ model: Category, attributes: ['id', 'name'], where: { shopId: req.shopId } }]
     });
     res.json(products);
   } catch (error) {
@@ -20,8 +20,8 @@ exports.getAllProducts = async (req, res) => {
 exports.getProductById = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true },
-      include: [{ model: Category, attributes: ['id', 'name'] }]
+      where: { id: req.params.id, active: true, shopId: req.shopId },
+      include: [{ model: Category, attributes: ['id', 'name'], where: { shopId: req.shopId } }]
     });
     
     if (!product) {
@@ -63,7 +63,8 @@ exports.createProduct = async (req, res) => {
       cost,
       stockQuantity,
       reorderPoint,
-      CategoryId
+      CategoryId,
+      shopId: req.shopId
     });
 
     const productWithCategory = await Product.findOne({
@@ -90,7 +91,7 @@ exports.updateProduct = async (req, res) => {
     }
 
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true }
+      where: { id: req.params.id, active: true, shopId: req.shopId }
     });
 
     if (!product) {
@@ -140,7 +141,7 @@ exports.updateProduct = async (req, res) => {
 exports.deleteProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true }
+      where: { id: req.params.id, active: true, shopId: req.shopId }
     });
 
     if (!product) {
@@ -165,7 +166,7 @@ exports.updateStock = async (req, res) => {
 
     const { quantity } = req.body;
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true }
+      where: { id: req.params.id, active: true, shopId: req.shopId }
     });
 
     if (!product) {

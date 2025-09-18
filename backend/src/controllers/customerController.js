@@ -15,7 +15,7 @@ exports.getAllCustomers = async (req, res) => {
 
     const whereClause = search ? {
       [Op.and]: [
-        { active: true },
+        { active: true, shopId: req.shopId },
         {
           [Op.or]: [
             { name: { [Op.like]: `%${search}%` } },
@@ -24,7 +24,7 @@ exports.getAllCustomers = async (req, res) => {
           ]
         }
       ]
-    } : { active: true };
+    } : { active: true, shopId: req.shopId };
 
     const customers = await Customer.findAndCountAll({
       where: whereClause,
@@ -48,14 +48,16 @@ exports.getAllCustomers = async (req, res) => {
 exports.getCustomerById = async (req, res) => {
   try {
     const customer = await Customer.findOne({
-      where: { id: req.params.id, active: true },
+      where: { id: req.params.id, active: true, shopId: req.shopId },
       include: [{
         model: Sale,
+        where: { shopId: req.shopId },
         include: [{
           model: SaleItem,
           include: [{
             model: Product,
-            attributes: ['id', 'name', 'sku', 'price']
+            attributes: ['id', 'name', 'sku', 'price'],
+            where: { shopId: req.shopId }
           }]
         }]
       }]
@@ -116,16 +118,16 @@ exports.createCustomer = async (req, res) => {
 
     const { name, email, phone, address, notes } = req.body;
 
-    // Check for duplicate email or phone
+    // Check for duplicate email or phone within the same shop
     if (email) {
-      const existingEmail = await Customer.findOne({ where: { email } });
+      const existingEmail = await Customer.findOne({ where: { email, shopId: req.shopId } });
       if (existingEmail) {
         return res.status(400).json({ error: 'Email already registered' });
       }
     }
 
     if (phone) {
-      const existingPhone = await Customer.findOne({ where: { phone } });
+      const existingPhone = await Customer.findOne({ where: { phone, shopId: req.shopId } });
       if (existingPhone) {
         return res.status(400).json({ error: 'Phone number already registered' });
       }
@@ -136,7 +138,8 @@ exports.createCustomer = async (req, res) => {
       email,
       phone,
       address,
-      notes
+      notes,
+      shopId: req.shopId
     });
 
     res.status(201).json(customer);
@@ -155,23 +158,23 @@ exports.updateCustomer = async (req, res) => {
 
     const { name, email, phone, address, notes } = req.body;
     const customer = await Customer.findOne({
-      where: { id: req.params.id, active: true }
+      where: { id: req.params.id, active: true, shopId: req.shopId }
     });
 
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
 
-    // Check for duplicate email or phone if changed
+    // Check for duplicate email or phone if changed (within the same shop)
     if (email && email !== customer.email) {
-      const existingEmail = await Customer.findOne({ where: { email } });
+      const existingEmail = await Customer.findOne({ where: { email, shopId: req.shopId } });
       if (existingEmail) {
         return res.status(400).json({ error: 'Email already registered' });
       }
     }
 
     if (phone && phone !== customer.phone) {
-      const existingPhone = await Customer.findOne({ where: { phone } });
+      const existingPhone = await Customer.findOne({ where: { phone, shopId: req.shopId } });
       if (existingPhone) {
         return res.status(400).json({ error: 'Phone number already registered' });
       }
@@ -195,7 +198,7 @@ exports.updateCustomer = async (req, res) => {
 exports.deleteCustomer = async (req, res) => {
   try {
     const customer = await Customer.findOne({
-      where: { id: req.params.id, active: true }
+      where: { id: req.params.id, active: true, shopId: req.shopId }
     });
 
     if (!customer) {
