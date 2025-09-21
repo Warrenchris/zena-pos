@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const sequelize = require('../config/database');
 const { logActivity } = require('../middleware/logger');
+const Employee = require('../models/Employee');
 
 // Get all sales with pagination
 exports.getAllSales = async (req, res) => {
@@ -91,11 +92,14 @@ exports.createSale = async (req, res) => {
 
     const {
       items,
+      customer,
       customerId,
       paymentMethod,
+      paymentAmount,
       discount = 0,
       tax = 0,
-      notes
+      notes,
+      employeeId
     } = req.body;
 
     // Validate items array
@@ -143,6 +147,9 @@ exports.createSale = async (req, res) => {
     }
 
     const total = subtotal + tax - discount;
+    
+    // Calculate change if payment amount is provided
+    const change = paymentAmount ? parseFloat(paymentAmount) - total : 0;
 
     // Generate invoice number (YYYYMMDD-XXXX format)
     const date = new Date();
@@ -164,7 +171,7 @@ exports.createSale = async (req, res) => {
     }
     const invoiceNumber = `${dateStr}-${sequence}`;
 
-    // Create sale
+    // Create sale with customer information and employee tracking
     const sale = await Sale.create({
       invoiceNumber,
       subtotal,
@@ -172,9 +179,17 @@ exports.createSale = async (req, res) => {
       discount,
       total,
       paymentMethod,
+      paymentAmount: paymentAmount ? parseFloat(paymentAmount) : null,
+      change: change > 0 ? change : 0,
       paymentStatus: 'completed',
+      // Store customer information directly in sale record
+      customerName: customer?.name || 'Walk-in Customer',
+      customerLocation: customer?.location || null,
+      customerPhone: customer?.phone || null,
+      customerEmail: customer?.email || null,
       customerId,
       userId: req.user.id,
+      employeeId: employeeId || req.user.id, // Track which employee/cashier made the sale
       notes,
       shopId: req.user.shopId
     }, { transaction: t });
@@ -195,9 +210,54 @@ exports.createSale = async (req, res) => {
       )
     ));
 
-    // Update customer's total purchases and loyalty points if customer exists
-    if (customerId) {
-      const customer = await Customer.findByPk(customerId);
+    // Handle customer creation/update for customer relationship management
+    let finalCustomerId = customerId;
+    
+    if (customer && customer.name && customer.name !== 'Walk-in Customer') {
+      // Try to find existing customer by email, phone, or name
+      let customerRecord = await Customer.findOne({
+        where: { 
+          shopId: req.user.shopId,
+          [Op.or]: [
+            ...(customer.email ? [{ email: customer.email }] : []),
+            ...(customer.phone ? [{ phone: customer.phone }] : []),
+            { name: customer.name }
+          ]
+        },
+        transaction: t
+      });
+
+      if (!customerRecord) {
+        // Create new customer
+        customerRecord = await Customer.create({
+          name: customer.name,
+          email: customer.email || null,
+          phone: customer.phone || null,
+          location: customer.location || null,
+          totalPurchases: total,
+          lastVisit: new Date(),
+          shopId: req.user.shopId
+        }, { transaction: t });
+      } else {
+        // Update existing customer
+        const loyaltyPoints = Math.floor(total); // 1 point per currency unit
+        await customerRecord.update({
+          totalPurchases: parseFloat(customerRecord.totalPurchases) + total,
+          loyaltyPoints: customerRecord.loyaltyPoints + loyaltyPoints,
+          lastVisit: new Date(),
+          ...(customer.email && { email: customer.email }),
+          ...(customer.phone && { phone: customer.phone }),
+          ...(customer.location && { location: customer.location })
+        }, { transaction: t });
+      }
+      
+      finalCustomerId = customerRecord.id;
+      
+      // Update sale with customer ID
+      await sale.update({ customerId: finalCustomerId }, { transaction: t });
+    } else if (customerId) {
+      // Update existing customer's total purchases and loyalty points
+      const customer = await Customer.findByPk(customerId, { transaction: t });
       if (customer) {
         const loyaltyPoints = Math.floor(total); // 1 point per currency unit
         await customer.update({
@@ -226,7 +286,12 @@ exports.createSale = async (req, res) => {
         },
         {
           model: Customer,
-          attributes: ['id', 'name', 'email', 'phone', 'loyaltyPoints']
+          attributes: ['id', 'name', 'email', 'phone', 'location', 'loyaltyPoints']
+        },
+        {
+          model: Employee,
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          as: 'Employee'
         }
       ]
     });
@@ -258,6 +323,120 @@ exports.updatePaymentStatus = async (req, res) => {
     res.json(sale);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update payment status' });
+  }
+};
+
+// Get cashier-specific sales statistics
+exports.getCashierStats = async (req, res) => {
+  try {
+    const { employeeId, startDate, endDate } = req.query;
+    
+    // If employeeId is provided, validate it exists and belongs to the shop
+    if (employeeId) {
+      const employee = await Employee.findOne({
+        where: { id: employeeId, shopId: req.user.shopId }
+      });
+      
+      if (!employee) {
+        return res.status(404).json({ error: 'Employee not found' });
+      }
+    }
+
+    // Use provided dates or default to today
+    const start = startDate ? new Date(startDate) : new Date();
+    start.setHours(0, 0, 0, 0);
+    
+    const end = endDate ? new Date(endDate) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    // Build where clause
+    const whereClause = {
+      shopId: req.user.shopId,
+      createdAt: {
+        [Op.between]: [start, end]
+      }
+    };
+
+    // Add employee filter if specified
+    if (employeeId) {
+      whereClause.employeeId = employeeId;
+    }
+
+    // Get sales data
+    const sales = await Sale.findAll({
+      where: whereClause,
+      attributes: [
+        'id',
+        'total',
+        'createdAt',
+        'employeeId'
+      ],
+      include: [
+        {
+          model: Employee,
+          attributes: ['id', 'firstName', 'lastName'],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Calculate statistics
+    const totalSales = sales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+    const orderCount = sales.length;
+
+    // Get today's stats specifically
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todaySales = sales.filter(sale => {
+      const saleDate = new Date(sale.createdAt);
+      return saleDate >= todayStart && saleDate <= todayEnd;
+    });
+
+    const todayTotal = todaySales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+    const todayCount = todaySales.length;
+
+    // Get this week's stats
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const weekSales = sales.filter(sale => {
+      const saleDate = new Date(sale.createdAt);
+      return saleDate >= weekStart && saleDate <= weekEnd;
+    });
+
+    const weekTotal = weekSales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+    const weekCount = weekSales.length;
+
+    res.json({
+      today: {
+        totalSales: todayTotal,
+        orderCount: todayCount
+      },
+      week: {
+        totalSales: weekTotal,
+        orderCount: weekCount
+      },
+      period: {
+        totalSales,
+        orderCount,
+        startDate: start,
+        endDate: end
+      },
+      sales: sales.slice(0, 10) // Return recent sales for the dashboard
+    });
+
+  } catch (error) {
+    console.error('Error fetching cashier stats:', error);
+    res.status(500).json({ error: 'Failed to fetch cashier statistics' });
   }
 };
 

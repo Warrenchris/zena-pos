@@ -1,8 +1,10 @@
 'use strict';
 
+const bcrypt = require('bcryptjs');
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
-  async up(queryInterface, Sequelize) {
+  up: async (queryInterface, Sequelize) => {
     // Create default shop
     await queryInterface.bulkInsert('Shops', [{
       name: 'Demo Shop',
@@ -25,6 +27,20 @@ module.exports = {
       {
         name: 'Food & Beverages',
         description: 'Food and drink items',
+        shopId: 1,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Groceries',
+        description: 'Food and household items',
+        shopId: 1,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Stationery',
+        description: 'Office and school supplies',
         shopId: 1,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -55,6 +71,40 @@ module.exports = {
       }
     ]);
 
+    // Create test users for each role
+    await queryInterface.bulkInsert('Users', [
+      {
+        name: 'System Admin',
+        email: 'admin@example.com',
+        password: await bcrypt.hash('admin123', 8),
+        role: 'admin',
+        shopId: 1,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Test Manager',
+        email: 'manager@example.com',
+        password: await bcrypt.hash('manager123', 8),
+        role: 'manager',
+        shopId: 1,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Test Cashier',
+        email: 'cashier@example.com',
+        password: await bcrypt.hash('cashier123', 8),
+        role: 'cashier',
+        shopId: 1,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    ]);
+
     // Create some customers
     await queryInterface.bulkInsert('Customers', [
       {
@@ -78,7 +128,7 @@ module.exports = {
     ]);
   },
 
-  async down(queryInterface, Sequelize) {
+  down: async (queryInterface, Sequelize) => {
     await queryInterface.bulkDelete('Customers', null, {});
     await queryInterface.bulkDelete('Products', null, {});
     await queryInterface.bulkDelete('Categories', null, {});

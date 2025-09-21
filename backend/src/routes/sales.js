@@ -26,8 +26,39 @@ const validateSale = [
     .isInt()
     .withMessage('Invalid customer ID'),
   body('paymentMethod')
-    .isIn(['cash', 'card', 'mobile_money', 'other'])
+    .isIn(['cash', 'card', 'mobile', 'mobile_money', 'other'])
     .withMessage('Invalid payment method'),
+  body('paymentAmount')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Payment amount must be a positive number'),
+  body('customer')
+    .optional()
+    .isObject()
+    .withMessage('Customer must be an object'),
+  body('customer.name')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Customer name must be between 1 and 100 characters'),
+  body('customer.email')
+    .optional()
+    .isEmail()
+    .withMessage('Invalid customer email'),
+  body('customer.phone')
+    .optional()
+    .trim()
+    .isLength({ max: 20 })
+    .withMessage('Customer phone must be less than 20 characters'),
+  body('customer.location')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Customer location must be less than 100 characters'),
+  body('employeeId')
+    .optional()
+    .isUUID()
+    .withMessage('Invalid employee ID'),
   body('discount')
     .optional()
     .isFloat({ min: 0 })
@@ -69,9 +100,16 @@ router.get('/',
 
 router.get('/statistics', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager']),
   validateDateRange,
   saleController.getSalesStatistics
+);
+
+router.get('/cashier-stats', 
+  auth, 
+  checkRole(['admin', 'manager', 'cashier']),
+  validateDateRange,
+  saleController.getCashierStats
 );
 
 router.get('/:id', 

@@ -23,6 +23,7 @@ import OrderTracking from '../components/dashboard/OrderTracking';
 import SellingPlatform from '../components/dashboard/SellingPlatform';
 import LocationAudience from '../components/dashboard/LocationAudience';
 import TopSellingProducts from '../components/dashboard/TopSellingProducts';
+import CashierDashboard from './CashierDashboard';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { fetchSalesStatistics, fetchSales } from '../store/slices/salesSlice';
 import { fetchCustomers } from '../store/slices/customersSlice';
@@ -280,6 +281,11 @@ export default function Dashboard() {
         </div>
       </div>
     );
+  }
+
+  // Render cashier-specific dashboard (employees are cashiers in this system)
+  if (user?.role === 'cashier' || user?.role === 'employee') {
+    return <CashierDashboard />;
   }
 
   return (

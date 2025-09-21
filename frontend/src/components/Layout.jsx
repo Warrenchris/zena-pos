@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
+import { usePermissions } from '../hooks/usePermissions'
 import { 
   HomeIcon, 
   ShoppingBagIcon, 
@@ -15,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { logout } from '../store/slices/authSlice'
 import Header from './dashboard/Header'
+import AdminSidebar from './AdminSidebar'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -22,6 +24,16 @@ export default function Layout() {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { user } = useSelector((state) => state.auth)
+
+  // Redirect cashiers/employees to dashboard if they try to access restricted routes
+  useEffect(() => {
+    if (user?.role === 'cashier' || user?.role === 'employee') {
+      const restrictedPaths = ['/products', '/categories', '/customers', '/expenses', '/admin', '/reports'];
+      if (restrictedPaths.some(path => location.pathname.startsWith(path))) {
+        navigate('/dashboard');
+      }
+    }
+  }, [location.pathname, user?.role, navigate]);
 
   const adminNavigation = user?.role === 'admin' ? [
     {
@@ -33,58 +45,28 @@ export default function Layout() {
     },
   ] : [];
 
-  const navigation = [
-    { 
-      name: 'Dashboard', 
-      href: '/dashboard', 
-      icon: HomeIcon,
-      badge: '',
-      description: 'Overview & Analytics'
-    },
-    { 
-      name: 'Sales', 
-      href: '/sales', 
-      icon: ShoppingBagIcon,
-      badge: '12',
-      description: 'Transactions & Orders'
-    },
-    { 
-      name: 'Products', 
-      href: '/products', 
-      icon: TagIcon,
-      badge: '34',
-      description: 'Inventory & Items'
-    },
-    { 
-      name: 'Customers', 
-      href: '/customers', 
-      icon: UsersIcon,
-      badge: '',
-      description: 'Client Management'
-    },
-    {
-      name: 'Expenses',
-      href: '/expenses',
-      icon: CurrencyDollarIcon,
-      badge: '',
-      description: 'Costs & Payments'
-    },
-    {
-      name: 'Categories',
-      href: '/categories',
-      icon: ChartBarIcon,
-      badge: '',
-      description: 'Product Groups'
+  const { getRoutesByRole } = usePermissions();
+  
+  const getIcon = (path) => {
+    switch (path) {
+      case '/dashboard': return (user?.role === 'cashier' || user?.role === 'employee') ? ShoppingBagIcon : HomeIcon;
+      case '/sales': return ShoppingBagIcon;
+      case '/products': return TagIcon;
+      case '/customers': return UsersIcon;
+      case '/expenses': return CurrencyDollarIcon;
+      case '/reports': return ChartBarIcon;
+      case '/admin/employees': return UserGroupIcon;
+      default: return HomeIcon;
     }
-    ,
-    {
-      name: 'Reports',
-      href: '/reports',
-      icon: ChartBarIcon,
-      badge: '',
-      description: 'Sales, P&L, Tax'
-    }
-  ]
+  };
+
+  const navigation = getRoutesByRole().map(route => ({
+    name: route.label,
+    href: route.path,
+    icon: getIcon(route.path),
+    badge: '',
+    description: route.label
+  }));
 
   const handleLogout = () => {
     dispatch(logout())
@@ -120,6 +102,68 @@ export default function Layout() {
     </Link>
   )
 
+  // Render AdminSidebar for admin users, regular sidebar for others
+  console.log('Layout - User role:', user?.role);
+  if (user?.role === 'admin') {
+    console.log('Rendering AdminSidebar for admin user');
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <AdminSidebar 
+          isOpen={sidebarOpen} 
+          onClose={() => setSidebarOpen(false)}
+          user={user}
+        />
+        
+        {/* Main content */}
+        <div className="lg:pl-80 flex flex-col flex-1">
+          {/* Header with search and profile */}
+          <div className="bg-white shadow-sm border-b border-gray-200">
+            <div className="flex items-center justify-between h-16 px-6">
+              <div className="flex items-center">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="lg:hidden p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100"
+                >
+                  <Bars3Icon className="h-6 w-6" />
+                </button>
+                <div className="hidden lg:block">
+                  <h1 className="text-xl font-semibold text-gray-900">
+                    {location.pathname === '/dashboard' ? 'Dashboard' : 
+                     location.pathname.includes('/products') ? 'Products' :
+                     location.pathname.includes('/sales') ? 'Sales' :
+                     location.pathname.includes('/customers') ? 'Customers' :
+                     location.pathname.includes('/expenses') ? 'Expenses' :
+                     location.pathname.includes('/reports') ? 'Reports' :
+                     location.pathname.includes('/admin') ? 'Admin Panel' : 'Dashboard'}
+                  </h1>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-4">
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">{user?.name || 'Admin'}</p>
+                  <p className="text-xs text-gray-500 capitalize">{user?.role || 'Administrator'}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ArrowRightOnRectangleIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Page content */}
+          <main className="flex-1 p-6">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular sidebar for non-admin users (cashiers, employees)
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar overlay */}

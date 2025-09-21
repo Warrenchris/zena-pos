@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
+const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const logger = require('../utils/logger');
 
@@ -64,19 +65,45 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name'] }] });
+    // First try to find a user
+    let user = await User.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name'] }] });
+    let isEmployee = false;
     
+    // If no user found, try to find an employee
+    if (!user) {
+      const employee = await Employee.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name'] }] });
+      if (employee) {
+        const isValidPassword = await employee.validatePassword(password);
+        if (isValidPassword && employee.status === 'active') {
+          isEmployee = true;
+          user = {
+            id: employee.id,
+            name: `${employee.firstName} ${employee.lastName}`,
+            email: employee.email,
+            role: 'employee',
+            shopId: employee.shopId,
+            Shop: employee.Shop,
+            isEmployee: true
+          };
+        }
+      }
+    }
+
+    // If neither user nor valid employee found
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const isValidPassword = await user.validatePassword(password);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    // For regular users, validate password and status
+    if (!isEmployee) {
+      const isValidPassword = await user.validatePassword(password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
 
-    if (!user.active) {
-      return res.status(401).json({ error: 'Account is deactivated' });
+      if (!user.active) {
+        return res.status(401).json({ error: 'Account is deactivated' });
+      }
     }
 
     if (!process.env.JWT_SECRET) {
@@ -85,7 +112,12 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role, shopId: user.shopId },
+      { 
+        id: user.id, 
+        role: user.role, 
+        shopId: user.shopId,
+        isEmployee: !!user.isEmployee
+      },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );

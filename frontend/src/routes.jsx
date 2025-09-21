@@ -8,6 +8,7 @@ import PrivateRoute from './components/PrivateRoute'
 const Login = lazy(() => import('./pages/Login'))
 const Signup = lazy(() => import('./pages/Signup'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
+const CashierDashboard = lazy(() => import('./pages/CashierDashboard'))
 const Products = lazy(() => import('./pages/Products'))
 const Categories = lazy(() => import('./pages/Categories'))
 const Customers = lazy(() => import('./pages/Customers'))
@@ -18,8 +19,11 @@ const CompanySettings = lazy(() => import('./pages/CompanySettings'))
 const Employees = lazy(() => import('./pages/Employees'))
 const Reports = lazy(() => import('./pages/Reports'))
 
+// Placeholder components for new sidebar items
+const PlaceholderPage = lazy(() => import('./components/PlaceholderPage'))
+
 export default function AppRoutes() {
-  const { token } = useSelector((state) => state.auth)
+  const { token, user } = useSelector((state) => state.auth)
   const location = useLocation()
 
   return (
@@ -36,7 +40,11 @@ export default function AppRoutes() {
             <Layout />
           </PrivateRoute>
         }>
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={
+            token ? (
+              (user?.role === 'cashier' || user?.role === 'employee') ? <CashierDashboard /> : <Dashboard />
+            ) : <Navigate to="/login" replace />
+          } />
           <Route path="/products" element={<Products />} />
           <Route path="/categories" element={<Categories />} />
           <Route path="/customers" element={<Customers />} />
@@ -46,6 +54,45 @@ export default function AppRoutes() {
           <Route path="/admin/employees" element={<Employees />} />
           <Route path="/admin/company" element={<CompanySettings />} />
           <Route path="/reports" element={<Reports />} />
+          
+          {/* Super Admin Routes */}
+          <Route path="/super-admin" element={<PlaceholderPage />} />
+          <Route path="/applications" element={<PlaceholderPage />} />
+          <Route path="/layouts" element={<PlaceholderPage />} />
+          
+          {/* Inventory Routes */}
+          <Route path="/products/create" element={<PlaceholderPage />} />
+          <Route path="/products/expired" element={<PlaceholderPage />} />
+          <Route path="/products/low-stock" element={<PlaceholderPage />} />
+          <Route path="/categories/sub" element={<PlaceholderPage />} />
+          <Route path="/brands" element={<PlaceholderPage />} />
+          <Route path="/units" element={<PlaceholderPage />} />
+          <Route path="/variants" element={<PlaceholderPage />} />
+          <Route path="/warranties" element={<PlaceholderPage />} />
+          <Route path="/print/barcode" element={<PlaceholderPage />} />
+          <Route path="/print/qr" element={<PlaceholderPage />} />
+          
+          {/* Stock Routes */}
+          <Route path="/stock/manage" element={<PlaceholderPage />} />
+          <Route path="/stock/adjustment" element={<PlaceholderPage />} />
+          <Route path="/stock/transfer" element={<PlaceholderPage />} />
+          
+          {/* Sales Routes */}
+          <Route path="/invoices" element={<PlaceholderPage />} />
+          <Route path="/sales/returns" element={<PlaceholderPage />} />
+          <Route path="/quotations" element={<PlaceholderPage />} />
+          <Route path="/pos" element={<PlaceholderPage />} />
+          
+          {/* Promo Routes */}
+          <Route path="/coupons" element={<PlaceholderPage />} />
+          <Route path="/gift-cards" element={<PlaceholderPage />} />
+          <Route path="/discounts" element={<PlaceholderPage />} />
+          
+          {/* Purchases Routes */}
+          <Route path="/purchases" element={<PlaceholderPage />} />
+          <Route path="/purchase-orders" element={<PlaceholderPage />} />
+          <Route path="/purchase-returns" element={<PlaceholderPage />} />
+          
           <Route index element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

@@ -27,6 +27,10 @@ const Customer = sequelize.define('Customer', {
     type: DataTypes.TEXT,
     allowNull: true
   },
+  location: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   loyaltyPoints: {
     type: DataTypes.INTEGER,
     defaultValue: 0

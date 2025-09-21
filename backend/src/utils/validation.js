@@ -13,6 +13,10 @@ function validateEmployee(payload) {
   if (!payload.firstName || String(payload.firstName).trim().length === 0) return 'First name is required';
   if (!payload.lastName || String(payload.lastName).trim().length === 0) return 'Last name is required';
   if (!payload.email || !isValidEmail(payload.email)) return 'Valid email is required';
+  
+  // Validate password only for new employees or if provided for existing ones
+  if (!payload.id && !payload.password) return 'Password is required for new employees';
+  if (payload.password && payload.password.length < 6) return 'Password must be at least 6 characters long';
   if (!payload.position || String(payload.position).trim().length === 0) return 'Position is required';
 
   const status = payload.status || 'active';

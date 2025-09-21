@@ -1,6 +1,8 @@
 const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const sequelize = require('../config/database');
+const RolePermission = require('./RolePermission');
+const Permission = require('./Permission');
 
 const User = sequelize.define('User', {
   id: {
@@ -42,6 +44,11 @@ const User = sequelize.define('User', {
   }
 }, {
   hooks: {
+    beforeValidate: async (user) => {
+      if (user.role && !['admin', 'manager', 'cashier'].includes(user.role)) {
+        throw new Error('Invalid role specified');
+      }
+    },
     beforeCreate: async (user) => {
       if (user.password) {
         user.password = await bcrypt.hash(user.password, 8);
@@ -67,6 +74,31 @@ User.prototype.toJSON = function() {
 
 User.prototype.validatePassword = async function(password) {
   return bcrypt.compare(password, this.password);
+};
+
+// Instance method to check permissions
+User.prototype.hasPermission = async function(permissionName) {
+  if (this.role === 'admin') return true;
+  
+  const rolePermission = await RolePermission.findOne({
+    include: [{
+      model: Permission,
+      where: { name: permissionName }
+    }],
+    where: { role: this.role }
+  });
+
+  return !!rolePermission;
+};
+
+// Instance method to get all permissions
+User.prototype.getPermissions = async function() {
+  const rolePermissions = await RolePermission.findAll({
+    include: [Permission],
+    where: { role: this.role }
+  });
+
+  return rolePermissions.map(rp => rp.Permission.name);
 };
 
 module.exports = User;

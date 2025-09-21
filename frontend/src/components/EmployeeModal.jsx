@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
+import { EMPLOYEE_POSITIONS } from '../constants/employeeConstants';
+import { useSelector } from 'react-redux';
 
 const EmployeeModal = ({ employee, onClose, onSave }) => {
+  const { user } = useSelector((state) => state.auth);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -10,8 +13,10 @@ const EmployeeModal = ({ employee, onClose, onSave }) => {
     position: '',
     status: 'active',
     salary: '',
-    shopId: '',
+    shopId: user?.shop?.id || '',
+    password: ''
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -25,10 +30,10 @@ const EmployeeModal = ({ employee, onClose, onSave }) => {
         position: employee.position,
         status: employee.status,
         salary: employee.salary,
-        shopId: employee.shopId,
+        shopId: employee.shopId || user?.shop?.id || '',
       });
     }
-  }, [employee]);
+  }, [employee, user?.shop?.id]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -138,6 +143,30 @@ const EmployeeModal = ({ employee, onClose, onSave }) => {
                   required
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Password {employee ? '(leave blank to keep current)' : ''}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      required={!employee}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
+                      placeholder={employee ? 'Leave blank to keep current password' : 'Enter password'}
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="mt-4">
@@ -155,16 +184,22 @@ const EmployeeModal = ({ employee, onClose, onSave }) => {
 
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700">
-                  Position
+                  Role
                 </label>
-                <input
-                  type="text"
+                <select
                   name="position"
                   value={formData.position}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
+                >
+                  <option value="">Select a role</option>
+                  <option value="manager">Manager</option>
+                  <option value="cashier">Cashier</option>
+                  {user?.role === 'admin' && (
+                    <option value="admin">Administrator</option>
+                  )}
+                </select>
               </div>
 
               <div className="mt-4">

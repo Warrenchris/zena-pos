@@ -8,6 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { employeesAPI, reportsAPI } from '../services/api';
 import EmployeeModal from '../components/EmployeeModal';
+import { EMPLOYEE_POSITIONS } from '../constants/employeeConstants';
 
 export default function Employees() {
   const dispatch = useDispatch();
@@ -33,6 +34,8 @@ export default function Employees() {
     position: '',
     status: 'active',
     hireDate: new Date().toISOString().slice(0, 10),
+    shopId: user?.shop?.id,
+    password: '',
     salary: ''
   });
 
@@ -93,7 +96,8 @@ export default function Employees() {
     setEditing(null)
     setForm({
       firstName: '', lastName: '', email: '', phone: '', position: '',
-      status: 'active', hireDate: new Date().toISOString().slice(0, 10), salary: ''
+      status: 'active', hireDate: new Date().toISOString().slice(0, 10), salary: '',
+      shopId: user?.shop?.id, password: ''
     })
     setFormOpen(true)
   }
@@ -108,7 +112,9 @@ export default function Employees() {
       position: emp.position || '',
       status: emp.status || 'active',
       hireDate: emp.hireDate ? String(emp.hireDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
-      salary: emp.salary != null ? String(emp.salary) : ''
+      salary: emp.salary != null ? String(emp.salary) : '',
+      shopId: emp.shopId || user?.shop?.id,
+      password: '' // Reset password field when editing
     })
     setFormOpen(true)
   }
@@ -288,8 +294,30 @@ export default function Employees() {
               <input required value={form.firstName} onChange={(e)=>setForm({...form, firstName:e.target.value})} placeholder="First name" className="border border-gray-300 rounded-md px-3 py-2" />
               <input required value={form.lastName} onChange={(e)=>setForm({...form, lastName:e.target.value})} placeholder="Last name" className="border border-gray-300 rounded-md px-3 py-2" />
               <input required type="email" value={form.email} onChange={(e)=>setForm({...form, email:e.target.value})} placeholder="Email" className="border border-gray-300 rounded-md px-3 py-2 md:col-span-2" />
+              <div className="relative md:col-span-2">
+                <input
+                  required={!editing}
+                  type="password"
+                  value={form.password}
+                  onChange={(e)=>setForm({...form, password:e.target.value})}
+                  placeholder={editing ? "Leave blank to keep current password" : "Password"}
+                  className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                />
+              </div>
               <input value={form.phone} onChange={(e)=>setForm({...form, phone:e.target.value})} placeholder="Phone" className="border border-gray-300 rounded-md px-3 py-2" />
-              <input required value={form.position} onChange={(e)=>setForm({...form, position:e.target.value})} placeholder="Position" className="border border-gray-300 rounded-md px-3 py-2" />
+              <select
+                required
+                value={form.position}
+                onChange={(e)=>setForm({...form, position:e.target.value})}
+                className="border border-gray-300 rounded-md px-3 py-2"
+              >
+                <option value="">Select a position</option>
+                <option value="cashier">Cashier</option>
+                <option value="manager">Manager</option>
+                {user?.role === 'admin' && (
+                  <option value="admin">Administrator</option>
+                )}
+              </select>
               <select value={form.status} onChange={(e)=>setForm({...form, status:e.target.value})} className="border border-gray-300 rounded-md px-3 py-2">
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
