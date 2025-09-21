@@ -44,10 +44,10 @@ const seedDatabase = async () => {
 
     // Create categories
     const categories = await Category.bulkCreate([
-      { name: 'Electronics', description: 'Electronic devices and accessories' },
-      { name: 'Clothing', description: 'Apparel and fashion items' },
-      { name: 'Groceries', description: 'Food and household items' },
-      { name: 'Stationery', description: 'Office and school supplies' }
+      { name: 'Electronics', description: 'Electronic devices and accessories', shopId: defaultShop.id },
+      { name: 'Clothing', description: 'Apparel and fashion items', shopId: defaultShop.id },
+      { name: 'Groceries', description: 'Food and household items', shopId: defaultShop.id },
+      { name: 'Stationery', description: 'Office and school supplies', shopId: defaultShop.id }
     ]);
 
     // Create products
@@ -60,7 +60,8 @@ const seedDatabase = async () => {
         price: 599.99,
         cost: 400.00,
         stockQuantity: 50,
-        CategoryId: categories[0].id
+        CategoryId: categories[0].id,
+        shopId: defaultShop.id
       },
       {
         name: 'Laptop',
@@ -70,7 +71,8 @@ const seedDatabase = async () => {
         price: 999.99,
         cost: 700.00,
         stockQuantity: 30,
-        CategoryId: categories[0].id
+        CategoryId: categories[0].id,
+        shopId: defaultShop.id
       },
       {
         name: 'T-Shirt',
@@ -80,7 +82,8 @@ const seedDatabase = async () => {
         price: 19.99,
         cost: 5.00,
         stockQuantity: 100,
-        CategoryId: categories[1].id
+        CategoryId: categories[1].id,
+        shopId: defaultShop.id
       },
       {
         name: 'Rice 5kg',
@@ -90,7 +93,8 @@ const seedDatabase = async () => {
         price: 15.99,
         cost: 10.00,
         stockQuantity: 200,
-        CategoryId: categories[2].id
+        CategoryId: categories[2].id,
+        shopId: defaultShop.id
       },
       {
         name: 'Notebook',
@@ -100,7 +104,8 @@ const seedDatabase = async () => {
         price: 4.99,
         cost: 1.50,
         stockQuantity: 300,
-        CategoryId: categories[3].id
+        CategoryId: categories[3].id,
+        shopId: defaultShop.id
       }
     ]);
 
@@ -111,21 +116,24 @@ const seedDatabase = async () => {
         email: 'john@example.com',
         phone: '+254700000001',
         address: 'Nairobi, Kenya',
-        loyaltyPoints: 100
+        loyaltyPoints: 100,
+        shopId: defaultShop.id
       },
       {
         name: 'Jane Smith',
         email: 'jane@example.com',
         phone: '+254700000002',
         address: 'Mombasa, Kenya',
-        loyaltyPoints: 50
+        loyaltyPoints: 50,
+        shopId: defaultShop.id
       },
       {
         name: 'Bob Johnson',
         email: 'bob@example.com',
         phone: '+254700000003',
         address: 'Kisumu, Kenya',
-        loyaltyPoints: 75
+        loyaltyPoints: 75,
+        shopId: defaultShop.id
       }
     ]);
 
@@ -140,7 +148,8 @@ const seedDatabase = async () => {
         paymentMethod: 'card',
         paymentStatus: 'completed',
         userId: users[2].id,
-        customerId: customers[0].id
+        customerId: customers[0].id,
+        shopId: defaultShop.id
       },
       {
         invoiceNumber: '20250916-0002',
@@ -151,7 +160,8 @@ const seedDatabase = async () => {
         paymentMethod: 'cash',
         paymentStatus: 'completed',
         userId: users[2].id,
-        customerId: customers[1].id
+        customerId: customers[1].id,
+        shopId: defaultShop.id
       }
     ]);
 
@@ -200,7 +210,8 @@ const seedDatabase = async () => {
         date: new Date(),
         paymentMethod: 'bank_transfer',
         reference: 'RENT-SEP2025',
-        userId: users[0].id
+        userId: users[0].id,
+        shopId: defaultShop.id
       },
       {
         description: 'Electricity Bill',
@@ -209,7 +220,8 @@ const seedDatabase = async () => {
         date: new Date(),
         paymentMethod: 'mobile_money',
         reference: 'UTIL-SEP2025',
-        userId: users[1].id
+        userId: users[1].id,
+        shopId: defaultShop.id
       },
       {
         description: 'Stock Reorder - Electronics',
@@ -218,7 +230,8 @@ const seedDatabase = async () => {
         date: new Date(),
         paymentMethod: 'bank_transfer',
         reference: 'INV-SEP2025-01',
-        userId: users[1].id
+        userId: users[1].id,
+        shopId: defaultShop.id
       }
     ]);
 

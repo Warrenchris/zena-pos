@@ -57,7 +57,7 @@ module.exports = {
   Customer,
   Sale,
   SaleItem,
-  Expense
-  , Shop,
+  Expense,
+  Shop,
   ActivityLog
 };

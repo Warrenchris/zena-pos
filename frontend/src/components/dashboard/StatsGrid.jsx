@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
+import api from '../../services/api';
+import analyticsService from '../../services/analytics.service';
 
 const StatsCard = ({ title, value, percentage, trend, data, color }) => {
   const isPositive = percentage > 0;
@@ -47,50 +49,76 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
 };
 
 const StatsGrid = () => {
-  const mockData = [
-    { value: 10 },
-    { value: 25 },
-    { value: 15 },
-    { value: 30 },
-    { value: 20 },
-    { value: 35 },
-    { value: 25 },
-  ];
+  const [stats, setStats] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const stats = [
-    {
-      title: 'Total Income',
-      value: '$54,235',
-      percentage: 12.5,
-      trend: 'Compared to last month',
-      data: mockData,
-      color: '#4F46E5'
-    },
-    {
-      title: 'Total Sales',
-      value: '1,235',
-      percentage: 8.2,
-      trend: 'Compared to last month',
-      data: mockData,
-      color: '#10B981'
-    },
-    {
-      title: 'Total Users',
-      value: '12,453',
-      percentage: -2.4,
-      trend: 'Compared to last month',
-      data: mockData,
-      color: '#F59E0B'
-    },
-    {
-      title: 'Total Transactions',
-      value: '4,325',
-      percentage: 15.3,
-      trend: 'Compared to last month',
-      data: mockData,
-      color: '#6366F1'
-    }
-  ];
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const [orderStats, visitorStats] = await Promise.all([
+          analyticsService.getOrderStats('month'),
+          analyticsService.getVisitorStats('month')
+        ]);
+
+        const formattedStats = [
+          {
+            title: 'Total Income',
+            value: `$${(orderStats?.totalRevenue || 0).toLocaleString()}`,
+            percentage: orderStats?.revenueGrowth || 0,
+            trend: 'Compared to last month',
+            data: (orderStats?.revenueHistory || []).map(h => ({ value: h?.value || 0 })),
+            color: '#4F46E5'
+          },
+          {
+            title: 'Total Orders',
+            value: (orderStats?.totalOrders || 0).toLocaleString(),
+            percentage: orderStats?.orderGrowth || 0,
+            trend: 'Compared to last month',
+            data: (orderStats?.orderHistory || []).map(h => ({ value: h?.value || 0 })),
+            color: '#10B981'
+          },
+          {
+            title: 'Total Visitors',
+            value: (visitorStats?.totalVisitors || 0).toLocaleString(),
+            percentage: visitorStats?.visitorGrowth || 0,
+            trend: 'Compared to last month',
+            data: (visitorStats?.visitorHistory || []).map(h => ({ value: h?.value || 0 })),
+            color: '#F59E0B'
+          },
+          {
+            title: 'Conversion Rate',
+            value: `${((visitorStats?.conversionRate || 0) * 100).toFixed(1)}%`,
+            percentage: visitorStats?.conversionRateGrowth || 0,
+            trend: 'Compared to last month',
+            data: (visitorStats?.conversionHistory || []).map(h => ({ value: h?.value || 0 })),
+            color: '#6366F1'
+          }
+        ];
+
+        setStats(formattedStats);
+      } catch (error) {
+        console.error('Error loading stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="bg-white p-6 rounded-xl shadow-sm animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+            <div className="h-8 bg-gray-200 rounded w-1/2 mb-4"></div>
+            <div className="h-16 bg-gray-200 rounded"></div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

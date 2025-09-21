@@ -14,7 +14,7 @@ exports.getAllExpenses = async (req, res) => {
     const { startDate, endDate, category } = req.query;
     
     // Build where clause based on filters
-    const whereClause = { shopId: req.shopId };
+    const whereClause = { shopId: req.user.shopId };
     if (startDate && endDate) {
       whereClause.date = {
         [Op.between]: [new Date(startDate), new Date(endDate)]
@@ -30,7 +30,7 @@ exports.getAllExpenses = async (req, res) => {
         model: User,
         as: 'recordedBy',
         attributes: ['id', 'name', 'email'],
-        where: { shopId: req.shopId }
+        where: { shopId: req.user.shopId }
       }],
       order: [['date', 'DESC']],
       limit,
@@ -52,12 +52,12 @@ exports.getAllExpenses = async (req, res) => {
 exports.getExpenseById = async (req, res) => {
   try {
     const expense = await Expense.findOne({
-      where: { id: req.params.id, shopId: req.shopId },
+      where: { id: req.params.id, shopId: req.user.shopId },
       include: [{
         model: User,
         as: 'recordedBy',
         attributes: ['id', 'name', 'email'],
-        where: { shopId: req.shopId }
+        where: { shopId: req.user.shopId }
       }]
     });
 
@@ -98,7 +98,7 @@ exports.createExpense = async (req, res) => {
       reference,
       notes,
       userId: req.user.id,
-      shopId: req.shopId
+      shopId: req.user.shopId
     });
 
     const expenseWithUser = await Expense.findByPk(expense.id, {
@@ -124,7 +124,7 @@ exports.updateExpense = async (req, res) => {
     }
 
     const expense = await Expense.findOne({
-      where: { id: req.params.id, shopId: req.shopId }
+      where: { id: req.params.id, shopId: req.user.shopId }
     });
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
@@ -168,7 +168,7 @@ exports.updateExpense = async (req, res) => {
 exports.deleteExpense = async (req, res) => {
   try {
     const expense = await Expense.findOne({
-      where: { id: req.params.id, shopId: req.shopId }
+      where: { id: req.params.id, shopId: req.user.shopId }
     });
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });

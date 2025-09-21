@@ -15,20 +15,20 @@ exports.getAllSales = async (req, res) => {
     const offset = (page - 1) * limit;
 
     const sales = await Sale.findAndCountAll({
-      where: { shopId: req.shopId },
+      where: { shopId: req.user.shopId },
       include: [
         { 
           model: SaleItem,
           include: [{ 
             model: Product,
             attributes: ['id', 'name', 'sku'],
-            where: { shopId: req.shopId }
+            where: { shopId: req.user.shopId }
           }]
         },
         {
           model: Customer,
           attributes: ['id', 'name', 'email', 'phone'],
-          where: { shopId: req.shopId }
+          where: { shopId: req.user.shopId }
         }
       ],
       order: [['createdAt', 'DESC']],
@@ -51,20 +51,20 @@ exports.getAllSales = async (req, res) => {
 exports.getSaleById = async (req, res) => {
   try {
     const sale = await Sale.findOne({
-      where: { id: req.params.id, shopId: req.shopId },
+      where: { id: req.params.id, shopId: req.user.shopId },
       include: [
         {
           model: SaleItem,
           include: [{ 
             model: Product,
             attributes: ['id', 'name', 'sku', 'price'],
-            where: { shopId: req.shopId }
+            where: { shopId: req.user.shopId }
           }]
         },
         {
           model: Customer,
           attributes: ['id', 'name', 'email', 'phone', 'loyaltyPoints'],
-          where: { shopId: req.shopId }
+          where: { shopId: req.user.shopId }
         }
       ]
     });
@@ -110,7 +110,7 @@ exports.createSale = async (req, res) => {
 
     for (const item of items) {
       const product = await Product.findOne({
-        where: { id: item.productId, active: true, shopId: req.shopId }
+        where: { id: item.productId, active: true, shopId: req.user.shopId }
       });
 
       if (!product) {
@@ -152,7 +152,7 @@ exports.createSale = async (req, res) => {
         invoiceNumber: {
           [Op.like]: `${dateStr}-%`
         },
-        shopId: req.shopId
+        shopId: req.user.shopId
       },
       order: [['invoiceNumber', 'DESC']]
     });
@@ -176,7 +176,7 @@ exports.createSale = async (req, res) => {
       customerId,
       userId: req.user.id,
       notes,
-      shopId: req.shopId
+      shopId: req.user.shopId
     }, { transaction: t });
 
     // Create sale items
@@ -264,8 +264,10 @@ exports.updatePaymentStatus = async (req, res) => {
 // Get sales statistics
 exports.getSalesStatistics = async (req, res) => {
   try {
+    console.log('getSalesStatistics called with shopId:', req.user.shopId);
     const { startDate, endDate } = req.query;
     const whereClause = {
+      shopId: req.user.shopId,
       createdAt: {
         [Op.between]: [
           startDate || new Date(new Date().setHours(0,0,0,0)),
@@ -273,6 +275,12 @@ exports.getSalesStatistics = async (req, res) => {
         ]
       }
     };
+
+    console.log('Where clause:', whereClause);
+
+    // First, let's check if there are any sales at all
+    const allSales = await Sale.findAll({ where: { shopId: req.user.shopId } });
+    console.log('All sales for shopId', req.user.shopId, ':', allSales.length);
 
     const [totalSales, totalRevenue, averageTicket] = await Promise.all([
       Sale.count({ where: whereClause }),
@@ -283,12 +291,15 @@ exports.getSalesStatistics = async (req, res) => {
       })
     ]);
 
+    console.log('Statistics results:', { totalSales, totalRevenue, averageTicket });
+
     res.json({
       totalSales,
       totalRevenue: totalRevenue || 0,
-      averageTicket: averageTicket.getDataValue('average') || 0
+      averageTicket: averageTicket ? averageTicket.getDataValue('average') || 0 : 0
     });
   } catch (error) {
+    console.error('Sales statistics error:', error);
     res.status(500).json({ error: 'Failed to fetch sales statistics' });
   }
 };

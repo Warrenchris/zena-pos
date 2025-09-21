@@ -5,6 +5,7 @@ import customersReducer from './slices/customersSlice'
 import salesReducer from './slices/salesSlice'
 import categoriesReducer from './slices/categoriesSlice'
 import settingsReducer from './slices/settingsSlice'
+import analyticsReducer from './slices/analyticsSlice'
 
 export const store = configureStore({
   reducer: {
@@ -14,7 +15,25 @@ export const store = configureStore({
     sales: salesReducer,
     categories: categoriesReducer,
     settings: settingsReducer,
+    analytics: analyticsReducer,
   },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      immutableCheck: { 
+        // Ignore these field paths in all actions
+        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+        // Ignore these field paths in all state
+        ignoredPaths: ['_persist'],
+        // Warn after 50ms instead of 32ms
+        warnAfter: 50,
+      },
+      serializableCheck: {
+        // Ignore these field paths in all actions
+        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+        // Ignore these field paths in all state
+        ignoredPaths: ['_persist'],
+      },
+    }),
 })
 
 export default store

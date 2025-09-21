@@ -5,7 +5,7 @@ const Category = require('../models/Category');
 exports.getAllCategories = async (req, res) => {
   try {
     const categories = await Category.findAll({
-      where: { active: true, shopId: req.shopId }
+      where: { active: true, shopId: req.user.shopId }
     });
     res.json(categories);
   } catch (error) {
@@ -17,7 +17,7 @@ exports.getAllCategories = async (req, res) => {
 exports.getCategoryById = async (req, res) => {
   try {
     const category = await Category.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
     
     if (!category) {
@@ -39,7 +39,7 @@ exports.createCategory = async (req, res) => {
     }
 
     const { name, description } = req.body;
-    const category = await Category.create({ name, description, shopId: req.shopId });
+    const category = await Category.create({ name, description, shopId: req.user.shopId });
     res.status(201).json(category);
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -59,7 +59,7 @@ exports.updateCategory = async (req, res) => {
 
     const { name, description } = req.body;
     const category = await Category.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
 
     if (!category) {
@@ -80,7 +80,7 @@ exports.updateCategory = async (req, res) => {
 exports.deleteCategory = async (req, res) => {
   try {
     const category = await Category.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
 
     if (!category) {

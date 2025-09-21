@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import forecastingService from '../services/forecasting.service';
 import { 
   ShoppingBagIcon,
   CurrencyDollarIcon,
@@ -31,7 +32,7 @@ import api from '../services/api';
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user } = useSelector((state) => state.auth);
+  const { user, loading: authLoading } = useSelector((state) => state.auth);
   const { sales, statistics, loading: salesLoading, error: salesError } = useSelector((state) => state.sales);
   const { customers, loading: customersLoading, error: customersError } = useSelector((state) => state.customers);
   const { products, loading: productsLoading, error: productsError } = useSelector((state) => state.products);
@@ -43,37 +44,48 @@ export default function Dashboard() {
   const [forecastLoading, setForecastLoading] = useState(false);
 
   const fetchForecast = useCallback(async () => {
+    if (forecastLoading) return; // Prevent multiple simultaneous calls
+    
     try {
       setForecastLoading(true);
       setForecastError(null);
-      const aiUrl = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:8000';
+      
+      // Only attempt forecast if we have statistics
+      if (!statistics?.totalRevenue) {
+        setForecast({ next: 0 });
+        return;
+      }
+
       const dates = [];
       const values = [];
       const end = new Date();
       
+      // Generate historical data points
       for (let i = 29; i >= 0; i--) {
         const d = new Date(end);
         d.setDate(end.getDate() - i);
         dates.push(d.toISOString());
-        const dayValue = i === 0 ? statistics?.totalRevenue || 0 : 0;
+        const dayValue = i === 0 ? statistics.totalRevenue : 0;
         values.push(dayValue);
       }
       
-      const resp = await fetch(`${aiUrl}/api/forecasting/forecast`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dates, values })
-      });
+      const data = await forecastingService.getForecast(dates, values);
       
-      if (!resp.ok) {
-        throw new Error('Failed to fetch forecast data');
+      if (data?.predictions?.length > 0) {
+        setForecast({ 
+          next: data.predictions[0],
+          confidence: {
+            lower: data.lower_bounds?.[0] || 0,
+            upper: data.upper_bounds?.[0] || 0
+          }
+        });
+      } else {
+        setForecast({ next: 0 });
       }
-      
-      const data = await resp.json();
-      setForecast({ next: data?.predictions?.[0] || 0 });
     } catch (error) {
       console.error('Error fetching forecast:', error);
-      setForecastError(error.message);
+      setForecastError(error?.message || 'Failed to fetch forecast');
+      setForecast({ next: 0 });
     } finally {
       setForecastLoading(false);
     }
@@ -81,29 +93,58 @@ export default function Dashboard() {
 
   const fetchInsights = useCallback(async () => {
     if (insightsLoading) return; // Prevent multiple simultaneous calls
+    
     try {
       setInsightsLoading(true);
       const response = await api.get('/api/insights');
       const data = response?.data || {};
-      const normalized = {
-        alerts: Array.isArray(data.alerts) ? data.alerts : [],
-        recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
-        trends: Array.isArray(data.trends) ? data.trends : [],
-      };
-      setInsights(normalized);
+      
+      // Transform and validate insights data
+      const validInsights = (data.insights || [])
+        .filter(insight => insight?.message && insight?.type) // Only include valid insights
+        .map(insight => ({
+          ...insight,
+          message: insight.message,
+          type: insight.type || 'info',
+          timestamp: insight.timestamp || new Date().toISOString(),
+          priority: insight.priority || 'medium'
+        }))
+        .sort((a, b) => {
+          // Sort by priority and timestamp
+          const priorityOrder = { high: 3, medium: 2, low: 1 };
+          const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+          if (priorityDiff !== 0) return priorityDiff;
+          return new Date(b.timestamp) - new Date(a.timestamp);
+        });
+
+      setInsights(validInsights);
     } catch (error) {
       console.error('Error fetching insights:', error);
-      setInsights({ alerts: [], recommendations: [], trends: [] });
+      // Set empty insights array on error
+      setInsights([]);
     } finally {
       setInsightsLoading(false);
     }
-  }, [insightsLoading]);
+  }, []);
 
   useEffect(() => {
     const loadDashboardData = async () => {
       const token = localStorage.getItem('token');
       if (!token) {
         console.error('No auth token found');
+        return;
+      }
+
+      // Check if user is authenticated
+      if (!user) {
+        console.log('User not authenticated, skipping data fetch');
+        return;
+      }
+
+      // Additional check: ensure user has shopId
+      const userShopId = user.shopId || user.shop?.id;
+      if (!userShopId) {
+        console.error('User has no shopId, cannot fetch data');
         return;
       }
 
@@ -124,7 +165,7 @@ export default function Dashboard() {
     };
 
     loadDashboardData();
-  }, [dispatch]); // Only re-run if dispatch changes
+  }, [dispatch, user]); // Re-run when user changes
 
   const stats = useMemo(() => [
     {
@@ -176,6 +217,70 @@ export default function Dashboard() {
     dispatch(fetchCustomers({ limit: 5 }));
     dispatch(fetchProducts({ limit: 5 }));
   }, [dispatch]);
+
+  // Show loading while authentication is being verified
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user is not authenticated, show login prompt
+  if (!user) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h1 className="text-3xl font-bold text-gray-900">
+            Welcome to Zana POS
+          </h1>
+          <p className="text-gray-600 mt-2">
+            Please log in to access your dashboard.
+          </p>
+          <div className="mt-4">
+            <button 
+              onClick={() => navigate('/login')}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+            >
+              Go to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If user doesn't have shopId, show error
+  const userShopId = user.shopId || user.shop?.id;
+  if (!userShopId) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h1 className="text-3xl font-bold text-red-900">
+            Authentication Error
+          </h1>
+          <p className="text-red-600 mt-2">
+            Your account is not properly configured. Please contact support.
+          </p>
+          <div className="mt-4">
+            <button 
+              onClick={() => {
+                localStorage.removeItem('token');
+                navigate('/login');
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+            >
+              Logout and Login Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

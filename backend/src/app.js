@@ -18,7 +18,8 @@ const employeeRoutes = require('./routes/employees');
 const insightsRoutes = require('./routes/insights');
 const reportsRoutes = require('./routes/reports');
 const activityRoutes = require('./routes/activity');
-const insightRoutes = require('./routes/insights');
+const dashboardRoutes = require('./routes/dashboard');
+const analyticsRoutes = require('./routes/analytics');
 
 const app = express();
 
@@ -47,7 +48,9 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/activity', activityRoutes);
-app.use('/api/insights', insightRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

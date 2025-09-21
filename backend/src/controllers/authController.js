@@ -96,6 +96,7 @@ exports.login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        shopId: user.shopId,
         shop: user.Shop ? { id: user.Shop.id, name: user.Shop.name } : null,
       },
       token

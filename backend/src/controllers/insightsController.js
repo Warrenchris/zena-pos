@@ -74,17 +74,17 @@ const generateRecommendations = async () => {
     },
     attributes: [
       'category',
-      [sequelize.fn('SUM', sequelize.col('amount')), 'totalAmount']
+      [sequelize.fn('SUM', sequelize.col('amount')), 'total']
     ],
     group: ['category']
   });
 
   // Check for high expense categories
   const highExpenseCategories = monthlyExpenses
-    .filter(exp => exp.getDataValue('totalAmount') > 5000) // Threshold can be adjusted
+    .filter(exp => exp.getDataValue('total') > 5000) // Threshold can be adjusted
     .map(exp => ({
       category: exp.category,
-      amount: exp.getDataValue('totalAmount')
+      amount: exp.getDataValue('total')
     }));
 
   if (highExpenseCategories.length > 0) {
@@ -140,7 +140,7 @@ const generateAlerts = async () => {
     attributes: [
       [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
       [sequelize.fn('COUNT', sequelize.col('id')), 'saleCount'],
-      [sequelize.fn('SUM', sequelize.col('total')), 'totalAmount']
+      [sequelize.fn('SUM', sequelize.col('total')), 'total']
     ],
     group: [sequelize.fn('DATE', sequelize.col('createdAt'))]
   });
@@ -148,17 +148,17 @@ const generateAlerts = async () => {
   // Analyze for significant drops in sales
   if (weeklySales.length > 0) {
     const averageDailySales = weeklySales.reduce((acc, sale) => 
-      acc + parseFloat(sale.getDataValue('totalAmount')), 0) / weeklySales.length;
+      acc + parseFloat(sale.getDataValue('total')), 0) / weeklySales.length;
     
     const latestSale = weeklySales[weeklySales.length - 1];
-    if (latestSale && latestSale.getDataValue('totalAmount') < averageDailySales * 0.5) {
+    if (latestSale && latestSale.getDataValue('total') < averageDailySales * 0.5) {
       alerts.push({
         type: 'SALES',
         severity: 'MEDIUM',
         message: 'Significant drop in daily sales detected',
         details: {
           date: latestSale.getDataValue('date'),
-          amount: latestSale.getDataValue('totalAmount'),
+          amount: latestSale.getDataValue('total'),
           average: averageDailySales
         }
       });

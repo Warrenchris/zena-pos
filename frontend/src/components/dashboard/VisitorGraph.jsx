@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchVisitorStats } from '../../store/slices/analyticsSlice';
 import {
   LineChart,
   Line,
@@ -8,17 +10,15 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { format, startOfWeek, addDays } from 'date-fns';
 
 const VisitorGraph = () => {
-  // Generate data for the current week
-  const currentWeekData = Array.from({ length: 7 }, (_, index) => {
-    const date = addDays(startOfWeek(new Date()), index);
-    return {
-      date: format(date, 'EEE'),
-      visitors: Math.floor(Math.random() * 1000) + 500,
-    };
-  });
+  const dispatch = useDispatch();
+  const { visitorData, percentageChange, totalVisitors, loading, error } =
+    useSelector((state) => state.analytics.visitorStats);
+
+  useEffect(() => {
+    dispatch(fetchVisitorStats('week'));
+  }, [dispatch]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -34,25 +34,57 @@ const VisitorGraph = () => {
     return null;
   };
 
+  if (loading) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="flex justify-center items-center h-[300px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="flex justify-center items-center h-[300px] text-red-500">
+          Error loading visitor statistics: {error}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Daily Visitors</h2>
-          <p className="text-sm text-gray-500">Current week's visitor statistics</p>
+          <p className="text-sm text-gray-500">
+            Total Visitors: {totalVisitors?.toLocaleString()}
+          </p>
         </div>
         <div className="flex items-center space-x-4">
           <div className="flex items-center">
             <div className="w-3 h-3 rounded-full bg-purple-500 mr-2" />
             <span className="text-sm text-gray-600">Visitors</span>
           </div>
+          {percentageChange !== undefined && (
+            <div
+              className={`text-sm font-medium ${
+                percentageChange >= 0 ? 'text-green-500' : 'text-red-500'
+              }`}
+            >
+              {percentageChange >= 0 ? '↑' : '↓'}{' '}
+              {Math.abs(percentageChange).toFixed(1)}%
+            </div>
+          )}
         </div>
       </div>
 
       <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
-            data={currentWeekData}
+            data={visitorData || []}
             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />

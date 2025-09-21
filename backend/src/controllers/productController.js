@@ -7,8 +7,8 @@ const Category = require('../models/Category');
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.findAll({
-      where: { active: true, shopId: req.shopId },
-      include: [{ model: Category, attributes: ['id', 'name'], where: { shopId: req.shopId } }]
+      where: { active: true, shopId: req.user.shopId },
+      include: [{ model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } }]
     });
     res.json(products);
   } catch (error) {
@@ -20,8 +20,8 @@ exports.getAllProducts = async (req, res) => {
 exports.getProductById = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId },
-      include: [{ model: Category, attributes: ['id', 'name'], where: { shopId: req.shopId } }]
+      where: { id: req.params.id, active: true, shopId: req.user.shopId },
+      include: [{ model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } }]
     });
     
     if (!product) {
@@ -64,7 +64,7 @@ exports.createProduct = async (req, res) => {
       stockQuantity,
       reorderPoint,
       CategoryId,
-      shopId: req.shopId
+      shopId: req.user.shopId
     });
 
     const productWithCategory = await Product.findOne({
@@ -91,7 +91,7 @@ exports.updateProduct = async (req, res) => {
     }
 
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
 
     if (!product) {
@@ -141,7 +141,7 @@ exports.updateProduct = async (req, res) => {
 exports.deleteProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
 
     if (!product) {
@@ -166,7 +166,7 @@ exports.updateStock = async (req, res) => {
 
     const { quantity } = req.body;
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
 
     if (!product) {

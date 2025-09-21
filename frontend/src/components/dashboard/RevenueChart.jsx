@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -9,28 +9,39 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { Tab } from '@headlessui/react';
+import analyticsService from '../../services/analytics.service';
 
 const RevenueChart = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('weekly');
+  const [revenueData, setRevenueData] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRevenueData = async () => {
+      try {
+        setLoading(true);
+        const response = await analyticsService.getOrderStats(selectedPeriod);
+        
+        setRevenueData(prevData => ({
+          ...prevData,
+          [selectedPeriod]: response.revenueData
+        }));
+      } catch (error) {
+        console.error('Error fetching revenue data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (!revenueData[selectedPeriod]) {
+      fetchRevenueData();
+    }
+  }, [selectedPeriod]);
 
   const periods = {
-    weekly: [
-      { date: 'Mon', revenue: 4000 },
-      { date: 'Tue', revenue: 3000 },
-      { date: 'Wed', revenue: 5000 },
-      { date: 'Thu', revenue: 2780 },
-      { date: 'Fri', revenue: 1890 },
-      { date: 'Sat', revenue: 6390 },
-      { date: 'Sun', revenue: 3490 },
-    ],
-    monthly: Array.from({ length: 30 }, (_, i) => ({
-      date: `Day ${i + 1}`,
-      revenue: Math.floor(Math.random() * 8000) + 1000,
-    })),
-    yearly: Array.from({ length: 12 }, (_, i) => ({
-      date: new Date(0, i).toLocaleString('default', { month: 'short' }),
-      revenue: Math.floor(Math.random() * 80000) + 10000,
-    })),
+    weekly: revenueData.weekly || [],
+    monthly: revenueData.monthly || [],
+    yearly: revenueData.yearly || []
   };
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -74,35 +85,41 @@ const RevenueChart = () => {
       </div>
 
       <div className="h-[400px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={periods[selectedPeriod]}
-            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis
-              dataKey="date"
-              stroke="#6b7280"
-              fontSize={12}
-              tickLine={false}
-            />
-            <YAxis
-              stroke="#6b7280"
-              fontSize={12}
-              tickLine={false}
-              tickFormatter={(value) => `$${value}`}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Line
-              type="monotone"
-              dataKey="revenue"
-              stroke="#4F46E5"
-              strokeWidth={2}
-              dot={{ strokeWidth: 2 }}
-              activeDot={{ r: 8, strokeWidth: 2 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        {loading ? (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={periods[selectedPeriod]}
+              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis
+                dataKey="date"
+                stroke="#6b7280"
+                fontSize={12}
+                tickLine={false}
+              />
+              <YAxis
+                stroke="#6b7280"
+                fontSize={12}
+                tickLine={false}
+                tickFormatter={(value) => `$${value}`}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Line
+                type="monotone"
+                dataKey="revenue"
+                stroke="#4F46E5"
+                strokeWidth={2}
+                dot={{ strokeWidth: 2 }}
+                activeDot={{ r: 8, strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

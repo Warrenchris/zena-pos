@@ -14,6 +14,7 @@ import {
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
 import { logout } from '../store/slices/authSlice'
+import Header from './dashboard/Header'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -213,26 +214,8 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="lg:pl-64 flex flex-col flex-1">
-        {/* Mobile header */}
-        <div className="sticky top-0 z-10 lg:hidden">
-          <div className="flex h-16 items-center gap-x-4 border-b border-gray-200 bg-white px-4">
-            <button
-              type="button"
-              className="-m-2.5 p-2.5 text-gray-700 lg:hidden"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <span className="sr-only">Open sidebar</span>
-              <Bars3Icon className="h-6 w-6" aria-hidden="true" />
-            </button>
-
-            <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-              <div className="flex items-center gap-x-4 lg:gap-x-6">
-                <img className="h-8 w-auto" src="/vite.svg" alt="Logo" />
-                <span className="text-xl font-semibold">Zana POS</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Header with search and profile */}
+        <Header onMobileMenuClick={() => setSidebarOpen(true)} />
 
         {/* Main content */}
         <main className="flex-1">

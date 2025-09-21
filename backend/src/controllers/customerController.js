@@ -15,7 +15,7 @@ exports.getAllCustomers = async (req, res) => {
 
     const whereClause = search ? {
       [Op.and]: [
-        { active: true, shopId: req.shopId },
+        { active: true, shopId: req.user.shopId },
         {
           [Op.or]: [
             { name: { [Op.like]: `%${search}%` } },
@@ -24,7 +24,7 @@ exports.getAllCustomers = async (req, res) => {
           ]
         }
       ]
-    } : { active: true, shopId: req.shopId };
+    } : { active: true, shopId: req.user.shopId };
 
     const customers = await Customer.findAndCountAll({
       where: whereClause,
@@ -48,16 +48,16 @@ exports.getAllCustomers = async (req, res) => {
 exports.getCustomerById = async (req, res) => {
   try {
     const customer = await Customer.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId },
+      where: { id: req.params.id, active: true, shopId: req.user.shopId },
       include: [{
         model: Sale,
-        where: { shopId: req.shopId },
+        where: { shopId: req.user.shopId },
         include: [{
           model: SaleItem,
           include: [{
             model: Product,
             attributes: ['id', 'name', 'sku', 'price'],
-            where: { shopId: req.shopId }
+            where: { shopId: req.user.shopId }
           }]
         }]
       }]
@@ -120,14 +120,14 @@ exports.createCustomer = async (req, res) => {
 
     // Check for duplicate email or phone within the same shop
     if (email) {
-      const existingEmail = await Customer.findOne({ where: { email, shopId: req.shopId } });
+      const existingEmail = await Customer.findOne({ where: { email, shopId: req.user.shopId } });
       if (existingEmail) {
         return res.status(400).json({ error: 'Email already registered' });
       }
     }
 
     if (phone) {
-      const existingPhone = await Customer.findOne({ where: { phone, shopId: req.shopId } });
+      const existingPhone = await Customer.findOne({ where: { phone, shopId: req.user.shopId } });
       if (existingPhone) {
         return res.status(400).json({ error: 'Phone number already registered' });
       }
@@ -139,7 +139,7 @@ exports.createCustomer = async (req, res) => {
       phone,
       address,
       notes,
-      shopId: req.shopId
+      shopId: req.user.shopId
     });
 
     res.status(201).json(customer);
@@ -158,7 +158,7 @@ exports.updateCustomer = async (req, res) => {
 
     const { name, email, phone, address, notes } = req.body;
     const customer = await Customer.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
 
     if (!customer) {
@@ -167,14 +167,14 @@ exports.updateCustomer = async (req, res) => {
 
     // Check for duplicate email or phone if changed (within the same shop)
     if (email && email !== customer.email) {
-      const existingEmail = await Customer.findOne({ where: { email, shopId: req.shopId } });
+      const existingEmail = await Customer.findOne({ where: { email, shopId: req.user.shopId } });
       if (existingEmail) {
         return res.status(400).json({ error: 'Email already registered' });
       }
     }
 
     if (phone && phone !== customer.phone) {
-      const existingPhone = await Customer.findOne({ where: { phone, shopId: req.shopId } });
+      const existingPhone = await Customer.findOne({ where: { phone, shopId: req.user.shopId } });
       if (existingPhone) {
         return res.status(400).json({ error: 'Phone number already registered' });
       }
@@ -198,7 +198,7 @@ exports.updateCustomer = async (req, res) => {
 exports.deleteCustomer = async (req, res) => {
   try {
     const customer = await Customer.findOne({
-      where: { id: req.params.id, active: true, shopId: req.shopId }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
 
     if (!customer) {
@@ -258,16 +258,18 @@ exports.getCustomerStatistics = async (req, res) => {
     } : {};
 
     const [totalCustomers, newCustomers, activeCustomers] = await Promise.all([
-      Customer.count({ where: { active: true } }),
+      Customer.count({ where: { active: true, shopId: req.user.shopId } }),
       Customer.count({
         where: {
           ...whereClause,
-          active: true
+          active: true,
+          shopId: req.user.shopId
         }
       }),
       Customer.count({
         where: {
           active: true,
+          shopId: req.user.shopId,
           lastVisit: {
             [Op.gte]: new Date(new Date() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
           }
@@ -284,6 +286,7 @@ exports.getCustomerStatistics = async (req, res) => {
         : 0
     });
   } catch (error) {
+    console.error('Customer statistics error:', error);
     res.status(500).json({ error: 'Failed to fetch customer statistics' });
   }
 };

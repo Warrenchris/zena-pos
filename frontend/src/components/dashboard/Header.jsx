@@ -1,14 +1,32 @@
 import React, { useState } from 'react';
-import { HiSearch, HiChevronDown, HiBell } from 'react-icons/hi';
+import { HiSearch, HiChevronDown, HiBell, HiMenu } from 'react-icons/hi';
 import { Menu, Transition } from '@headlessui/react';
+import { useSelector, useDispatch } from 'react-redux';
+import { logout } from '../../store/slices/authSlice';
 
-const Header = () => {
+const Header = ({ onMobileMenuClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const dispatch = useDispatch();
+  const { user } = useSelector((state) => state.auth);
+
+  const handleLogout = () => {
+    dispatch(logout());
+  };
 
   return (
     <header className="flex items-center justify-between p-4 bg-white shadow-sm">
+      {/* Mobile menu button */}
+      <button
+        type="button"
+        className="lg:hidden -m-2.5 p-2.5 text-gray-700"
+        onClick={onMobileMenuClick}
+      >
+        <span className="sr-only">Open sidebar</span>
+        <HiMenu className="h-6 w-6" aria-hidden="true" />
+      </button>
+
       {/* Search Bar */}
-      <div className="relative flex-1 max-w-xl">
+      <div className="relative flex-1 max-w-xl ml-4">
         <div className="relative">
           <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
           <input
@@ -33,11 +51,11 @@ const Header = () => {
         <Menu as="div" className="relative">
           <Menu.Button className="flex items-center space-x-3 hover:bg-gray-100 rounded-lg p-2">
             <img
-              src="https://ui-avatars.com/api/?name=John+Doe"
+              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`}
               alt="Profile"
               className="w-8 h-8 rounded-full"
             />
-            <span className="font-medium text-gray-700">John Doe</span>
+            <span className="font-medium text-gray-700">{user?.name || 'User'}</span>
             <HiChevronDown className="w-5 h-5 text-gray-500" />
           </Menu.Button>
 
@@ -49,35 +67,33 @@ const Header = () => {
             leaveFrom="transform opacity-100 scale-100"
             leaveTo="transform opacity-0 scale-95"
           >
-            <Menu.Items className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1">
+            <Menu.Items className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
               <Menu.Item>
                 {({ active }) => (
-                  <a
-                    href="#profile"
-                    className={`${active ? 'bg-gray-100' : ''} block px-4 py-2 text-sm text-gray-700`}
+                  <button
+                    className={`${active ? 'bg-gray-100' : ''} block w-full text-left px-4 py-2 text-sm text-gray-700`}
                   >
                     Your Profile
-                  </a>
+                  </button>
                 )}
               </Menu.Item>
               <Menu.Item>
                 {({ active }) => (
-                  <a
-                    href="#settings"
-                    className={`${active ? 'bg-gray-100' : ''} block px-4 py-2 text-sm text-gray-700`}
+                  <button
+                    className={`${active ? 'bg-gray-100' : ''} block w-full text-left px-4 py-2 text-sm text-gray-700`}
                   >
                     Settings
-                  </a>
+                  </button>
                 )}
               </Menu.Item>
               <Menu.Item>
                 {({ active }) => (
-                  <a
-                    href="#signout"
-                    className={`${active ? 'bg-gray-100' : ''} block px-4 py-2 text-sm text-gray-700`}
+                  <button
+                    onClick={handleLogout}
+                    className={`${active ? 'bg-gray-100' : ''} block w-full text-left px-4 py-2 text-sm text-gray-700`}
                   >
                     Sign out
-                  </a>
+                  </button>
                 )}
               </Menu.Item>
             </Menu.Items>

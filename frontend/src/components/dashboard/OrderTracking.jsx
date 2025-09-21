@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   BarChart,
   Bar,
@@ -8,31 +9,28 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { fetchOrderStats } from '../../store/slices/analyticsSlice';
 
 const OrderTracking = () => {
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
+  const dispatch = useDispatch();
+  const { orderData, orderPercentageChange, revenuePercentageChange, totalOrders, totalRevenue, loading, error } = 
+    useSelector((state) => state.analytics.orderStats);
+  const [selectedPeriod, setSelectedPeriod] = useState('week');
 
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-
-  // Generate random data for the selected month
-  const generateMonthData = (month) => {
-    const daysInMonth = new Date(2025, month + 1, 0).getDate();
-    return Array.from({ length: daysInMonth }, (_, index) => ({
-      day: index + 1,
-      orders: Math.floor(Math.random() * 50) + 10,
-    }));
-  };
+  useEffect(() => {
+    dispatch(fetchOrderStats(selectedPeriod));
+  }, [dispatch, selectedPeriod]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-white p-3 shadow-lg rounded-lg border">
-          <p className="font-medium text-gray-900">Day {label}</p>
+          <p className="font-medium text-gray-900">{label}</p>
           <p className="text-orange-600 font-semibold">
             {payload[0].value} orders
+          </p>
+          <p className="text-green-600 font-semibold">
+            ${payload[1].value.toLocaleString()}
           </p>
         </div>
       );
@@ -40,48 +38,96 @@ const OrderTracking = () => {
     return null;
   };
 
+  if (loading) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="flex justify-center items-center h-[300px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="flex justify-center items-center h-[300px] text-red-500">
+          Error loading order statistics: {error}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Order Tracking</h2>
-          <p className="text-sm text-gray-500">Daily orders for selected month</p>
+          <div className="flex space-x-4">
+            <p className="text-sm text-gray-500">
+              Total Orders: {totalOrders?.toLocaleString()}
+              <span className={`ml-2 ${orderPercentageChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {orderPercentageChange >= 0 ? '↑' : '↓'} {Math.abs(orderPercentageChange).toFixed(1)}%
+              </span>
+            </p>
+            <p className="text-sm text-gray-500">
+              Revenue: ${totalRevenue?.toLocaleString()}
+              <span className={`ml-2 ${revenuePercentageChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {revenuePercentageChange >= 0 ? '↑' : '↓'} {Math.abs(revenuePercentageChange).toFixed(1)}%
+              </span>
+            </p>
+          </div>
         </div>
         <select
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(Number(e.target.value))}
+          value={selectedPeriod}
+          onChange={(e) => setSelectedPeriod(e.target.value)}
           className="border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500"
         >
-          {months.map((month, index) => (
-            <option key={month} value={index}>
-              {month}
-            </option>
-          ))}
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
         </select>
       </div>
 
       <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={generateMonthData(selectedMonth)}
+            data={orderData}
             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis
-              dataKey="day"
+              dataKey="date"
               stroke="#6b7280"
               fontSize={12}
               tickLine={false}
             />
             <YAxis
+              yAxisId="left"
               stroke="#6b7280"
               fontSize={12}
               tickLine={false}
+              orientation="left"
+            />
+            <YAxis
+              yAxisId="right"
+              stroke="#22C55E"
+              fontSize={12}
+              tickLine={false}
+              orientation="right"
+              tickFormatter={(value) => `$${value}`}
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar
+              yAxisId="left"
               dataKey="orders"
               fill="#F97316"
+              radius={[4, 4, 0, 0]}
+            />
+            <Bar
+              yAxisId="right"
+              dataKey="revenue"
+              fill="#22C55E"
               radius={[4, 4, 0, 0]}
             />
           </BarChart>
