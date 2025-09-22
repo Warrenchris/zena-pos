@@ -43,7 +43,7 @@ export default function Categories() {
             setEditingCategory(null)
             setShowModal(true)
           }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          className="bg-brand-yellow text-brand-black px-4 py-2 rounded-lg hover:bg-brand-yellowDark flex items-center gap-2"
         >
           <PlusIcon className="h-5 w-5" />
           Add Category

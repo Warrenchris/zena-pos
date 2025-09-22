@@ -141,9 +141,9 @@ export default function Reports() {
 
 function Stat({ label, value, highlight }){
   return (
-    <div className={`p-4 rounded border ${highlight ? 'border-green-400 bg-green-50' : 'border-gray-200'}`}>
-      <div className="text-sm text-gray-600">{label}</div>
-      <div className="text-xl font-semibold">{Number(value||0).toLocaleString(undefined,{style:'currency',currency:'USD'})}</div>
+    <div className={`p-4 rounded border ${highlight ? 'border-brand-yellow bg-brand-yellow/10' : 'border-brand-yellow/20'}`}>
+      <div className="text-sm text-gray-300">{label}</div>
+      <div className="text-xl font-semibold text-brand-yellow">{Number(value||0).toLocaleString(undefined,{style:'currency',currency:'USD'})}</div>
     </div>
   )
 }

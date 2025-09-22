@@ -4,6 +4,10 @@ const router = express.Router();
 const saleController = require('../controllers/saleController');
 const { auth, checkRole } = require('../middleware/auth');
 
+// Define role access levels
+const CASHIER_ROLES = ['admin', 'manager', 'employee', 'cashier']; // 'employee' and 'cashier' are treated the same
+const MANAGER_ROLES = ['admin', 'manager'];
+
 // Validation middleware
 const validateSale = [
   body('items')
@@ -94,20 +98,20 @@ const validateDateRange = [
 // Routes
 router.get('/', 
   auth, 
-  checkRole(['admin', 'manager', 'cashier']), 
+  checkRole(CASHIER_ROLES), 
   saleController.getAllSales
 );
 
 router.get('/statistics', 
   auth, 
-  checkRole(['admin', 'manager']),
+  checkRole(MANAGER_ROLES),
   validateDateRange,
   saleController.getSalesStatistics
 );
 
 router.get('/cashier-stats', 
   auth, 
-  checkRole(['admin', 'manager', 'cashier']),
+  checkRole(CASHIER_ROLES),
   validateDateRange,
   saleController.getCashierStats
 );

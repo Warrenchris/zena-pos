@@ -19,7 +19,7 @@ function AppContent() {
   }, [dispatch])
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-brand-black text-gray-100">
       <AppRoutes />
     </div>
   )

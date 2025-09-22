@@ -8,14 +8,14 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
   const isPositive = percentage > 0;
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-brand-gray p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-brand-yellow/20">
       <div className="flex justify-between items-start mb-4">
         <div>
-          <h3 className="text-gray-500 text-sm font-medium">{title}</h3>
-          <p className="text-2xl font-semibold mt-1">{value}</p>
+          <h3 className="text-gray-300 text-sm font-medium">{title}</h3>
+          <p className="text-2xl font-semibold mt-1 text-brand-yellow">{value}</p>
         </div>
         <div className={`flex items-center px-2.5 py-1 rounded-full ${
-          isPositive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          isPositive ? 'bg-brand-yellow/20 text-brand-yellow' : 'bg-red-500/20 text-red-500'
         }`}>
           {isPositive ? (
             <HiArrowUp className="w-4 h-4 mr-1" />

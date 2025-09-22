@@ -1,16 +1,86 @@
 const { logActivity } = require('../middleware/logger');
 const { validationResult } = require('express-validator');
+const { Op } = require('sequelize');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 
-// Get all products
+// Get all products with filters and pagination
 exports.getAllProducts = async (req, res) => {
   try {
-    const products = await Product.findAll({
-      where: { active: true, shopId: req.user.shopId },
-      include: [{ model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } }]
+    const {
+      search,
+      categoryId,
+      availability, // 'in_stock' | 'low_stock' | 'out_of_stock'
+      minPrice,
+      maxPrice,
+      page = 1,
+      pageSize = 12,
+    } = req.query;
+
+    const numericPage = Math.max(parseInt(page, 10) || 1, 1);
+    const numericPageSize = Math.min(Math.max(parseInt(pageSize, 10) || 12, 1), 100);
+
+    const where = {
+      active: true,
+      shopId: req.user.shopId,
+    };
+
+    if (search && String(search).trim()) {
+      const term = `%${String(search).trim()}%`;
+      where[Op.or] = [
+        { name: { [Op.like]: term } },
+        { sku: { [Op.like]: term } },
+        { barcode: { [Op.like]: term } },
+      ];
+    }
+
+    if (categoryId) {
+      where.CategoryId = parseInt(categoryId, 10);
+    }
+
+    if (minPrice || maxPrice) {
+      where.price = {};
+      if (minPrice) where.price[Op.gte] = parseFloat(minPrice);
+      if (maxPrice) where.price[Op.lte] = parseFloat(maxPrice);
+    }
+
+    if (availability === 'in_stock') {
+      where.stockQuantity = { [Op.gt]: 0 };
+    } else if (availability === 'low_stock') {
+      // stockQuantity <= reorderPoint and > 0
+      where[Op.and] = [
+        { stockQuantity: { [Op.gt]: 0 } },
+        { stockQuantity: { [Op.lte]: { [Op.col]: 'reorderPoint' } } },
+      ];
+    } else if (availability === 'out_of_stock') {
+      where.stockQuantity = 0;
+    }
+
+    const include = [
+      { model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } },
+    ];
+
+    const offset = (numericPage - 1) * numericPageSize;
+
+    const { rows, count } = await Product.findAndCountAll({
+      where,
+      include,
+      limit: numericPageSize,
+      offset,
+      order: [['createdAt', 'DESC']],
+      distinct: true,
     });
-    res.json(products);
+
+    const totalPages = Math.ceil(count / numericPageSize) || 1;
+
+    res.json({
+      products: rows,
+      pagination: {
+        currentPage: numericPage,
+        totalPages,
+        total: count,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }
@@ -51,7 +121,8 @@ exports.createProduct = async (req, res) => {
       cost,
       stockQuantity,
       reorderPoint,
-      CategoryId
+      CategoryId,
+      expirationDate
     } = req.body;
 
     const product = await Product.create({
@@ -64,6 +135,7 @@ exports.createProduct = async (req, res) => {
       stockQuantity,
       reorderPoint,
       CategoryId,
+      expirationDate: expirationDate || null,
       shopId: req.user.shopId
     });
 
@@ -119,7 +191,8 @@ exports.updateProduct = async (req, res) => {
       cost,
       stockQuantity,
       reorderPoint,
-      CategoryId
+      CategoryId,
+      expirationDate: expirationDate || null
     });
 
     const updatedProduct = await Product.findOne({

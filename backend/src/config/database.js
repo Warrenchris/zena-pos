@@ -28,17 +28,15 @@ async function testConnection() {
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
 
-    if (process.env.NODE_ENV === 'development') {
-      // First try to sync without altering
-      try {
-        await sequelize.sync();
-        console.log('Database synchronized successfully.');
-      } catch (syncError) {
-        console.log('Initial sync failed, attempting to sync with force...');
-        // If sync fails, try to force sync
-        await sequelize.sync({ force: true });
-        console.log('Database force synchronized successfully.');
-      }
+    // Ensure schema is in sync locally so new columns (e.g., expirationDate) are created
+    // Use alter to be non-destructive. Set DB_SYNC_FORCE=true to force if needed.
+    const shouldAlter = process.env.DB_SYNC_FORCE !== 'true';
+    if (shouldAlter) {
+      await sequelize.sync({ alter: true });
+      console.log('Database synchronized with alter successfully.');
+    } else {
+      await sequelize.sync({ force: true });
+      console.log('Database force synchronized successfully.');
     }
   } catch (error) {
     console.error('Unable to connect to the database:', error);

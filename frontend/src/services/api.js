@@ -42,6 +42,24 @@ export const authAPI = {
   resetPassword: (payload) => api.post('/api/auth/reset-password', payload),
 };
 
+// Brands API
+export const brandsAPI = {
+  getAll: () => api.get('/api/brands'),
+  getById: (id) => api.get(`/api/brands/${id}`),
+  create: (brandData) => api.post('/api/brands', brandData),
+  update: (id, brandData) => api.put(`/api/brands/${id}`, brandData),
+  delete: (id) => api.delete(`/api/brands/${id}`),
+};
+
+// Units API
+export const unitsAPI = {
+  getAll: () => api.get('/api/units'),
+  getById: (id) => api.get(`/api/units/${id}`),
+  create: (unitData) => api.post('/api/units', unitData),
+  update: (id, unitData) => api.put(`/api/units/${id}`, unitData),
+  delete: (id) => api.delete(`/api/units/${id}`),
+};
+
 // Products API
 export const productsAPI = {
   getAll: (params) =>

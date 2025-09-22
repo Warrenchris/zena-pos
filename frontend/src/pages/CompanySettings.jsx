@@ -136,12 +136,12 @@ export default function CompanySettings() {
             <Tab.Panel>
               <form onSubmit={saveThemeSettings} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Theme Mode</label>
+                  <label className="block text-sm font-medium text-gray-300">Theme Mode</label>
                   <select
                     name="theme"
                     value={themeForm.theme}
                     onChange={onThemeChange}
-                    className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2"
+                    className="mt-1 w-full border border-brand-yellow/20 bg-brand-gray text-gray-200 rounded-md px-3 py-2"
                   >
                     <option value="light">Light</option>
                     <option value="dark">Dark</option>

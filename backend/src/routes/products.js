@@ -52,7 +52,11 @@ const validateProduct = [
     .notEmpty()
     .withMessage('Category is required')
     .isInt()
-    .withMessage('Invalid category')
+    .withMessage('Invalid category'),
+  body('expirationDate')
+    .optional({ nullable: true })
+    .isISO8601()
+    .withMessage('Invalid expiration date')
 ];
 
 const validateStockUpdate = [

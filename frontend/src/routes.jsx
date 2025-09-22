@@ -18,6 +18,10 @@ const Users = lazy(() => import('./pages/Users'))
 const CompanySettings = lazy(() => import('./pages/CompanySettings'))
 const Employees = lazy(() => import('./pages/Employees'))
 const Reports = lazy(() => import('./pages/Reports'))
+const CreateProduct = lazy(() => import('./pages/CreateProduct'))
+const Brands = lazy(() => import('./pages/Brands'))
+const Units = lazy(() => import('./pages/Units'))
+const SubCategories = lazy(() => import('./pages/SubCategories'))
 
 // Placeholder components for new sidebar items
 const PlaceholderPage = lazy(() => import('./components/PlaceholderPage'))
@@ -61,12 +65,12 @@ export default function AppRoutes() {
           <Route path="/layouts" element={<PlaceholderPage />} />
           
           {/* Inventory Routes */}
-          <Route path="/products/create" element={<PlaceholderPage />} />
+          <Route path="/products/create" element={<CreateProduct />} />
           <Route path="/products/expired" element={<PlaceholderPage />} />
           <Route path="/products/low-stock" element={<PlaceholderPage />} />
-          <Route path="/categories/sub" element={<PlaceholderPage />} />
-          <Route path="/brands" element={<PlaceholderPage />} />
-          <Route path="/units" element={<PlaceholderPage />} />
+          <Route path="/categories/sub" element={<SubCategories />} />
+          <Route path="/brands" element={<Brands />} />
+          <Route path="/units" element={<Units />} />
           <Route path="/variants" element={<PlaceholderPage />} />
           <Route path="/warranties" element={<PlaceholderPage />} />
           <Route path="/print/barcode" element={<PlaceholderPage />} />

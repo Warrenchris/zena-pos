@@ -4,8 +4,18 @@ module.exports = {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
+      colors: {
+        brand: {
+          black: '#0b0b0c',
+          gray: '#121214',
+          yellow: '#F5C518',
+          yellowDark: '#D4A80F',
+          accent: '#FFE166'
+        }
+      },
       animation: {
         'fadeIn': 'fadeIn 0.5s ease-in',
         'slideIn': 'slideIn 0.5s ease-out',

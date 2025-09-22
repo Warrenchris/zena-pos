@@ -32,7 +32,7 @@ const RecommendationCard = ({ recommendation }: RecommendationCardProps): JSX.El
   };
 
   return (
-    <div className={`p-4 mb-4 border-l-4 ${getBorderColor(recommendation.priority)} bg-white rounded-lg shadow`}>
+    <div className={`p-4 mb-4 border-l-4 ${getBorderColor(recommendation.priority)} bg-brand-gray text-gray-200 rounded-lg shadow`}>
       <div className="flex items-start">
         <LightBulbIcon className="h-6 w-6 mr-3 text-yellow-500" />
         <div>

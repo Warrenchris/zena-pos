@@ -20,6 +20,8 @@ const reportsRoutes = require('./routes/reports');
 const activityRoutes = require('./routes/activity');
 const dashboardRoutes = require('./routes/dashboard');
 const analyticsRoutes = require('./routes/analytics');
+const brandRoutes = require('./routes/brandRoutes');
+const unitRoutes = require('./routes/unitRoutes');
 
 const app = express();
 
@@ -48,6 +50,8 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/brands', brandRoutes);
+app.use('/api/units', unitRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);

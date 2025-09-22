@@ -44,6 +44,10 @@ const Product = sequelize.define('Product', {
     allowNull: false,
     defaultValue: 10
   },
+  expirationDate: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true

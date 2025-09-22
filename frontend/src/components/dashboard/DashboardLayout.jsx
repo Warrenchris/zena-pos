@@ -3,7 +3,7 @@ import Header from './Header';
 
 const DashboardLayout = ({ children }) => {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-brand-black">
       <Header />
       <main className="p-6">
         <div className="max-w-7xl mx-auto">
