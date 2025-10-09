@@ -1,10 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict
-import pandas as pd
 from datetime import datetime
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
 
 router = APIRouter()
 
@@ -27,6 +24,11 @@ async def analyze_business(data: BusinessData):
     Generate business insights using ML techniques
     """
     try:
+        # Import heavy dependencies lazily so the app can start without them
+        import pandas as pd
+        from sklearn.cluster import KMeans
+        from sklearn.preprocessing import StandardScaler
+
         # Prepare data for analysis
         df = pd.DataFrame({
             'revenue': data.revenue,

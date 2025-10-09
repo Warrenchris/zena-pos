@@ -23,6 +23,8 @@ const Brands = lazy(() => import('./pages/Brands'))
 const Units = lazy(() => import('./pages/Units'))
 const SubCategories = lazy(() => import('./pages/SubCategories'))
 
+const AiServices = lazy(() => import('./pages/AiServices'))
+
 // Placeholder components for new sidebar items
 const PlaceholderPage = lazy(() => import('./components/PlaceholderPage'))
 
@@ -58,6 +60,7 @@ export default function AppRoutes() {
           <Route path="/admin/employees" element={<Employees />} />
           <Route path="/admin/company" element={<CompanySettings />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/admin/ai" element={<AiServices />} />
           
           {/* Super Admin Routes */}
           <Route path="/super-admin" element={<PlaceholderPage />} />

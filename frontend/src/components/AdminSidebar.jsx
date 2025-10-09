@@ -37,7 +37,10 @@ import {
 
 const AdminSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
   const location = useLocation();
-  console.log('AdminSidebar - Props:', { isOpen, user: user?.role });
+  const withTrustedClick = (handler) => (event, ...rest) => {
+    if (event && event.nativeEvent && event.nativeEvent.isTrusted === false) return;
+    return handler(event, ...rest);
+  };
   
   const [expandedSections, setExpandedSections] = useState({
     inventory: true,
@@ -137,7 +140,8 @@ const AdminSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
       items: [
         { name: 'Expenses', path: '/expenses', icon: CurrencyDollarIcon },
         { name: 'Reports', path: '/reports', icon: ChartBarIcon },
-        { name: 'Employees', path: '/admin/employees', icon: UserGroupIcon }
+        { name: 'Employees', path: '/admin/employees', icon: UserGroupIcon },
+        { name: 'AI Center', path: '/admin/ai', icon: SparklesIcon }
       ]
     }
   ];
@@ -208,7 +212,8 @@ const AdminSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
       return (
         <div key={section.title} className="mb-2">
           <button
-            onClick={() => toggleSection(section.key)}
+            type="button"
+            onClick={withTrustedClick(() => toggleSection(section.key))}
             className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-200 hover:bg-black/40 rounded-xl transition-all duration-200 group"
           >
             <div className="flex items-center">
@@ -252,7 +257,7 @@ const AdminSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         className={`fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-300 ease-in-out lg:hidden ${
           isOpen ? 'opacity-100 z-40' : 'opacity-0 pointer-events-none'
         }`}
-        onClick={onClose}
+        onClick={withTrustedClick(onClose)}
       />
 
       {/* Sidebar */}
@@ -267,12 +272,13 @@ const AdminSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
                 <BuildingStorefrontIcon className="h-5 w-5 text-brand-black" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-brand-yellow">Admin Panel</h1>
-                <p className="text-xs text-gray-400">Business Management</p>
+                <h1 className="text-lg font-bold text-brand-yellow">{variant === 'cashier' ? 'Cashier Panel' : 'Admin Panel'}</h1>
+                <p className="text-xs text-gray-400">{variant === 'cashier' ? 'Point of Sale' : 'Business Management'}</p>
               </div>
             </div>
             <button
-              onClick={onClose}
+              type="button"
+              onClick={withTrustedClick(onClose)}
               className="lg:hidden p-2 rounded-lg text-gray-200 hover:bg:white/10 transition-colors"
             >
               <XMarkIcon className="h-5 w-5" />

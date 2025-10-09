@@ -7,6 +7,7 @@ import { useDispatch } from 'react-redux'
 import { getCurrentUser } from './store/slices/authSlice'
 import ErrorBoundary from './components/ErrorBoundary'
 import { routerConfig } from './router.config'
+import { ToastProvider } from './components/Toast'
 
 function AppContent() {
   const dispatch = useDispatch()
@@ -30,7 +31,9 @@ function App() {
     <Provider store={store}>
       <Router {...routerConfig}>
         <ErrorBoundary>
-          <AppContent />
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
         </ErrorBoundary>
       </Router>
     </Provider>

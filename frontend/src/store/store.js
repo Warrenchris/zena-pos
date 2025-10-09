@@ -14,7 +14,8 @@ export const store = configureStore({
     getDefaultMiddleware({
       serializableCheck: false,
     }),
-  devTools: process.env.NODE_ENV !== 'production',
+  // Safely determine production mode without assuming `process` exists in the runtime.
+  devTools: !(typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production'),
 });
 
 export default store;

@@ -1,7 +1,12 @@
 import axios from 'axios';
 
+// Safely read Vite / Node env var without throwing in browser (where
+// `process` is undefined). In tests/process envs this will pick up
+// process.env.VITE_API_URL; otherwise fall back to localhost.
+const baseURL = (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) || 'http://localhost:3000';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },

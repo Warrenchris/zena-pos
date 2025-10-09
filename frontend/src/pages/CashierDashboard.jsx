@@ -27,7 +27,6 @@ import api from '../services/api';
 import cashierAPI from '../services/cashierAPI';
 import CustomerModal from '../components/CustomerModal';
 import AdminSidebar from '../components/AdminSidebar';
-import TopNavBar from '../components/navigation/TopNavBar';
 
 export default function CashierDashboard() {
   const dispatch = useDispatch();
@@ -65,6 +64,12 @@ export default function CashierDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Prevent accidental programmatic clicks; only allow real user-initiated events
+  const withTrustedClick = (handler) => (event, ...rest) => {
+    if (event && event.nativeEvent && event.nativeEvent.isTrusted === false) return;
+    return handler(event, ...rest);
+  };
 
   useEffect(() => {
     dispatch(fetchProducts());
@@ -576,11 +581,7 @@ export default function CashierDashboard() {
 
       {/* Main Content */}
       <div className={`transition-all duration-300 flex flex-col min-h-screen ${!sidebarCollapsed ? 'lg:pl-80' : 'lg:pl-20'}`}>
-        {/* Shared Top Navigation */}
-        <TopNavBar 
-          onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          title="Point of Sale"
-        />
+        {/* Top navigation is provided by Layout; removed here to avoid duplication */}
         {/* Page content wrapper */}
         <div className="flex-1 overflow-hidden">
 
@@ -597,7 +598,8 @@ export default function CashierDashboard() {
                 <p className="text-gray-400 mb-8">Click the button below to begin processing a new transaction</p>
                 
                 <button
-                  onClick={startNewSale}
+                  type="button"
+                  onClick={withTrustedClick(startNewSale)}
                   className="px-8 py-4 bg-brand-yellow text-brand-black rounded-2xl font-bold text-xl hover:bg-brand-yellowDark transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
                 >
                   Start New Sale
@@ -689,14 +691,16 @@ export default function CashierDashboard() {
                   </div>
                   <div className="flex space-x-3">
                     <button
-                      onClick={cancelSale}
+                      type="button"
+                      onClick={withTrustedClick(cancelSale)}
                       className="px-4 py-2 text-red-400 hover:bg-black/40 rounded-lg transition-colors"
                     >
                       Cancel Sale
                     </button>
                     {currentSale.items.length > 0 && (
                       <button
-                        onClick={() => setShowPaymentModal(true)}
+                        type="button"
+                        onClick={withTrustedClick(() => setShowPaymentModal(true))}
                         className="px-6 py-2 bg-brand-yellow text-brand-black rounded-lg font-medium hover:bg-brand-yellowDark transition-all duration-200"
                       >
                         Proceed to Payment
@@ -720,7 +724,8 @@ export default function CashierDashboard() {
                     />
                   </div>
                   <button
-                    onClick={handleBarcodeScan}
+                    type="button"
+                    onClick={withTrustedClick(handleBarcodeScan)}
                     className="px-6 py-3 bg-brand-yellow text-brand-black rounded-xl hover:bg-brand-yellowDark transition-all duration-200 flex items-center space-x-2 shadow-lg hover:shadow-xl"
                   >
                     <QrCodeIcon className="h-5 w-5" />
@@ -732,8 +737,9 @@ export default function CashierDashboard() {
                 <div className="flex space-x-2 overflow-x-auto pb-2">
                   {categories.map(category => (
                     <button
+                      type="button"
                       key={category}
-                      onClick={() => setSelectedCategory(category)}
+                      onClick={withTrustedClick(() => setSelectedCategory(category))}
                       className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap ${
                         selectedCategory === category
                           ? 'bg-brand-yellow text-brand-black shadow-lg'
@@ -769,8 +775,9 @@ export default function CashierDashboard() {
           ) : (
             filteredProducts.map(product => (
               <button
+                type="button"
                 key={product.id}
-                onClick={() => addToCart(product)}
+                onClick={withTrustedClick(() => addToCart(product))}
                       disabled={product.stockQuantity <= 0}
                       className="group bg-brand-gray border border-brand-yellow/20 rounded-xl p-4 hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
                     >
@@ -806,7 +813,8 @@ export default function CashierDashboard() {
                   <div className="flex items-center space-x-4">
                   {currentSale.items.length > 0 && (
                     <button
-                      onClick={() => setCurrentSale(prev => ({ ...prev, items: [], total: 0 }))}
+                      type="button"
+                      onClick={withTrustedClick(() => setCurrentSale(prev => ({ ...prev, items: [], total: 0 })))}
                         className="text-red-400 hover:text-red-300 transition-colors"
                         title="Clear cart"
                     >
@@ -814,14 +822,15 @@ export default function CashierDashboard() {
                     </button>
                   )}
                     <button
+                      type="button"
                       className="lg:hidden text-gray-400 hover:text-gray-300"
-                      onClick={() => {
+                      onClick={withTrustedClick(() => {
                         const cartPanel = document.getElementById('cart-panel');
                         if (cartPanel) {
                           cartPanel.classList.toggle('h-[50vh]');
                           cartPanel.classList.toggle('h-20');
                         }
-                      }}
+                      })}
                     >
                       <ChevronDownIcon className="h-5 w-5" />
                     </button>
@@ -851,7 +860,8 @@ export default function CashierDashboard() {
                           </div>
                         </div>
                         <button
-                          onClick={() => removeFromCart(item.id)}
+                          type="button"
+                          onClick={withTrustedClick(() => removeFromCart(item.id))}
                           className="text-red-400 hover:text-red-300 transition-colors"
                           title="Remove item"
                         >
@@ -862,7 +872,8 @@ export default function CashierDashboard() {
                         <div className="flex flex-col items-start space-y-1">
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                    type="button"
+                    onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity - 1))}
                               className="w-8 h-8 bg-brand-black border border-brand-yellow/20 rounded-lg flex items-center justify-center hover:bg-black/60 transition-colors disabled:opacity-50"
                               disabled={item.quantity <= 1}
                               title="Decrease quantity"
@@ -885,7 +896,8 @@ export default function CashierDashboard() {
                               />
                             </div>
                   <button
-                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                    type="button"
+                    onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity + 1))}
                               className="w-8 h-8 bg-brand-black border border-brand-yellow/20 rounded-lg flex items-center justify-center hover:bg-black/60 transition-colors disabled:opacity-50"
                               disabled={item.quantity >= item.stockQuantity}
                               title={item.quantity >= item.stockQuantity ? 'Maximum stock reached' : 'Increase quantity'}
@@ -921,7 +933,8 @@ export default function CashierDashboard() {
                     <span className="text-2xl font-bold text-brand-yellow">${currentSale.total.toFixed(2)}</span>
             </div>
             <button
-              onClick={() => setShowPaymentModal(true)}
+              type="button"
+              onClick={withTrustedClick(() => setShowPaymentModal(true))}
                     className="w-full py-4 bg-brand-yellow text-brand-black rounded-xl font-bold hover:bg-brand-yellowDark transition-all duration-200 shadow-lg hover:shadow-xl"
             >
                     Proceed to Payment
@@ -947,12 +960,13 @@ export default function CashierDashboard() {
 
       {/* Payment Modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowPaymentModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={withTrustedClick(() => setShowPaymentModal(false))}>
           <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-800">Payment</h3>
               <button
-                onClick={() => setShowPaymentModal(false)}
+                type="button"
+                onClick={withTrustedClick(() => setShowPaymentModal(false))}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <XMarkIcon className="h-6 w-6" />
@@ -989,7 +1003,8 @@ export default function CashierDashboard() {
               <label className="block text-sm font-medium text-gray-700 mb-3">Payment Method</label>
               <div className="grid grid-cols-3 gap-3">
                 <button
-                  onClick={() => setCurrentSale(prev => ({ ...prev, paymentMethod: 'cash' }))}
+                  type="button"
+                  onClick={withTrustedClick(() => setCurrentSale(prev => ({ ...prev, paymentMethod: 'cash' })))}
                   className={`p-3 rounded-xl border-2 transition-all duration-200 flex flex-col items-center space-y-2 ${
                     currentSale.paymentMethod === 'cash' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -998,7 +1013,8 @@ export default function CashierDashboard() {
                   <span className="text-sm font-medium">Cash</span>
                 </button>
                 <button
-                  onClick={() => setCurrentSale(prev => ({ ...prev, paymentMethod: 'card' }))}
+                  type="button"
+                  onClick={withTrustedClick(() => setCurrentSale(prev => ({ ...prev, paymentMethod: 'card' })))}
                   className={`p-3 rounded-xl border-2 transition-all duration-200 flex flex-col items-center space-y-2 ${
                     currentSale.paymentMethod === 'card' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -1007,7 +1023,8 @@ export default function CashierDashboard() {
                   <span className="text-sm font-medium">Card</span>
                 </button>
                 <button
-                  onClick={() => setCurrentSale(prev => ({ ...prev, paymentMethod: 'mobile' }))}
+                  type="button"
+                  onClick={withTrustedClick(() => setCurrentSale(prev => ({ ...prev, paymentMethod: 'mobile' })))}
                   className={`p-3 rounded-xl border-2 transition-all duration-200 flex flex-col items-center space-y-2 ${
                     currentSale.paymentMethod === 'mobile' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -1089,14 +1106,16 @@ export default function CashierDashboard() {
             {/* Action Buttons */}
             <div className="flex space-x-3">
               <button
-                onClick={() => setShowPaymentModal(false)}
+                type="button"
+                onClick={withTrustedClick(() => setShowPaymentModal(false))}
                 disabled={processingPayment}
                 className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Back to Cart
               </button>
               <button
-                onClick={handlePayment}
+                type="button"
+                onClick={withTrustedClick(handlePayment)}
                 disabled={
                   processingPayment || 
                   !currentSale.paymentAmount || 
@@ -1126,10 +1145,11 @@ export default function CashierDashboard() {
               {[10, 20, 50, 100, 200, 500].map(amount => (
                 <button
                   key={amount}
-                  onClick={() => {
+                  type="button"
+                  onClick={withTrustedClick(() => {
                     setCurrentSale(prev => ({ ...prev, paymentAmount: amount.toString() }));
                     setPaymentError(null);
-                  }}
+                  })}
                   className="py-2 px-3 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   ${amount}
@@ -1143,14 +1163,16 @@ export default function CashierDashboard() {
       {/* Floating Action Buttons */}
       <div className="fixed bottom-6 right-6 flex flex-col space-y-3 z-40">
         <button
-          onClick={() => window.print()}
+          type="button"
+          onClick={withTrustedClick(() => window.print())}
           className="w-14 h-14 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center text-gray-600 hover:text-blue-600"
           title="Print Last Receipt"
         >
           <PrinterIcon className="h-6 w-6" />
         </button>
         <button
-          onClick={() => setShowStatsPanel(!showStatsPanel)}
+          type="button"
+          onClick={withTrustedClick(() => setShowStatsPanel(!showStatsPanel))}
           className="w-14 h-14 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center text-gray-600 hover:text-green-600"
           title="View Stats"
         >
@@ -1160,12 +1182,12 @@ export default function CashierDashboard() {
 
       {/* Stats Panel Overlay */}
       {showStatsPanel && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" onClick={() => setShowStatsPanel(false)}>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" onClick={withTrustedClick(() => setShowStatsPanel(false))}>
           <div className="absolute right-6 top-20 w-80 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-800">My Performance</h3>
               <button
-                onClick={() => setShowStatsPanel(false)}
+                onClick={withTrustedClick(() => setShowStatsPanel(false))}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <XMarkIcon className="h-6 w-6" />

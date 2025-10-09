@@ -1,9 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
-import pandas as pd
 from datetime import datetime, timedelta
-from prophet import Prophet
 
 router = APIRouter()
 
@@ -23,6 +21,10 @@ async def create_forecast(data: TimeSeriesData, periods: int = 30):
     Create time series forecast using Facebook Prophet
     """
     try:
+        # Import heavy dependencies lazily so the app can start without them
+        import pandas as pd
+        from prophet import Prophet
+
         # Prepare data for Prophet
         df = pd.DataFrame({
             'ds': data.dates,

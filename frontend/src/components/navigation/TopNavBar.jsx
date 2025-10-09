@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { fetchMyShop } from '../../store/slices/shopSlice';
+import { logout } from '../../store/slices/authSlice';
 import {
   MagnifyingGlassIcon,
   BuildingStorefrontIcon,
@@ -14,7 +15,11 @@ import {
 } from '@heroicons/react/24/outline';
 import { ShoppingCartIcon } from '@heroicons/react/24/solid';
 
-const TopNavBar = () => {
+const TopNavBar = ({ onMenuClick }) => {
+  const withTrustedClick = (handler) => (event, ...rest) => {
+    if (event && event.nativeEvent && event.nativeEvent.isTrusted === false) return;
+    return handler(event, ...rest);
+  };
   const dispatch = useDispatch();
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -25,6 +30,7 @@ const TopNavBar = () => {
   const { shop, loading, error: stateError } = useSelector((state) => state.shop || {});
 
   const currentShop = shop || authShop || null;
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!authShop && !shop) {
@@ -38,12 +44,26 @@ const TopNavBar = () => {
     { code: 'fr', name: 'French', flag: '🇫🇷' },
   ];
 
+  const handleLogout = () => {
+    dispatch(logout());
+    setIsProfileMenuOpen(false);
+    navigate('/login');
+  };
+
   return (
     <nav className="bg-brand-gray/95 backdrop-blur border-b border-brand-yellow/20">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          {/* Left section: Logo */}
-          <div className="flex items-center flex-shrink-0">
+          {/* Left section: Menu + Logo */}
+          <div className="flex items-center flex-shrink-0 space-x-2">
+            <button
+              type="button"
+              className="lg:hidden p-2 rounded-lg text-gray-200 hover:bg-black/40"
+              onClick={withTrustedClick(() => onMenuClick && onMenuClick())}
+              aria-label="Open menu"
+            >
+              <Squares2X2Icon className="h-6 w-6" />
+            </button>
             <Link to="/" className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-brand-yellow rounded-lg flex items-center justify-center">
                 <BuildingStorefrontIcon className="h-5 w-5 text-brand-black" />
@@ -70,7 +90,8 @@ const TopNavBar = () => {
             {/* Store Selector */}
             <div className="relative">
               <button
-                onClick={() => setIsStoreMenuOpen(!isStoreMenuOpen)}
+                type="button"
+                onClick={withTrustedClick(() => setIsStoreMenuOpen(!isStoreMenuOpen))}
                 className="flex items-center space-x-2 px-4 py-2 border border-brand-yellow/30 rounded-lg hover:bg-brand-black focus:outline-none focus:ring-2 focus:ring-brand-yellow text-gray-100"
                 disabled={loading}
               >
@@ -109,7 +130,7 @@ const TopNavBar = () => {
           {/* Right section: Actions and Profile */}
           <div className="flex items-center space-x-4">
             {/* Add New Button */}
-            <button className="inline-flex items-center px-4 py-2 border border-brand-yellow/40 rounded-lg text-sm font-medium text-brand-black bg-brand-yellow hover:bg-brand-yellowDark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-yellow focus:ring-offset-brand-gray">
+            <button type="button" className="inline-flex items-center px-4 py-2 border border-brand-yellow/40 rounded-lg text-sm font-medium text-brand-black bg-brand-yellow hover:bg-brand-yellowDark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-yellow focus:ring-offset-brand-gray">
               <PlusIcon className="h-5 w-5 mr-1" />
               Add New
             </button>
@@ -124,14 +145,14 @@ const TopNavBar = () => {
             </Link>
 
             {/* Notification Icons */}
-            <button className="relative p-2 text-gray-300 hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-gray rounded-lg">
+            <button type="button" className="relative p-2 text-gray-300 hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-gray rounded-lg">
               <BellIcon className="h-6 w-6" />
               <span className="absolute top-0 right-0 block h-5 w-5 rounded-full bg-brand-yellow text-brand-black border-2 border-brand-gray text-xs font-medium flex items-center justify-center">
                 3
               </span>
             </button>
 
-            <button className="relative p-2 text-gray-300 hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-gray rounded-lg">
+            <button type="button" className="relative p-2 text-gray-300 hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-gray rounded-lg">
               <ChatBubbleLeftIcon className="h-6 w-6" />
               <span className="absolute top-0 right-0 block h-5 w-5 rounded-full bg-brand-yellow text-brand-black border-2 border-brand-gray text-xs font-medium flex items-center justify-center">
                 2
@@ -141,7 +162,8 @@ const TopNavBar = () => {
             {/* Language Selector */}
             <div className="relative">
               <button
-                onClick={() => setIsLanguageMenuOpen(!isLanguageMenuOpen)}
+                type="button"
+                onClick={withTrustedClick(() => setIsLanguageMenuOpen(!isLanguageMenuOpen))}
                 className="p-2 text-gray-300 hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-gray rounded-lg"
               >
                 <GlobeAltIcon className="h-6 w-6" />
@@ -152,6 +174,7 @@ const TopNavBar = () => {
                   {languages.map((lang) => (
                     <button
                       key={lang.code}
+                      type="button"
                       className="w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-black/50 flex items-center space-x-2"
                     >
                       <span>{lang.flag}</span>
@@ -165,7 +188,8 @@ const TopNavBar = () => {
             {/* Profile Menu */}
             <div className="relative">
               <button
-                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                type="button"
+                onClick={withTrustedClick(() => setIsProfileMenuOpen(!isProfileMenuOpen))}
                 className="flex items-center space-x-3 focus:outline-none"
               >
                 <div className="relative">
@@ -183,9 +207,9 @@ const TopNavBar = () => {
                     <p className="text-sm font-medium text-gray-100">{user?.name}</p>
                     <p className="text-xs text-gray-400">{user?.email}</p>
                   </div>
-                  <button className="w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-black/50">Profile Settings</button>
-                  <button className="w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-black/50">Help Center</button>
-                  <button className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10">Sign Out</button>
+                  <button type="button" className="w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-black/50">Profile Settings</button>
+                  <button type="button" className="w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg:black/50">Help Center</button>
+                  <button type="button" onClick={withTrustedClick(handleLogout)} className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10">Sign Out</button>
                 </div>
               )}
             </div>

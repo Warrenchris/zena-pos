@@ -22,6 +22,8 @@ const dashboardRoutes = require('./routes/dashboard');
 const analyticsRoutes = require('./routes/analytics');
 const brandRoutes = require('./routes/brandRoutes');
 const unitRoutes = require('./routes/unitRoutes');
+const aiProxyRoutes = require('./routes/aiProxy');
+const systemHealthRoutes = require('./routes/systemHealth');
 
 const app = express();
 
@@ -53,6 +55,8 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/brands', brandRoutes);
 app.use('/api/units', unitRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/ai', aiProxyRoutes);
+app.use('/api/system/health', systemHealthRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
