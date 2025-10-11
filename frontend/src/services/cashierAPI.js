@@ -2,32 +2,44 @@ import api from './api';
 
 // Cashier-specific API endpoints
 export const cashierAPI = {
-  // Get cashier statistics
+  // Get cashier statistics with date range
   getCashierStats: (employeeId, startDate, endDate) => 
     api.get('/api/sales/cashier-stats', {
       params: { employeeId, startDate, endDate }
     }),
 
-  // Get cashier's recent sales
-  getRecentSales: (employeeId, limit = 10) =>
-    api.get('/api/sales', {
+  // Get cashier's own sales history
+  getMySales: (page = 1, limit = 10) =>
+    api.get('/api/sales/my-sales', {
       params: { 
-        employeeId, 
+        page,
         limit,
         sortBy: 'createdAt',
         sortOrder: 'DESC'
       }
     }),
 
+  // Get all sales for the cashier (paginated)
+  getAllMySales: async (params) => {
+    const response = await api.get('/api/sales/my-sales', { params });
+    return response.data;
+  },
+
   // Get cashier's top selling products
-  getTopSellingProducts: (employeeId, period = 'today') =>
+  getTopSellingProducts: (period = 'today') =>
     api.get('/api/sales/top-products', {
-      params: { employeeId, period }
+      params: { period }
     }),
 
   // Create a new sale
   createSale: (saleData) =>
     api.post('/api/sales', saleData),
+    
+  // Get available products (read-only)
+  getProducts: async (params) => {
+    const response = await api.get('/api/products', { params });
+    return response.data;
+  },
 
   // Get cashier's daily performance
   getDailyPerformance: (employeeId, date) =>

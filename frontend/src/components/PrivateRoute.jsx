@@ -1,28 +1,41 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getCurrentUser } from '../store/slices/authSlice';
 
 export default function PrivateRoute({ children }) {
   const dispatch = useDispatch();
   const { token, user, loading } = useSelector((state) => state.auth);
   const location = useLocation();
+  const authCheckRef = useRef(false);
 
   useEffect(() => {
-    if (token && !user && !loading) {
-      dispatch(getCurrentUser());
-    }
+    let mounted = true;
+    
+    const checkAuth = async () => {
+      // Only check auth once and when we have a token but no user
+      if (!authCheckRef.current && token && !user && !loading) {
+        authCheckRef.current = true;
+        try {
+          await dispatch(getCurrentUser()).unwrap();
+        } catch (error) {
+          console.error('Auth check failed:', error);
+          if (mounted && error === 'Your session has expired. Please sign in again.') {
+            localStorage.removeItem('token');
+          }
+        }
+      }
+    };
+
+    checkAuth();
+
+    return () => {
+      mounted = false;
+    };
   }, [token, user, loading, dispatch]);
 
-  // Check both token and user
-  if (!token) {
-    // Clear any stale token
-    localStorage.removeItem('token');
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  // Show loading while fetching user data
-  if (token && !user && loading) {
+  // Show loading state while we're fetching user data
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -32,10 +45,9 @@ export default function PrivateRoute({ children }) {
       </div>
     );
   }
-
-  // If we have a token but no user after loading, there's an auth error
-  if (token && !user && !loading) {
-    localStorage.removeItem('token');
+    
+  // Redirect to login if there's no token or no user data
+  if (!token || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

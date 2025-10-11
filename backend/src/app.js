@@ -24,6 +24,7 @@ const brandRoutes = require('./routes/brandRoutes');
 const unitRoutes = require('./routes/unitRoutes');
 const aiProxyRoutes = require('./routes/aiProxy');
 const systemHealthRoutes = require('./routes/systemHealth');
+const storeRoutes = require('./routes/storeRoutes');
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use('/api/ai', aiProxyRoutes);
 app.use('/api/system/health', systemHealthRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/stores', storeRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

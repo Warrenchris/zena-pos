@@ -1,4 +1,5 @@
 import { useSelector } from 'react-redux';
+import { useCallback } from 'react';
 import { ROLE_PERMISSIONS } from '../constants/roles';
 
 export const usePermissions = () => {
@@ -17,7 +18,7 @@ export const usePermissions = () => {
     return ROLE_PERMISSIONS[userRole].permissions.includes(permission);
   };
 
-  const getRoutesByRole = () => {
+  const getRoutesByRole = useCallback(() => {
     switch (userRole) {
       case 'admin':
         return [
@@ -49,7 +50,7 @@ export const usePermissions = () => {
       default:
         return [];
     }
-  };
+  }, [userRole]);
 
   return {
     hasPermission,

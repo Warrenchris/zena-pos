@@ -16,6 +16,7 @@ const api = axios.create({
   }
 });
 
+// Add request interceptor to include auth token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -24,17 +25,46 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Track the number of 401 errors to prevent infinite loops
+let unauthorized401Count = 0;
+const MAX_401_COUNT = 3; // Maximum number of 401s before forcing logout
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Reset 401 counter on successful response
+    unauthorized401Count = 0;
+    return response;
+  },
   async (error) => {
     if (error.response?.status === 401) {
-      // Handle token expiration
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      unauthorized401Count++;
+      
+      // Only redirect to login if we get multiple 401s
+      // or if it's a login-related endpoint
+      const isAuthEndpoint = error.config.url.includes('/auth/');
+      if (unauthorized401Count >= MAX_401_COUNT || isAuthEndpoint) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
 );
+
+// Profile request debouncing
+let profileRequestPromise = null;
+let profileRequestTimeout = null;
+const PROFILE_CACHE_TIME = 2000; // 2 seconds
 
 // Auth API
 export const authAPI = {
@@ -42,7 +72,28 @@ export const authAPI = {
     api.post('/api/auth/login', credentials),
   register: (userData) =>
     api.post('/api/auth/register', userData),
-  getProfile: () => api.get('/api/auth/profile'),
+  getProfile: () => {
+    // Return cached promise if it exists
+    if (profileRequestPromise) {
+      return profileRequestPromise;
+    }
+
+    // Clear any existing timeout
+    if (profileRequestTimeout) {
+      clearTimeout(profileRequestTimeout);
+    }
+
+    // Create new request promise
+    profileRequestPromise = api.get('/api/auth/profile');
+
+    // Set timeout to clear the cached promise
+    profileRequestTimeout = setTimeout(() => {
+      profileRequestPromise = null;
+      profileRequestTimeout = null;
+    }, PROFILE_CACHE_TIME);
+
+    return profileRequestPromise;
+  },
   forgotPassword: (email) => api.post('/api/auth/forgot-password', { email }),
   resetPassword: (payload) => api.post('/api/auth/reset-password', payload),
 };

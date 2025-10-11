@@ -1,7 +1,17 @@
 import React from 'react';
 import { Line } from 'react-chartjs-2';
+// Register ChartJS components
+import 'chart.js/auto';
 
-const ForecastChart = ({ data }) => {
+type ForecastData = {
+  dates: string[];
+  actual?: number[];
+  predictions: number[];
+  lower_bounds: number[];
+  upper_bounds: number[];
+}
+
+const ForecastChart: React.FC<{ data: ForecastData }> = ({ data }) => {
   const chartData = {
     labels: data.dates,
     datasets: [
@@ -60,8 +70,8 @@ const ForecastChart = ({ data }) => {
           display: true,
           text: 'Revenue ($)',
         },
-        min: Math.min(...data.lower_bounds) * 0.9,
-        max: Math.max(...data.upper_bounds) * 1.1,
+  min: data.lower_bounds && data.lower_bounds.length ? Math.min(...data.lower_bounds) * 0.9 : undefined,
+  max: data.upper_bounds && data.upper_bounds.length ? Math.max(...data.upper_bounds) * 1.1 : undefined,
       },
     },
   };

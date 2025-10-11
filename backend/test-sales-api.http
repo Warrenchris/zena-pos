@@ -1,0 +1,6 @@
+### Testing Sales API Endpoints
+
+GET http://localhost:3000/api/sales/my-sales?page=1&startDate=2025-10-01&endDate=2025-10-11&status=COMPLETED&sortField=createdAt&sortOrder=desc
+
+### Get Sales Stats
+GET http://localhost:3000/api/sales/my-stats?startDate=2025-10-01&endDate=2025-10-11

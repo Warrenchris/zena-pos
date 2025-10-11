@@ -3,25 +3,36 @@ import { lazy, Suspense } from 'react'
 import { useSelector } from 'react-redux'
 import Layout from './components/Layout'
 import PrivateRoute from './components/PrivateRoute'
+import LoadingSpinner from './components/LoadingSpinner'
 
-// Lazy load components
-const Login = lazy(() => import('./pages/Login'))
-const Signup = lazy(() => import('./pages/Signup'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const CashierDashboard = lazy(() => import('./pages/CashierDashboard'))
-const Products = lazy(() => import('./pages/Products'))
-const Categories = lazy(() => import('./pages/Categories'))
-const Customers = lazy(() => import('./pages/Customers'))
-const Sales = lazy(() => import('./pages/Sales'))
-const Expenses = lazy(() => import('./pages/Expenses'))
-const Users = lazy(() => import('./pages/Users'))
-const CompanySettings = lazy(() => import('./pages/CompanySettings'))
-const Employees = lazy(() => import('./pages/Employees'))
-const Reports = lazy(() => import('./pages/Reports'))
-const CreateProduct = lazy(() => import('./pages/CreateProduct'))
-const Brands = lazy(() => import('./pages/Brands'))
-const Units = lazy(() => import('./pages/Units'))
-const SubCategories = lazy(() => import('./pages/SubCategories'))
+// Custom lazy loading with error handling
+const lazyLoad = (importFunc) => {
+  return lazy(() => 
+    importFunc().catch(error => {
+      console.error('Error loading module:', error);
+      return { default: () => <div>Error loading page. Please try refreshing.</div> };
+    })
+  );
+};
+
+// Lazy load components with error handling
+const Login = lazyLoad(() => import('./pages/Login'))
+const Signup = lazyLoad(() => import('./pages/Signup'))
+const Dashboard = lazyLoad(() => import('./pages/Dashboard'))
+const CashierDashboard = lazyLoad(() => import('./pages/CashierDashboard'))
+const Products = lazyLoad(() => import('./pages/Products'))
+const Categories = lazyLoad(() => import('./pages/Categories'))
+const Customers = lazyLoad(() => import('./pages/Customers'))
+const Sales = lazyLoad(() => import('./pages/Sales'))
+const Expenses = lazyLoad(() => import('./pages/Expenses'))
+const Users = lazyLoad(() => import('./pages/Users'))
+const CompanySettings = lazyLoad(() => import('./pages/CompanySettings'))
+const Employees = lazyLoad(() => import('./pages/Employees'))
+const Reports = lazyLoad(() => import('./pages/Reports'))
+const CreateProduct = lazyLoad(() => import('./pages/CreateProduct'))
+const Brands = lazyLoad(() => import('./pages/Brands'))
+const Units = lazyLoad(() => import('./pages/Units'))
+const SubCategories = lazyLoad(() => import('./pages/SubCategories'))
 
 const AiServices = lazy(() => import('./pages/AiServices'))
 
@@ -33,13 +44,13 @@ export default function AppRoutes() {
   const location = useLocation()
 
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<LoadingSpinner />}>
       <Routes>
         <Route path="/login" element={
-          token ? <Navigate to="/dashboard" replace /> : <Login />
+          token && user ? <Navigate to="/dashboard" replace /> : <Login />
         } />
         <Route path="/signup" element={
-          token ? <Navigate to="/dashboard" replace /> : <Signup />
+          token && user ? <Navigate to="/dashboard" replace /> : <Signup />
         } />
         <Route path="/" element={
           <PrivateRoute>
@@ -48,7 +59,7 @@ export default function AppRoutes() {
         }>
           <Route path="/dashboard" element={
             token ? (
-              (user?.role === 'cashier' || user?.role === 'employee') ? <CashierDashboard /> : <Dashboard />
+              (user?.role === 'admin') ? <Dashboard /> : <CashierDashboard />
             ) : <Navigate to="/login" replace />
           } />
           <Route path="/products" element={<Products />} />

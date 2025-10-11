@@ -3,14 +3,26 @@ import {
   CalculatorIcon, 
   ChartBarIcon, 
   CurrencyDollarIcon,
-  TrendingUpIcon
-} from '@heroicons/react/outline';
+} from '@heroicons/react/24/outline';
 
-const MetricCard = ({ title, value, icon: Icon, trend, description }) => (
+// TrendingUpIcon isn't exported from this package path in this project; fallback to a simple SVG component
+const TrendingUpIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 14l6-6 4 4 6-8v8H3z" /></svg>
+);
+
+type Metric = {
+  title: string;
+  value: number | string;
+  icon?: React.ElementType;
+  trend?: number;
+  description?: string;
+}
+
+const MetricCard: React.FC<Metric> = ({ title, value, icon: Icon, trend, description }) => (
   <div className="bg-white rounded-lg shadow p-6">
     <div className="flex items-start">
       <div className="p-3 rounded-full bg-blue-100">
-        <Icon className="h-6 w-6 text-blue-600" />
+        {Icon ? <Icon className="h-6 w-6 text-blue-600" /> : <CurrencyDollarIcon className="h-6 w-6 text-blue-600" />}
       </div>
       <div className="ml-4">
         <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
@@ -33,13 +45,13 @@ const MetricCard = ({ title, value, icon: Icon, trend, description }) => (
   </div>
 );
 
-const FinancialMetrics = ({ metrics }) => {
+const FinancialMetrics: React.FC<{ metrics: Record<string, any> }> = ({ metrics }) => {
   const {
-    revenue,
-    gross_profit_margin,
-    net_profit_margin,
-    current_ratio
-  } = metrics;
+    revenue = 0,
+    gross_profit_margin = 0,
+    net_profit_margin = 0,
+    current_ratio = 0
+  } = metrics || {};
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -40,7 +40,7 @@ const RecommendationCard = ({ recommendation }: RecommendationCardProps): JSX.El
           <p className="text-gray-600 mt-1">{recommendation.message}</p>
           {Array.isArray(recommendation.details) && (
             <ul className="mt-2 space-y-1">
-              {recommendation.details.map((detail: any, index: number) => (
+                        {recommendation.details.map((detail: any, index: number) => (
                 <li key={index} className="text-sm text-gray-500">
                   {detail.name ? `${detail.name}: ${detail.currentStock} units` : 
                    detail.category ? `${detail.category}: $${detail.amount}` : 

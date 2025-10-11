@@ -9,6 +9,7 @@ const Sale = require('./Sale');
 const SaleItem = require('./SaleItem');
 const Expense = require('./Expense');
 const Shop = require('./Shop');
+const Store = require('./Store');
 const ActivityLog = require('./ActivityLog');
 
 // Define model associations
@@ -59,5 +60,6 @@ module.exports = {
   SaleItem,
   Expense,
   Shop,
+  Store,
   ActivityLog
 };

@@ -11,11 +11,26 @@ const initialState = {
 
 export const login = createAsyncThunk(
   'auth/login',
-  async (credentials, { rejectWithValue }) => {
+  async (credentials, { rejectWithValue, dispatch }) => {
     try {
       const response = await authAPI.login(credentials)
-      localStorage.setItem('token', response.data.token)
-      return response.data
+      const { token, user } = response.data
+      
+      // Store token
+      localStorage.setItem('token', token)
+      
+      // Get full profile after login
+      try {
+        const profileResponse = await authAPI.getProfile()
+        return {
+          token,
+          user: profileResponse.data.user,
+          shop: profileResponse.data.shop
+        }
+      } catch (profileError) {
+        // If profile fetch fails, return basic user info
+        return { token, user }
+      }
     } catch (error) {
       return rejectWithValue(
         error?.response?.data?.error ||
@@ -27,11 +42,19 @@ export const login = createAsyncThunk(
 
 export const getCurrentUser = createAsyncThunk(
   'auth/getCurrentUser',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, getState }) => {
+    const { token } = getState().auth;
+    if (!token) {
+      return rejectWithValue('No authentication token found');
+    }
+    
     try {
       const response = await authAPI.getProfile()
       return response.data
     } catch (error) {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+      }
       return rejectWithValue(
         error?.response?.data?.error || 'Your session has expired. Please sign in again.'
       )
@@ -47,6 +70,7 @@ const authSlice = createSlice({
       state.user = null
       state.shop = null
       state.token = null
+      state.error = null
       localStorage.removeItem('token')
     },
     clearError: (state) => {
@@ -79,18 +103,24 @@ const authSlice = createSlice({
       })
       .addCase(getCurrentUser.pending, (state) => {
         state.loading = true
+        state.error = null
       })
       .addCase(getCurrentUser.fulfilled, (state, action) => {
         state.loading = false
-        state.user = action.payload
-        state.shop = action.payload?.shop || action.payload?.Shop || null
+        state.user = action.payload.user
+        state.shop = action.payload?.shop || action.payload.user?.shop || null
+        state.error = null
       })
       .addCase(getCurrentUser.rejected, (state, action) => {
         state.loading = false
         state.user = null
         state.shop = null
-        state.token = null
-        localStorage.removeItem('token')
+        // Only clear token if it's an authentication error
+        if (action.payload === 'Your session has expired. Please sign in again.' || 
+            action.payload === 'No authentication token found') {
+          state.token = null
+          localStorage.removeItem('token')
+        }
         state.error = action.payload || null
       })
   },

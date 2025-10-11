@@ -283,8 +283,8 @@ export default function Dashboard() {
     );
   }
 
-  // Render cashier-specific dashboard (employees are cashiers in this system)
-  if (user?.role === 'cashier' || user?.role === 'employee') {
+  // Only render cashier dashboard for non-admin users
+  if (user?.role !== 'admin') {
     return <CashierDashboard />;
   }
 

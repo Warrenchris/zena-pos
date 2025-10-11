@@ -38,13 +38,21 @@ exports.register = async (req, res) => {
     });
 
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { 
+        id: user.id, 
+        role: user.role,
+        shopId: createdShop?.id,
+        isEmployee: false
+      },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
     res.status(201).json({
-      user,
+      user: {
+        ...user.toJSON(),
+        shop: createdShop
+      },
       token
     });
   } catch (error) {
@@ -175,7 +183,34 @@ exports.resetPassword = async (req, res) => {
 // Get user profile
 exports.getProfile = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const { id: userId, isEmployee } = req.user;
+
+    if (isEmployee) {
+      // If token belongs to an employee, fetch from Employee model
+      const employee = await Employee.findByPk(userId, {
+        attributes: { exclude: ['password'] },
+        include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone'] }]
+      });
+
+      if (!employee) {
+        return res.status(404).json({ error: 'Employee not found' });
+      }
+
+      // Normalize response similar to User and match frontend shape { user, shop }
+      const userProfile = {
+        id: employee.id,
+        name: `${employee.firstName} ${employee.lastName}`,
+        email: employee.email,
+        role: 'employee',
+        shopId: employee.shopId,
+      };
+
+      const shop = employee.Shop ? { id: employee.Shop.id, name: employee.Shop.name, address: employee.Shop.address, phone: employee.Shop.phone } : null;
+
+      return res.json({ user: userProfile, shop });
+    }
+
+    // Regular user
     const user = await User.findByPk(userId, {
       attributes: { exclude: ['password'] },
       include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone'] }]
@@ -185,7 +220,18 @@ exports.getProfile = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(user);
+    // Normalize user response to match frontend expected shape { user, shop }
+    const userProfile = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      shopId: user.shopId,
+    };
+
+    const shop = user.Shop ? { id: user.Shop.id, name: user.Shop.name, address: user.Shop.address, phone: user.Shop.phone } : null;
+
+    res.json({ user: userProfile, shop });
   } catch (error) {
     logger.error('Error in getProfile:', error);
     res.status(500).json({ error: 'Server error' });

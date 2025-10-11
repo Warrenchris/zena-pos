@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Line } from 'react-chartjs-2';
+// Register ChartJS components
+import 'chart.js/auto';
 import axios from 'axios';
 
 const FinancialDashboard = () => {
-  const [metrics, setMetrics] = useState(null);
-  const [insights, setInsights] = useState([]);
-  const [forecasts, setForecasts] = useState(null);
+  const [metrics, setMetrics] = useState<Record<string, any> | null>(null);
+  const [insights, setInsights] = useState<Array<any>>([]);
+  const [forecasts, setForecasts] = useState<Record<string, any> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -27,8 +29,9 @@ const FinancialDashboard = () => {
         setForecasts(forecastsResponse.data);
         
         setLoading(false);
-      } catch (err) {
-        setError(err.message);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg);
         setLoading(false);
       }
     };
@@ -62,7 +65,7 @@ const FinancialDashboard = () => {
               <h3 className="font-semibold">{insight.insight_type}</h3>
               <p className="text-gray-600">{insight.description}</p>
               <ul className="list-disc list-inside mt-2">
-                {insight.recommendations.map((rec, idx) => (
+                {insight.recommendations.map((rec: string, idx: number) => (
                   <li key={idx} className="text-sm text-gray-500">{rec}</li>
                 ))}
               </ul>
