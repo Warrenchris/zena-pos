@@ -44,6 +44,7 @@ exports.getAllSales = async (req, res) => {
       currentPage: page
     });
   } catch (error) {
+    console.error('Error fetching sales:', error);
     res.status(500).json({ error: 'Failed to fetch sales' });
   }
 };
@@ -192,7 +193,10 @@ exports.createSale = async (req, res) => {
       paymentAmount,
       discount = 0,
       tax = 0,
-      notes
+      notes,
+      total: frontendTotal,
+      change: frontendChange,
+      employeeId: frontendEmployeeId
     } = req.body;
     
     // Always use the current user's ID as the employeeId for cashiers
@@ -225,7 +229,9 @@ exports.createSale = async (req, res) => {
         });
       }
 
-      const itemSubtotal = product.price * item.quantity;
+      // Use frontend price if provided, otherwise use product price
+      const itemPrice = item.price || product.price;
+      const itemSubtotal = itemPrice * item.quantity;
       subtotal += itemSubtotal;
 
       productUpdates.push({
@@ -236,28 +242,34 @@ exports.createSale = async (req, res) => {
       saleItems.push({
         productId: product.id,
         quantity: item.quantity,
-        unitPrice: product.price,
+        unitPrice: product.price, // Always store the original product price
+        price: itemPrice, // Store the actual price used (frontend or product)
         subtotal: itemSubtotal,
         discount: item.discount || 0
       });
     }
 
-    const total = subtotal + tax - discount;
+    // Use frontend total if provided and valid, otherwise calculate
+    const total = frontendTotal && frontendTotal > 0 ? parseFloat(frontendTotal) : (subtotal + tax - discount);
     
     // Calculate change if payment amount is provided
-    const change = paymentAmount ? parseFloat(paymentAmount) - total : 0;
+    const change = frontendChange !== undefined ? parseFloat(frontendChange) : (paymentAmount ? parseFloat(paymentAmount) - total : 0);
 
-    // Generate invoice number (YYYYMMDD-XXXX format)
+    // Generate invoice number (YYYYMMDD-XXXX format) with transaction lock
     const date = new Date();
     const dateStr = date.toISOString().slice(0,10).replace(/-/g,'');
-    const lastSale = await Sale.findOne({
+    
+    const [lastSale] = await Sale.findAll({
       where: {
         invoiceNumber: {
           [Op.like]: `${dateStr}-%`
         },
         shopId: req.user.shopId
       },
-      order: [['invoiceNumber', 'DESC']]
+      order: [['invoiceNumber', 'DESC']],
+      limit: 1,
+      lock: true,
+      transaction: t
     });
 
     let sequence = '0001';
@@ -284,27 +296,33 @@ exports.createSale = async (req, res) => {
       customerPhone: customer?.phone || null,
       customerEmail: customer?.email || null,
       customerId,
-      userId: req.user.id,
+      userId: req.user.id, // Track which user created the sale
       employeeId: employeeId || req.user.id, // Track which employee/cashier made the sale
       notes,
       shopId: req.user.shopId
     }, { transaction: t });
 
     // Create sale items
-    await Promise.all(saleItems.map(item => 
-      SaleItem.create({
-        ...item,
-        saleId: sale.id
-      }, { transaction: t })
-    ));
+    try {
+      await Promise.all(saleItems.map(item => 
+        SaleItem.create({
+          ...item,
+          saleId: sale.id
+        }, { transaction: t })
+      ));
 
-    // Update product stock
-    await Promise.all(productUpdates.map(update =>
-      Product.update(
-        { stockQuantity: update.stockQuantity },
-        { where: { id: update.id }, transaction: t }
-      )
-    ));
+      // Update product stock
+      await Promise.all(productUpdates.map(update =>
+        Product.update(
+          { stockQuantity: update.stockQuantity },
+          { where: { id: update.id }, transaction: t }
+        )
+      ));
+    } catch (error) {
+      await t.rollback();
+      console.error('Error creating sale items or updating stock:', error);
+      return res.status(500).json({ error: 'Failed to process sale items' });
+    }
 
     // Handle customer creation/update for customer relationship management
     let finalCustomerId = customerId;
@@ -367,7 +385,19 @@ exports.createSale = async (req, res) => {
     await t.commit();
 
     // Log activity
-    try { await logActivity(req, 'SALE_CREATED', 'Sale', sale.id, { total }); } catch (_) {}
+    try {
+      await logActivity({
+        userId: req.user.id,
+        action: 'SALE_CREATED',
+        details: `Created sale ${invoiceNumber} with total ${total}`,
+        entityId: sale.id,
+        entityType: 'sale',
+        shopId: req.user.shopId
+      });
+    } catch (error) {
+      console.warn('Failed to log sale activity:', error);
+      // Continue execution as this is non-critical
+    }
 
     // Fetch complete sale with relations
     const completeSale = await Sale.findOne({
@@ -442,8 +472,8 @@ exports.getCashierStats = async (req, res) => {
       }
     };
 
-    // For cashiers, always show their own stats only
-    if (req.user.role === 'cashier') {
+    // For cashiers and employees, always show their own stats only
+    if (req.user.role === 'cashier' || req.user.role === 'employee') {
       whereClause.employeeId = req.user.id;
     }
     // For managers/admins, filter by employeeId if provided

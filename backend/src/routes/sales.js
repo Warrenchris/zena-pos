@@ -12,6 +12,7 @@ router.use(auth);
 
 // Validation middleware
 const validateSale = [
+  // Required fields validation
   body('items')
     .isArray()
     .withMessage('Items must be an array')
@@ -23,61 +24,187 @@ const validateSale = [
   body('items.*.quantity')
     .isInt({ min: 1 })
     .withMessage('Quantity must be at least 1'),
+  body('items.*.originalPrice')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Original price must be a positive number'),
+  body('items.*.price')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Price must be a positive number'),
   body('items.*.discount')
     .optional()
     .isFloat({ min: 0 })
     .withMessage('Discount must be a positive number'),
+  body('items.*.discountType')
+    .optional()
+    .isIn(['percentage', 'fixed'])
+    .withMessage('Discount type must be percentage or fixed'),
+  body('items.*.discountValue')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Discount value must be a positive number'),
+  body('items.*.taxRate')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Tax rate must be a positive number'),
+  body('items.*.taxAmount')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Tax amount must be a positive number'),
+  body('items.*.notes')
+    .optional()
+    .isString()
+    .withMessage('Item notes must be a string'),
+  body('items.*.serialNumber')
+    .optional()
+    .isString()
+    .withMessage('Serial number must be a string'),
+  body('items.*.batchNumber')
+    .optional()
+    .isString()
+    .withMessage('Batch number must be a string'),
+
+  // Customer fields validation
   body('customerId')
     .optional()
     .isInt()
     .withMessage('Invalid customer ID'),
-  body('paymentMethod')
-    .isIn(['cash', 'card', 'mobile', 'mobile_money', 'other'])
-    .withMessage('Invalid payment method'),
-  body('paymentAmount')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Payment amount must be a positive number'),
   body('customer')
     .optional()
     .isObject()
     .withMessage('Customer must be an object'),
   body('customer.name')
     .optional()
+    .isString()
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Customer name must be between 1 and 100 characters'),
   body('customer.email')
     .optional()
     .isEmail()
-    .withMessage('Invalid customer email'),
+    .withMessage('Invalid email format'),
   body('customer.phone')
     .optional()
+    .isString()
     .trim()
     .isLength({ max: 20 })
-    .withMessage('Customer phone must be less than 20 characters'),
+    .withMessage('Phone must be less than 20 characters'),
   body('customer.location')
     .optional()
+    .isString()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Customer location must be less than 100 characters'),
-  body('employeeId')
+    .withMessage('Location must be less than 100 characters'),
+  
+  // Payment fields validation  
+  body('paymentMethod')
     .optional()
-    .isUUID()
-    .withMessage('Invalid employee ID'),
-  body('discount')
+    .isIn(['cash', 'card', 'mobile', 'mobile_money', 'check', 'store_credit'])
+    .withMessage('Invalid payment method'),
+  body('paymentAmount')
     .optional()
     .isFloat({ min: 0 })
-    .withMessage('Discount must be a positive number'),
+    .withMessage('Payment amount must be a positive number'),
+  body('paymentReference')
+    .optional()
+    .isString()
+    .withMessage('Payment reference must be a string'),
+  body('paymentProvider')
+    .optional()
+    .isString()
+    .withMessage('Payment provider must be a string'),
+  body('paymentNotes')
+    .optional()
+    .isString()
+    .withMessage('Payment notes must be a string'),
+  
+  // Amount fields
+  body('subtotal')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Subtotal must be a positive number'),
   body('tax')
     .optional()
     .isFloat({ min: 0 })
     .withMessage('Tax must be a positive number'),
+  body('taxRate')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Tax rate must be a positive number'),
+  body('discount')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Discount must be a positive number'),
+  body('discountType')
+    .optional()
+    .isIn(['percentage', 'fixed'])
+    .withMessage('Discount type must be percentage or fixed'),
+  body('discountValue')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Discount value must be a positive number'),
+  body('total')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Total must be a positive number'),
+  body('change')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Change amount must be a positive number'),
+
+  // Customer experience fields
+  body('customerNotes')
+    .optional()
+    .isString()
+    .withMessage('Customer notes must be a string'),
+  body('deliveryAddress')
+    .optional()
+    .isString()
+    .withMessage('Delivery address must be a string'),
+  body('deliveryInstructions')
+    .optional()
+    .isString()
+    .withMessage('Delivery instructions must be a string'),
+  body('preferredLanguage')
+    .optional()
+    .isString()
+    .isLength({ min: 2, max: 5 })
+    .withMessage('Preferred language must be a valid language code'),
+
+  // Business operations fields
+  body('source')
+    .optional()
+    .isIn(['pos', 'online', 'phone', 'mobile_app'])
+    .withMessage('Invalid sale source'),
+  body('saleStatus')
+    .optional()
+    .isIn(['pending', 'confirmed', 'processing', 'completed', 'cancelled', 'refunded', 'partially_refunded'])
+    .withMessage('Invalid sale status'),
+  body('fulfillmentStatus')
+    .optional()
+    .isIn(['pending', 'processing', 'ready', 'delivered', 'collected', 'failed'])
+    .withMessage('Invalid fulfillment status'),
+
+  // Additional metadata
+  body('metadata')
+    .optional()
+    .isObject()
+    .withMessage('Metadata must be an object'),
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Tags must be an array'),
   body('notes')
     .optional()
+    .isString()
     .trim()
     .isLength({ max: 500 })
-    .withMessage('Notes must be less than 500 characters')
+    .withMessage('Notes must be less than 500 characters'),
+  body('employeeId')
+    .optional()
+    .isString()
+    .withMessage('Employee ID must be a string')
 ];
 
 const validatePaymentStatus = [
@@ -100,7 +227,7 @@ router.get('/statistics',
 
 router.get('/cashier-stats', 
   auth,
-  checkRole(['admin', 'manager', 'cashier']),
+  checkRole(['admin', 'manager', 'cashier', 'employee']),
   validateDateRange,
   saleController.getCashierStats
 );
@@ -126,8 +253,8 @@ router.get('/:id',
     if (req.user.role === 'admin' || req.user.role === 'manager') {
       return next();
     }
-    // Cashiers can only view their own sales
-    if (req.user.role === 'cashier') {
+    // Cashiers and employees can only view their own sales
+    if (req.user.role === 'cashier' || req.user.role === 'employee') {
       const sale = await Sale.findOne({ 
         where: { 
           id: req.params.id,
@@ -146,15 +273,9 @@ router.get('/:id',
 );
 
 // Create new sale - Cashiers can only create sales for their shop
-router.post('/',
-  checkPermission('create_sale'),
-  body('products').isArray(),
-  body('products.*.id').isInt(),
-  body('products.*.quantity').isInt({ min: 1 }),
-  body('customerId').optional().isInt(),
-  body('paymentType').isIn(['cash', 'card', 'mobile']),
-  body('notes').optional().isString(),
-  validateRequest,
+router.post('/', 
+  checkPermission('create_sales'),
+  validateSale,
   saleController.createSale
 );
 
@@ -171,13 +292,6 @@ router.put('/:id',
 router.delete('/:id',
   checkRole(['admin']),
   saleController.deleteSale
-);
-
-router.post('/', 
-  auth,
-  checkPermission('create_sales'),
-  validateSale,
-  saleController.createSale
 );
 
 router.patch('/:id/payment-status', 

@@ -15,6 +15,12 @@ const ROLE_PERMISSIONS = {
     'create_sales',
     'view_products',
     'view_own_sales'
+  ],
+  employee: [
+    'access_pos',
+    'create_sales',
+    'view_products',
+    'view_own_sales'
   ]
 };
 
