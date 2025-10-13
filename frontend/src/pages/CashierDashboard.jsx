@@ -318,15 +318,19 @@ export default function CashierDashboard() {
       const paymentAmount = parseFloat(parseFloat(currentSale.paymentAmount).toFixed(2));
       
       const saleData = {
-        customer: currentSale.customer,
-        total: parseFloat(currentSale.total.toFixed(2)),
+        // Required fields with correct structure
         items: currentSale.items.map(item => ({
-          productId: item.id,
-          quantity: item.quantity,
+          productId: parseInt(item.id),
+          quantity: parseInt(item.quantity),
+          discount: parseFloat(item.discount || 0),
           price: parseFloat((typeof item.price === 'number' ? item.price : parseFloat(item.price || 0)).toFixed(2))
         })),
+        customerId: currentSale.customer?.id, // Send null if no customer.id
+        // Additional fields
+        customer: currentSale.customer,
+        total: parseFloat(currentSale.total.toFixed(2)),
         paymentAmount,
-        paymentMethod: currentSale.paymentMethod,
+        paymentMethod: currentSale.paymentMethod || 'cash',
         notes: currentSale.notes,
         employeeId: user?.id,
         change: parseFloat((paymentAmount - currentSale.total).toFixed(2))

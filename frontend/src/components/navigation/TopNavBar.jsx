@@ -151,14 +151,14 @@ const TopNavBar = ({ onMenuClick }) => {
             {/* Notification Icons */}
             <button type="button" className="relative p-2 text-gray-300 hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-gray rounded-lg">
               <BellIcon className="h-6 w-6" />
-              <span className="absolute top-0 right-0 block h-5 w-5 rounded-full bg-brand-yellow text-brand-black border-2 border-brand-gray text-xs font-medium flex items-center justify-center">
+              <span className="absolute top-0 right-0 flex h-5 w-5 rounded-full bg-brand-yellow text-brand-black border-2 border-brand-gray text-xs font-medium items-center justify-center">
                 3
               </span>
             </button>
 
             <button type="button" className="relative p-2 text-gray-300 hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-gray rounded-lg">
               <ChatBubbleLeftIcon className="h-6 w-6" />
-              <span className="absolute top-0 right-0 block h-5 w-5 rounded-full bg-brand-yellow text-brand-black border-2 border-brand-gray text-xs font-medium flex items-center justify-center">
+              <span className="absolute top-0 right-0 flex h-5 w-5 rounded-full bg-brand-yellow text-brand-black border-2 border-brand-gray text-xs font-medium items-center justify-center">
                 2
               </span>
             </button>
