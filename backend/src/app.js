@@ -5,6 +5,14 @@ const morgan = require('morgan');
 const logger = require('./utils/logger');
 require('dotenv').config();
 
+// Create logs directory if it doesn't exist
+const fs = require('fs');
+const path = require('path');
+const logsDir = path.join(__dirname, '../logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir);
+}
+
 const { testConnection } = require('./config/database');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');

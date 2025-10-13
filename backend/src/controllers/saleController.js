@@ -48,6 +48,100 @@ exports.getAllSales = async (req, res) => {
   }
 };
 
+// Update sale status and notes
+exports.updateSale = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+
+    // Find the sale
+    const sale = await Sale.findOne({
+      where: { 
+        id,
+        shopId: req.user.shopId
+      }
+    });
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+
+    // Update the sale
+    const updatedSale = await sale.update({
+      status,
+      notes,
+      updatedBy: req.user.id
+    });
+
+    // Log the activity
+    await logActivity({
+      userId: req.user.id,
+      action: 'UPDATE_SALE',
+      details: `Updated sale ${sale.invoiceNumber} status to ${status}`,
+      entityId: sale.id,
+      entityType: 'sale',
+      shopId: req.user.shopId
+    });
+
+    res.json(updatedSale);
+  } catch (error) {
+    console.error('Error updating sale:', error);
+    res.status(500).json({ error: 'Failed to update sale' });
+  }
+};
+
+// Delete a sale (soft delete)
+exports.deleteSale = async (req, res) => {
+  const t = await sequelize.transaction();
+  
+  try {
+    const { id } = req.params;
+
+    // Find the sale
+    const sale = await Sale.findOne({
+      where: { 
+        id,
+        shopId: req.user.shopId
+      },
+      include: [
+        { 
+          model: SaleItem,
+          include: [Product]
+        }
+      ]
+    });
+
+    if (!sale) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+
+    // Mark sale as deleted and store who deleted it
+    await sale.update({
+      status: 'deleted',
+      deletedAt: new Date(),
+      deletedBy: req.user.id
+    }, { transaction: t });
+
+    // Log the activity
+    await logActivity({
+      userId: req.user.id,
+      action: 'DELETE_SALE',
+      details: `Deleted sale ${sale.invoiceNumber}`,
+      entityId: sale.id,
+      entityType: 'sale',
+      shopId: req.user.shopId
+    }, { transaction: t });
+
+    await t.commit();
+    res.json({ message: 'Sale deleted successfully' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Error deleting sale:', error);
+    res.status(500).json({ error: 'Failed to delete sale' });
+  }
+};
+
 // Get sale by ID
 exports.getSaleById = async (req, res) => {
   try {
@@ -98,9 +192,11 @@ exports.createSale = async (req, res) => {
       paymentAmount,
       discount = 0,
       tax = 0,
-      notes,
-      employeeId
+      notes
     } = req.body;
+    
+    // Always use the current user's ID as the employeeId for cashiers
+    const employeeId = req.user.id;
 
     // Validate items array
     if (!Array.isArray(items) || items.length === 0) {
@@ -331,18 +427,7 @@ exports.getCashierStats = async (req, res) => {
   try {
     const { employeeId, startDate, endDate } = req.query;
     
-    // If employeeId is provided, validate it exists and belongs to the shop
-    if (employeeId) {
-      const employee = await Employee.findOne({
-        where: { id: employeeId, shopId: req.user.shopId }
-      });
-      
-      if (!employee) {
-        return res.status(404).json({ error: 'Employee not found' });
-      }
-    }
-
-    // Use provided dates or default to today
+    // Default the dates if not provided
     const start = startDate ? new Date(startDate) : new Date();
     start.setHours(0, 0, 0, 0);
     
@@ -357,9 +442,31 @@ exports.getCashierStats = async (req, res) => {
       }
     };
 
-    // Add employee filter if specified
-    if (employeeId) {
-      whereClause.employeeId = employeeId;
+    // For cashiers, always show their own stats only
+    if (req.user.role === 'cashier') {
+      whereClause.employeeId = req.user.id;
+    }
+    // For managers/admins, filter by employeeId if provided
+    else if (employeeId) {
+      try {
+        const employee = await Employee.findOne({
+          where: { id: employeeId, shopId: req.user.shopId }
+        });
+        
+        if (!employee) {
+          return res.status(404).json({ 
+            error: 'Employee not found',
+            details: `No employee found with ID ${employeeId} in shop ${req.user.shopId}`
+          });
+        }
+        whereClause.employeeId = employeeId;
+      } catch (err) {
+        console.error('Error finding employee:', err);
+        return res.status(400).json({
+          error: 'Invalid employee ID format',
+          details: err.message
+        });
+      }
     }
 
     // Get sales data

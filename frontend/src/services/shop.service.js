@@ -6,13 +6,21 @@ const getMine = async () => {
     return response.data;
   } catch (error) {
     const status = error.response?.status;
-    if (status === 404 || status === 401 || status === 403) {
-      // Gracefully degrade when unauthorized/forbidden or not found
+    if (status === 404) {
+      return null; // Shop not found
+    }
+    if (status === 401) {
+      // Token expired or invalid
+      localStorage.removeItem('token');
+      window.location.href = '/login';
       return null;
     }
+    if (status === 403) {
+      // User doesn't have admin permissions - return minimal shop info from auth
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      return currentUser.shop || null;
+    }
     if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
-      // Log only in development for unexpected errors
-      // eslint-disable-next-line no-console
       console.error('Error fetching my shop:', error);
     }
     throw error;

@@ -10,7 +10,7 @@ function App() {
     <React.StrictMode>
       <Provider store={store}>
         <ToastProvider>
-          <RouterProvider router={router} />
+          <RouterProvider router={router} future={{ v7_startTransition: true }} />
         </ToastProvider>
       </Provider>
     </React.StrictMode>

@@ -1,9 +1,12 @@
 import axios from 'axios';
+import { logger, loggerInterceptor } from '../utils/logger';
 
 // Safely read Vite / Node env var without throwing in browser (where
 // `process` is undefined). In tests/process envs this will pick up
 // process.env.VITE_API_URL; otherwise fall back to localhost.
 const baseURL = (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) || 'http://localhost:3000';
+
+logger.info('🚀 API Service initialized with baseURL:', baseURL);
 
 const api = axios.create({
   baseURL,
@@ -15,6 +18,10 @@ const api = axios.create({
     return status >= 200 && status < 300;
   }
 });
+
+// Add logging interceptors
+api.interceptors.request.use(loggerInterceptor.request);
+api.interceptors.response.use(loggerInterceptor.response, loggerInterceptor.error);
 
 // Add request interceptor to include auth token
 api.interceptors.request.use((config) => {

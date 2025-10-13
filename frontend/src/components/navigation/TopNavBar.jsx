@@ -29,17 +29,18 @@ const TopNavBar = ({ onMenuClick }) => {
   const authShop = useSelector((state) => state.auth?.shop);
   const { shop, loading, error: stateError } = useSelector((state) => state.shop || {});
 
-  const currentShop = shop || authShop || null;
+  const currentShop = shop || authShop || (user?.shop ? { name: user.shop.name } : null);
   const navigate = useNavigate();
   const hasFetchedShopRef = useRef(false);
 
   useEffect(() => {
+    // Only try to fetch shop details if user is admin
     if (hasFetchedShopRef.current) return;
-    if (!authShop && !shop && !loading) {
+    if (user?.role === 'admin' && !authShop && !shop && !loading) {
       hasFetchedShopRef.current = true;
       dispatch(fetchMyShop());
     }
-  }, [dispatch, authShop, shop, loading]);
+  }, [dispatch, authShop, shop, loading, user]);
 
   const languages = [
     { code: 'en', name: 'English', flag: '🇬🇧' },
@@ -108,7 +109,7 @@ const TopNavBar = ({ onMenuClick }) => {
               {/* Store Dropdown */}
               {isStoreMenuOpen && (
                 <div className="absolute right-0 mt-2 w-72 bg-brand-gray border border-brand-yellow/20 rounded-lg shadow-xl py-1 z-50">
-                  {stateError ? (
+                  {stateError && user?.role === 'admin' ? (
                     <div className="px-4 py-2 text-sm text-red-400">{stateError.message || 'Failed to load shop'}</div>
                   ) : loading ? (
                     <div className="px-4 py-2 text-sm text-gray-300">Loading shop...</div>
@@ -121,7 +122,7 @@ const TopNavBar = ({ onMenuClick }) => {
                     </div>
                   ) : (
                     <div className="p-4">
-                      <p className="text-sm text-gray-300 mb-1">No shop set yet.</p>
+                      <p className="text-sm text-gray-300 mb-1">{user?.role === 'admin' ? 'No shop set yet.' : 'Contact admin for shop access.'}</p>
                       <p className="text-xs text-gray-400">Ask an admin to create your company shop.</p>
                     </div>
                   )}

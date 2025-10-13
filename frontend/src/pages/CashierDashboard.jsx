@@ -34,7 +34,7 @@ import api from '../services/api';
 import cashierAPI from '../services/cashierAPI';
 import CustomerModal from '../components/CustomerModal';
 import PaymentModal from '../components/PaymentModal';
-import Toast from '../components/Toast';
+import { useToast } from '../components/Toast';
 
 export default function CashierDashboard() {
   const navigate = useNavigate();
@@ -42,6 +42,7 @@ export default function CashierDashboard() {
   const { user, token } = useSelector((state) => state.auth);
   const { products, loading: productsLoading } = useSelector((state) => state.products);
   const [view, setView] = useState('grid');
+  const { showToast, hideToast } = useToast();
   
   // Effect to validate authentication
   useEffect(() => {
@@ -79,9 +80,6 @@ export default function CashierDashboard() {
   const [recentSales, setRecentSales] = useState([]);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
   const [showCart, setShowCart] = useState(false);
-
-  // Toast state
-  const [toast, setToast] = useState({ visible: false, type: 'success', title: '', message: '' });
 
   const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -341,8 +339,7 @@ export default function CashierDashboard() {
         await printReceipt(sale);
       } catch (printError) {
         console.error('Failed to print receipt:', printError);
-        setToast({
-          visible: true,
+        showToast({
           type: 'info',
           title: 'Printed later',
           message: 'Transaction succeeded, but printing failed. Try printing again.'
@@ -363,8 +360,7 @@ export default function CashierDashboard() {
       const itemLabel = firstItem ? `${firstItem.name}${currentSale.items.length > 1 ? ` +${currentSale.items.length - 1} more` : ''}` : 'Sale';
       const quantity = currentSale.items.reduce((sum, i) => sum + i.quantity, 0);
       const total = currentSale.total.toFixed(2);
-      setToast({
-        visible: true,
+      showToast({
         type: 'success',
         title: `Sale of ${itemLabel} completed`,
         message: `Qty: ${quantity} • Total: $${total}`
@@ -377,8 +373,7 @@ export default function CashierDashboard() {
       } else {
         const msg = error.response?.data?.error || 'Error processing sale. Please try again.';
         setPaymentError(msg);
-        setToast({
-          visible: true,
+        showToast({
           type: 'error',
           title: 'Sale failed',
           message: msg
@@ -1048,18 +1043,7 @@ export default function CashierDashboard() {
         </button>
       </div>
       
-      {/* Toast Notification */}
-      {toast.visible && (
-        <div className="fixed z-50 w-full flex justify-center sm:justify-end px-4 sm:px-6 bottom-6 sm:bottom-auto sm:top-6 left-0 right-0">
-          <Toast
-            type={toast.type}
-            title={toast.title}
-            message={toast.message}
-            onClose={() => setToast(prev => ({ ...prev, visible: false }))}
-            autoCloseMs={4000}
-          />
-        </div>
-      )}
+
 
       {/* Stats Panel Overlay */}
       {showStatsPanel && (

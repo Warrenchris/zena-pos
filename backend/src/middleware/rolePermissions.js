@@ -18,24 +18,41 @@ const ROLE_PERMISSIONS = {
   ]
 };
 
+const checkUserPermission = (userRole, permission) => {
+  // Admin has all permissions
+  if (userRole === 'admin') return true;
+
+  // Get permissions for the user's role
+  const rolePermissions = ROLE_PERMISSIONS[userRole] || [];
+
+  // Check if the role has the specific permission or 'all' permission
+  return rolePermissions.includes('all') || rolePermissions.includes(permission);
+};
+
 exports.checkPermission = (permission) => {
-  return async (req, res, next) => {
+  return (req, res, next) => {
     try {
-      // Admin has all permissions
-      if (req.user.role === 'admin') {
-        return next();
+      if (!req.user || !req.user.role) {
+        console.error('No user or role found in request');
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Check specific permission
-      const hasPermission = await req.user.hasPermission(permission);
+      const hasPermission = checkUserPermission(req.user.role, permission);
+      
       if (hasPermission) {
         return next();
       }
 
-      return res.status(403).json({ error: 'Permission denied' });
+      return res.status(403).json({ 
+        error: 'Permission denied',
+        details: `User with role ${req.user.role} does not have permission: ${permission}`
+      });
     } catch (error) {
       console.error('Permission check error:', error);
-      return res.status(500).json({ error: 'Error checking permissions' });
+      return res.status(500).json({ 
+        error: 'Error checking permissions',
+        details: error.message 
+      });
     }
   };
 };

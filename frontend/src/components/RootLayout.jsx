@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { ToastProvider } from './Toast';
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center h-screen">
@@ -11,24 +12,14 @@ const RootLayout = () => {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
 
-  // For login page, render without any navigation
-  if (isLoginPage) {
-    return (
+  return (
+    <ToastProvider>
       <div className="min-h-screen bg-gray-900">
         <Suspense fallback={<LoadingSpinner />}>
           <Outlet />
         </Suspense>
       </div>
-    );
-  }
-
-  // For other pages, render with the Layout component (which includes sidebar and top nav)
-  return (
-    <div className="min-h-screen bg-gray-900">
-      <Suspense fallback={<LoadingSpinner />}>
-        <Outlet />
-      </Suspense>
-    </div>
+    </ToastProvider>
   );
 };
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { updateStock } from '../store/slices/productsSlice'
+import { useToast } from './Toast'
 
 export default function StockModal({ product, onClose }) {
   const dispatch = useDispatch()
@@ -9,11 +10,18 @@ export default function StockModal({ product, onClose }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const { showToast } = useToast()
+  
   const handleSubmit = async (e) => {
     e.preventDefault()
     
     if (!quantity || quantity === '0') {
       setError('Please enter a valid quantity')
+      showToast({
+        type: 'error',
+        title: 'Invalid Quantity',
+        message: 'Please enter a valid quantity value'
+      })
       return
     }
 
@@ -21,10 +29,21 @@ export default function StockModal({ product, onClose }) {
     setError('')
     
     try {
-      dispatch(updateStock({ id: product.id, quantity: parseInt(quantity) }))
+      await dispatch(updateStock({ id: product.id, quantity: parseInt(quantity) })).unwrap()
+      const action = parseInt(quantity) > 0 ? 'added to' : 'removed from'
+      showToast({
+        type: 'success',
+        title: 'Stock Updated',
+        message: `${Math.abs(parseInt(quantity))} units ${action} ${product.name}`
+      })
       onClose()
     } catch (err) {
       setError('Failed to update stock')
+      showToast({
+        type: 'error',
+        title: 'Update Failed',
+        message: 'Failed to update stock quantity. Please try again.'
+      })
     } finally {
       setLoading(false)
     }

@@ -9,6 +9,10 @@ export default [
       ecmaVersion: 2022,
       sourceType: "script",
       globals: {
+        module: "writable",
+        require: true,
+      },
+      env: {
         node: true,
       },
     },

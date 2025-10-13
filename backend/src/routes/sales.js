@@ -3,10 +3,12 @@ const { body, query } = require('express-validator');
 const router = express.Router();
 const saleController = require('../controllers/saleController');
 const { auth, checkRole } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rolePermissions');
+const { Sale } = require('../models');
+const { validateRequest, validateDateRange } = require('../middleware/validators');
 
-// Define role access levels
-const CASHIER_ROLES = ['admin', 'manager', 'employee', 'cashier']; // 'employee' and 'cashier' are treated the same
-const MANAGER_ROLES = ['admin', 'manager'];
+// All routes require authentication
+router.use(auth);
 
 // Validation middleware
 const validateSale = [
@@ -84,69 +86,102 @@ const validatePaymentStatus = [
     .withMessage('Invalid payment status')
 ];
 
-const validateDateRange = [
-  query('startDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid start date format'),
-  query('endDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid end date format')
-];
-
-// Routes
+// Basic routes with role-based access
 router.get('/', 
-  auth, 
-  checkRole(CASHIER_ROLES), 
+  checkRole(['admin', 'manager']), 
   saleController.getAllSales
 );
 
 router.get('/statistics', 
-  auth, 
-  checkRole(MANAGER_ROLES),
+  checkRole(['admin', 'manager']),
   validateDateRange,
   saleController.getSalesStatistics
 );
 
 router.get('/cashier-stats', 
-  auth, 
-  checkRole(CASHIER_ROLES),
+  auth,
+  checkRole(['admin', 'manager', 'cashier']),
   validateDateRange,
   saleController.getCashierStats
 );
 
 // Admin route to get all sales with filtering
 router.get('/admin/all', 
-  auth, 
-  checkRole(MANAGER_ROLES),
+  checkRole(['admin', 'manager']),
   validateDateRange,
   saleController.getAllSalesForAdmin
 );
 
 // Cashier route to get only their own sales
 router.get('/my-sales', 
-  auth, 
-  checkRole(CASHIER_ROLES),
+  checkPermission('view_own_sales'),
   validateDateRange,
   saleController.getMySales
 );
 
+// Get specific sale - Permission check is handled in controller
 router.get('/:id', 
-  auth, 
-  checkRole(['admin', 'manager', 'cashier']), 
+  async (req, res, next) => {
+    // Admin and managers can view all sales
+    if (req.user.role === 'admin' || req.user.role === 'manager') {
+      return next();
+    }
+    // Cashiers can only view their own sales
+    if (req.user.role === 'cashier') {
+      const sale = await Sale.findOne({ 
+        where: { 
+          id: req.params.id,
+          employeeId: req.user.id,
+          shopId: req.user.shopId
+        }
+      });
+      if (sale) {
+        return next();
+      }
+      return res.status(403).json({ error: 'Access denied to this sale' });
+    }
+    return res.status(403).json({ error: 'Access denied' });
+  },
   saleController.getSaleById
 );
 
+// Create new sale - Cashiers can only create sales for their shop
+router.post('/',
+  checkPermission('create_sale'),
+  body('products').isArray(),
+  body('products.*.id').isInt(),
+  body('products.*.quantity').isInt({ min: 1 }),
+  body('customerId').optional().isInt(),
+  body('paymentType').isIn(['cash', 'card', 'mobile']),
+  body('notes').optional().isString(),
+  validateRequest,
+  saleController.createSale
+);
+
+// Update sale - Only managers and admin can update sales
+router.put('/:id',
+  checkRole(['admin', 'manager']),
+  body('status').optional().isIn(['completed', 'cancelled', 'refunded']),
+  body('notes').optional().isString(),
+  validateRequest,
+  saleController.updateSale
+);
+
+// Delete sale - Only admin can delete sales
+router.delete('/:id',
+  checkRole(['admin']),
+  saleController.deleteSale
+);
+
 router.post('/', 
-  auth, 
-  checkRole(['admin', 'manager', 'cashier']), 
+  auth,
+  checkPermission('create_sales'),
   validateSale,
   saleController.createSale
 );
 
 router.patch('/:id/payment-status', 
-  auth, 
+  auth,
   checkRole(['admin', 'manager']), 
   validatePaymentStatus,
   saleController.updatePaymentStatus

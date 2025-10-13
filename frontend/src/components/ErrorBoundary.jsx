@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExclamationTriangleIcon, ArrowPathIcon, HomeIcon } from '@heroicons/react/24/outline';
+import { logger } from '../utils/logger';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -17,7 +18,11 @@ class ErrorBoundary extends React.Component {
       errorInfo: errorInfo
     });
     
-    // Log error to console for debugging
+    // Log error with our logger
+    logger.error('React Error Boundary caught an error:', {
+      error: error,
+      componentStack: errorInfo.componentStack
+    });
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 

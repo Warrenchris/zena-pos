@@ -1,15 +1,40 @@
+/* eslint-disable no-undef */
 const formatTimestamp = () => new Date().toISOString();
 
-const base = (level, ...args) => {
-  // eslint-disable-next-line no-console
-  console[level](`[${formatTimestamp()}] [${level.toUpperCase()}]`, ...args);
+// Emoji indicators for different log types
+const emoji = {
+  error: '🔴',
+  warn: '⚠️',
+  info: '📢',
+  http: '🌐',
+  debug: '🔍',
 };
 
-module.exports = {
-  info: (...args) => base('log', ...args),
-  warn: (...args) => base('warn', ...args),
-  error: (...args) => base('error', ...args),
-  debug: (...args) => base('log', ...args),
+// Create base logging function
+const baseLog = (level, ...args) => {
+  const timestamp = formatTimestamp();
+  const prefix = `${emoji[level]} [${timestamp}] [${level.toUpperCase()}]`;
+  
+  // Log to console with emoji and timestamp
+  console[level === 'info' ? 'log' : level](`${prefix}`, ...args);
 };
 
+// Create logger object
+const logger = {
+  error: (...args) => baseLog('error', ...args),
+  warn: (...args) => baseLog('warn', ...args),
+  info: (...args) => baseLog('info', ...args),
+  debug: (...args) => {
+    if (process.env.NODE_ENV !== 'production') {
+      baseLog('debug', ...args);
+    }
+  },
+  http: (...args) => baseLog('http', ...args),
+};
 
+// Create a stream object for Morgan
+logger.stream = {
+  write: (message) => logger.http(message.trim()),
+};
+
+module.exports = logger;

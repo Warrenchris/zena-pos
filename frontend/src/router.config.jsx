@@ -7,6 +7,7 @@ import DashboardRouter from './components/DashboardRouter';
 import ErrorBoundary from './components/ErrorBoundary';
 
 const Login = lazy(() => import('./pages/Login'));
+const ToastExample = lazy(() => import('./pages/ToastExample'));
 const CashierDashboard = lazy(() => import('./pages/CashierDashboard.jsx'));
 const Products = lazy(() => import('./pages/Products'));
 const Customers = lazy(() => import('./pages/Customers'));
@@ -52,6 +53,10 @@ export const routes = [
       {
         path: 'login',
         element: <Login />
+      },
+      {
+        path: 'toast-example',
+        element: <ToastExample />
       },
       {
         element: <Layout />,
