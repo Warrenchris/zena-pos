@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { XMarkIcon, UserIcon, MapPinIcon, PhoneIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 
-const CustomerModal = ({ isOpen, onClose, onSubmit, onSkip }) => {
+const CustomerModal = ({ isOpen, customer, onClose, onSubmit, onSkip }) => {
+  // Do not render anything if the modal is not open
+  if (!isOpen) return null;
+
   const [customerData, setCustomerData] = useState({
-    name: '',
-    location: '',
-    phone: '',
-    email: ''
+    name: customer?.name || '',
+    location: customer?.location || '',
+    phone: customer?.phone || '',
+    email: customer?.email || ''
   });
 
   const handleSubmit = (e) => {
@@ -25,7 +28,7 @@ const CustomerModal = ({ isOpen, onClose, onSubmit, onSkip }) => {
     }));
   };
 
-  if (!isOpen) return null;
+  // Note: visibility is controlled by isOpen; no additional guard needed here
 
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -39,9 +42,11 @@ const CustomerModal = ({ isOpen, onClose, onSubmit, onSkip }) => {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-yellow-400">
-                  Customer Information
+                  {customer ? 'Edit Customer' : 'Customer Information'}
                 </h3>
-                <p className="text-sm text-yellow-200/70">Help us serve you better</p>
+                <p className="text-sm text-yellow-200/70">
+                  {customer ? 'Update customer details' : 'Help us serve you better'}
+                </p>
               </div>
             </div>
             <button
@@ -170,17 +175,17 @@ const CustomerModal = ({ isOpen, onClose, onSubmit, onSkip }) => {
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={handleSkip}
+              onClick={onClose}
               className="flex-1 py-2.5 px-4 border border-yellow-500/30 text-yellow-500 rounded-lg hover:bg-yellow-500/10 transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-yellow-500"
             >
-              Skip for Now
+              Cancel
             </button>
             <button
               type="submit"
               form="customerForm"
               className="flex-1 py-2.5 px-4 bg-gradient-to-r from-yellow-400 to-yellow-500 text-black rounded-lg font-medium hover:from-yellow-500 hover:to-yellow-600 transition-all duration-200 shadow-lg shadow-yellow-500/25 focus:outline-none focus:ring-2 focus:ring-yellow-500"
             >
-              Continue
+              {customer ? 'Update Customer' : 'Create Customer'}
             </button>
           </div>
         </div>

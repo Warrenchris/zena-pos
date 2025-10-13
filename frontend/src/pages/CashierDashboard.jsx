@@ -34,6 +34,7 @@ import api from '../services/api';
 import cashierAPI from '../services/cashierAPI';
 import CustomerModal from '../components/CustomerModal';
 import PaymentModal from '../components/PaymentModal';
+import Toast from '../components/Toast';
 
 export default function CashierDashboard() {
   const navigate = useNavigate();
@@ -78,6 +79,9 @@ export default function CashierDashboard() {
   const [recentSales, setRecentSales] = useState([]);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
   const [showCart, setShowCart] = useState(false);
+
+  // Toast state
+  const [toast, setToast] = useState({ visible: false, type: 'success', title: '', message: '' });
 
   const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -337,23 +341,48 @@ export default function CashierDashboard() {
         await printReceipt(sale);
       } catch (printError) {
         console.error('Failed to print receipt:', printError);
-        alert('Transaction successful but failed to print receipt. Please try printing again.');
+        setToast({
+          visible: true,
+          type: 'info',
+          title: 'Printed later',
+          message: 'Transaction succeeded, but printing failed. Try printing again.'
+        });
       }
       
-      cancelSale();
+      // Smooth reset: close modal, then reset sale state
       setShowPaymentModal(false);
+      setTimeout(() => {
+        cancelSale();
+      }, 200);
       
       setRecentSales([sale, ...recentSales.slice(0, 4)]);
       fetchCashierStats();
-      
-      alert('Transaction completed successfully!');
+
+      // Show success toast with key details
+      const firstItem = currentSale.items[0];
+      const itemLabel = firstItem ? `${firstItem.name}${currentSale.items.length > 1 ? ` +${currentSale.items.length - 1} more` : ''}` : 'Sale';
+      const quantity = currentSale.items.reduce((sum, i) => sum + i.quantity, 0);
+      const total = currentSale.total.toFixed(2);
+      setToast({
+        visible: true,
+        type: 'success',
+        title: `Sale of ${itemLabel} completed`,
+        message: `Qty: ${quantity} • Total: $${total}`
+      });
     } catch (error) {
       console.error('Payment processing error:', error);
       if (error.response?.status === 403) {
         setPaymentError('Authentication error. Please try logging in again.');
         navigate('/login');
       } else {
-        setPaymentError(error.response?.data?.error || 'Error processing sale. Please try again.');
+        const msg = error.response?.data?.error || 'Error processing sale. Please try again.';
+        setPaymentError(msg);
+        setToast({
+          visible: true,
+          type: 'error',
+          title: 'Sale failed',
+          message: msg
+        });
       }
     } finally {
       setProcessingPayment(false);
@@ -1018,6 +1047,19 @@ export default function CashierDashboard() {
           <ChartBarIcon className="h-6 w-6" />
         </button>
       </div>
+      
+      {/* Toast Notification */}
+      {toast.visible && (
+        <div className="fixed z-50 w-full flex justify-center sm:justify-end px-4 sm:px-6 bottom-6 sm:bottom-auto sm:top-6 left-0 right-0">
+          <Toast
+            type={toast.type}
+            title={toast.title}
+            message={toast.message}
+            onClose={() => setToast(prev => ({ ...prev, visible: false }))}
+            autoCloseMs={4000}
+          />
+        </div>
+      )}
 
       {/* Stats Panel Overlay */}
       {showStatsPanel && (
@@ -1038,8 +1080,8 @@ export default function CashierDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm opacity-90">Today's Sales</p>
-                    <p className="text-2xl font-bold">${cashierStats.today.totalSales.toFixed(2)}</p>
-                    <p className="text-sm opacity-90">{cashierStats.today.orderCount} transactions</p>
+                    <p className="text-2xl font-bold">${(cashierStats?.today?.totalSales || 0).toFixed(2)}</p>
+                    <p className="text-sm opacity-90">{cashierStats?.today?.orderCount || 0} transactions</p>
                   </div>
                   <ArrowTrendingUpIcon className="h-8 w-8 opacity-80" />
                 </div>
@@ -1049,8 +1091,8 @@ export default function CashierDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm opacity-90">This Week</p>
-                    <p className="text-2xl font-bold">${cashierStats.week.totalSales.toFixed(2)}</p>
-                    <p className="text-sm opacity-90">{cashierStats.week.orderCount} transactions</p>
+                    <p className="text-2xl font-bold">${(cashierStats?.week?.totalSales || 0).toFixed(2)}</p>
+                    <p className="text-sm opacity-90">{cashierStats?.week?.orderCount || 0} transactions</p>
                   </div>
                   <ChartBarIcon className="h-8 w-8 opacity-80" />
                 </div>
@@ -1059,10 +1101,10 @@ export default function CashierDashboard() {
               <div className="bg-gray-50 rounded-xl p-4">
                 <h4 className="font-semibold text-gray-800 mb-3">Recent Sales</h4>
                 <div className="space-y-2">
-                  {recentSales.slice(0, 3).map((sale, index) => (
+                  {(recentSales || []).slice(0, 3).map((sale, index) => (
                     <div key={index} className="flex justify-between items-center text-sm">
-                      <span className="text-gray-600">#{sale.id || 'N/A'}</span>
-                      <span className="font-medium">${sale.total?.toFixed(2) || '0.00'}</span>
+                      <span className="text-gray-600">#{sale?.id || 'N/A'}</span>
+                      <span className="font-medium">${(sale?.total || 0).toFixed(2)}</span>
                     </div>
                   ))}
                   {recentSales.length === 0 && (

@@ -1,3 +1,16 @@
+import React from 'react';
+
+const Expenses = () => {
+  return (
+    <div className="py-6">
+      <h1 className="text-2xl font-semibold">Expenses</h1>
+      <p className="mt-2 text-gray-600">Record and track business expenses.</p>
+    </div>
+  );
+};
+
+export default Expenses;
+
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { 

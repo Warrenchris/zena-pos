@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchMyShop } from '../../store/slices/shopSlice';
@@ -31,12 +31,15 @@ const TopNavBar = ({ onMenuClick }) => {
 
   const currentShop = shop || authShop || null;
   const navigate = useNavigate();
+  const hasFetchedShopRef = useRef(false);
 
   useEffect(() => {
-    if (!authShop && !shop) {
+    if (hasFetchedShopRef.current) return;
+    if (!authShop && !shop && !loading) {
+      hasFetchedShopRef.current = true;
       dispatch(fetchMyShop());
     }
-  }, [dispatch, authShop, shop]);
+  }, [dispatch, authShop, shop, loading]);
 
   const languages = [
     { code: 'en', name: 'English', flag: '🇬🇧' },

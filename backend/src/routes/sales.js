@@ -116,6 +116,22 @@ router.get('/cashier-stats',
   saleController.getCashierStats
 );
 
+// Admin route to get all sales with filtering
+router.get('/admin/all', 
+  auth, 
+  checkRole(MANAGER_ROLES),
+  validateDateRange,
+  saleController.getAllSalesForAdmin
+);
+
+// Cashier route to get only their own sales
+router.get('/my-sales', 
+  auth, 
+  checkRole(CASHIER_ROLES),
+  validateDateRange,
+  saleController.getMySales
+);
+
 router.get('/:id', 
   auth, 
   checkRole(['admin', 'manager', 'cashier']), 

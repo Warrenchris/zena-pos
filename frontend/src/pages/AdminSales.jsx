@@ -5,20 +5,20 @@ import {
   EyeIcon,
   PrinterIcon,
   FunnelIcon,
-  CalendarIcon
+  CalendarIcon,
+  UserIcon
 } from '@heroicons/react/24/outline'
-import { fetchAdminSales, fetchMySales } from '../store/slices/salesSlice'
+import { fetchAdminSales } from '../store/slices/salesSlice'
 import { fetchProducts } from '../store/slices/productsSlice'
 import { fetchCustomers } from '../store/slices/customersSlice'
 import { employeesAPI } from '../services/api'
 import POSModal from '../components/POSModal'
 
-export default function Sales() {
+export default function AdminSales() {
   const dispatch = useDispatch()
   const { sales, loading, pagination } = useSelector((state) => state.sales)
   const { products } = useSelector((state) => state.products)
   const { customers } = useSelector((state) => state.customers)
-  const { user } = useSelector((state) => state.auth)
   
   const [currentPage, setCurrentPage] = useState(1)
   const [showPOSModal, setShowPOSModal] = useState(false)
@@ -32,32 +32,18 @@ export default function Sales() {
     sortOrder: 'DESC'
   })
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager'
-
   useEffect(() => {
-    if (isAdmin) {
-      fetchEmployees()
-    }
+    fetchEmployees()
     dispatch(fetchProducts())
     dispatch(fetchCustomers())
-  }, [dispatch, isAdmin])
+  }, [dispatch])
 
   useEffect(() => {
-    if (isAdmin) {
-      dispatch(fetchAdminSales({ 
-        page: currentPage, 
-        ...filters 
-      }))
-    } else {
-      dispatch(fetchMySales({ 
-        page: currentPage, 
-        startDate: filters.startDate,
-        endDate: filters.endDate,
-        sortBy: filters.sortBy,
-        sortOrder: filters.sortOrder
-      }))
-    }
-  }, [dispatch, currentPage, filters, isAdmin])
+    dispatch(fetchAdminSales({ 
+      page: currentPage, 
+      ...filters 
+    }))
+  }, [dispatch, currentPage, filters])
 
   const fetchEmployees = async () => {
     try {
@@ -129,12 +115,8 @@ export default function Sales() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {isAdmin ? 'Sales Management' : 'My Sales'}
-          </h1>
-          <p className="text-gray-600">
-            {isAdmin ? 'View and manage all sales transactions' : 'View your sales transactions'}
-          </p>
+          <h1 className="text-3xl font-bold text-gray-900">Sales Management</h1>
+          <p className="text-gray-600">View and manage all sales transactions</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -180,25 +162,23 @@ export default function Sales() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            {isAdmin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cashier
-                </label>
-                <select
-                  value={filters.cashierId}
-                  onChange={(e) => handleFilterChange('cashierId', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Cashiers</option>
-                  {employees.map(employee => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.firstName} {employee.lastName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Cashier
+              </label>
+              <select
+                value={filters.cashierId}
+                onChange={(e) => handleFilterChange('cashierId', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Cashiers</option>
+                {employees.map(employee => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.firstName} {employee.lastName}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Sort By
@@ -256,11 +236,9 @@ export default function Sales() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Customer
                   </th>
-                  {isAdmin && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Cashier
-                    </th>
-                  )}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cashier
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Items
                   </th>
@@ -289,13 +267,11 @@ export default function Sales() {
                         {sale.Customer?.name || sale.customerName || 'Walk-in Customer'}
                       </div>
                     </td>
-                    {isAdmin && (
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {getCashierName(sale)}
-                        </div>
-                      </td>
-                    )}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {getCashierName(sale)}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {sale.SaleItems?.length || 0} item(s)

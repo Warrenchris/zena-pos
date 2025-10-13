@@ -1,3 +1,16 @@
+import React from 'react';
+
+const SubCategories = () => {
+  return (
+    <div className="py-6">
+      <h1 className="text-2xl font-semibold">Sub Categories</h1>
+      <p className="mt-2 text-gray-600">Manage sub-categories under categories.</p>
+    </div>
+  );
+};
+
+export default SubCategories;
+
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { 

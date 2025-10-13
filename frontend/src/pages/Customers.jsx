@@ -7,7 +7,7 @@ import {
   TrashIcon,
   EyeIcon
 } from '@heroicons/react/24/outline'
-import { fetchCustomers, deleteCustomer } from '../store/slices/customersSlice'
+import { fetchCustomers, deleteCustomer, createCustomer, updateCustomer } from '../store/slices/customersSlice'
 import CustomerModal from '../components/CustomerModal'
 
 export default function Customers() {
@@ -226,6 +226,19 @@ export default function Customers() {
           onClose={() => {
             setShowModal(false)
             setEditingCustomer(null)
+          }}
+          onSubmit={async (customerData) => {
+            try {
+              if (editingCustomer) {
+                dispatch(updateCustomer({ id: editingCustomer.id, customerData }))
+              } else {
+                dispatch(createCustomer(customerData))
+              }
+              setShowModal(false)
+              setEditingCustomer(null)
+            } catch (error) {
+              console.error('Error saving customer:', error)
+            }
           }}
         />
       )}

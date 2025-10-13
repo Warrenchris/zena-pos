@@ -4,13 +4,41 @@ import PrivateRoute from './components/PrivateRoute';
 import RootLayout from './components/RootLayout';
 import Layout from './components/Layout';
 import DashboardRouter from './components/DashboardRouter';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const Login = lazy(() => import('./pages/Login'));
 const CashierDashboard = lazy(() => import('./pages/CashierDashboard.jsx'));
 const Products = lazy(() => import('./pages/Products'));
+const Customers = lazy(() => import('./pages/Customers'));
+const Employees = lazy(() => import('./pages/Employees'));
 const MySales = lazy(() => import('./pages/MySales'));
 const TestDatePicker = lazy(() => import('./pages/TestDatePicker'));
 const PlaceholderPage = lazy(() => import('./components/PlaceholderPage'));
+const AiServices = lazy(() => import('./pages/AiServices'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Invoices = lazy(() => import('./pages/Invoices'));
+const Quotations = lazy(() => import('./pages/Quotations'));
+const Purchases = lazy(() => import('./pages/Purchases'));
+const PurchaseOrders = lazy(() => import('./pages/PurchaseOrders'));
+const PurchaseReturns = lazy(() => import('./pages/PurchaseReturns'));
+const SalesReturns = lazy(() => import('./pages/SalesReturns'));
+const Coupons = lazy(() => import('./pages/Coupons'));
+const GiftCards = lazy(() => import('./pages/GiftCards'));
+const Discounts = lazy(() => import('./pages/Discounts'));
+const Brands = lazy(() => import('./pages/Brands'));
+const Units = lazy(() => import('./pages/Units'));
+const Variants = lazy(() => import('./pages/Variants'));
+const Warranties = lazy(() => import('./pages/Warranties'));
+const PrintBarcode = lazy(() => import('./pages/PrintBarcode'));
+const PrintQR = lazy(() => import('./pages/PrintQR'));
+const ManageStock = lazy(() => import('./pages/ManageStock'));
+const StockAdjustment = lazy(() => import('./pages/StockAdjustment'));
+const StockTransfer = lazy(() => import('./pages/StockTransfer'));
+const ExpensesPage = lazy(() => import('./pages/Expenses'));
+const CategoriesPage = lazy(() => import('./pages/Categories'));
+const SubCategories = lazy(() => import('./pages/SubCategories'));
+const Pos = lazy(() => import('./pages/Pos'));
 
 export const routes = [
   {
@@ -37,8 +65,49 @@ export const routes = [
             )
               },
           {
+            path: 'products/view',
+            element: <PrivateRoute><Products /></PrivateRoute>
+          },
+          {
             path: 'products',
             element: <PrivateRoute><Products /></PrivateRoute>
+          },
+          {
+            path: 'customers',
+            element: <PrivateRoute><Customers /></PrivateRoute>
+          },
+          {
+            path: 'employees',
+            element: (
+              <ErrorBoundary>
+                <PrivateRoute><Employees /></PrivateRoute>
+              </ErrorBoundary>
+            )
+          },
+          // Admin aliases
+          {
+            path: 'admin/employees',
+            element: (
+              <ErrorBoundary>
+                <PrivateRoute><Employees /></PrivateRoute>
+              </ErrorBoundary>
+            )
+          },
+          {
+            path: 'admin/users',
+            element: <PlaceholderPage />
+          },
+          {
+            path: 'admin/company',
+            element: <PlaceholderPage />
+          },
+          {
+            path: 'admin/ai',
+            element: (
+              <PrivateRoute>
+                <AiServices />
+              </PrivateRoute>
+            )
           },
           {
             path: 'my-sales',
@@ -48,6 +117,15 @@ export const routes = [
             // alias for legacy routes that reference /sales
             path: 'sales',
             element: <PrivateRoute><MySales /></PrivateRoute>
+          },
+          // Common admin items not yet implemented
+          {
+            path: 'reports',
+            element: <PrivateRoute><Reports /></PrivateRoute>
+          },
+          {
+            path: 'settings',
+            element: <PrivateRoute><Settings /></PrivateRoute>
           },
            {
              path: 'test-date-picker',
@@ -69,108 +147,133 @@ export const routes = [
            // Inventory sections
            {
              path: 'products/create',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Products /></PrivateRoute>
            },
            {
              path: 'products/expired',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Products /></PrivateRoute>
            },
            {
              path: 'products/low-stock',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Products /></PrivateRoute>
            },
            {
              path: 'categories',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><CategoriesPage /></PrivateRoute>
            },
            {
              path: 'categories/sub',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><SubCategories /></PrivateRoute>
            },
            {
              path: 'brands',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Brands /></PrivateRoute>
            },
            {
              path: 'units',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Units /></PrivateRoute>
            },
            {
              path: 'variants',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Variants /></PrivateRoute>
            },
            {
              path: 'warranties',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Warranties /></PrivateRoute>
            },
            {
              path: 'print/barcode',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><PrintBarcode /></PrivateRoute>
            },
            {
              path: 'print/qr',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><PrintQR /></PrivateRoute>
            },
            // Stock sections
            {
              path: 'stock/manage',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><ManageStock /></PrivateRoute>
            },
            {
              path: 'stock/adjustment',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><StockAdjustment /></PrivateRoute>
            },
            {
              path: 'stock/transfer',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><StockTransfer /></PrivateRoute>
            },
            // Sales sections
            {
              path: 'invoices',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Invoices /></PrivateRoute>
            },
            {
              path: 'sales/returns',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><SalesReturns /></PrivateRoute>
            },
            {
              path: 'quotations',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Quotations /></PrivateRoute>
            },
            {
              path: 'pos',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Pos /></PrivateRoute>
+           },
+           // AI & Analytics
+           {
+             path: 'ai/forecasting',
+             element: (
+               <PrivateRoute>
+                 <AiServices />
+               </PrivateRoute>
+             )
+           },
+           {
+             path: 'ai/insights',
+             element: (
+               <PrivateRoute>
+                 <AiServices />
+               </PrivateRoute>
+             )
+           },
+           {
+             path: 'ai/finance',
+             element: (
+               <PrivateRoute>
+                 <AiServices />
+               </PrivateRoute>
+             )
            },
            // Promo sections
            {
              path: 'coupons',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Coupons /></PrivateRoute>
            },
            {
              path: 'gift-cards',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><GiftCards /></PrivateRoute>
            },
            {
              path: 'discounts',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Discounts /></PrivateRoute>
            },
            // Purchases sections
            {
              path: 'purchases',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><Purchases /></PrivateRoute>
            },
            {
              path: 'purchase-orders',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><PurchaseOrders /></PrivateRoute>
            },
            {
              path: 'purchase-returns',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><PurchaseReturns /></PrivateRoute>
            },
            // Finance sections
            {
              path: 'expenses',
-             element: <PlaceholderPage />
+             element: <PrivateRoute><ExpensesPage /></PrivateRoute>
            }
         ]
       }

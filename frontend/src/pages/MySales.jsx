@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { Menu } from '@headlessui/react';
-import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, FilterIcon, ViewIcon, DownloadIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, FunnelIcon, EyeIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { cashierAPI } from '../services/cashierAPI';
 
@@ -111,10 +111,10 @@ const MySales = () => {
   const [sortField, setSortField] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
   const [selectedSale, setSelectedSale] = useState(null);
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
-  const { isOpen: isDrawerOpen, onOpen: onDrawerOpen, onClose: onDrawerClose } = useDisclosure();
+  const onDrawerOpen = () => setIsDrawerOpen(true);
+  const onDrawerClose = () => setIsDrawerOpen(false);
   
   const fetchSales = async (page) => {
     try {

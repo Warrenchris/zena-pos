@@ -1,3 +1,16 @@
+import React from 'react';
+
+const Brands = () => {
+  return (
+    <div className="py-6">
+      <h1 className="text-2xl font-semibold">Brands</h1>
+      <p className="mt-2 text-gray-600">Manage product brands.</p>
+    </div>
+  );
+};
+
+export default Brands;
+
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { 

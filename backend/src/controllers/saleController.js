@@ -482,3 +482,131 @@ exports.getSalesStatistics = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch sales statistics' });
   }
 };
+
+// Get all sales for admin with filtering by cashier and date range
+exports.getAllSalesForAdmin = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const { startDate, endDate, cashierId, sortBy = 'createdAt', sortOrder = 'DESC' } = req.query;
+
+    // Build where clause
+    const whereClause = {
+      shopId: req.user.shopId
+    };
+
+    // Add date range filter
+    if (startDate || endDate) {
+      whereClause.createdAt = {
+        [Op.between]: [
+          startDate || new Date(new Date().setHours(0,0,0,0)),
+          endDate || new Date(new Date().setHours(23,59,59,999))
+        ]
+      };
+    }
+
+    // Add cashier filter
+    if (cashierId) {
+      whereClause.employeeId = cashierId;
+    }
+
+    const sales = await Sale.findAndCountAll({
+      where: whereClause,
+      include: [
+        { 
+          model: SaleItem,
+          include: [{ 
+            model: Product,
+            attributes: ['id', 'name', 'sku'],
+            where: { shopId: req.user.shopId }
+          }]
+        },
+        {
+          model: Customer,
+          attributes: ['id', 'name', 'email', 'phone'],
+          where: { shopId: req.user.shopId },
+          required: false
+        },
+        {
+          model: Employee,
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          as: 'Employee',
+          required: false
+        }
+      ],
+      order: [[sortBy, sortOrder.toUpperCase()]],
+      limit,
+      offset
+    });
+
+    res.json({
+      sales: sales.rows,
+      total: sales.count,
+      totalPages: Math.ceil(sales.count / limit),
+      currentPage: page
+    });
+  } catch (error) {
+    console.error('Error fetching admin sales:', error);
+    res.status(500).json({ error: 'Failed to fetch sales' });
+  }
+};
+
+// Get cashier's own sales only
+exports.getMySales = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const { startDate, endDate, sortBy = 'createdAt', sortOrder = 'DESC' } = req.query;
+
+    // Build where clause - only show sales made by this cashier
+    const whereClause = {
+      shopId: req.user.shopId,
+      employeeId: req.user.id // Only show sales made by this cashier
+    };
+
+    // Add date range filter
+    if (startDate || endDate) {
+      whereClause.createdAt = {
+        [Op.between]: [
+          startDate || new Date(new Date().setHours(0,0,0,0)),
+          endDate || new Date(new Date().setHours(23,59,59,999))
+        ]
+      };
+    }
+
+    const sales = await Sale.findAndCountAll({
+      where: whereClause,
+      include: [
+        { 
+          model: SaleItem,
+          include: [{ 
+            model: Product,
+            attributes: ['id', 'name', 'sku'],
+            where: { shopId: req.user.shopId }
+          }]
+        },
+        {
+          model: Customer,
+          attributes: ['id', 'name', 'email', 'phone'],
+          where: { shopId: req.user.shopId },
+          required: false
+        }
+      ],
+      order: [[sortBy, sortOrder.toUpperCase()]],
+      limit,
+      offset
+    });
+
+    res.json({
+      sales: sales.rows,
+      total: sales.count,
+      totalPages: Math.ceil(sales.count / limit),
+      currentPage: page
+    });
+  } catch (error) {
+    console.error('Error fetching my sales:', error);
+    res.status(500).json({ error: 'Failed to fetch sales' });
+  }
+};

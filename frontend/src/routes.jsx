@@ -4,6 +4,8 @@ import { useSelector } from 'react-redux'
 import Layout from './components/Layout'
 import PrivateRoute from './components/PrivateRoute'
 import LoadingSpinner from './components/LoadingSpinner'
+import ErrorBoundary from './components/ErrorBoundary'
+import RouteError from './components/RouteError'
 
 // Custom lazy loading with error handling
 const lazyLoad = (importFunc) => {
@@ -43,9 +45,22 @@ export default function AppRoutes() {
   const { token, user } = useSelector((state) => state.auth)
   const location = useLocation()
 
+  // Debug logging
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔍 AppRoutes Debug:');
+    console.log('Current location:', location.pathname);
+    console.log('Token exists:', !!token);
+    console.log('User role:', user?.role);
+    console.log('Routes registered:', [
+      '/dashboard', '/products', '/categories', '/customers', '/employees', 
+      '/sales', '/expenses', '/reports', '/admin/users', '/admin/employees'
+    ]);
+  }
+
   return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Routes>
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
         <Route path="/login" element={
           token && user ? <Navigate to="/dashboard" replace /> : <Login />
         } />
@@ -65,6 +80,11 @@ export default function AppRoutes() {
           <Route path="/products" element={<Products />} />
           <Route path="/categories" element={<Categories />} />
           <Route path="/customers" element={<Customers />} />
+          <Route path="/employees" element={<Employees />} />
+          {/* Test route */}
+          <Route path="/test-employees" element={<Employees />} />
+          {/* Debug route */}
+          <Route path="/debug-routes" element={<div>Routes are working!</div>} />
           <Route path="/sales" element={<Sales />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/admin/users" element={<Users />} />
@@ -112,8 +132,12 @@ export default function AppRoutes() {
           <Route path="/purchase-returns" element={<PlaceholderPage />} />
           
           <Route index element={<Navigate to="/dashboard" replace />} />
+          
+          {/* Catch-all route for unmatched paths */}
+          <Route path="*" element={<RouteError />} />
         </Route>
       </Routes>
     </Suspense>
+    </ErrorBoundary>
   )
 }

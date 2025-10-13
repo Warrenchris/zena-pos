@@ -5,6 +5,7 @@ import { usePermissions } from '../hooks/usePermissions'
 import { logout } from '../store/slices/authSlice'
 import ModernSidebar from './ModernSidebar'
 import TopNavBar from './navigation/TopNavBar'
+import RouteDebugger from './RouteDebugger'
 
 export default function Layout() {
 	const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -69,6 +70,7 @@ export default function Layout() {
 					</div>
 				</main>
 			</div>
+			<RouteDebugger />
 		</Shell>
 	)
 }

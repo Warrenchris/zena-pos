@@ -1,0 +1,19 @@
+### Test Admin Sales Route
+GET http://localhost:3000/api/sales/admin/all
+Authorization: Bearer YOUR_ADMIN_TOKEN
+Content-Type: application/json
+
+### Test Admin Sales with Filters
+GET http://localhost:3000/api/sales/admin/all?startDate=2024-01-01&endDate=2024-12-31&cashierId=EMPLOYEE_ID&page=1&limit=10
+Authorization: Bearer YOUR_ADMIN_TOKEN
+Content-Type: application/json
+
+### Test Cashier My Sales Route
+GET http://localhost:3000/api/sales/my-sales
+Authorization: Bearer YOUR_CASHIER_TOKEN
+Content-Type: application/json
+
+### Test Cashier My Sales with Date Filter
+GET http://localhost:3000/api/sales/my-sales?startDate=2024-01-01&endDate=2024-12-31&page=1&limit=10
+Authorization: Bearer YOUR_CASHIER_TOKEN
+Content-Type: application/json

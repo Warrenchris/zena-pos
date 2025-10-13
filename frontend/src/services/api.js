@@ -162,6 +162,12 @@ export const salesAPI = {
     api.put(`/api/sales/${id}/payment-status`, { paymentStatus }),
   getStatistics: (params) =>
     api.get('/api/sales/statistics', { params }),
+  // Admin endpoints
+  getAllForAdmin: (params) =>
+    api.get('/api/sales/admin/all', { params }),
+  // Cashier endpoints
+  getMySales: (params) =>
+    api.get('/api/sales/my-sales', { params }),
 };
 
 // Expenses API

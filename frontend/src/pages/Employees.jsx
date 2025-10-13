@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { 
   PlusIcon,
@@ -39,16 +39,26 @@ export default function Employees() {
     salary: ''
   });
 
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const load = async () => {
     try {
       setLoading(true)
       setError(null)
       const res = await employeesAPI.getAll()
+      if (!mountedRef.current) return
       setEmployees(Array.isArray(res.data) ? res.data : [])
     } catch (e) {
-      setError(e?.response?.data?.error || 'Failed to load employees')
+      if (!mountedRef.current) return
+      setError(e?.response?.data?.error || 'Failed to load employee data. Please try again.')
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }
 
@@ -58,13 +68,17 @@ export default function Employees() {
 
   const loadEmployeeStats = async () => {
     try {
-      const res = await reportsAPI.salesSummary // placeholder to avoid unused warning
+      // placeholder to avoid unused warning
+      const _noop = reportsAPI.salesSummary
+      void _noop
       const statsRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/reports/employee-sales`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       })
+      if (!mountedRef.current) return
+      if (!statsRes.ok) throw new Error('Failed to load employee stats')
       const json = await statsRes.json()
       if (Array.isArray(json)) setEmployeeStats(json)
-    } catch (_) {}
+    } catch (_) { /* non-blocking */ }
   }
 
   const loadActivity = async () => {
@@ -72,9 +86,11 @@ export default function Employees() {
       const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/activity?limit=100`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       })
+      if (!mountedRef.current) return
+      if (!res.ok) throw new Error('Failed to load activity')
       const json = await res.json()
       if (Array.isArray(json)) setActivity(json)
-    } catch (_) {}
+    } catch (_) { /* non-blocking */ }
   }
 
   const filtered = useMemo(() => {
@@ -131,25 +147,87 @@ export default function Employees() {
       } else {
         await employeesAPI.create(payload)
       }
+      if (!mountedRef.current) return
       setFormOpen(false)
       await load()
     } catch (e) {
-      alert(e?.response?.data?.error || 'Failed to save employee')
+      setError(e?.response?.data?.error || 'Failed to save employee')
     }
   }
 
   const remove = async (emp) => {
-    if (!confirm(`Delete ${emp.firstName} ${emp.lastName}?`)) return
+    if (!window.confirm(`Delete ${emp.firstName} ${emp.lastName}?`)) return
     try {
       await employeesAPI.delete(emp.id)
       await load()
     } catch (e) {
-      alert(e?.response?.data?.error || 'Failed to delete employee')
+      setError(e?.response?.data?.error || 'Failed to delete employee')
     }
+  }
+
+  const SkeletonRows = ({ rows = 6 }) => (
+    <>
+      {Array.from({ length: rows }).map((_, i) => (
+        <tr key={i} className="animate-pulse">
+          <td className="px-4 py-3">
+            <div className="h-3 w-28 bg-gray-200 rounded" />
+          </td>
+          <td className="px-4 py-3">
+            <div className="h-3 w-40 bg-gray-200 rounded" />
+          </td>
+          <td className="px-4 py-3">
+            <div className="h-3 w-24 bg-gray-200 rounded" />
+          </td>
+          <td className="px-4 py-3">
+            <div className="h-3 w-24 bg-gray-200 rounded" />
+          </td>
+          <td className="px-4 py-3">
+            <div className="h-5 w-16 bg-gray-200 rounded-full" />
+          </td>
+          <td className="px-4 py-3">
+            <div className="h-3 w-24 bg-gray-200 rounded" />
+          </td>
+          <td className="px-4 py-3">
+            <div className="h-3 w-20 bg-gray-200 rounded" />
+          </td>
+          <td className="px-4 py-3 text-right">
+            <div className="ml-auto h-8 w-24 bg-gray-200 rounded" />
+          </td>
+        </tr>
+      ))}
+    </>
+  )
+
+  const TabPanel = ({ active, children }) => {
+    const [visible, setVisible] = useState(false)
+    useEffect(() => {
+      if (active) {
+        setVisible(false)
+        const id = requestAnimationFrame(() => setVisible(true))
+        return () => cancelAnimationFrame(id)
+      } else {
+        setVisible(false)
+      }
+    }, [active])
+    if (!active) return null
+    return (
+      <div className={`transition-all duration-300 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+        {children}
+      </div>
+    )
   }
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center justify-between">
+          <div>{error}</div>
+          <div className="flex items-center gap-2">
+            <button onClick={load} className="px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700">Retry</button>
+            <button onClick={() => setError(null)} className="px-2 py-1 rounded border border-red-300 text-red-700 hover:bg-red-100">Dismiss</button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Employees</h1>
         <div className="space-x-2">
@@ -187,7 +265,7 @@ export default function Employees() {
         </select>
       </div>
 
-      {activeTab==='list' && (
+      <TabPanel active={activeTab==='list'}>
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full">
           <thead className="bg-gray-50">
@@ -204,7 +282,7 @@ export default function Employees() {
           </thead>
           <tbody className="divide-y divide-gray-100 text-sm">
             {loading ? (
-              <tr><td colSpan="8" className="px-4 py-6 text-center">Loading...</td></tr>
+              <SkeletonRows rows={6} />
             ) : error ? (
               <tr><td colSpan="8" className="px-4 py-6 text-center text-red-600">{error}</td></tr>
             ) : pageItems.length === 0 ? (
@@ -233,9 +311,9 @@ export default function Employees() {
           </tbody>
         </table>
       </div>
-      )}
+      </TabPanel>
 
-      {activeTab==='analytics' && (
+      <TabPanel active={activeTab==='analytics'}>
         <div className="bg-white rounded-lg shadow p-4">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Sales by Employee</h3>
           <div className="overflow-x-auto">
@@ -259,9 +337,9 @@ export default function Employees() {
         </table>
           </div>
         </div>
-      )}
+      </TabPanel>
 
-      {activeTab==='activity' && (
+      <TabPanel active={activeTab==='activity'}>
         <div className="bg-white rounded-lg shadow p-4">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h3>
           <ul className="divide-y divide-gray-100">
@@ -276,7 +354,7 @@ export default function Employees() {
             ))}
           </ul>
         </div>
-      )}
+      </TabPanel>
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-600">Page {page} of {totalPages}</p>

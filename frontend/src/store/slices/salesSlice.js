@@ -26,6 +26,22 @@ export const fetchSales = createAsyncThunk(
   }
 )
 
+export const fetchAdminSales = createAsyncThunk(
+  'sales/fetchAdminSales',
+  async (params) => {
+    const response = await salesAPI.getAllForAdmin(params)
+    return response.data
+  }
+)
+
+export const fetchMySales = createAsyncThunk(
+  'sales/fetchMySales',
+  async (params) => {
+    const response = await salesAPI.getMySales(params)
+    return response.data
+  }
+)
+
 export const fetchSaleById = createAsyncThunk(
   'sales/fetchSaleById',
   async (id) => {
@@ -88,6 +104,42 @@ const salesSlice = createSlice({
       .addCase(fetchSales.rejected, (state, action) => {
         state.loading = false
         state.error = action.error.message || 'Failed to fetch sales'
+      })
+      // Fetch admin sales
+      .addCase(fetchAdminSales.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(fetchAdminSales.fulfilled, (state, action) => {
+        state.loading = false
+        state.sales = action.payload.sales || action.payload
+        state.pagination = action.payload.pagination || {
+          currentPage: 1,
+          totalPages: 1,
+          total: action.payload.length
+        }
+      })
+      .addCase(fetchAdminSales.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.error.message || 'Failed to fetch admin sales'
+      })
+      // Fetch my sales
+      .addCase(fetchMySales.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(fetchMySales.fulfilled, (state, action) => {
+        state.loading = false
+        state.sales = action.payload.sales || action.payload
+        state.pagination = action.payload.pagination || {
+          currentPage: 1,
+          totalPages: 1,
+          total: action.payload.length
+        }
+      })
+      .addCase(fetchMySales.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.error.message || 'Failed to fetch my sales'
       })
       // Fetch sale by ID
       .addCase(fetchSaleById.pending, (state) => {

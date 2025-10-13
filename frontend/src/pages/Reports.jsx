@@ -1,3 +1,16 @@
+import React from 'react';
+
+const Reports = () => {
+  return (
+    <div className="py-6">
+      <h1 className="text-2xl font-semibold">Reports</h1>
+      <p className="mt-2 text-gray-600">Analytics and reporting will appear here.</p>
+    </div>
+  );
+};
+
+export default Reports;
+
 import { useEffect, useMemo, useState } from 'react'
 import { reportsAPI } from '../services/api'
 

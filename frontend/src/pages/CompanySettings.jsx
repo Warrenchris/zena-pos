@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { shopAPI, settingsAPI } from '../services/api'
 import { Tab } from '@headlessui/react'
 import { CogIcon, PaintBrushIcon, GlobeAltIcon, BuildingOfficeIcon } from '@heroicons/react/24/outline'
@@ -18,21 +18,34 @@ export default function CompanySettings() {
   })
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState(null)
+  const [error, setError] = useState(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     (async () => {
       try {
+        setError(null)
         const res = await shopAPI.getMine()
+        if (!mountedRef.current) return
+        const data = res?.data || {}
         setCompanyForm({ 
-          name: res.data?.name || '', 
-          address: res.data?.address || '', 
-          phone: res.data?.phone || '' 
+          name: data.name || '', 
+          address: data.address || '', 
+          phone: data.phone || '' 
         })
         // In a real app, these would be fetched from the API
-        setThemeForm(res.data?.theme || themeForm)
-        setRegionalForm(res.data?.regional || regionalForm)
+        setThemeForm(data.theme || themeForm)
+        setRegionalForm(data.regional || regionalForm)
+      } catch (e) {
+        if (!mountedRef.current) return
+        setError(e?.response?.data?.message || e?.message || 'Failed to load company settings. Please try again.')
       } finally {
-        setLoading(false)
+        if (mountedRef.current) setLoading(false)
       }
     })()
   }, [])
@@ -44,22 +57,43 @@ export default function CompanySettings() {
   const saveCompanySettings = async (e) => {
     e.preventDefault()
     setMessage(null)
-    await shopAPI.updateMine(companyForm)
-    setMessage('Company details saved')
+    setError(null)
+    try {
+      await shopAPI.updateMine(companyForm)
+      if (!mountedRef.current) return
+      setMessage('Company details saved')
+    } catch (e) {
+      if (!mountedRef.current) return
+      setError(e?.response?.data?.message || e?.message || 'Failed to save company details')
+    }
   }
 
   const saveThemeSettings = async (e) => {
     e.preventDefault()
     setMessage(null)
-    await shopAPI.updateTheme(themeForm)
-    setMessage('Theme settings saved')
+    setError(null)
+    try {
+      await settingsAPI.updateTheme(themeForm)
+      if (!mountedRef.current) return
+      setMessage('Theme settings saved')
+    } catch (e) {
+      if (!mountedRef.current) return
+      setError(e?.response?.data?.message || e?.message || 'Failed to save theme settings')
+    }
   }
 
   const saveRegionalSettings = async (e) => {
     e.preventDefault()
     setMessage(null)
-    await shopAPI.updateRegional(regionalForm)
-    setMessage('Regional settings saved')
+    setError(null)
+    try {
+      await settingsAPI.updateRegional(regionalForm)
+      if (!mountedRef.current) return
+      setMessage('Regional settings saved')
+    } catch (e) {
+      if (!mountedRef.current) return
+      setError(e?.response?.data?.message || e?.message || 'Failed to save regional settings')
+    }
   }
 
   if (loading) return (
@@ -77,6 +111,15 @@ export default function CompanySettings() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {error && (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center justify-between">
+          <div>{error}</div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => window.location.reload()} className="px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700">Retry</button>
+            <button onClick={() => setError(null)} className="px-2 py-1 rounded border border-red-300 text-red-700 hover:bg-red-100">Dismiss</button>
+          </div>
+        </div>
+      )}
       <Tab.Group>
         <div className="bg-white rounded-lg shadow">
           <Tab.List className="flex p-1 space-x-1 border-b">
