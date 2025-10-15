@@ -194,15 +194,17 @@ const Sale = sequelize.define('Sale', {
       model: 'Employees',
       key: 'id'
     }
+  },
+  customerId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'Customers',
+      key: 'id'
+    }
   }
 });
 
-// Relationships
-Sale.belongsTo(User);
-Sale.belongsTo(Customer);
-Sale.belongsTo(Employee, { foreignKey: 'employeeId' });
-User.hasMany(Sale);
-Customer.hasMany(Sale);
-Employee.hasMany(Sale, { foreignKey: 'employeeId' });
+// Relationships are now defined in models/index.js to avoid conflicts
 
 module.exports = Sale;

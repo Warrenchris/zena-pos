@@ -11,15 +11,18 @@ const Expense = require('./Expense');
 const Shop = require('./Shop');
 const Store = require('./Store');
 const ActivityLog = require('./ActivityLog');
+const Employee = require('./Employee');
 
 // Define model associations
 Product.belongsTo(Category);
 Category.hasMany(Product);
 
-Sale.belongsTo(User);
-Sale.belongsTo(Customer);
-User.hasMany(Sale);
-Customer.hasMany(Sale);
+Sale.belongsTo(User, { foreignKey: 'userId' });
+Sale.belongsTo(Customer, { foreignKey: 'customerId' });
+Sale.belongsTo(Employee, { foreignKey: 'employeeId' });
+User.hasMany(Sale, { foreignKey: 'userId' });
+Customer.hasMany(Sale, { foreignKey: 'customerId' });
+Employee.hasMany(Sale, { foreignKey: 'employeeId' });
 
 SaleItem.belongsTo(Sale);
 SaleItem.belongsTo(Product);
@@ -40,6 +43,7 @@ Customer.belongsTo(Shop, { foreignKey: 'shopId' });
 Sale.belongsTo(Shop, { foreignKey: 'shopId' });
 Expense.belongsTo(Shop, { foreignKey: 'shopId' });
 ActivityLog.belongsTo(Shop, { foreignKey: 'shopId' });
+Employee.belongsTo(Shop, { foreignKey: 'shopId' });
 
 // Shop has many of each entity
 Shop.hasMany(Product, { foreignKey: 'shopId' });
@@ -48,6 +52,7 @@ Shop.hasMany(Customer, { foreignKey: 'shopId' });
 Shop.hasMany(Sale, { foreignKey: 'shopId' });
 Shop.hasMany(Expense, { foreignKey: 'shopId' });
 Shop.hasMany(ActivityLog, { foreignKey: 'shopId' });
+Shop.hasMany(Employee, { foreignKey: 'shopId' });
 
 // Export models and sequelize instance
 module.exports = {
@@ -61,5 +66,6 @@ module.exports = {
   Expense,
   Shop,
   Store,
-  ActivityLog
+  ActivityLog,
+  Employee
 };

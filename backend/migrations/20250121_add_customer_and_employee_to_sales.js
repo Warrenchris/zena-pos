@@ -2,45 +2,62 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('Sales', 'customerName', {
-      type: Sequelize.STRING,
-      allowNull: true
-    });
+    const tableInfo = await queryInterface.describeTable('Sales');
 
-    await queryInterface.addColumn('Sales', 'customerLocation', {
-      type: Sequelize.STRING,
-      allowNull: true
-    });
+    // Only add customer fields if they don't exist
+    if (!tableInfo.customerName) {
+      await queryInterface.addColumn('Sales', 'customerName', {
+        type: Sequelize.STRING,
+        allowNull: true
+      });
+    }
 
-    await queryInterface.addColumn('Sales', 'customerPhone', {
-      type: Sequelize.STRING,
-      allowNull: true
-    });
+    if (!tableInfo.customerLocation) {
+      await queryInterface.addColumn('Sales', 'customerLocation', {
+        type: Sequelize.STRING,
+        allowNull: true
+      });
+    }
 
-    await queryInterface.addColumn('Sales', 'customerEmail', {
-      type: Sequelize.STRING,
-      allowNull: true
-    });
+    if (!tableInfo.customerPhone) {
+      await queryInterface.addColumn('Sales', 'customerPhone', {
+        type: Sequelize.STRING,
+        allowNull: true
+      });
+    }
 
-    await queryInterface.addColumn('Sales', 'paymentAmount', {
-      type: Sequelize.DECIMAL(10, 2),
-      allowNull: true
-    });
+    if (!tableInfo.customerEmail) {
+      await queryInterface.addColumn('Sales', 'customerEmail', {
+        type: Sequelize.STRING,
+        allowNull: true
+      });
+    }
 
-    await queryInterface.addColumn('Sales', 'change', {
-      type: Sequelize.DECIMAL(10, 2),
-      allowNull: true,
-      defaultValue: 0
-    });
+    if (!tableInfo.paymentAmount) {
+      await queryInterface.addColumn('Sales', 'paymentAmount', {
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: true
+      });
+    }
 
-    await queryInterface.addColumn('Sales', 'employeeId', {
-      type: Sequelize.UUID,
-      allowNull: true,
-      references: {
-        model: 'Employees',
-        key: 'id'
-      }
-    });
+    if (!tableInfo.change) {
+      await queryInterface.addColumn('Sales', 'change', {
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0
+      });
+    }
+
+    if (!tableInfo.employeeId) {
+      await queryInterface.addColumn('Sales', 'employeeId', {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: 'Employees',
+          key: 'id'
+        }
+      });
+    }
 
     // Update paymentMethod enum to include 'mobile'
     await queryInterface.changeColumn('Sales', 'paymentMethod', {

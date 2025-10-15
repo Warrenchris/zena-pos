@@ -4,7 +4,14 @@ const User = require('./User');
 
 const ActivityLog = sequelize.define('ActivityLog', {
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-  userId: { type: DataTypes.INTEGER, allowNull: false },
+  userId: { 
+    type: DataTypes.UUID, 
+    allowNull: false,
+    references: {
+      model: 'Users',
+      key: 'id'
+    }
+  },
   action: { type: DataTypes.STRING, allowNull: false },
   entity: { type: DataTypes.STRING, allowNull: true },
   entityId: { type: DataTypes.STRING, allowNull: true },

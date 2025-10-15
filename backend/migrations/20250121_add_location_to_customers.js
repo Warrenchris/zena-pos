@@ -2,10 +2,13 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('Customers', 'location', {
-      type: Sequelize.STRING,
-      allowNull: true
-    });
+    const tableInfo = await queryInterface.describeTable('Customers');
+    if (!tableInfo.location) {
+      await queryInterface.addColumn('Customers', 'location', {
+        type: Sequelize.STRING,
+        allowNull: true
+      });
+    }
   },
 
   async down(queryInterface, Sequelize) {

@@ -7,6 +7,7 @@ const Customer = require('../models/Customer');
 const sequelize = require('../config/database');
 const { logActivity } = require('../middleware/logger');
 const Employee = require('../models/Employee');
+const UuidHelper = require('../utils/uuidHelper');
 
 // Get all sales with pagination
 exports.getAllSales = async (req, res) => {
@@ -17,9 +18,13 @@ exports.getAllSales = async (req, res) => {
 
     const sales = await Sale.findAndCountAll({
       where: { shopId: req.user.shopId },
+      attributes: {
+        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
+      },
       include: [
         { 
           model: SaleItem,
+          required: false, // Make this a LEFT JOIN
           include: [{ 
             model: Product,
             attributes: ['id', 'name', 'sku'],
@@ -28,10 +33,11 @@ exports.getAllSales = async (req, res) => {
         },
         {
           model: Customer,
-          attributes: ['id', 'name', 'email', 'phone'],
-          where: { shopId: req.user.shopId }
+          required: false, // Make this a LEFT JOIN
+          attributes: ['id', 'name', 'email', 'phone']
         }
       ],
+      distinct: true, // This ensures correct count with eager loading
       order: [['createdAt', 'DESC']],
       limit,
       offset
@@ -148,6 +154,9 @@ exports.getSaleById = async (req, res) => {
   try {
     const sale = await Sale.findOne({
       where: { id: req.params.id, shopId: req.user.shopId },
+      attributes: {
+        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
+      },
       include: [
         {
           model: SaleItem,
@@ -402,6 +411,9 @@ exports.createSale = async (req, res) => {
     // Fetch complete sale with relations
     const completeSale = await Sale.findOne({
       where: { id: sale.id },
+      attributes: {
+        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
+      },
       include: [
         {
           model: SaleItem,
@@ -474,13 +486,24 @@ exports.getCashierStats = async (req, res) => {
 
     // For cashiers and employees, always show their own stats only
     if (req.user.role === 'cashier' || req.user.role === 'employee') {
-      whereClause.employeeId = req.user.id;
+      try {
+        whereClause.employeeId = UuidHelper.validate(req.user.id);
+      } catch (error) {
+        return res.status(400).json({
+          error: 'Invalid employee ID format',
+          details: error.message
+        });
+      }
     }
     // For managers/admins, filter by employeeId if provided
     else if (employeeId) {
       try {
+        const validEmployeeId = UuidHelper.validate(employeeId);
         const employee = await Employee.findOne({
-          where: { id: employeeId, shopId: req.user.shopId }
+          where: { 
+            id: validEmployeeId,
+            shopId: req.user.shopId 
+          }
         });
         
         if (!employee) {
@@ -489,7 +512,7 @@ exports.getCashierStats = async (req, res) => {
             details: `No employee found with ID ${employeeId} in shop ${req.user.shopId}`
           });
         }
-        whereClause.employeeId = employeeId;
+        whereClause.employeeId = validEmployeeId;
       } catch (err) {
         console.error('Error finding employee:', err);
         return res.status(400).json({
@@ -518,8 +541,17 @@ exports.getCashierStats = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
-    // Calculate statistics
-    const totalSales = sales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+    // Add debug logging
+    console.log('Fetched sales:', {
+      count: sales.length,
+      employeeIds: sales.map(s => s.employeeId)
+    });
+
+    // Calculate statistics with error handling
+    const totalSales = sales.reduce((sum, sale) => {
+      const total = parseFloat(sale.total || 0);
+      return isNaN(total) ? sum : sum + total;
+    }, 0);
     const orderCount = sales.length;
 
     // Get today's stats specifically
@@ -573,7 +605,23 @@ exports.getCashierStats = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching cashier stats:', error);
-    res.status(500).json({ error: 'Failed to fetch cashier statistics' });
+    
+    // More descriptive error response
+    let errorMessage = 'Failed to fetch cashier statistics';
+    let statusCode = 500;
+    
+    if (error.name === 'SequelizeDatabaseError' && error.message.includes('invalid input syntax')) {
+      errorMessage = 'Invalid employee ID format';
+      statusCode = 400;
+    } else if (error.name === 'SequelizeValidationError') {
+      errorMessage = error.message;
+      statusCode = 400;
+    }
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: error.message
+    });
   }
 };
 
@@ -650,6 +698,9 @@ exports.getAllSalesForAdmin = async (req, res) => {
 
     const sales = await Sale.findAndCountAll({
       where: whereClause,
+      attributes: {
+        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
+      },
       include: [
         { 
           model: SaleItem,
@@ -715,6 +766,9 @@ exports.getMySales = async (req, res) => {
 
     const sales = await Sale.findAndCountAll({
       where: whereClause,
+      attributes: {
+        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
+      },
       include: [
         { 
           model: SaleItem,
