@@ -34,9 +34,9 @@ const TopNavBar = ({ onMenuClick }) => {
   const hasFetchedShopRef = useRef(false);
 
   useEffect(() => {
-    // Only try to fetch shop details if user is admin
+    // Fetch shop details for all user roles if not already available
     if (hasFetchedShopRef.current) return;
-    if (user?.role === 'admin' && !authShop && !shop && !loading) {
+    if (user && !authShop && !shop && !loading) {
       hasFetchedShopRef.current = true;
       dispatch(fetchMyShop());
     }
@@ -109,7 +109,7 @@ const TopNavBar = ({ onMenuClick }) => {
               {/* Store Dropdown */}
               {isStoreMenuOpen && (
                 <div className="absolute right-0 mt-2 w-72 bg-brand-gray border border-brand-yellow/20 rounded-lg shadow-xl py-1 z-50">
-                  {stateError && user?.role === 'admin' ? (
+                  {stateError ? (
                     <div className="px-4 py-2 text-sm text-red-400">{stateError.message || 'Failed to load shop'}</div>
                   ) : loading ? (
                     <div className="px-4 py-2 text-sm text-gray-300">Loading shop...</div>

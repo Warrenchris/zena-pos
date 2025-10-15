@@ -282,6 +282,18 @@ export default function CashierDashboard() {
   const [paymentError, setPaymentError] = useState(null);
 
   const validatePayment = () => {
+    if (!currentSale.items.length) {
+      setPaymentError('Cart is empty');
+      return false;
+    }
+
+    // Validate all cart items have valid product IDs
+    const invalidItems = currentSale.items.filter(item => !item.id || isNaN(parseInt(item.id)));
+    if (invalidItems.length > 0) {
+      setPaymentError(`Invalid product data detected. Please remove and re-add items.`);
+      return false;
+    }
+
     if (!currentSale.paymentAmount) {
       setPaymentError('Please enter payment amount');
       return false;
@@ -317,17 +329,41 @@ export default function CashierDashboard() {
     try {
       const paymentAmount = parseFloat(parseFloat(currentSale.paymentAmount).toFixed(2));
       
-      const saleData = {
-        // Required fields with correct structure
-        items: currentSale.items.map(item => ({
+      // Validate and prepare sale data
+      const validatedItems = currentSale.items.map(item => {
+        // Ensure productId is valid
+        if (!item.id || isNaN(parseInt(item.id))) {
+          throw new Error(`Invalid product ID for item: ${item.name || 'Unknown'}`);
+        }
+        
+        return {
           productId: parseInt(item.id),
           quantity: parseInt(item.quantity),
           discount: parseFloat(item.discount || 0),
           price: parseFloat((typeof item.price === 'number' ? item.price : parseFloat(item.price || 0)).toFixed(2))
-        })),
-        customerId: currentSale.customer?.id, // Send null if no customer.id
+        };
+      });
+
+      // Clean customer data - remove empty strings and null values
+      const cleanCustomer = currentSale.customer ? {
+        ...currentSale.customer,
+        email: currentSale.customer.email && currentSale.customer.email.trim() !== '' 
+          ? currentSale.customer.email.trim() 
+          : undefined,
+        phone: currentSale.customer.phone && currentSale.customer.phone.trim() !== '' 
+          ? currentSale.customer.phone.trim() 
+          : undefined,
+        location: currentSale.customer.location && currentSale.customer.location.trim() !== '' 
+          ? currentSale.customer.location.trim() 
+          : undefined
+      } : undefined;
+
+      const saleData = {
+        // Required fields with correct structure
+        items: validatedItems,
+        customerId: currentSale.customer?.id || null, // Send null if no customer.id
         // Additional fields
-        customer: currentSale.customer,
+        customer: cleanCustomer,
         total: parseFloat(currentSale.total.toFixed(2)),
         paymentAmount,
         paymentMethod: currentSale.paymentMethod || 'cash',
@@ -374,8 +410,28 @@ export default function CashierDashboard() {
       if (error.response?.status === 403) {
         setPaymentError('Authentication error. Please try logging in again.');
         navigate('/login');
+      } else if (error.response?.status === 400) {
+        // Handle validation errors
+        const errors = error.response?.data?.errors || [];
+        if (errors.length > 0) {
+          const errorMessages = errors.map(err => err.msg).join(', ');
+          setPaymentError(`Validation error: ${errorMessages}`);
+          showToast({
+            type: 'error',
+            title: 'Invalid data',
+            message: errorMessages
+          });
       } else {
-        const msg = error.response?.data?.error || 'Error processing sale. Please try again.';
+          const msg = error.response?.data?.error || 'Invalid data provided. Please check your inputs.';
+          setPaymentError(msg);
+          showToast({
+            type: 'error',
+            title: 'Sale failed',
+            message: msg
+          });
+        }
+      } else {
+        const msg = error.response?.data?.error || error.message || 'Error processing sale. Please try again.';
         setPaymentError(msg);
         showToast({
           type: 'error',

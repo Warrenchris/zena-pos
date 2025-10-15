@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { categoriesAPI, productsAPI } from '../services/api'
+import { useToast } from '../components/Toast'
 import { 
   PhotoIcon,
   ArrowLeftIcon,
@@ -23,6 +24,7 @@ const initialForm = {
 
 export default function CreateProduct() {
   const navigate = useNavigate()
+  const { showToast } = useToast()
   const [form, setForm] = useState(initialForm)
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(false)
@@ -32,12 +34,24 @@ export default function CreateProduct() {
 
   useEffect(() => {
     let mounted = true
+    setLoading(true)
     categoriesAPI.getAll()
       .then((res) => {
         if (!mounted) return
         setCategories(res.data || [])
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (!mounted) return
+        setError(err)
+        showToast({
+          type: 'error',
+          title: 'Error',
+          message: 'Failed to load categories. Please try again.'
+        })
+      })
+      .finally(() => {
+        if (mounted) setLoading(false)
+      })
     return () => { mounted = false }
   }, [])
 

@@ -19,6 +19,8 @@ const validateSale = [
     .notEmpty()
     .withMessage('At least one item is required'),
   body('items.*.productId')
+    .notEmpty()
+    .withMessage('Product ID is required')
     .isInt()
     .withMessage('Invalid product ID'),
   body('items.*.quantity')
@@ -68,8 +70,15 @@ const validateSale = [
   // Customer fields validation
   body('customerId')
     .optional()
-    .isInt()
-    .withMessage('Invalid customer ID'),
+    .custom((value) => {
+      if (value === null || value === undefined) {
+        return true; // Allow null/undefined for walk-in customers
+      }
+      if (!Number.isInteger(value)) {
+        throw new Error('Invalid customer ID');
+      }
+      return true;
+    }),
   body('customer')
     .optional()
     .isObject()
@@ -82,8 +91,17 @@ const validateSale = [
     .withMessage('Customer name must be between 1 and 100 characters'),
   body('customer.email')
     .optional()
-    .isEmail()
-    .withMessage('Invalid email format'),
+    .custom((value) => {
+      if (value === '' || value === null || value === undefined) {
+        return true; // Allow empty email for walk-in customers
+      }
+      // Only validate email format if a value is provided
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) {
+        throw new Error('Invalid email format');
+      }
+      return true;
+    }),
   body('customer.phone')
     .optional()
     .isString()

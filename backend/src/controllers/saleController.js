@@ -288,6 +288,14 @@ exports.createSale = async (req, res) => {
     }
     const invoiceNumber = `${dateStr}-${sequence}`;
 
+    // Resolve userId (integer) vs employeeId (UUID)
+    const jwtId = req.user?.id;
+    const resolvedUserId = (typeof jwtId === 'number')
+      ? jwtId
+      : (typeof jwtId === 'string' && /^\d+$/.test(jwtId))
+        ? parseInt(jwtId, 10)
+        : null;
+
     // Create sale with customer information and employee tracking
     const sale = await Sale.create({
       invoiceNumber,
@@ -305,8 +313,8 @@ exports.createSale = async (req, res) => {
       customerPhone: customer?.phone || null,
       customerEmail: customer?.email || null,
       customerId,
-      userId: req.user.id, // Track which user created the sale
-      employeeId: employeeId || req.user.id, // Track which employee/cashier made the sale
+      userId: resolvedUserId, // Only set when numeric
+      employeeId: employeeId || jwtId, // Track which employee/cashier made the sale
       notes,
       shopId: req.user.shopId
     }, { transaction: t });
@@ -469,12 +477,14 @@ exports.getCashierStats = async (req, res) => {
   try {
     const { employeeId, startDate, endDate } = req.query;
     
-    // Default the dates if not provided
-    const start = startDate ? new Date(startDate) : new Date();
-    start.setHours(0, 0, 0, 0);
-    
-    const end = endDate ? new Date(endDate) : new Date();
-    end.setHours(23, 59, 59, 999);
+    // Default the dates if not provided (use UTC day boundaries to avoid TZ drift)
+    const now = new Date();
+    const start = startDate
+      ? new Date(startDate)
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    const end = endDate
+      ? new Date(endDate)
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
 
     // Build where clause
     const whereClause = {
@@ -555,10 +565,9 @@ exports.getCashierStats = async (req, res) => {
     const orderCount = sales.length;
 
     // Get today's stats specifically
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    const today = new Date();
+    const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 0, 0, 0, 0));
+    const todayEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999));
 
     const todaySales = sales.filter(sale => {
       const saleDate = new Date(sale.createdAt);
@@ -790,8 +799,39 @@ exports.getMySales = async (req, res) => {
       offset
     });
 
+    // Normalize response to match frontend expectations
+    const normalizedRows = sales.rows.map((row) => {
+      const sale = row.get ? row.get({ plain: true }) : row;
+
+      const saleItems = Array.isArray(sale.SaleItems) ? sale.SaleItems : [];
+      const products = saleItems.map((si) => ({
+        id: si.Product?.id ?? si.ProductId ?? null,
+        name: si.Product?.name ?? 'Unknown',
+        quantity: si.quantity ?? 0,
+        priceAtSale: parseFloat(
+          (si.price ?? si.unitPrice ?? si.originalPrice ?? 0)
+        )
+      }));
+
+      return {
+        id: sale.id,
+        createdAt: sale.createdAt,
+        invoiceNumber: sale.invoiceNumber,
+        customer: sale.Customer ? { 
+          id: sale.Customer.id,
+          name: sale.Customer.name,
+          email: sale.Customer.email,
+          phone: sale.Customer.phone
+        } : null,
+        products,
+        totalAmount: parseFloat(sale.total ?? 0),
+        paymentMethod: (sale.paymentMethod || 'cash').toUpperCase(),
+        status: (sale.saleStatus || 'completed').toUpperCase()
+      };
+    });
+
     res.json({
-      sales: sales.rows,
+      sales: normalizedRows,
       total: sales.count,
       totalPages: Math.ceil(sales.count / limit),
       currentPage: page

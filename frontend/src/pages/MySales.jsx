@@ -29,7 +29,7 @@ const SaleDetails = ({ sale, onClose }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {sale.products.map((product) => (
+            {(sale.products || []).map((product) => (
               <tr key={product.id}>
                 <td className="px-4 py-2 whitespace-nowrap">{product.name}</td>
                 <td className="px-4 py-2 text-right">{product.quantity}</td>
@@ -119,11 +119,45 @@ const MySales = () => {
   const fetchSales = async (page) => {
     try {
       const response = await cashierAPI.getMySales(page);
-      setSales(response.data.sales);
-      setTotalPages(response.data.totalPages);
-      setCurrentPage(response.data.currentPage);
+      const data = response.data || response; // support either axios response or direct data
+      const rows = Array.isArray(data.sales) ? data.sales : [];
+
+      // Normalize backend sales shape to UI-friendly shape
+      const normalized = rows.map((s) => {
+        const customer = s.Customer || s.customer || null;
+        const saleItems = s.SaleItems || s.items || [];
+        const products = saleItems.map((it) => ({
+          id: it.ProductId || it.productId || it.id,
+          name: it.Product?.name || it.name || 'Item',
+          quantity: it.quantity || 1,
+          priceAtSale: parseFloat(it.price ?? it.unitPrice ?? it.originalPrice ?? 0)
+        }));
+        return {
+          id: s.id,
+          createdAt: s.createdAt,
+          invoiceNumber: s.invoiceNumber || s.id,
+          customer,
+          products,
+          totalAmount: parseFloat(s.total ?? s.totalAmount ?? 0),
+          subtotal: parseFloat(s.subtotal ?? 0),
+          discount: parseFloat(s.discount ?? 0),
+          paymentMethod: s.paymentMethod?.toUpperCase?.() || 'CASH',
+          status: s.saleStatus?.toUpperCase?.() || 'COMPLETED'
+        };
+      });
+
+      const pages = Math.max(1, Number(data.totalPages) || 1);
+      const current = Math.min(Math.max(1, Number(data.currentPage) || Number(page) || 1), pages);
+
+      setSales(normalized);
+      setTotalPages(pages);
+      setCurrentPage(current);
     } catch (error) {
       console.error('Error fetching sales:', error);
+      // Graceful fallback on error
+      setSales([]);
+      setTotalPages(1);
+      setCurrentPage(1);
     } finally {
       setLoading(false);
     }
@@ -163,6 +197,12 @@ const MySales = () => {
 
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
+          {!loading && sales.length === 0 ? (
+            <div className="p-8 text-center text-gray-500 dark:text-gray-300">
+              <div className="text-lg font-medium mb-1">No sales yet</div>
+              <div className="text-sm">Your completed sales will appear here.</div>
+            </div>
+          ) : (
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
@@ -199,32 +239,32 @@ const MySales = () => {
                       {sale.customer?.name || 'Walk-in Customer'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sale.products.length} items
+                      {(Array.isArray(sale.products) ? sale.products.length : 0)} items
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                       {new Intl.NumberFormat('en-US', {
                         style: 'currency',
                         currency: 'USD'
-                      }).format(sale.totalAmount)}
+                      }).format(Number(sale.totalAmount) || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        sale.paymentMethod === 'CASH'
+                        (sale.paymentMethod || '').toUpperCase() === 'CASH'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-blue-100 text-blue-800'
                       }`}>
-                        {sale.paymentMethod}
+                        {(sale.paymentMethod || 'CASH')}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        sale.status === 'COMPLETED'
+                        (sale.status || '').toUpperCase() === 'COMPLETED'
                           ? 'bg-green-100 text-green-800'
-                          : sale.status === 'PENDING'
+                          : (sale.status || '').toUpperCase() === 'PENDING'
                           ? 'bg-yellow-100 text-yellow-800'
                           : 'bg-red-100 text-red-800'
                       }`}>
-                        {sale.status}
+                        {(sale.status || 'COMPLETED')}
                       </span>
                     </td>
                   </tr>
@@ -232,6 +272,7 @@ const MySales = () => {
               )}
             </tbody>
           </table>
+          )}
         </div>
       </div>
     </div>

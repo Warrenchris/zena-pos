@@ -40,6 +40,7 @@ const ExpensesPage = lazy(() => import('./pages/Expenses'));
 const CategoriesPage = lazy(() => import('./pages/Categories'));
 const SubCategories = lazy(() => import('./pages/SubCategories'));
 const Pos = lazy(() => import('./pages/Pos'));
+const CreateProduct = lazy(() => import('./pages/CreateProduct'));
 
 export const routes = [
   {
@@ -76,6 +77,18 @@ export const routes = [
           {
             path: 'products',
             element: <PrivateRoute><Products /></PrivateRoute>
+          },
+          {
+            path: 'products/create',
+            element: (
+              <ErrorBoundary>
+                <PrivateRoute>
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <CreateProduct />
+                  </Suspense>
+                </PrivateRoute>
+              </ErrorBoundary>
+            )
           },
           {
             path: 'customers',
