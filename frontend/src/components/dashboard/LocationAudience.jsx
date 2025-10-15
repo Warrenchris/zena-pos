@@ -34,6 +34,12 @@ const LocationAudience = () => {
   }, [dispatch, selectedPeriod]);
 
   const getLocationDetails = (location) => {
+    if (!location || !location.country) {
+      return {
+        ...location,
+        code: 'XX' // Default code for invalid/missing location data
+      };
+    }
     const countryName = location.country.split(',')[0].trim();
     return {
       ...location,
