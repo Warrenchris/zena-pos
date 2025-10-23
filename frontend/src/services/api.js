@@ -190,10 +190,11 @@ export const expensesAPI = {
 // Settings API
 export const settingsAPI = {
   getAll: () => api.get('/api/settings'),
-  updateTheme: (data) => api.put('/api/settings/theme', data),
-  updateRegional: (data) => api.put('/api/settings/regional', data),
-  getStatistics: (params) =>
-    api.get('/api/expenses/statistics', { params }),
+  update: (data) => api.put('/api/settings', data),
+  reset: () => api.post('/api/settings/reset'),
+  getCurrency: () => api.get('/api/settings/currency'),
+  getTheme: () => api.get('/api/settings/theme'),
+  getNotifications: () => api.get('/api/settings/notifications'),
 };
 
 // Users (admin only)

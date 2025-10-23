@@ -35,7 +35,9 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   XMarkIcon,
-  BuildingStorefrontIcon as StoreIcon
+  BuildingStorefrontIcon as StoreIcon,
+  CogIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline';
 
 const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
@@ -124,6 +126,15 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
       title: 'Finance & Accounts',
       items: [
         { name: 'Expenses', path: '/expenses', icon: CurrencyDollarIcon }
+      ]
+    },
+    {
+      title: 'Administration',
+      items: [
+        { name: 'Settings', path: '/settings', icon: CogIcon },
+        { name: 'Users', path: '/admin/users', icon: UserIcon },
+        { name: 'Company', path: '/admin/company', icon: BuildingOfficeIcon },
+        { name: 'Reports', path: '/reports', icon: ChartBarIcon }
       ]
     }
   ];

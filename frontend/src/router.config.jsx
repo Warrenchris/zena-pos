@@ -119,6 +119,7 @@ export const routes = [
             path: 'admin/company',
             element: <PlaceholderPage />
           },
+          // Settings are handled by the /settings route below
           {
             path: 'admin/ai',
             element: (

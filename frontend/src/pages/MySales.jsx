@@ -5,6 +5,7 @@ import { Menu } from '@headlessui/react';
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, FunnelIcon, EyeIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { cashierAPI } from '../services/cashierAPI';
+import { useAdvancedCurrency } from '../hooks/useAdvancedCurrency';
 
 const SaleDetails = ({ sale, onClose }) => {
   return (
@@ -74,7 +75,7 @@ const SalesStats = ({ startDate, endDate, sales }) => {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mb-8">
       <div className="p-4 bg-white dark:bg-gray-800 shadow-sm rounded-lg">
         <div className="text-sm text-gray-500 dark:text-gray-400">Total Sales</div>
-        <div className="text-2xl font-semibold mt-1">${totalSales.toFixed(2)}</div>
+        <div className="text-2xl font-semibold mt-1">{formatCurrency(totalSales)}</div>
         <div className="text-sm mt-2 flex items-center">
           <span className={`mr-1 ${salesGrowth >= 0 ? 'text-green-500' : 'text-red-500'}`}>
             {salesGrowth >= 0 ? '↑' : '↓'}
@@ -85,7 +86,7 @@ const SalesStats = ({ startDate, endDate, sales }) => {
 
       <div className="p-4 bg-white dark:bg-gray-800 shadow-sm rounded-lg">
         <div className="text-sm text-gray-500 dark:text-gray-400">Average Ticket</div>
-        <div className="text-2xl font-semibold mt-1">${avgTicket.toFixed(2)}</div>
+        <div className="text-2xl font-semibold mt-1">{formatCurrency(avgTicket)}</div>
         <div className="text-sm text-gray-500 mt-2">Per transaction</div>
       </div>
 
@@ -99,6 +100,7 @@ const SalesStats = ({ startDate, endDate, sales }) => {
 };
 
 const MySales = () => {
+  const { formatLocale: formatCurrency } = useAdvancedCurrency();
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -242,10 +244,7 @@ const MySales = () => {
                       {(Array.isArray(sale.products) ? sale.products.length : 0)} items
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-                      {new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD'
-                      }).format(Number(sale.totalAmount) || 0)}
+                      {formatCurrency(Number(sale.totalAmount) || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${

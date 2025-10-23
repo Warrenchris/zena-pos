@@ -6,7 +6,7 @@ import { type Insight } from './types';
 describe('BusinessInsights', () => {
   const mockInsights: Insight = {
     trends: [
-      { date: '2023-09-17', totalSales: 1500 }
+      { date: '2023-09-17', totalSales: 1500, currencyCode: 'KES' }
     ],
     recommendations: [
       {
@@ -26,6 +26,7 @@ describe('BusinessInsights', () => {
         details: {
           date: '2023-09-17',
           amount: 1000,
+          currencyCode: 'KES',
           average: 2000
         }
       }

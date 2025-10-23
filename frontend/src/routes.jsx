@@ -35,6 +35,7 @@ const CreateProduct = lazyLoad(() => import('./pages/CreateProduct'))
 const Brands = lazyLoad(() => import('./pages/Brands'))
 const Units = lazyLoad(() => import('./pages/Units'))
 const SubCategories = lazyLoad(() => import('./pages/SubCategories'))
+const Settings = lazyLoad(() => import('./pages/Settings'))
 
 const AiServices = lazy(() => import('./pages/AiServices'))
 
@@ -90,6 +91,7 @@ export default function AppRoutes() {
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/employees" element={<Employees />} />
           <Route path="/admin/company" element={<CompanySettings />} />
+          {/* Settings are now handled by the /settings route */}
           <Route path="/reports" element={<Reports />} />
           <Route path="/admin/ai" element={<AiServices />} />
           

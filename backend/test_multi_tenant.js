@@ -225,7 +225,8 @@ class MultiTenantTester {
       cost: 5.00,
       stockQuantity: 100,
       reorderPoint: 10,
-      CategoryId: 1 // Assuming category exists
+      CategoryId: 1, // Assuming category exists
+      currencyCode: 'KES' // Add currency code
     };
     
     const response = await this.makeRequest('POST', '/products', productData, token);

@@ -1,20 +1,9 @@
-import React from 'react';
-
-const Reports = () => {
-  return (
-    <div className="py-6">
-      <h1 className="text-2xl font-semibold">Reports</h1>
-      <p className="mt-2 text-gray-600">Analytics and reporting will appear here.</p>
-    </div>
-  );
-};
-
-export default Reports;
-
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { reportsAPI } from '../services/api'
+import { useAdvancedCurrency } from '../hooks/useAdvancedCurrency'
 
 export default function Reports() {
+  const { formatLocale: formatCurrency } = useAdvancedCurrency();
   const [tab, setTab] = useState('sales')
   const [range, setRange] = useState('monthly')
   const [startDate, setStartDate] = useState('')
@@ -115,9 +104,9 @@ export default function Reports() {
                     <tr key={i}>
                       <td className="px-4 py-3">{r.period}</td>
                       <td className="px-4 py-3">{r.saleCount}</td>
-                      <td className="px-4 py-3">{Number(r.revenue||0).toLocaleString(undefined,{style:'currency',currency:'USD'})}</td>
-                      <td className="px-4 py-3">{Number(r.tax||0).toLocaleString(undefined,{style:'currency',currency:'USD'})}</td>
-                      <td className="px-4 py-3">{Number(r.discount||0).toLocaleString(undefined,{style:'currency',currency:'USD'})}</td>
+                      <td className="px-4 py-3">{formatCurrency(Number(r.revenue||0))}</td>
+                      <td className="px-4 py-3">{formatCurrency(Number(r.tax||0))}</td>
+                      <td className="px-4 py-3">{formatCurrency(Number(r.discount||0))}</td>
                     </tr>
                   ))}
                 </tbody>

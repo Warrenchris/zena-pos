@@ -29,23 +29,27 @@ describe('Insights Controller', () => {
         sku: 'TEST123',
         price: 100,
         stockQuantity: 5,
-        reorderPoint: 10
+        reorderPoint: 10,
+        currencyCode: 'KES'
       });
 
       await Sale.create({
         totalAmount: 500,
         customerId: 1,
+        currencyCode: 'KES',
         items: [{
           productId: 1,
           quantity: 2,
-          price: 100
+          price: 100,
+          currencyCode: 'KES'
         }]
       });
 
       await Expense.create({
         category: 'Supplies',
         amount: 6000,
-        description: 'Test expense'
+        description: 'Test expense',
+        currencyCode: 'KES'
       });
 
       const response = await request(app)

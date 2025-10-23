@@ -12,6 +12,7 @@ import { fetchProducts } from '../store/slices/productsSlice'
 import { fetchCustomers } from '../store/slices/customersSlice'
 import { employeesAPI } from '../services/api'
 import POSModal from '../components/POSModal'
+import { useCurrency } from '../hooks/useCurrency'
 
 export default function Sales() {
   const dispatch = useDispatch()
@@ -19,6 +20,7 @@ export default function Sales() {
   const { products } = useSelector((state) => state.products)
   const { customers } = useSelector((state) => state.customers)
   const { user } = useSelector((state) => state.auth)
+  const { format: formatCurrency } = useCurrency()
   
   const [currentPage, setCurrentPage] = useState(1)
   const [showPOSModal, setShowPOSModal] = useState(false)
@@ -68,12 +70,6 @@ export default function Sales() {
     }
   }
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount)
-  }
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {

@@ -12,6 +12,7 @@ const Shop = require('./Shop');
 const Store = require('./Store');
 const ActivityLog = require('./ActivityLog');
 const Employee = require('./Employee');
+const SystemSettings = require('./SystemSettings');
 
 // Define model associations
 Product.belongsTo(Category);
@@ -53,6 +54,8 @@ Shop.hasMany(Sale, { foreignKey: 'shopId' });
 Shop.hasMany(Expense, { foreignKey: 'shopId' });
 Shop.hasMany(ActivityLog, { foreignKey: 'shopId' });
 Shop.hasMany(Employee, { foreignKey: 'shopId' });
+Shop.hasOne(SystemSettings, { foreignKey: 'shopId' });
+SystemSettings.belongsTo(Shop, { foreignKey: 'shopId' });
 
 // Export models and sequelize instance
 module.exports = {
@@ -67,5 +70,6 @@ module.exports = {
   Shop,
   Store,
   ActivityLog,
-  Employee
+  Employee,
+  SystemSettings
 };

@@ -8,9 +8,11 @@ import {
 } from '@heroicons/react/24/outline';
 import { employeesAPI, reportsAPI } from '../services/api';
 import EmployeeModal from '../components/EmployeeModal';
+import { useAdvancedCurrency } from '../hooks/useAdvancedCurrency';
 import { EMPLOYEE_POSITIONS } from '../constants/employeeConstants';
 
 export default function Employees() {
+  const { formatLocale: formatCurrency } = useAdvancedCurrency();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   const [employees, setEmployees] = useState([]);
@@ -300,7 +302,7 @@ export default function Employees() {
                   </span>
                 </td>
                   <td className="px-4 py-3">{new Date(emp.hireDate).toLocaleDateString()}</td>
-                  <td className="px-4 py-3">{Number(emp.salary).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}</td>
+                  <td className="px-4 py-3">{formatCurrency(Number(emp.salary))}</td>
                   <td className="px-4 py-3 text-right space-x-2">
                     <button onClick={() => openEdit(emp)} className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">Edit</button>
                     <button onClick={() => remove(emp)} className="px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700">Delete</button>
@@ -330,7 +332,7 @@ export default function Employees() {
                   <tr key={i}>
                     <td className="px-4 py-3">{r.user?.name || r.user?.id}</td>
                     <td className="px-4 py-3">{r.saleCount}</td>
-                    <td className="px-4 py-3">{Number(r.revenue||0).toLocaleString(undefined,{style:'currency',currency:'USD'})}</td>
+                    <td className="px-4 py-3">{formatCurrency(Number(r.revenue||0))}</td>
               </tr>
             ))}
           </tbody>

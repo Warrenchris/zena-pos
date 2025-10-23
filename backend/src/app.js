@@ -33,8 +33,12 @@ const unitRoutes = require('./routes/unitRoutes');
 const aiProxyRoutes = require('./routes/aiProxy');
 const systemHealthRoutes = require('./routes/systemHealth');
 const storeRoutes = require('./routes/storeRoutes');
+const settingsRoutes = require('./routes/settings');
 
 const app = express();
+
+// Import request logger middleware
+const requestLogger = require('./middleware/requestLogger');
 
 // Middleware
 app.use(helmet());
@@ -47,6 +51,7 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms', 
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(requestLogger);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -69,6 +74,7 @@ app.use('/api/system/health', systemHealthRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stores', storeRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

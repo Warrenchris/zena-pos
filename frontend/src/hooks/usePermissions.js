@@ -30,6 +30,7 @@ export const usePermissions = () => {
           { path: '/expenses', label: 'Expenses' },
           { path: '/admin/employees', label: 'Employees' },
           { path: '/admin/users', label: 'Users' },
+          { path: '/settings', label: 'Settings' },
           { path: '/reports', label: 'Reports' },
         ];
       case 'manager':
@@ -40,6 +41,7 @@ export const usePermissions = () => {
           { path: '/categories', label: 'Categories' },
           { path: '/customers', label: 'Customers' },
           { path: '/expenses', label: 'Expenses' },
+          { path: '/settings', label: 'Settings' },
           { path: '/reports', label: 'Reports' },
         ];
       case 'cashier':

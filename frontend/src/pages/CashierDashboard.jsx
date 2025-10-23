@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchProducts } from '../store/slices/productsSlice';
 import { getCurrentUser } from '../store/slices/authSlice';
 import StatsCard from '../components/StatsCard';
+import { useAdvancedCurrency } from '../hooks/useAdvancedCurrency';
 import HeroSection from '../components/HeroSection';
 import ProductCard from '../components/ProductCard';
 import ProductFilterBar from '../components/ProductFilterBar';
@@ -37,8 +38,18 @@ import PaymentModal from '../components/PaymentModal';
 import { useToast } from '../components/Toast';
 
 export default function CashierDashboard() {
+  const { formatLocale: formatCurrency, roundToUnit } = useAdvancedCurrency();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  
+  // Currency utility functions
+  const calculateItemTotal = (item) => {
+    return roundToUnit((parseFloat(item.price || 0) * item.quantity));
+  };
+
+  const parseAmount = (amount) => {
+    return roundToUnit(parseFloat(amount || 0));
+  };
   const { user, token } = useSelector((state) => state.auth);
   const { products, loading: productsLoading } = useSelector((state) => state.products);
   const [view, setView] = useState('grid');
@@ -327,7 +338,7 @@ export default function CashierDashboard() {
     setPaymentError(null);
 
     try {
-      const paymentAmount = parseFloat(parseFloat(currentSale.paymentAmount).toFixed(2));
+      const paymentAmount = parseAmount(currentSale.paymentAmount);
       
       // Validate and prepare sale data
       const validatedItems = currentSale.items.map(item => {
@@ -403,7 +414,7 @@ export default function CashierDashboard() {
       showToast({
         type: 'success',
         title: `Sale of ${itemLabel} completed`,
-        message: `Qty: ${quantity} • Total: $${total}`
+        message: `Qty: ${quantity} • Total: ${formatCurrency(total)}`
       });
     } catch (error) {
       console.error('Payment processing error:', error);
@@ -459,8 +470,8 @@ export default function CashierDashboard() {
               <span class="item-meta">${item.sku || ''}</span>
             </div>
             <div class="item-price">
-              <span class="quantity">${item.quantity} x $${parseFloat(item.price || 0).toFixed(2)}</span>
-              <span class="amount">$${(parseFloat(item.price || 0) * item.quantity).toFixed(2)}</span>
+              <span class="quantity">${item.quantity} x ${formatCurrency(parseFloat(item.price || 0))}</span>
+              <span class="amount">${formatCurrency(parseFloat(item.price || 0) * item.quantity)}</span>
             </div>
           </div>
         `).join('');
@@ -598,17 +609,17 @@ export default function CashierDashboard() {
               <div class="totals">
                 <div class="total-row">
                   <span>Subtotal:</span>
-                  <span>$${subtotal.toFixed(2)}</span>
+                  <span>${formatCurrency(subtotal)}</span>
                 </div>
                 ${discountTotal > 0 ? `
                   <div class="total-row">
                     <span>Discount:</span>
-                    <span>-$${discountTotal.toFixed(2)}</span>
+                    <span>-${formatCurrency(discountTotal)}</span>
                   </div>
                 ` : ''}
                 <div class="total-row grand-total">
                   <span>Total:</span>
-                  <span>$${total.toFixed(2)}</span>
+                  <span>${formatCurrency(total)}</span>
                 </div>
               </div>
 
@@ -619,11 +630,11 @@ export default function CashierDashboard() {
                 </div>
                 <div class="total-row">
                   <span>Amount Paid:</span>
-                  <span>$${parseFloat(currentSale.paymentAmount).toFixed(2)}</span>
+                  <span>${formatCurrency(parseFloat(currentSale.paymentAmount))}</span>
                 </div>
                 <div class="total-row">
                   <span>Change:</span>
-                  <span>$${change.toFixed(2)}</span>
+                  <span>${formatCurrency(change)}</span>
                 </div>
               </div>
 
@@ -735,7 +746,7 @@ export default function CashierDashboard() {
                           <CurrencyDollarIcon className="h-6 w-6 text-green-600" />
                         </div>
                         <h3 className="text-lg font-semibold text-gray-100">Today's Revenue</h3>
-                        <p className="text-2xl font-bold text-green-400">${cashierStats.today.totalSales.toFixed(2)}</p>
+                        <p className="text-2xl font-bold text-green-400">{formatCurrency(cashierStats.today.totalSales)}</p>
                       </div>
                       
                       <div className="bg-brand-gray border border-brand-yellow/20 rounded-xl p-6 text-center hover:shadow-lg transition-all duration-200">
@@ -751,7 +762,7 @@ export default function CashierDashboard() {
                           <ChartBarIcon className="h-6 w-6 text-purple-600" />
                         </div>
                         <h3 className="text-lg font-semibold text-gray-100">This Week</h3>
-                        <p className="text-2xl font-bold text-purple-400">${cashierStats.week.totalSales.toFixed(2)}</p>
+                        <p className="text-2xl font-bold text-purple-400">{formatCurrency(cashierStats.week.totalSales)}</p>
                       </div>
                     </>
                   )}
@@ -882,9 +893,9 @@ export default function CashierDashboard() {
                           </div>
                           <h3 className="font-semibold text-gray-100 text-sm mb-1 line-clamp-2">{product.name}</h3>
                           <p className="text-lg font-bold text-brand-yellow mb-1">
-                            ${typeof product.price === 'number' 
-                              ? product.price.toFixed(2) 
-                              : parseFloat(product.price || 0).toFixed(2)}
+                            {formatCurrency(typeof product.price === 'number' 
+                              ? product.price 
+                              : parseFloat(product.price || 0))}
                           </p>
                           <p className="text-xs text-gray-300">
                             Stock: {product.stockQuantity}
@@ -947,7 +958,7 @@ export default function CashierDashboard() {
                             <h4 className="font-semibold text-gray-100 text-sm">{item.name}</h4>
                             <div className="flex items-center space-x-2">
                               <p className="text-xs text-gray-300">
-                                ${parseFloat(item.price || 0).toFixed(2)} each
+                                {formatCurrency(parseFloat(item.price || 0))} each
                               </p>
                               {item.quantity >= item.stockQuantity && (
                                 <span className="text-xs text-yellow-400">Max stock reached</span>
@@ -1025,7 +1036,7 @@ export default function CashierDashboard() {
                   <div className="p-4 sm:p-6 border-t border-brand-yellow/20 bg-brand-gray">
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-lg font-bold text-gray-100">Total:</span>
-                      <span className="text-2xl font-bold text-brand-yellow">${currentSale.total.toFixed(2)}</span>
+                      <span className="text-2xl font-bold text-brand-yellow">{formatCurrency(currentSale.total)}</span>
                     </div>
                     <button
                       type="button"
@@ -1124,7 +1135,7 @@ export default function CashierDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm opacity-90">Today's Sales</p>
-                    <p className="text-2xl font-bold">${(cashierStats?.today?.totalSales || 0).toFixed(2)}</p>
+                    <p className="text-2xl font-bold">{formatCurrency(cashierStats?.today?.totalSales || 0)}</p>
                     <p className="text-sm opacity-90">{cashierStats?.today?.orderCount || 0} transactions</p>
                   </div>
                   <ArrowTrendingUpIcon className="h-8 w-8 opacity-80" />
@@ -1135,7 +1146,7 @@ export default function CashierDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm opacity-90">This Week</p>
-                    <p className="text-2xl font-bold">${(cashierStats?.week?.totalSales || 0).toFixed(2)}</p>
+                    <p className="text-2xl font-bold">{formatCurrency(cashierStats?.week?.totalSales || 0)}</p>
                     <p className="text-sm opacity-90">{cashierStats?.week?.orderCount || 0} transactions</p>
                   </div>
                   <ChartBarIcon className="h-8 w-8 opacity-80" />
@@ -1148,7 +1159,7 @@ export default function CashierDashboard() {
                   {(recentSales || []).slice(0, 3).map((sale, index) => (
                     <div key={index} className="flex justify-between items-center text-sm">
                       <span className="text-gray-600">#{sale?.id || 'N/A'}</span>
-                      <span className="font-medium">${(sale?.total || 0).toFixed(2)}</span>
+                      <span className="font-medium">{formatCurrency(sale?.total || 0)}</span>
                     </div>
                   ))}
                   {recentSales.length === 0 && (

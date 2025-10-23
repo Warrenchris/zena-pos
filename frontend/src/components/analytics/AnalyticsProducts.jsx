@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { HiSortAscending, HiSortDescending } from 'react-icons/hi';
+import { useAdvancedCurrency } from '../../hooks/useAdvancedCurrency';
 
 const AnalyticsProducts = () => {
+  const { formatLocale } = useAdvancedCurrency();
   const [sortField, setSortField] = useState('earnings');
   const [sortDirection, setSortDirection] = useState('desc');
 
@@ -10,10 +12,12 @@ const AnalyticsProducts = () => {
       id: 1,
       name: 'Wireless Earbuds Pro',
       price: 129.99,
+      formattedPrice: formatLocale(129.99),
       status: 'active',
       sellCount: 1234,
       viewCount: 5678,
       earnings: 160366.66,
+      formattedEarnings: formatLocale(160366.66),
     },
     {
       id: 2,
