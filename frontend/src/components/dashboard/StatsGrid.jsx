@@ -3,6 +3,7 @@ import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
 import api from '../../services/api';
 import analyticsService from '../../services/analytics.service';
+import useCurrency from '../../hooks/useCurrency';
 
 const StatsCard = ({ title, value, percentage, trend, data, color }) => {
   const isPositive = percentage > 0;
@@ -49,6 +50,7 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
 };
 
 const StatsGrid = () => {
+  const { format } = useCurrency();
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,7 +65,7 @@ const StatsGrid = () => {
         const formattedStats = [
           {
             title: 'Total Income',
-            value: `$${(orderStats?.totalRevenue || 0).toLocaleString()}`,
+            value: format(orderStats?.totalRevenue || 0),
             percentage: orderStats?.revenueGrowth || 0,
             trend: 'Compared to last month',
             data: (orderStats?.revenueHistory || []).map(h => ({ value: h?.value || 0 })),

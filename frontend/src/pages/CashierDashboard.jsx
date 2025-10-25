@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchProducts } from '../store/slices/productsSlice';
 import { getCurrentUser } from '../store/slices/authSlice';
 import StatsCard from '../components/StatsCard';
-import { useAdvancedCurrency } from '../hooks/useAdvancedCurrency';
+import useCurrency from '../hooks/useCurrency';
 import HeroSection from '../components/HeroSection';
 import ProductCard from '../components/ProductCard';
 import ProductFilterBar from '../components/ProductFilterBar';
@@ -38,17 +38,17 @@ import PaymentModal from '../components/PaymentModal';
 import { useToast } from '../components/Toast';
 
 export default function CashierDashboard() {
-  const { formatLocale: formatCurrency, roundToUnit } = useAdvancedCurrency();
+  const { format: formatCurrency } = useCurrency();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   
   // Currency utility functions
   const calculateItemTotal = (item) => {
-    return roundToUnit((parseFloat(item.price || 0) * item.quantity));
+    return Math.round((parseFloat(item.price || 0) * item.quantity) * 100) / 100;
   };
 
   const parseAmount = (amount) => {
-    return roundToUnit(parseFloat(amount || 0));
+    return Math.round(parseFloat(amount || 0) * 100) / 100;
   };
   const { user, token } = useSelector((state) => state.auth);
   const { products, loading: productsLoading } = useSelector((state) => state.products);

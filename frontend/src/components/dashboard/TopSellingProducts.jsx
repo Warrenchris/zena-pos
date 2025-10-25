@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { HiSortAscending, HiSortDescending } from 'react-icons/hi';
 import { fetchTopProducts } from '../../store/slices/analyticsSlice';
+import useCurrency from '../../hooks/useCurrency';
 
 const TopSellingProducts = () => {
   const dispatch = useDispatch();
+  const { format } = useCurrency();
   const { products, salesPercentageChange, totalSales, loading, error } = 
     useSelector((state) => state.analytics.topProducts);
   const [sortField, setSortField] = useState('quantity');
@@ -134,16 +136,13 @@ const TopSellingProducts = () => {
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                ${product.price.toFixed(2)}
+                {format(product.price)}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {product.quantity.toLocaleString()}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                ${product.revenue.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {format(product.revenue)}
               </td>
             </tr>
           ))}

@@ -6,6 +6,7 @@ import {
   DevicePhoneMobileIcon
 } from '@heroicons/react/24/outline';
 import { withTrustedClick } from '../utils/securityUtils';
+import useCurrency from '../hooks/useCurrency';
 
 export default function PaymentModal({
   isOpen,
@@ -17,6 +18,7 @@ export default function PaymentModal({
   paymentError,
   setPaymentError
 }) {
+  const { format: formatCurrency, getCode: getMetadata } = useCurrency();
   if (!isOpen) return null;
 
   const handleAmountChange = (value) => {
@@ -50,7 +52,7 @@ export default function PaymentModal({
         <div className="mb-6 bg-brand-black rounded-xl p-4 border border-brand-yellow/10">
           <div className="flex justify-between items-center text-lg font-bold">
             <span className="text-gray-300">Total Due</span>
-            <span className="text-brand-yellow">${currentSale.total.toFixed(2)}</span>
+            <span className="text-brand-yellow">{formatCurrency(currentSale.total)}</span>
           </div>
         </div>
         
@@ -130,7 +132,9 @@ export default function PaymentModal({
             Amount Received
           </label>
           <div className="relative">
-            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
+            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+              {getMetadata()?.symbol}
+            </span>
             <input
               type="number"
               step="0.01"
@@ -172,7 +176,7 @@ export default function PaymentModal({
               })}
               className="py-3 px-4 bg-brand-black border border-gray-700 rounded-xl text-sm font-medium text-gray-400 hover:border-brand-yellow/50 hover:text-brand-yellow transition-all duration-200"
             >
-              ${amount}
+              {formatCurrency(amount)}
             </button>
           ))}
         </div>
@@ -182,11 +186,11 @@ export default function PaymentModal({
           <div className="mb-6 p-4 bg-brand-black rounded-xl space-y-2 border border-brand-yellow/10">
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Amount Received</span>
-              <span className="font-medium text-gray-200">${parseFloat(currentSale.paymentAmount).toFixed(2)}</span>
+              <span className="font-medium text-gray-200">{formatCurrency(parseFloat(currentSale.paymentAmount))}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Total Due</span>
-              <span className="font-medium text-gray-200">-${currentSale.total.toFixed(2)}</span>
+              <span className="font-medium text-gray-200">-{formatCurrency(currentSale.total)}</span>
             </div>
             <div className="border-t border-gray-700 pt-2 mt-2">
               <div className="flex justify-between items-center">
@@ -198,7 +202,7 @@ export default function PaymentModal({
                     ? 'text-brand-yellow'
                     : 'text-red-400'
                 }`}>
-                  ${Math.max(0, (parseFloat(currentSale.paymentAmount) - currentSale.total)).toFixed(2)}
+                  {formatCurrency(Math.max(0, (parseFloat(currentSale.paymentAmount) - currentSale.total)))}
                 </span>
               </div>
             </div>

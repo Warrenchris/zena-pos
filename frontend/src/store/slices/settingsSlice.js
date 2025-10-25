@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
 import { settingsAPI } from '../../services/api';
 import { getCurrencySymbol } from '../../utils/currency';
-import { toast } from 'react-hot-toast';
+import { toast } from '../../utils/toast';
 
 const initialState = {
   // General Settings

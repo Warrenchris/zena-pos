@@ -1,22 +1,11 @@
-// Legacy formatCurrency function - now uses settings-based formatting
+import { formatAmount } from './currencyFormatters';
+
+// Wrapper for backward compatibility
 export const formatCurrency = (amount, settings = null) => {
-  // If settings are provided, use the new system
-  if (settings) {
-    const { currencySymbol, currencyPosition, decimalPlaces } = settings;
-    const formattedAmount = parseFloat(amount).toFixed(decimalPlaces);
-    
-    if (currencyPosition === 'before') {
-      return `${currencySymbol} ${formattedAmount}`;
-    } else {
-      return `${formattedAmount} ${currencySymbol}`;
-    }
+  if (settings?.currency) {
+    return formatAmount(amount, settings.currency);
   }
-  
-  // Fallback to USD formatting for backward compatibility
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(amount)
+  return formatAmount(amount); // Uses default currency (KES)
 }
 
 export const formatDate = (dateString) => {

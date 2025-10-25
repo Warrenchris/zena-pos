@@ -5,7 +5,7 @@ import { Menu } from '@headlessui/react';
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, FunnelIcon, EyeIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { cashierAPI } from '../services/cashierAPI';
-import { useAdvancedCurrency } from '../hooks/useAdvancedCurrency';
+import useCurrency from '../hooks/useCurrency';
 
 const SaleDetails = ({ sale, onClose }) => {
   return (
@@ -100,7 +100,7 @@ const SalesStats = ({ startDate, endDate, sales }) => {
 };
 
 const MySales = () => {
-  const { formatLocale: formatCurrency } = useAdvancedCurrency();
+  const { format: formatCurrency } = useCurrency();
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);

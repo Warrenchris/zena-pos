@@ -1,16 +1,3 @@
-import React from 'react';
-
-const Expenses = () => {
-  return (
-    <div className="py-6">
-      <h1 className="text-2xl font-semibold">Expenses</h1>
-      <p className="mt-2 text-gray-600">Record and track business expenses.</p>
-    </div>
-  );
-};
-
-export default Expenses;
-
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { 
@@ -18,17 +5,12 @@ import {
   PencilIcon,
   TrashIcon
 } from '@heroicons/react/24/outline'
+import useCurrency from '../hooks/useCurrency'
 
 export default function Expenses() {
+  const { format: formatCurrency } = useCurrency();
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(false)
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount)
-  }
 
   return (
     <div className="space-y-6">

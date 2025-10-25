@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { fetchSalesChannels } from '../../store/slices/analyticsSlice';
+import useCurrency from '../../hooks/useCurrency';
 
 const SellingPlatform = () => {
   const dispatch = useDispatch();
+  const { format } = useCurrency();
   const { platforms, totalSales, totalRevenue, salesPercentageChange, loading, error } = 
     useSelector((state) => state.analytics.salesChannels);
   const [selectedPeriod, setSelectedPeriod] = useState('week');
@@ -27,7 +29,7 @@ const SellingPlatform = () => {
             {payload[0].payload.orders} orders
           </p>
           <p className="text-gray-500">
-            ${payload[0].payload.revenue.toLocaleString()}
+            {format(payload[0].payload.revenue)}
           </p>
         </div>
       );
@@ -117,7 +119,7 @@ const SellingPlatform = () => {
                   {entry.name}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {entry.orders} orders · ${entry.revenue.toLocaleString()}
+                  {entry.orders} orders · {format(entry.revenue)}
                 </div>
               </div>
               <p className="text-sm font-semibold text-gray-900">
@@ -130,7 +132,7 @@ const SellingPlatform = () => {
 
       <div className="mt-6 pt-6 border-t border-gray-200">
         <div className="text-sm text-gray-500">
-          Total Revenue: ${totalRevenue?.toLocaleString()}
+          Total Revenue: {format(totalRevenue)}
         </div>
       </div>
     </div>

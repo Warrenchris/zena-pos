@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { reportsAPI } from '../services/api'
-import { useAdvancedCurrency } from '../hooks/useAdvancedCurrency'
+import useCurrency from '../hooks/useCurrency'
 
 export default function Reports() {
-  const { formatLocale: formatCurrency } = useAdvancedCurrency();
+  const { format: formatCurrency } = useCurrency();
   const [tab, setTab] = useState('sales')
   const [range, setRange] = useState('monthly')
   const [startDate, setStartDate] = useState('')
@@ -145,7 +145,7 @@ function Stat({ label, value, highlight }){
   return (
     <div className={`p-4 rounded border ${highlight ? 'border-brand-yellow bg-brand-yellow/10' : 'border-brand-yellow/20'}`}>
       <div className="text-sm text-gray-300">{label}</div>
-      <div className="text-xl font-semibold text-brand-yellow">{Number(value||0).toLocaleString(undefined,{style:'currency',currency:'USD'})}</div>
+      <div className="text-xl font-semibold text-brand-yellow">{formatCurrency(Number(value||0))}</div>
     </div>
   )
 }

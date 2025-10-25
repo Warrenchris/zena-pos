@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import { useErrorHandler, errorTypes, createError } from '../utils/errorHandler';
 import { LoadingOverlay, GridSkeletonLoader, InlineLoading } from '../components/LoadingStates';
+import useCurrency from '../hooks/useCurrency';
 import { 
   PlusIcon, 
   MagnifyingGlassIcon,
@@ -25,6 +26,7 @@ function ProductsContent() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { handleError } = useErrorHandler();
+  const { format: formatCurrency } = useCurrency();
   const { products, loading, pagination } = useSelector((state) => state.products);
   const { categories } = useSelector((state) => state.categories || { categories: [] });
   
@@ -145,12 +147,6 @@ function ProductsContent() {
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
 
   const getStockStatus = (quantity, reorderPoint) => {
     if (quantity === 0) return { status: 'out', color: 'text-red-600' };

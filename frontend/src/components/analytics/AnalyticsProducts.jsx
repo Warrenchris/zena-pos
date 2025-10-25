@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { HiSortAscending, HiSortDescending } from 'react-icons/hi';
-import { useAdvancedCurrency } from '../../hooks/useAdvancedCurrency';
+import useCurrency from '../../hooks/useCurrency';
 
 const AnalyticsProducts = () => {
-  const { formatLocale } = useAdvancedCurrency();
+  const { format: formatLocale } = useCurrency();
   const [sortField, setSortField] = useState('earnings');
   const [sortDirection, setSortDirection] = useState('desc');
 

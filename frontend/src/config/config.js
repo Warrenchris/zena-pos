@@ -7,7 +7,6 @@ export const API_URL = viteApi || nodeApi || 'http://localhost:3001';
 
 // Other global configuration
 export const APP_NAME = 'Zana POS';
-export const DEFAULT_CURRENCY = 'KES';
 export const DEFAULT_LANGUAGE = 'en';
 
 // Feature flags

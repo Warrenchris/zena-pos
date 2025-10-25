@@ -8,11 +8,11 @@ import {
 } from '@heroicons/react/24/outline';
 import { employeesAPI, reportsAPI } from '../services/api';
 import EmployeeModal from '../components/EmployeeModal';
-import { useAdvancedCurrency } from '../hooks/useAdvancedCurrency';
+import useCurrency from '../hooks/useCurrency';
 import { EMPLOYEE_POSITIONS } from '../constants/employeeConstants';
 
 export default function Employees() {
-  const { formatLocale: formatCurrency } = useAdvancedCurrency();
+  const { format: formatCurrency } = useCurrency();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   const [employees, setEmployees] = useState([]);

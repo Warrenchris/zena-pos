@@ -6,6 +6,7 @@ import {
   PlusIcon,
   CreditCardIcon
 } from '@heroicons/react/24/outline';
+import useCurrency from '../hooks/useCurrency';
 
 export default function CartPanel({ 
   items,
@@ -15,6 +16,7 @@ export default function CartPanel({
   onProceedToPayment,
   total 
 }) {
+  const { format: formatCurrency } = useCurrency();
   return (
     <div className="lg:w-96 bg-brand-gray/95 backdrop-blur-sm border-t lg:border-t-0 lg:border-l border-brand-yellow/20 flex flex-col h-[50vh] lg:h-full fixed lg:static bottom-0 left-0 right-0">
       {/* Cart Header */}
@@ -48,7 +50,7 @@ export default function CartPanel({
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <h3 className="font-medium text-gray-200">{item.name}</h3>
-                  <p className="text-brand-yellow text-lg">${item.price.toFixed(2)}</p>
+                  <p className="text-brand-yellow text-lg">{formatCurrency(item.price)}</p>
                 </div>
                 <button
                   onClick={() => onRemoveItem(item)}
@@ -76,7 +78,7 @@ export default function CartPanel({
                   </button>
                 </div>
                 <span className="text-gray-300">
-                  ${(item.price * item.quantity).toFixed(2)}
+                  {formatCurrency(item.price * item.quantity)}
                 </span>
               </div>
             </div>
@@ -89,11 +91,11 @@ export default function CartPanel({
         <div className="mb-4">
           <div className="flex justify-between text-gray-400 mb-2">
             <span>Subtotal</span>
-            <span>${total.toFixed(2)}</span>
+            <span>{formatCurrency(total)}</span>
           </div>
           <div className="flex justify-between text-lg font-bold text-gray-100">
             <span>Total</span>
-            <span className="text-brand-yellow">${total.toFixed(2)}</span>
+            <span className="text-brand-yellow">{formatCurrency(total)}</span>
           </div>
         </div>
 

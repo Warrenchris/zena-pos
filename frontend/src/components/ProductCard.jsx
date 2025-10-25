@@ -1,7 +1,9 @@
 import React from 'react';
 import { CurrencyDollarIcon, PlusIcon } from '@heroicons/react/24/outline';
+import useCurrency from '../hooks/useCurrency';
 
 export default function ProductCard({ product, onAddToCart }) {
+  const { format: formatCurrency } = useCurrency();
   return (
     <div className="group bg-brand-gray/50 backdrop-blur-sm border border-brand-yellow/20 rounded-xl p-4 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
       {/* Product Image */}
@@ -39,7 +41,7 @@ export default function ProductCard({ product, onAddToCart }) {
         <h3 className="font-medium text-gray-200 mb-1 truncate">{product.name}</h3>
         <p className="text-sm text-gray-400 mb-2 truncate">{product.category}</p>
         <div className="flex justify-between items-center">
-          <p className="text-lg font-bold text-brand-yellow">${product.price.toFixed(2)}</p>
+          <p className="text-lg font-bold text-brand-yellow">{formatCurrency(product.price)}</p>
           <span className="text-sm text-gray-400">Stock: {product.stock}</span>
         </div>
       </div>

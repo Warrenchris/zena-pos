@@ -1,6 +1,7 @@
 import React from 'react';
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
+import useCurrency from '../../hooks/useCurrency';
 
 const AnalyticsStats = () => {
   const mockData = [
@@ -13,10 +14,12 @@ const AnalyticsStats = () => {
     { value: 25 },
   ];
 
+  const { format: formatCurrency } = useCurrency();
+  
   const stats = [
     {
       title: 'Total Income',
-      value: '$54,235',
+      value: formatCurrency(54235),
       percentage: 12.5,
       trend: 'Compared to last month',
       data: mockData,

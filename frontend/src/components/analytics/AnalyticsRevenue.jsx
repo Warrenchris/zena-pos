@@ -9,8 +9,10 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Tab } from '@headlessui/react';
+import useCurrency from '../../hooks/useCurrency';
 
 const AnalyticsRevenue = () => {
+  const { format } = useCurrency();
   const [selectedPeriod, setSelectedPeriod] = useState('weekly');
 
   const periods = {
@@ -39,7 +41,7 @@ const AnalyticsRevenue = () => {
         <div className="bg-white p-4 shadow-lg rounded-lg border">
           <p className="font-medium text-gray-900">{label}</p>
           <p className="text-blue-600 font-semibold">
-            ${payload[0].value.toLocaleString()}
+            {format(payload[0].value)}
           </p>
         </div>
       );
@@ -87,7 +89,7 @@ const AnalyticsRevenue = () => {
               stroke="#6b7280"
               fontSize={12}
               tickLine={false}
-              tickFormatter={(value) => `$${value}`}
+              tickFormatter={(value) => format(value)}
             />
             <Tooltip content={<CustomTooltip />} />
             <Line

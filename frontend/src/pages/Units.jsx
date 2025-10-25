@@ -1,16 +1,3 @@
-import React from 'react';
-
-const Units = () => {
-  return (
-    <div className="py-6">
-      <h1 className="text-2xl font-semibold">Units</h1>
-      <p className="mt-2 text-gray-600">Define and manage measurement units.</p>
-    </div>
-  );
-};
-
-export default Units;
-
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { 
