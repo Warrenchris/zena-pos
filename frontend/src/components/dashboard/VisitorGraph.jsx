@@ -47,8 +47,26 @@ const VisitorGraph = () => {
   if (error) {
     return (
       <div className="bg-white p-6 rounded-xl shadow-sm">
-        <div className="flex justify-center items-center h-[300px] text-red-500">
-          Error loading visitor statistics: {error}
+        <div className="flex flex-col justify-center items-center h-[300px]">
+          <p className="text-red-500 mb-2">Error loading visitor statistics</p>
+          <p className="text-gray-500 text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show empty state if no data
+  if (!visitorData || visitorData.length === 0) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Daily Visitors</h2>
+            <p className="text-sm text-gray-500">No visitor data available</p>
+          </div>
+        </div>
+        <div className="flex justify-center items-center h-[300px]">
+          <p className="text-gray-400">No visitor data for the selected period</p>
         </div>
       </div>
     );

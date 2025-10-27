@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { Menu } from '@headlessui/react';
-import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, FunnelIcon, EyeIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, FunnelIcon, EyeIcon, ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { cashierAPI } from '../services/cashierAPI';
 import useCurrency from '../hooks/useCurrency';
+import api from '../services/api';
+import SaleDetailModal from '../components/SaleDetailModal';
 
 const SaleDetails = ({ sale, onClose }) => {
   return (
@@ -101,6 +103,7 @@ const SalesStats = ({ startDate, endDate, sales }) => {
 
 const MySales = () => {
   const { format: formatCurrency } = useCurrency();
+  const { user, shop } = useSelector((state) => state.auth);
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -114,37 +117,74 @@ const MySales = () => {
   const [sortOrder, setSortOrder] = useState('desc');
   const [selectedSale, setSelectedSale] = useState(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   const onDrawerOpen = () => setIsDrawerOpen(true);
   const onDrawerClose = () => setIsDrawerOpen(false);
   
-  const fetchSales = async (page) => {
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+
+  const handleSaleClick = (sale) => {
+    // Get the original sale data from the API response before normalization
+    // We need to fetch the sale with full details to show items
+    const originalSale = null; // Will need to be fetched separately or stored
+    setSelectedSale(sale);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedSale(null);
+  };
+
+  const handlePrintReceipt = (sale) => {
+    // TODO: Implement print functionality
+    console.log('Print receipt for sale:', sale.id);
+    // window.print() or generate PDF
+  };
+  
+  const fetchSales = async (page, showLoading = true) => {
     try {
-      const response = await cashierAPI.getMySales(page);
+      if (showLoading) {
+        setLoading(true);
+      }
+      
+      let response;
+      
+      // If admin, fetch all sales from the shop, otherwise fetch user's sales
+      if (isAdmin) {
+        response = await api.get('/api/sales/admin/all', {
+          params: { page, limit: 10 }
+        });
+      } else {
+        response = await cashierAPI.getMySales(page);
+      }
+      
       const data = response.data || response; // support either axios response or direct data
       const rows = Array.isArray(data.sales) ? data.sales : [];
 
-      // Normalize backend sales shape to UI-friendly shape
+      // Keep original sale data for modal, add normalized fields for display
       const normalized = rows.map((s) => {
         const customer = s.Customer || s.customer || null;
         const saleItems = s.SaleItems || s.items || [];
         const products = saleItems.map((it) => ({
-          id: it.ProductId || it.productId || it.id,
+          id: it.ProductId || it.productId || it.Product?.id || it.id,
           name: it.Product?.name || it.name || 'Item',
           quantity: it.quantity || 1,
-          priceAtSale: parseFloat(it.price ?? it.unitPrice ?? it.originalPrice ?? 0)
+          priceAtSale: parseFloat(it.price ?? it.unitPrice ?? it.originalPrice ?? it.Product?.price ?? 0)
         }));
         return {
-          id: s.id,
-          createdAt: s.createdAt,
-          invoiceNumber: s.invoiceNumber || s.id,
+          ...s, // Keep all original fields for modal
+          // Normalized fields for display in table
           customer,
           products,
           totalAmount: parseFloat(s.total ?? s.totalAmount ?? 0),
           subtotal: parseFloat(s.subtotal ?? 0),
           discount: parseFloat(s.discount ?? 0),
           paymentMethod: s.paymentMethod?.toUpperCase?.() || 'CASH',
-          status: s.saleStatus?.toUpperCase?.() || 'COMPLETED'
+          status: s.saleStatus?.toUpperCase?.() || 'COMPLETED',
+          employee: s.Employee ? `${s.Employee.firstName || ''} ${s.Employee.lastName || ''}`.trim() : null
         };
       });
 
@@ -162,12 +202,18 @@ const MySales = () => {
       setCurrentPage(1);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchSales(currentPage, false);
   };
 
   useEffect(() => {
     fetchSales(currentPage);
-  }, [currentPage]);
+  }, [currentPage, isAdmin, user?.shopId]);
 
   const handlePageChange = (newPage) => {
     if (newPage > 0 && newPage <= totalPages) {
@@ -178,22 +224,32 @@ const MySales = () => {
   return (
     <div className="p-4">
       <div className="mb-6 flex justify-between items-center">
-        <h1 className="text-2xl font-semibold">My Sales History</h1>
-        <div className="inline-flex rounded-md shadow-sm">
+        <h1 className="text-2xl font-semibold">{isAdmin ? 'All Sales' : 'My Sales History'}</h1>
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="inline-flex items-center px-2 py-1 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-yellow disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <ChevronLeftIcon className="h-5 w-5" />
+            <ArrowPathIcon className={`h-5 w-5 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
           </button>
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className="inline-flex items-center px-2 py-1 rounded-r-md border border-l-0 border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronRightIcon className="h-5 w-5" />
-          </button>
+          <div className="inline-flex rounded-md shadow-sm">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="inline-flex items-center px-2 py-1 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeftIcon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="inline-flex items-center px-2 py-1 rounded-r-md border border-l-0 border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRightIcon className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -202,7 +258,7 @@ const MySales = () => {
           {!loading && sales.length === 0 ? (
             <div className="p-8 text-center text-gray-500 dark:text-gray-300">
               <div className="text-lg font-medium mb-1">No sales yet</div>
-              <div className="text-sm">Your completed sales will appear here.</div>
+              <div className="text-sm">{isAdmin ? 'Sales from all cashiers will appear here.' : 'Your completed sales will appear here.'}</div>
             </div>
           ) : (
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -213,6 +269,7 @@ const MySales = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Customer</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Items</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total</th>
+                {isAdmin && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Cashier</th>}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Payment Method</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
               </tr>
@@ -221,7 +278,7 @@ const MySales = () => {
               {loading ? (
                 [...Array(5)].map((_, i) => (
                   <tr key={i}>
-                    {[...Array(7)].map((_, j) => (
+                    {[...Array(isAdmin ? 8 : 7)].map((_, j) => (
                       <td key={j} className="px-6 py-4 whitespace-nowrap">
                         <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
                       </td>
@@ -230,7 +287,11 @@ const MySales = () => {
                 ))
               ) : (
                 sales.map((sale) => (
-                  <tr key={sale.id}>
+                  <tr 
+                    key={sale.id}
+                    onClick={() => handleSaleClick(sale)}
+                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {format(new Date(sale.createdAt), 'MMM dd, yyyy HH:mm')}
                     </td>
@@ -246,6 +307,11 @@ const MySales = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                       {formatCurrency(Number(sale.totalAmount) || 0)}
                     </td>
+                    {isAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sale.employee || 'Unknown'}
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                         (sale.paymentMethod || '').toUpperCase() === 'CASH'
@@ -274,6 +340,16 @@ const MySales = () => {
           )}
         </div>
       </div>
+
+      {/* Sale Detail Modal */}
+      <SaleDetailModal
+        sale={selectedSale}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onPrint={handlePrintReceipt}
+        shopName={shop?.name || 'My Shop'}
+        shop={shop || {}}
+      />
     </div>
   );
 };

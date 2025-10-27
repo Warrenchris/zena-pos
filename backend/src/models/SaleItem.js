@@ -9,6 +9,22 @@ const SaleItem = sequelize.define('SaleItem', {
     primaryKey: true,
     autoIncrement: true
   },
+  saleId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Sales',
+      key: 'id'
+    }
+  },
+  productId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'Products',
+      key: 'id'
+    }
+  },
   quantity: {
     type: DataTypes.INTEGER,
     allowNull: false
@@ -29,6 +45,14 @@ const SaleItem = sequelize.define('SaleItem', {
   subtotal: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true
+  },
+  shopId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Shops',
+      key: 'id'
+    }
   },
   // Discount handling
   discount: {

@@ -53,8 +53,38 @@ const TopSellingProducts = () => {
   if (error) {
     return (
       <div className="bg-white p-6 rounded-xl shadow-sm">
-        <div className="flex justify-center items-center h-[400px] text-red-500">
-          Error loading top products: {error}
+        <div className="flex flex-col justify-center items-center h-[400px]">
+          <p className="text-red-500 mb-2">Error loading top products</p>
+          <p className="text-gray-500 text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show empty state if no products
+  if (!products || products.length === 0) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Top Selling Products</h2>
+            <div className="text-sm text-gray-500">No sales data available</div>
+          </div>
+          <select
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value)}
+            className="border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500"
+          >
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+          </select>
+        </div>
+        <div className="flex justify-center items-center h-[300px]">
+          <div className="text-center">
+            <p className="text-gray-400">No products sold in this period</p>
+            <p className="text-gray-500 text-sm mt-2">Create some sales to see top products here</p>
+          </div>
         </div>
       </div>
     );

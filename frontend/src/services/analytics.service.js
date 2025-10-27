@@ -7,7 +7,12 @@ const analyticsService = {
       return response.data;
     } catch (error) {
       console.error('Error fetching visitor statistics:', error);
-      throw error;
+      // Return empty data structure on error
+      return {
+        visitorData: [],
+        totalVisitors: 0,
+        percentageChange: 0
+      };
     }
   },
 
@@ -17,7 +22,15 @@ const analyticsService = {
       return response.data;
     } catch (error) {
       console.error('Error fetching order statistics:', error);
-      throw error;
+      // Return empty data structure on error
+      return {
+        orderData: [],
+        revenueData: [],
+        totalOrders: 0,
+        totalRevenue: 0,
+        orderPercentageChange: 0,
+        revenuePercentageChange: 0
+      };
     }
   },
 
@@ -27,7 +40,12 @@ const analyticsService = {
       return response.data;
     } catch (error) {
       console.error('Error fetching top products:', error);
-      throw error;
+      // Return empty data structure on error
+      return {
+        products: [],
+        totalSales: 0,
+        salesPercentageChange: 0
+      };
     }
   },
 
@@ -37,7 +55,13 @@ const analyticsService = {
       return response.data;
     } catch (error) {
       console.error('Error fetching sales channels:', error);
-      throw error;
+      // Return empty data structure on error
+      return {
+        platforms: [],
+        totalSales: 0,
+        totalRevenue: 0,
+        salesPercentageChange: 0
+      };
     }
   },
 
@@ -47,7 +71,12 @@ const analyticsService = {
       return response.data;
     } catch (error) {
       console.error('Error fetching customer locations:', error);
-      throw error;
+      // Return empty data structure on error
+      return {
+        locations: [],
+        totalCustomers: 0,
+        percentageChange: 0
+      };
     }
   }
 };

@@ -24,11 +24,13 @@ import SellingPlatform from '../components/dashboard/SellingPlatform';
 import LocationAudience from '../components/dashboard/LocationAudience';
 import TopSellingProducts from '../components/dashboard/TopSellingProducts';
 import CashierDashboard from './CashierDashboard';
+import SaleDetailModal from '../components/SaleDetailModal';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { fetchSalesStatistics, fetchSales } from '../store/slices/salesSlice';
 import { fetchCustomers } from '../store/slices/customersSlice';
 import { fetchProducts } from '../store/slices/productsSlice';
 import api from '../services/api';
+import { notifyLowStock } from '../utils/notifications';
 
 export default function Dashboard() {
   const dispatch = useDispatch();
@@ -37,12 +39,30 @@ export default function Dashboard() {
   const { sales, statistics, loading: salesLoading, error: salesError } = useSelector((state) => state.sales);
   const { customers, loading: customersLoading, error: customersError } = useSelector((state) => state.customers);
   const { products, loading: productsLoading, error: productsError } = useSelector((state) => state.products);
+  const { shop } = useSelector((state) => state.shop || {});
 
   const [insights, setInsights] = useState([]);
   const [insightsLoading, setInsightsLoading] = useState(true);
   const [forecast, setForecast] = useState(null);
   const [forecastError, setForecastError] = useState(null);
   const [forecastLoading, setForecastLoading] = useState(false);
+  const [selectedSale, setSelectedSale] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleSaleClick = (sale) => {
+    setSelectedSale(sale);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedSale(null);
+  };
+
+  const handlePrintReceipt = (sale) => {
+    console.log('Print receipt for sale:', sale.id);
+    // TODO: Implement print functionality
+  };
 
   const fetchForecast = useCallback(async () => {
     if (forecastLoading) return; // Prevent multiple simultaneous calls
@@ -167,6 +187,25 @@ export default function Dashboard() {
 
     loadDashboardData();
   }, [dispatch, user]); // Re-run when user changes
+
+  // Check for low stock products
+  useEffect(() => {
+    if (products && products.length > 0) {
+      const lowStockProducts = products.filter(product => 
+        product.stockQuantity <= product.reorderPoint && product.active
+      );
+      
+      if (lowStockProducts.length > 0 && user?.role === 'admin') {
+        lowStockProducts.forEach(product => {
+          notifyLowStock(
+            product.name,
+            product.stockQuantity,
+            product.reorderPoint
+          );
+        });
+      }
+    }
+  }, [products, user]);
 
   const stats = useMemo(() => [
     {
@@ -367,6 +406,11 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            ) : salesError ? (
+              <div className="text-center py-6">
+                <p className="text-red-500 mb-2">Error loading recent sales</p>
+                <p className="text-gray-400 text-sm">{salesError}</p>
+              </div>
             ) : !sales || sales.length === 0 ? (
               <div className="text-center py-6">
                 <p className="text-gray-500">No recent sales</p>
@@ -375,13 +419,17 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-4">
                 {(Array.isArray(sales) ? sales : []).slice(0, 5).map((sale) => (
-                  <div key={sale.id} className="flex justify-between items-center">
+                  <div 
+                    key={sale.id} 
+                    onClick={() => handleSaleClick(sale)}
+                    className="flex justify-between items-center hover:bg-gray-50 p-2 rounded transition-colors cursor-pointer"
+                  >
                     <div>
                       <p className="text-sm font-medium text-gray-900">
                         {sale.invoiceNumber}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {sale.Customer?.name || 'Walk-in Customer'}
+                        {sale.Customer?.name || sale.customer?.name || 'Walk-in Customer'}
                       </p>
                     </div>
                     <div className="text-right">
@@ -531,6 +579,16 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {/* Sale Detail Modal */}
+      <SaleDetailModal
+        sale={selectedSale}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onPrint={handlePrintReceipt}
+        shopName={user?.shop?.name || 'My Shop'}
+        shop={user?.shop}
+      />
     </div>
   );
 }

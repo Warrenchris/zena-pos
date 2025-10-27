@@ -36,6 +36,7 @@ import cashierAPI from '../services/cashierAPI';
 import CustomerModal from '../components/CustomerModal';
 import PaymentModal from '../components/PaymentModal';
 import { useToast } from '../components/Toast';
+import { notifySaleComplete, notifyError as notifyErrorUtil, showSnackbar } from '../utils/notifications';
 
 export default function CashierDashboard() {
   const { format: formatCurrency } = useCurrency();
@@ -226,16 +227,31 @@ export default function CashierDashboard() {
       items: updatedItems,
       total: parseFloat(total.toFixed(2))
     }));
+
+    // Show snackbar notification
+    showSnackbar(
+      existingItem 
+        ? `${product.name} quantity updated to ${existingItem.quantity + 1}` 
+        : `${product.name} added to cart`,
+      'success',
+      2000
+    );
   };
 
   // Remove item from cart
   const removeFromCart = (productId) => {
+    const itemToRemove = currentSale.items.find(item => item.id === productId);
     const updatedItems = currentSale.items.filter(item => item.id !== productId);
     setCurrentSale(prev => ({
       ...prev,
       items: updatedItems,
       total: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
     }));
+
+    // Show snackbar notification
+    if (itemToRemove) {
+      showSnackbar(`${itemToRemove.name} removed from cart`, 'info', 2000);
+    }
   };
 
   // Update item quantity
@@ -416,6 +432,13 @@ export default function CashierDashboard() {
         title: `Sale of ${itemLabel} completed`,
         message: `Qty: ${quantity} • Total: ${formatCurrency(total)}`
       });
+
+      // Add to notification panel
+      notifySaleComplete({
+        ...sale,
+        invoiceNumber: sale.invoiceNumber || sale.id,
+        total: sale.total || currentSale.total
+      });
     } catch (error) {
       console.error('Payment processing error:', error);
       if (error.response?.status === 403) {
@@ -449,6 +472,8 @@ export default function CashierDashboard() {
           title: 'Sale failed',
           message: msg
         });
+        // Add error notification
+        notifyErrorUtil('Sale Failed', msg);
       }
     } finally {
       setProcessingPayment(false);

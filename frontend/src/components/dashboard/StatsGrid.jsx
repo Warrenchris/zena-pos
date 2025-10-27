@@ -66,33 +66,35 @@ const StatsGrid = () => {
           {
             title: 'Total Income',
             value: format(orderStats?.totalRevenue || 0),
-            percentage: orderStats?.revenueGrowth || 0,
+            percentage: orderStats?.revenuePercentageChange || 0,
             trend: 'Compared to last month',
-            data: (orderStats?.revenueHistory || []).map(h => ({ value: h?.value || 0 })),
+            data: (orderStats?.orderData || []).map(h => ({ value: h?.revenue || 0 })),
             color: '#4F46E5'
           },
           {
             title: 'Total Orders',
             value: (orderStats?.totalOrders || 0).toLocaleString(),
-            percentage: orderStats?.orderGrowth || 0,
+            percentage: orderStats?.orderPercentageChange || 0,
             trend: 'Compared to last month',
-            data: (orderStats?.orderHistory || []).map(h => ({ value: h?.value || 0 })),
+            data: (orderStats?.orderData || []).map(h => ({ value: h?.orders || 0 })),
             color: '#10B981'
           },
           {
             title: 'Total Visitors',
             value: (visitorStats?.totalVisitors || 0).toLocaleString(),
-            percentage: visitorStats?.visitorGrowth || 0,
+            percentage: visitorStats?.percentageChange || 0,
             trend: 'Compared to last month',
-            data: (visitorStats?.visitorHistory || []).map(h => ({ value: h?.value || 0 })),
+            data: (visitorStats?.visitorData || []).map(h => ({ value: h?.visitors || 0 })),
             color: '#F59E0B'
           },
           {
             title: 'Conversion Rate',
-            value: `${((visitorStats?.conversionRate || 0) * 100).toFixed(1)}%`,
-            percentage: visitorStats?.conversionRateGrowth || 0,
+            value: orderStats?.totalOrders && visitorStats?.totalVisitors 
+              ? `${((orderStats.totalOrders / visitorStats.totalVisitors) * 100).toFixed(1)}%`
+              : '0.0%',
+            percentage: visitorStats?.percentageChange || 0,
             trend: 'Compared to last month',
-            data: (visitorStats?.conversionHistory || []).map(h => ({ value: h?.value || 0 })),
+            data: (visitorStats?.visitorData || []).map(h => ({ value: h?.visitors || 0 })),
             color: '#6366F1'
           }
         ];
@@ -100,13 +102,20 @@ const StatsGrid = () => {
         setStats(formattedStats);
       } catch (error) {
         console.error('Error loading stats:', error);
+        // Set default empty stats on error
+        setStats([
+          { title: 'Total Income', value: format(0), percentage: 0, trend: 'No data', data: [], color: '#4F46E5' },
+          { title: 'Total Orders', value: '0', percentage: 0, trend: 'No data', data: [], color: '#10B981' },
+          { title: 'Total Visitors', value: '0', percentage: 0, trend: 'No data', data: [], color: '#F59E0B' },
+          { title: 'Conversion Rate', value: '0.0%', percentage: 0, trend: 'No data', data: [], color: '#6366F1' }
+        ]);
       } finally {
         setLoading(false);
       }
     };
 
     loadStats();
-  }, []);
+  }, [format]);
 
   if (loading) {
     return (

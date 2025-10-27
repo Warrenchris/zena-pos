@@ -4,6 +4,7 @@ import { Provider } from 'react-redux';
 import store from './store';
 import { router } from './router.config.jsx';
 import { ToastProvider } from './components/Toast';
+import { SnackbarProvider } from './components/Snackbar';
 import { CurrencyProvider } from './components/CurrencyProvider';
 
 function App() {
@@ -12,7 +13,9 @@ function App() {
       <Provider store={store}>
         <CurrencyProvider>
           <ToastProvider>
-            <RouterProvider router={router} future={{ v7_startTransition: true }} />
+            <SnackbarProvider>
+              <RouterProvider router={router} future={{ v7_startTransition: true }} />
+            </SnackbarProvider>
           </ToastProvider>
         </CurrencyProvider>
       </Provider>

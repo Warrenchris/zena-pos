@@ -16,21 +16,24 @@ exports.getAllSales = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    const sales = await Sale.findAndCountAll({
-      where: { shopId: req.user.shopId },
-      attributes: {
-        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
-      },
-      include: [
-        { 
-          model: SaleItem,
-          required: false, // Make this a LEFT JOIN
-          include: [{ 
-            model: Product,
-            attributes: ['id', 'name', 'sku'],
-            where: { shopId: req.user.shopId }
-          }]
-        },
+     // Get the sales with their items
+     const sales = await Sale.findAndCountAll({
+       where: { 
+         shopId: req.user.shopId
+       },
+       attributes: {
+         exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
+       },
+       include: [
+         { 
+           model: SaleItem,
+           required: false, // Make this LEFT JOIN to get sales even without items
+           include: [{ 
+             model: Product,
+             required: false, // Also make this LEFT JOIN
+             attributes: ['id', 'name', 'sku', 'price']
+           }]
+         },
         {
           model: Customer,
           required: false, // Make this a LEFT JOIN
@@ -324,7 +327,8 @@ exports.createSale = async (req, res) => {
       await Promise.all(saleItems.map(item => 
         SaleItem.create({
           ...item,
-          saleId: sale.id
+          saleId: sale.id,
+          shopId: req.user.shopId
         }, { transaction: t })
       ));
 
@@ -713,16 +717,19 @@ exports.getAllSalesForAdmin = async (req, res) => {
       include: [
         { 
           model: SaleItem,
+          required: false,
+          as: 'SaleItems', // Explicitly set the alias
           include: [{ 
             model: Product,
-            attributes: ['id', 'name', 'sku'],
-            where: { shopId: req.user.shopId }
+            as: 'Product',
+            attributes: ['id', 'name', 'sku', 'price'],
+            required: false
           }]
         },
         {
           model: Customer,
+          as: 'Customer',
           attributes: ['id', 'name', 'email', 'phone'],
-          where: { shopId: req.user.shopId },
           required: false
         },
         {
@@ -732,9 +739,22 @@ exports.getAllSalesForAdmin = async (req, res) => {
           required: false
         }
       ],
+      distinct: true,
       order: [[sortBy, sortOrder.toUpperCase()]],
       limit,
       offset
+    });
+
+    // Log for debugging
+    console.log('Fetched sales:', {
+      total: sales.count,
+      returned: sales.rows.length,
+      sample: sales.rows.length > 0 ? {
+        id: sales.rows[0].id,
+        saleItemsCount: sales.rows[0].SaleItems?.length || 0,
+        customer: sales.rows[0].Customer?.name || 'No customer',
+        employee: sales.rows[0].Employee?.firstName || 'No employee'
+      } : null
     });
 
     res.json({
@@ -781,19 +801,20 @@ exports.getMySales = async (req, res) => {
       include: [
         { 
           model: SaleItem,
+          required: false,
           include: [{ 
             model: Product,
             attributes: ['id', 'name', 'sku'],
-            where: { shopId: req.user.shopId }
+            required: false
           }]
         },
         {
           model: Customer,
           attributes: ['id', 'name', 'email', 'phone'],
-          where: { shopId: req.user.shopId },
           required: false
         }
       ],
+      distinct: true,
       order: [[sortBy, sortOrder.toUpperCase()]],
       limit,
       offset
@@ -813,6 +834,10 @@ exports.getMySales = async (req, res) => {
         )
       }));
 
+      const itemsText = saleItems.map(item => 
+        `${item.quantity}x ${item.Product?.name || 'Unknown Product'}`
+      ).join(', ');
+
       return {
         id: sale.id,
         createdAt: sale.createdAt,
@@ -824,6 +849,8 @@ exports.getMySales = async (req, res) => {
           phone: sale.Customer.phone
         } : null,
         products,
+        items: saleItems.length > 0 ? itemsText : '0 items',
+        itemCount: `${saleItems.length} items`,
         totalAmount: parseFloat(sale.total ?? 0),
         paymentMethod: (sale.paymentMethod || 'cash').toUpperCase(),
         status: (sale.saleStatus || 'completed').toUpperCase()

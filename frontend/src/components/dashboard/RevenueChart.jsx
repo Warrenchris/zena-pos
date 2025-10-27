@@ -24,20 +24,29 @@ const RevenueChart = () => {
         setLoading(true);
         const response = await analyticsService.getOrderStats(selectedPeriod);
         
+        // Handle different response formats
+        const data = response.orderData || response.revenueData || [];
+        
         setRevenueData(prevData => ({
           ...prevData,
-          [selectedPeriod]: response.revenueData
+          [selectedPeriod]: data.map(item => ({
+            date: item.date,
+            revenue: item.revenue || 0
+          }))
         }));
       } catch (error) {
         console.error('Error fetching revenue data:', error);
+        // Set empty data on error
+        setRevenueData(prevData => ({
+          ...prevData,
+          [selectedPeriod]: []
+        }));
       } finally {
         setLoading(false);
       }
     };
 
-    if (!revenueData[selectedPeriod]) {
-      fetchRevenueData();
-    }
+    fetchRevenueData();
   }, [selectedPeriod]);
 
   const periods = {
@@ -90,6 +99,13 @@ const RevenueChart = () => {
         {loading ? (
           <div className="w-full h-full flex items-center justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+          </div>
+        ) : periods[selectedPeriod].length === 0 ? (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-gray-400 text-lg">No revenue data available</p>
+              <p className="text-gray-500 text-sm mt-2">Start making sales to see revenue trends</p>
+            </div>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">

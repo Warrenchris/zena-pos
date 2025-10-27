@@ -14,22 +14,38 @@ export function useToast() {
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
-  const addToast = (toast) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setToasts(current => [...current, { ...toast, id }]);
+  useEffect(() => {
+    // Make toast function globally accessible
+    if (typeof window !== 'undefined') {
+      window.showToast = ({ type = 'info', title, message, duration = 4000 }) => {
+        const id = Math.random().toString(36).substr(2, 9);
+        const newToast = { id, type, title, message };
+        
+        setToasts(current => [...current, newToast]);
 
-    // Auto-dismiss after duration
-    setTimeout(() => {
-      removeToast(id);
-    }, toast.duration || 4000);
-  };
+        // Auto-dismiss after duration
+        setTimeout(() => {
+          setToasts(current => current.filter(toast => toast.id !== id));
+        }, duration);
+      };
+    }
+
+    // Cleanup
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete window.showToast;
+      }
+    };
+  }, []);
 
   const removeToast = (id) => {
     setToasts(current => current.filter(toast => toast.id !== id));
   };
 
   const showToast = ({ type = 'info', title, message, duration = 4000 }) => {
-    addToast({ type, title, message, duration });
+    if (window.showToast) {
+      window.showToast({ type, title, message, duration });
+    }
   };
 
   return (

@@ -9,6 +9,7 @@ import analyticsReducer from './slices/analyticsSlice'
 import shopReducer from './slices/shopSlice'
 import brandsReducer from './slices/brandsSlice'
 import unitsReducer from './slices/unitsSlice'
+import notificationsReducer from './slices/notificationsSlice'
 
 export const store = configureStore({
   reducer: {
@@ -22,6 +23,7 @@ export const store = configureStore({
     shop: shopReducer,
     brands: brandsReducer,
     units: unitsReducer,
+    notifications: notificationsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
