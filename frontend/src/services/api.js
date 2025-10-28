@@ -224,6 +224,12 @@ export const reportsAPI = {
   salesSummary: (params) => api.get('/api/reports/sales-summary', { params }),
   profitAndLoss: (params) => api.get('/api/reports/profit-loss', { params }),
   taxEstimate: (params) => api.get('/api/reports/tax-estimate', { params }),
+  employeeSales: (params) => api.get('/api/reports/employee-sales', { params }),
+};
+
+// Activity (admin/manager)
+export const activityAPI = {
+  getAll: (params) => api.get('/api/activity', { params }),
 };
 
 export default api;

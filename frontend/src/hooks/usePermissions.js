@@ -23,11 +23,15 @@ export const usePermissions = () => {
       case 'admin':
         return [
           { path: '/dashboard', label: 'Dashboard' },
+          { path: '/pos', label: 'POS' },
           { path: '/sales', label: 'Sales' },
+          { path: '/invoices', label: 'Invoices' },
           { path: '/products', label: 'Products' },
           { path: '/categories', label: 'Categories' },
           { path: '/customers', label: 'Customers' },
           { path: '/expenses', label: 'Expenses' },
+          // Support both canonical and admin-aliased employees routes
+          { path: '/employees', label: 'Employees' },
           { path: '/admin/employees', label: 'Employees' },
           { path: '/admin/users', label: 'Users' },
           { path: '/settings', label: 'Settings' },
@@ -37,10 +41,13 @@ export const usePermissions = () => {
         return [
           { path: '/dashboard', label: 'Dashboard' },
           { path: '/sales', label: 'Sales' },
+          { path: '/invoices', label: 'Invoices' },
           { path: '/products', label: 'Products' },
           { path: '/categories', label: 'Categories' },
           { path: '/customers', label: 'Customers' },
           { path: '/expenses', label: 'Expenses' },
+          // Managers can manage employees per role permissions
+          { path: '/employees', label: 'Employees' },
           { path: '/settings', label: 'Settings' },
           { path: '/reports', label: 'Reports' },
         ];

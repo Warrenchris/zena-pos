@@ -6,8 +6,8 @@ const sequelize = require('../config/database');
 // Get all employees
 exports.getAllEmployees = async (req, res) => {
   try {
-    const { shopId } = req.query;
-    const where = shopId ? { shopId } : {};
+    // Enforce tenant scope based on authenticated user's shop
+    const where = { shopId: req.user.shopId };
     
     const employees = await Employee.findAll({ 
       where,
@@ -24,7 +24,7 @@ exports.getAllEmployees = async (req, res) => {
 // Get employee by ID
 exports.getEmployeeById = async (req, res) => {
   try {
-    const employee = await Employee.findByPk(req.params.id);
+    const employee = await Employee.findOne({ where: { id: req.params.id, shopId: req.user.shopId } });
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
     }
@@ -55,7 +55,9 @@ exports.createEmployee = async (req, res) => {
     }
 
     // Create employee record
-    const employee = await Employee.create(req.body, { transaction });
+    // Force shopId from token, ignore any client-sent shopId
+    const payload = { ...req.body, shopId: req.user.shopId };
+    const employee = await Employee.create(payload, { transaction });
 
     await transaction.commit();
     res.status(201).json(employee);
@@ -85,7 +87,7 @@ exports.updateEmployee = async (req, res) => {
     }
 
     const [updated] = await Employee.update(req.body, {
-      where: { id: req.params.id },
+      where: { id: req.params.id, shopId: req.user.shopId },
       individualHooks: true // This ensures password hashing hooks are run
     });
 
@@ -93,7 +95,7 @@ exports.updateEmployee = async (req, res) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    const updatedEmployee = await Employee.findByPk(req.params.id);
+    const updatedEmployee = await Employee.findOne({ where: { id: req.params.id, shopId: req.user.shopId } });
     res.json(updatedEmployee);
   } catch (error) {
     console.error('Error updating employee:', error);
@@ -108,7 +110,7 @@ exports.updateEmployee = async (req, res) => {
 exports.deleteEmployee = async (req, res) => {
   try {
     const deleted = await Employee.destroy({
-      where: { id: req.params.id }
+      where: { id: req.params.id, shopId: req.user.shopId }
     });
 
     if (!deleted) {

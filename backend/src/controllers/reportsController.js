@@ -10,7 +10,7 @@ exports.getSalesSummary = async (req, res) => {
     const { range = 'daily', startDate, endDate } = req.query;
     const fmt = range === 'monthly' ? '%Y-%m' : '%Y-%m-%d';
 
-    const where = {};
+    const where = { shopId: req.user.shopId };
     if (startDate || endDate) {
       where.createdAt = {
         [Op.between]: [
@@ -43,7 +43,7 @@ exports.getSalesSummary = async (req, res) => {
 exports.getProfitAndLoss = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const where = {};
+    const where = { shopId: req.user.shopId };
     if (startDate || endDate) {
       where.createdAt = {
         [Op.between]: [
@@ -78,7 +78,7 @@ exports.getTaxEstimate = async (req, res) => {
   try {
     const { startDate, endDate, rate } = req.query;
     const taxRate = rate ? Number(rate) : 0.16; // default 16%
-    const where = {};
+    const where = { shopId: req.user.shopId };
     if (startDate || endDate) {
       where.createdAt = {
         [Op.between]: [
@@ -100,7 +100,7 @@ exports.getTaxEstimate = async (req, res) => {
 exports.getEmployeeSales = async (req, res) => {
   try {
     const { startDate, endDate, limit = 10 } = req.query;
-    const where = {};
+    const where = { shopId: req.user.shopId };
     if (startDate || endDate) {
       where.createdAt = {
         [Op.between]: [

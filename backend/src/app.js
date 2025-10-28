@@ -34,6 +34,7 @@ const aiProxyRoutes = require('./routes/aiProxy');
 const systemHealthRoutes = require('./routes/systemHealth');
 const storeRoutes = require('./routes/storeRoutes');
 const settingsRoutes = require('./routes/settings');
+const invoiceRoutes = require('./routes/invoiceRoutes');
 
 const app = express();
 
@@ -75,6 +76,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/invoices', invoiceRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

@@ -10,12 +10,15 @@ import {
   EyeIcon
 } from '@heroicons/react/24/outline';
 import { fetchCustomers, deleteCustomer, createCustomer, updateCustomer } from '../store/slices/customersSlice';
+import useCurrency from '../hooks/useCurrency';
+import CustomerDetailsCard from '../components/CustomerDetailsCard';
 import CustomerModal from '../components/CustomerModal';
 
 export default function Customers() {
   const dispatch = useDispatch();
   const { showToast } = useToast();
   const { customers, loading, pagination } = useSelector((state) => state.customers);
+  const { format: formatCurrency } = useCurrency();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -92,12 +95,7 @@ export default function Customers() {
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
+  // currency now handled by useCurrency hook
 
   return (
     <div className="min-h-screen p-6">
@@ -200,7 +198,7 @@ export default function Customers() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => setSelectedCustomer(customer)}
-                            className="text-blue-600 hover:text-blue-900"
+                            className="text-brand-yellow hover:text-yellow-400"
                             title="View Details"
                           >
                             <EyeIcon className="h-4 w-4" />
@@ -325,6 +323,7 @@ export default function Customers() {
             }}
           />
         )}
+        <CustomerDetailsCard customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} />
       </LoadingOverlay>
     </div>
   );

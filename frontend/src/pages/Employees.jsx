@@ -6,7 +6,8 @@ import {
   TrashIcon,
   UserGroupIcon
 } from '@heroicons/react/24/outline';
-import { employeesAPI, reportsAPI } from '../services/api';
+import { employeesAPI, reportsAPI, activityAPI } from '../services/api';
+import EmployeeDetailsCard from '../components/EmployeeDetailsCard';
 import EmployeeModal from '../components/EmployeeModal';
 import useCurrency from '../hooks/useCurrency';
 import { EMPLOYEE_POSITIONS } from '../constants/employeeConstants';
@@ -22,6 +23,7 @@ export default function Employees() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [selected, setSelected] = useState(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('list');
@@ -70,28 +72,24 @@ export default function Employees() {
 
   const loadEmployeeStats = async () => {
     try {
-      // placeholder to avoid unused warning
-      const _noop = reportsAPI.salesSummary
-      void _noop
-      const statsRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/reports/employee-sales`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      })
+      const res = await reportsAPI.employeeSales()
       if (!mountedRef.current) return
-      if (!statsRes.ok) throw new Error('Failed to load employee stats')
-      const json = await statsRes.json()
-      if (Array.isArray(json)) setEmployeeStats(json)
+      const rows = Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray(res.data?.rows)
+          ? res.data.rows
+          : Array.isArray(res.data)
+            ? res.data
+            : []
+      if (Array.isArray(rows)) setEmployeeStats(rows)
     } catch (_) { /* non-blocking */ }
   }
 
   const loadActivity = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/activity?limit=100`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      })
+      const res = await activityAPI.getAll({ limit: 100 })
       if (!mountedRef.current) return
-      if (!res.ok) throw new Error('Failed to load activity')
-      const json = await res.json()
-      if (Array.isArray(json)) setActivity(json)
+      if (Array.isArray(res.data)) setActivity(res.data)
     } catch (_) { /* non-blocking */ }
   }
 
@@ -200,6 +198,21 @@ export default function Employees() {
     </>
   )
 
+  const getStatEmployeeName = (row) => {
+    // Try various shapes coming from the API
+    const byUserId = employees.find(e => e.userId === row.userId || e.userId === row.user?.id)
+    if (byUserId) {
+      const full = `${byUserId.firstName || ''} ${byUserId.lastName || ''}`.trim()
+      return full || byUserId.email || byUserId.position || byUserId.id
+    }
+    const byEmployeeId = employees.find(e => e.id === row.employeeId)
+    if (byEmployeeId) {
+      const full = `${byEmployeeId.firstName || ''} ${byEmployeeId.lastName || ''}`.trim()
+      return full || byEmployeeId.email || byEmployeeId.position || byEmployeeId.id
+    }
+    return row.user?.name || row.employee?.name || row.name || (row.userId ?? row.employeeId ?? row.id)
+  }
+
   const TabPanel = ({ active, children }) => {
     const [visible, setVisible] = useState(false)
     useEffect(() => {
@@ -222,35 +235,35 @@ export default function Employees() {
   return (
     <div className="space-y-4">
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center justify-between">
+        <div className="rounded-md border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-300 flex items-center justify-between">
           <div>{error}</div>
           <div className="flex items-center gap-2">
-            <button onClick={load} className="px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700">Retry</button>
-            <button onClick={() => setError(null)} className="px-2 py-1 rounded border border-red-300 text-red-700 hover:bg-red-100">Dismiss</button>
+            <button onClick={load} className="px-2 py-1 rounded bg-red-500/20 text-red-200 border border-red-400/40 hover:bg-red-500/30">Retry</button>
+            <button onClick={() => setError(null)} className="px-2 py-1 rounded border border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10">Dismiss</button>
           </div>
         </div>
       )}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Employees</h1>
+        <h1 className="text-2xl font-semibold text-brand-yellow">Employees</h1>
         <div className="space-x-2">
-          <button onClick={()=>{setActiveTab('list')}} className={`px-3 py-1.5 rounded ${activeTab==='list'?'bg-blue-600 text-white':'border border-gray-300'}`}>List</button>
-          <button onClick={()=>{setActiveTab('analytics'); loadEmployeeStats();}} className={`px-3 py-1.5 rounded ${activeTab==='analytics'?'bg-blue-600 text-white':'border border-gray-300'}`}>Analytics</button>
-          <button onClick={()=>{setActiveTab('activity'); loadActivity();}} className={`px-3 py-1.5 rounded ${activeTab==='activity'?'bg-blue-600 text-white':'border border-gray-300'}`}>Activity</button>
-          <button onClick={openCreate} className="px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700">New Employee</button>
+          <button onClick={()=>{setActiveTab('list')}} className={`px-3 py-1.5 rounded border ${activeTab==='list'?'border-yellow-500/60 text-yellow-300 bg-black/40 shadow-[0_0_12px_rgba(255,214,0,0.15)]':'border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10'}`}>List</button>
+          <button onClick={()=>{setActiveTab('analytics'); loadEmployeeStats();}} className={`px-3 py-1.5 rounded border ${activeTab==='analytics'?'border-yellow-500/60 text-yellow-300 bg-black/40 shadow-[0_0_12px_rgba(255,214,0,0.15)]':'border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10'}`}>Analytics</button>
+          <button onClick={()=>{setActiveTab('activity'); loadActivity();}} className={`px-3 py-1.5 rounded border ${activeTab==='activity'?'border-yellow-500/60 text-yellow-300 bg-black/40 shadow-[0_0_12px_rgba(255,214,0,0.15)]':'border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10'}`}>Activity</button>
+          <button onClick={openCreate} className="px-3 py-1.5 rounded-md bg-brand-yellow text-black font-semibold shadow-[0_8px_24px_-8px_rgba(255,214,0,0.45)] hover:brightness-95 hover:shadow-[0_8px_24px_-8px_rgba(255,214,0,0.6)] transition">New Employee</button>
         </div>
         </div>
 
-      <div className="bg-white rounded-lg shadow p-4 flex items-center gap-3">
+      <div className="rounded-lg p-4 flex items-center gap-3 bg-brand-black border border-yellow-500/20 shadow-[0_10px_30px_-10px_rgba(255,214,0,0.2)]">
         <input
           value={query}
           onChange={(e) => { setQuery(e.target.value); setPage(1) }}
           placeholder="Search name, email, phone, position"
-          className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className="flex-1 rounded-md px-3 py-2 bg-black/60 text-yellow-100 placeholder:text-yellow-500/40 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
         />
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-          className="border border-gray-300 rounded-md px-3 py-2 bg-white"
+          className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500"
         >
           <option value="all">All Status</option>
           <option value="active">Active</option>
@@ -259,7 +272,7 @@ export default function Employees() {
         <select
           value={pageSize}
           onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-          className="border border-gray-300 rounded-md px-3 py-2 bg-white"
+          className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500"
         >
           <option value={5}>5</option>
           <option value={10}>10</option>
@@ -268,44 +281,44 @@ export default function Employees() {
       </div>
 
       <TabPanel active={activeTab==='list'}>
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-brand-black rounded-lg border border-yellow-500/20 overflow-hidden shadow-[0_14px_40px_-12px_rgba(255,214,0,0.18)]">
         <table className="min-w-full">
-          <thead className="bg-gray-50">
-            <tr className="text-left text-gray-600 text-sm">
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Phone</th>
-              <th className="px-4 py-3">Position</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Hire Date</th>
-              <th className="px-4 py-3">Salary</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+          <thead className="bg-black/60">
+            <tr className="text-left text-yellow-300 text-sm">
+              <th className="px-4 py-3 border-b border-yellow-500/20">Name</th>
+              <th className="px-4 py-3 border-b border-yellow-500/20">Email</th>
+              <th className="px-4 py-3 border-b border-yellow-500/20">Phone</th>
+              <th className="px-4 py-3 border-b border-yellow-500/20">Position</th>
+              <th className="px-4 py-3 border-b border-yellow-500/20">Status</th>
+              <th className="px-4 py-3 border-b border-yellow-500/20">Hire Date</th>
+              <th className="px-4 py-3 border-b border-yellow-500/20">Salary</th>
+              <th className="px-4 py-3 text-right border-b border-yellow-500/20">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 text-sm">
+          <tbody className="text-sm">
             {loading ? (
               <SkeletonRows rows={6} />
             ) : error ? (
-              <tr><td colSpan="8" className="px-4 py-6 text-center text-red-600">{error}</td></tr>
+              <tr><td colSpan="8" className="px-4 py-6 text-center text-red-300">{error}</td></tr>
             ) : pageItems.length === 0 ? (
-              <tr><td colSpan="8" className="px-4 py-6 text-center text-gray-500">No employees found</td></tr>
+              <tr><td colSpan="8" className="px-4 py-6 text-center text-yellow-200/70">No employees found</td></tr>
             ) : (
-              pageItems.map(emp => (
-                <tr key={emp.id}>
+              pageItems.map((emp, idx) => (
+                <tr key={emp.id} onClick={() => setSelected(emp)} className={`${idx % 2 === 0 ? 'bg-black/30' : 'bg-black/20'} text-gray-100 hover:bg-yellow-500/5 transition-colors cursor-pointer`}>
                   <td className="px-4 py-3">{emp.firstName} {emp.lastName}</td>
                   <td className="px-4 py-3">{emp.email}</td>
                   <td className="px-4 py-3">{emp.phone || '-'}</td>
                   <td className="px-4 py-3">{emp.position}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs ${emp.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}`}>
+                    <span className={`px-2 py-1 rounded-full text-xs ${emp.status === 'active' ? 'bg-green-500/15 text-green-300 border border-green-500/30' : 'bg-gray-500/15 text-gray-300 border border-gray-400/30'}`}>
                       {emp.status}
                   </span>
                 </td>
                   <td className="px-4 py-3">{new Date(emp.hireDate).toLocaleDateString()}</td>
                   <td className="px-4 py-3">{formatCurrency(Number(emp.salary))}</td>
                   <td className="px-4 py-3 text-right space-x-2">
-                    <button onClick={() => openEdit(emp)} className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">Edit</button>
-                    <button onClick={() => remove(emp)} className="px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700">Delete</button>
+                    <button onClick={(e) => { e.stopPropagation(); openEdit(emp); }} className="px-3 py-1.5 rounded border border-yellow-500/40 text-yellow-200 hover:bg-yellow-500/10 transition">Edit</button>
+                    <button onClick={(e) => { e.stopPropagation(); remove(emp); }} className="px-3 py-1.5 rounded border border-red-400/40 text-red-300 hover:bg-red-500/10 transition">Delete</button>
                 </td>
                 </tr>
               ))
@@ -316,23 +329,23 @@ export default function Employees() {
       </TabPanel>
 
       <TabPanel active={activeTab==='analytics'}>
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Sales by Employee</h3>
+        <div className="bg-brand-black rounded-lg border border-yellow-500/20 shadow-[0_14px_40px_-12px_rgba(255,214,0,0.18)] p-4">
+          <h3 className="text-lg font-semibold text-brand-yellow mb-4">Sales by Employee</h3>
           <div className="overflow-x-auto">
             <table className="min-w-full">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-gray-600 text-sm">
-                  <th className="px-4 py-3">Employee</th>
-                  <th className="px-4 py-3">Sales</th>
-                  <th className="px-4 py-3">Revenue</th>
+              <thead className="bg-black/60">
+                <tr className="text-left text-yellow-300 text-sm">
+                  <th className="px-4 py-3 border-b border-yellow-500/20">Employee</th>
+                  <th className="px-4 py-3 border-b border-yellow-500/20">Sales</th>
+                  <th className="px-4 py-3 border-b border-yellow-500/20">Revenue</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-sm">
+              <tbody className="text-sm">
                 {(employeeStats||[]).map((r,i)=>(
-                  <tr key={i}>
-                    <td className="px-4 py-3">{r.user?.name || r.user?.id}</td>
-                    <td className="px-4 py-3">{r.saleCount}</td>
-                    <td className="px-4 py-3">{formatCurrency(Number(r.revenue||0))}</td>
+                  <tr key={i} className={`${i % 2 === 0 ? 'bg-black/30' : 'bg-black/20'} text-gray-100`}>
+                    <td className="px-4 py-3">{getStatEmployeeName(r)}</td>
+                    <td className="px-4 py-3">{r.saleCount ?? r.sales ?? r.count ?? 0}</td>
+                    <td className="px-4 py-3">{formatCurrency(Number(r.revenue ?? r.total ?? r.amount ?? 0))}</td>
               </tr>
             ))}
           </tbody>
@@ -342,16 +355,16 @@ export default function Employees() {
       </TabPanel>
 
       <TabPanel active={activeTab==='activity'}>
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h3>
-          <ul className="divide-y divide-gray-100">
+        <div className="bg-brand-black rounded-lg border border-yellow-500/20 shadow-[0_14px_40px_-12px_rgba(255,214,0,0.18)] p-4">
+          <h3 className="text-lg font-semibold text-brand-yellow mb-4">Recent Activity</h3>
+          <ul className="divide-y divide-yellow-500/10">
             {(activity||[]).map((a)=> (
-              <li key={a.id} className="py-3 flex items-center justify-between">
+              <li key={a.id} className="py-3 flex items-center justify-between text-gray-100">
                 <div>
-                  <div className="text-sm text-gray-900">{a.action} {a.entity ? `on ${a.entity}`: ''} {a.entityId ? `#${a.entityId}`: ''}</div>
-                  <div className="text-xs text-gray-500">by {a.User?.name || a.userId} • {new Date(a.createdAt).toLocaleString()}</div>
+                  <div className="text-sm">{a.action} {a.entity ? `on ${a.entity}`: ''} {a.entityId ? `#${a.entityId}`: ''}</div>
+                  <div className="text-xs text-yellow-200/70">by {a.User?.name || a.userId} • {new Date(a.createdAt).toLocaleString()}</div>
                 </div>
-                {a.metadata && <pre className="text-xs text-gray-500 bg-gray-50 p-2 rounded">{JSON.stringify(a.metadata)}</pre>}
+                {a.metadata && <pre className="text-xs text-yellow-200/80 bg-black/50 border border-yellow-500/20 p-2 rounded">{JSON.stringify(a.metadata)}</pre>}
               </li>
             ))}
           </ul>
@@ -359,37 +372,40 @@ export default function Employees() {
       </TabPanel>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">Page {page} of {totalPages}</p>
+        <p className="text-sm text-yellow-200/80">Page {page} of {totalPages}</p>
         <div className="space-x-2">
-          <button disabled={page<=1} onClick={() => setPage(p => Math.max(1, p-1))} className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50">Prev</button>
-          <button disabled={page>=totalPages} onClick={() => setPage(p => Math.min(totalPages, p+1))} className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50">Next</button>
+          <button disabled={page<=1} onClick={() => setPage(p => Math.max(1, p-1))} className="px-3 py-1.5 rounded border border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10 disabled:opacity-50">Prev</button>
+          <button disabled={page>=totalPages} onClick={() => setPage(p => Math.min(totalPages, p+1))} className="px-3 py-1.5 rounded border border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10 disabled:opacity-50">Next</button>
         </div>
       </div>
 
       {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-lg shadow max-w-lg w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{editing ? 'Edit Employee' : 'New Employee'}</h3>
-            <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input required value={form.firstName} onChange={(e)=>setForm({...form, firstName:e.target.value})} placeholder="First name" className="border border-gray-300 rounded-md px-3 py-2" />
-              <input required value={form.lastName} onChange={(e)=>setForm({...form, lastName:e.target.value})} placeholder="Last name" className="border border-gray-300 rounded-md px-3 py-2" />
-              <input required type="email" value={form.email} onChange={(e)=>setForm({...form, email:e.target.value})} placeholder="Email" className="border border-gray-300 rounded-md px-3 py-2 md:col-span-2" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg transform transition-all duration-200 ease-out scale-100">
+            <div className="rounded-xl border border-yellow-500/20 bg-brand-black shadow-[0_24px_64px_-16px_rgba(255,214,0,0.25)]">
+              <div className="px-6 py-4 border-b border-yellow-500/20 bg-black/40 rounded-t-xl">
+                <h3 className="text-lg font-semibold text-brand-yellow">{editing ? 'Edit Employee' : 'New Employee'}</h3>
+              </div>
+              <form onSubmit={save} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input required value={form.firstName} onChange={(e)=>setForm({...form, firstName:e.target.value})} placeholder="First name" className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 placeholder:text-yellow-500/40 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500" />
+                <input required value={form.lastName} onChange={(e)=>setForm({...form, lastName:e.target.value})} placeholder="Last name" className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 placeholder:text-yellow-500/40 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500" />
+                <input required type="email" value={form.email} onChange={(e)=>setForm({...form, email:e.target.value})} placeholder="Email" className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 placeholder:text-yellow-500/40 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 md:col-span-2" />
               <div className="relative md:col-span-2">
                 <input
                   required={!editing}
                   type="password"
                   value={form.password}
                   onChange={(e)=>setForm({...form, password:e.target.value})}
-                  placeholder={editing ? "Leave blank to keep current password" : "Password"}
-                  className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                    placeholder={editing ? 'Leave blank to keep current password' : 'Password'}
+                    className="rounded-md px-3 py-2 w-full bg-black/60 text-yellow-100 placeholder:text-yellow-500/40 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 />
               </div>
-              <input value={form.phone} onChange={(e)=>setForm({...form, phone:e.target.value})} placeholder="Phone" className="border border-gray-300 rounded-md px-3 py-2" />
+                <input value={form.phone} onChange={(e)=>setForm({...form, phone:e.target.value})} placeholder="Phone" className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 placeholder:text-yellow-500/40 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500" />
               <select
                 required
                 value={form.position}
                 onChange={(e)=>setForm({...form, position:e.target.value})}
-                className="border border-gray-300 rounded-md px-3 py-2"
+                  className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500"
               >
                 <option value="">Select a position</option>
                 <option value="cashier">Cashier</option>
@@ -398,20 +414,22 @@ export default function Employees() {
                   <option value="admin">Administrator</option>
                 )}
               </select>
-              <select value={form.status} onChange={(e)=>setForm({...form, status:e.target.value})} className="border border-gray-300 rounded-md px-3 py-2">
+                <select value={form.status} onChange={(e)=>setForm({...form, status:e.target.value})} className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500">
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
-              <input required type="date" value={form.hireDate} onChange={(e)=>setForm({...form, hireDate:e.target.value})} className="border border-gray-300 rounded-md px-3 py-2" />
-              <input required type="number" step="0.01" min="0" value={form.salary} onChange={(e)=>setForm({...form, salary:e.target.value})} placeholder="Salary (USD)" className="border border-gray-300 rounded-md px-3 py-2" />
+                <input required type="date" value={form.hireDate} onChange={(e)=>setForm({...form, hireDate:e.target.value})} className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                <input required type="number" step="0.01" min="0" value={form.salary} onChange={(e)=>setForm({...form, salary:e.target.value})} placeholder="Salary" className="rounded-md px-3 py-2 bg-black/60 text-yellow-100 placeholder:text-yellow-500/40 border border-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
               <div className="md:col-span-2 flex justify-end gap-2 mt-2">
-                <button type="button" onClick={()=>setFormOpen(false)} className="px-3 py-1.5 rounded border border-gray-300">Cancel</button>
-                <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700">Save</button>
+                  <button type="button" onClick={()=>setFormOpen(false)} className="px-3 py-1.5 rounded border border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10">Cancel</button>
+                  <button type="submit" className="px-3 py-1.5 rounded bg-brand-yellow text-black font-semibold hover:brightness-95 shadow-[0_8px_24px_-8px_rgba(255,214,0,0.45)]">Save</button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}
+      <EmployeeDetailsCard employee={selected} onClose={() => setSelected(null)} />
     </div>
   )
 }

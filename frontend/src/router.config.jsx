@@ -236,7 +236,7 @@ export const routes = [
            },
            {
              path: 'pos',
-             element: <PrivateRoute><Pos /></PrivateRoute>
+            element: <PrivateRoute><CashierDashboard /></PrivateRoute>
            },
            // AI & Analytics
            {
