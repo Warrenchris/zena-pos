@@ -112,7 +112,12 @@ const NotificationDropdown = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-brand-gray border border-brand-yellow/20 rounded-lg shadow-xl z-50 max-h-[600px] flex flex-col">
+        <div
+          className="absolute right-0 mt-2 bg-brand-gray border border-brand-yellow/20 rounded-lg shadow-xl z-50 flex flex-col w-[22rem] sm:w-[24rem] md:w-[26rem] lg:w-[28rem] max-h-[85vh]"
+          style={{
+            insetInlineEnd: 0,
+          }}
+        >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-brand-yellow/10">
             <div className="flex items-center space-x-2">
@@ -138,7 +143,7 @@ const NotificationDropdown = () => {
           </div>
 
           {/* Notifications List */}
-          <div className="overflow-y-auto max-h-[500px]">
+          <div className="overflow-y-auto flex-1 min-h-0" style={{ maxHeight: '70vh' }}>
             {notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-8 text-gray-400">
                 <BellIcon className="h-12 w-12 mb-2 opacity-50" />
@@ -162,11 +167,11 @@ const NotificationDropdown = () => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <p className={`text-sm font-medium ${notification.read ? 'text-gray-300' : 'text-gray-100'}`}>
+                              <p className={`text-sm font-medium break-words ${notification.read ? 'text-gray-300' : 'text-gray-100'}`}>
                                 {notification.title}
                               </p>
                               {notification.message && (
-                                <p className="mt-1 text-sm text-gray-400">{notification.message}</p>
+                                <p className="mt-1 text-sm text-gray-400 break-words whitespace-pre-wrap">{notification.message}</p>
                               )}
                             </div>
                             <div className="flex items-center space-x-2 ml-2">

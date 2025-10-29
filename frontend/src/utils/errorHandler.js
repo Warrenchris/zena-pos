@@ -28,6 +28,12 @@ export const useErrorHandler = () => {
     let type = 'error';
     let duration = 5000;
 
+    // Prefer backend-provided message if available
+    const backendMessage = error?.response?.data?.message || error?.message || error?.response?.statusText;
+    if (backendMessage) {
+      message = String(backendMessage);
+    }
+
     // Network errors
     if (error.name === 'NetworkError' || !navigator.onLine) {
       title = 'Connection Error';

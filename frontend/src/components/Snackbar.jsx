@@ -57,8 +57,8 @@ export function SnackbarProvider({ children }) {
   return (
     <SnackbarContext.Provider value={{ showSnackbar }}>
       {children}
-      {/* Snackbar Container - Fixed at bottom center */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 max-w-md w-full px-4">
+      {/* Snackbar Container - Bottom-center on mobile, bottom-right on desktop */}
+      <div className="fixed z-50 flex flex-col gap-2 bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-md px-0 pb-[env(safe-area-inset-bottom)] md:left-auto md:translate-x-0 md:right-4 md:w-full md:max-w-sm">
         {snackbars.map((snackbar) => (
           <Snackbar
             key={snackbar.id}
@@ -81,17 +81,17 @@ const iconsByType = {
 };
 
 const bgByType = {
-  success: 'bg-green-600',
-  error: 'bg-red-600',
-  warning: 'bg-yellow-600',
-  info: 'bg-blue-600'
+  success: 'bg-brand-black',
+  error: 'bg-red-700',
+  warning: 'bg-brand-black',
+  info: 'bg-brand-black'
 };
 
 const textByType = {
-  success: 'text-white',
+  success: 'text-zana-yellow',
   error: 'text-white',
-  warning: 'text-white',
-  info: 'text-white'
+  warning: 'text-zana-yellow',
+  info: 'text-zana-yellow'
 };
 
 function Snackbar({ type = 'info', message, action, onClose }) {
@@ -100,17 +100,17 @@ function Snackbar({ type = 'info', message, action, onClose }) {
   return (
     <div 
       className={`
-        ${bgByType[type]} ${textByType[type]}
-        px-4 py-3 rounded-lg shadow-lg
+        ${bgByType[type]} ${textByType[type]} border border-zana-borderTint ring-1 ring-[rgba(255,214,0,0.2)]
+        px-4 py-3 rounded-xl shadow-zana
         flex items-center justify-between gap-4
         animate-slideUp
-        min-h-[48px]
+        min-h-[52px] w-full
       `}
       role="alert"
     >
-      <div className="flex items-center gap-3 flex-1">
-        <Icon className="h-5 w-5 flex-shrink-0" />
-        <p className="text-sm font-medium flex-1">{message}</p>
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <Icon className={`h-5 w-5 flex-shrink-0 ${type !== 'error' ? 'text-zana-yellow' : 'text-white'}`} />
+        <p className="text-sm font-medium flex-1 break-words break-all whitespace-normal leading-snug">{message}</p>
       </div>
       
       <div className="flex items-center gap-2">
@@ -120,14 +120,14 @@ function Snackbar({ type = 'info', message, action, onClose }) {
               action.onClick();
               onClose();
             }}
-            className="text-sm font-semibold hover:opacity-80 underline"
+            className={`text-sm font-semibold hover:opacity-80 underline ${type !== 'error' ? 'text-zana-yellow' : 'text-white'}`}
           >
             {action.label}
           </button>
         )}
         <button
           onClick={onClose}
-          className="hover:opacity-80 transition-opacity"
+          className={`hover:opacity-80 transition-opacity ${type !== 'error' ? 'text-zana-yellow' : 'text-white'}`}
           aria-label="Close"
         >
           <XMarkIcon className="h-5 w-5" />

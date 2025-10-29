@@ -51,7 +51,7 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
+      <div className="fixed z-50 flex flex-col gap-2 items-center bottom-4 left-4 right-4 pb-[env(safe-area-inset-bottom)] md:items-end md:bottom-4 md:right-4 md:left-auto">
         {toasts.map((toast) => (
           <Toast
             key={toast.id}
@@ -73,11 +73,11 @@ const iconsByType = {
   info: InformationCircleIcon
 };
 
-const baseStyles = 'pointer-events-auto w-full max-w-sm overflow-hidden rounded-xl shadow-zana ring-1 ring-[rgba(255,214,0,0.2)] backdrop-blur-md transform transition-all duration-300 ease-in-out bg-brand-black border border-zana-borderTint';
+const baseStyles = 'pointer-events-auto w-full max-w-md md:max-w-sm overflow-hidden rounded-xl shadow-zana ring-1 ring-[rgba(255,214,0,0.2)] backdrop-blur-md transform transition-all duration-300 ease-in-out bg-brand-black border border-zana-borderTint';
 
 const bgByType = {
   success: 'bg-brand-black',
-  error: 'bg-brand-black',
+  error: 'bg-red-700',
   warning: 'bg-brand-black',
   info: 'bg-brand-black'
 };
@@ -93,16 +93,16 @@ function Toast({ type = 'info', title, message, onClose }) {
   const Icon = iconsByType[type];
 
   return (
-    <div className={`${baseStyles} ${bgByType[type]} animate-slideIn`}>
-      <div className="flex items-start p-4">
+    <div className={`${baseStyles} ${bgByType[type]} animate-slideIn min-h-[52px]`}>
+      <div className="flex items-start p-4 gap-3">
         <div className="flex-shrink-0">
           <Icon className={`h-6 w-6 ${textByType[type]}`} aria-hidden="true" />
         </div>
-        <div className="ml-3 w-0 flex-1">
-          {title && <p className={`text-sm font-medium ${textByType[type]}`}>{title}</p>}
-          {message && <p className="mt-1 text-sm text-white/80">{message}</p>}
+        <div className="flex-1 min-w-0">
+          {title && <p className={`text-sm font-medium ${textByType[type]} break-words break-all`}>{title}</p>}
+          {message && <p className="mt-1 text-sm text-white/85 break-words break-all whitespace-normal leading-snug">{message}</p>}
         </div>
-        <div className="ml-4 flex flex-shrink-0">
+        <div className="ml-2 flex flex-shrink-0">
           <button
             type="button"
             className={`inline-flex rounded-md ${textByType[type]} hover:opacity-75 focus:outline-none focus:ring-2 focus:ring-zana-yellow/50`}
