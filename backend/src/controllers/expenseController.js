@@ -184,12 +184,16 @@ exports.deleteExpense = async (req, res) => {
 // Get expense statistics and summary
 exports.getExpenseStatistics = async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
-    const whereClause = startDate && endDate ? {
-      date: {
-        [Op.between]: [new Date(startDate), new Date(endDate)]
-      }
-    } : {};
+    const { startDate, endDate, category } = req.query;
+    const whereClause = {
+      shopId: req.user.shopId,
+      ...(startDate && endDate ? {
+        date: {
+          [Op.between]: [new Date(startDate), new Date(endDate)]
+        }
+      } : {}),
+      ...(category ? { category } : {})
+    };
 
     // Get total expenses and category breakdown
     const [totalExpenses, categoryBreakdown, monthlyTrend] = await Promise.all([
@@ -206,11 +210,11 @@ exports.getExpenseStatistics = async (req, res) => {
       Expense.findAll({
         where: whereClause,
         attributes: [
-          [sequelize.fn('DATE_TRUNC', 'month', sequelize.col('date')), 'month'],
+          [sequelize.fn('DATE_FORMAT', sequelize.col('date'), '%Y-%m-01'), 'month'],
           [sequelize.fn('SUM', sequelize.col('amount')), 'total']
         ],
-        group: [sequelize.fn('DATE_TRUNC', 'month', sequelize.col('date'))],
-        order: [[sequelize.fn('DATE_TRUNC', 'month', sequelize.col('date')), 'ASC']]
+        group: [sequelize.fn('DATE_FORMAT', sequelize.col('date'), '%Y-%m-01')],
+        order: [[sequelize.fn('DATE_FORMAT', sequelize.col('date'), '%Y-%m-01'), 'ASC']]
       })
     ]);
 

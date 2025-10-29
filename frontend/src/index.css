@@ -106,6 +106,29 @@ body {
   }
 }
 
+/* Print styles for clean reports */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .bg-brand-black, .bg-brand-gray, .bg-black, .bg-black\/40, .bg-black\/30 {
+    background: #ffffff !important;
+  }
+  .text-zana-yellow, .text-white, .text-white\/70, .text-white\/80 {
+    color: #000000 !important;
+  }
+  .border-zana-borderTint {
+    border-color: #00000033 !important;
+  }
+  button, .no-print {
+    display: none !important;
+  }
+  a {
+    color: #000000 !important;
+  }
+}
+
 @keyframes modalContent {
   from {
     opacity: 0;

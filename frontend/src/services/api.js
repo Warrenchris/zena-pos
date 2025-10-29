@@ -185,6 +185,7 @@ export const expensesAPI = {
   create: (expenseData) => api.post('/api/expenses', expenseData),
   update: (id, expenseData) => api.put(`/api/expenses/${id}`, expenseData),
   delete: (id) => api.delete(`/api/expenses/${id}`),
+  getStatistics: (params) => api.get('/api/expenses/statistics', { params }),
 };
 
 // Settings API
