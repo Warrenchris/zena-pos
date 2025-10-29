@@ -328,31 +328,31 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-brand-black text-white min-h-screen p-6">
       {/* Welcome Header */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h1 className="text-3xl font-bold text-gray-900">
+      <div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6">
+        <h1 className="text-3xl font-bold text-zana-yellow">
           Welcome back, {user?.name || 'User'}!
         </h1>
-        <p className="text-gray-600 mt-2">
+        <p className="text-white/70 mt-2">
           Here's what's happening with your business today.
         </p>
       </div>
 
       {/* Loading & error states for the whole dashboard */}
       {isLoading && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-700">Loading latest data...</p>
-          <div className="mt-4 h-2 w-full bg-gray-100 rounded overflow-hidden">
-            <div className="h-2 bg-blue-500 animate-pulse" style={{ width: '65%' }} />
+        <div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6">
+          <p className="text-white/80">Loading latest data...</p>
+          <div className="mt-4 h-2 w-full bg-black/40 rounded overflow-hidden">
+            <div className="h-2 bg-zana-yellow animate-pulse" style={{ width: '65%' }} />
           </div>
         </div>
       )}
 
       {!isLoading && firstError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-700 font-medium">We couldn't load the dashboard data.</p>
-          <p className="text-red-600 text-sm mt-1">{firstError}</p>
+        <div className="bg-black/40 border border-red-500/30 rounded-lg p-4">
+          <p className="text-red-400 font-medium">We couldn't load the dashboard data.</p>
+          <p className="text-red-300 text-sm mt-1">{firstError}</p>
           <button onClick={retryAll} className="mt-3 inline-flex items-center px-3 py-1.5 rounded-md bg-red-600 text-white text-sm hover:bg-red-700">
             Retry
           </button>
@@ -386,9 +386,9 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Sales */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Recent Sales</h3>
+        <div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint">
+          <div className="p-6 border-b border-zana-borderTint">
+            <h3 className="text-lg font-medium text-zana-yellow">Recent Sales</h3>
           </div>
           <div className="p-6">
             {salesLoading ? (
@@ -396,25 +396,25 @@ export default function Dashboard() {
                 {[...Array(5)].map((_, i) => (
                   <div key={i} className="flex justify-between items-center">
                     <div>
-                      <div className="h-4 w-24 bg-gray-200 rounded"></div>
-                      <div className="h-3 w-32 bg-gray-200 rounded mt-2"></div>
+                      <div className="h-4 w-24 bg-black/40 rounded"></div>
+                      <div className="h-3 w-32 bg-black/40 rounded mt-2"></div>
                     </div>
                     <div className="text-right">
-                      <div className="h-4 w-20 bg-gray-200 rounded"></div>
-                      <div className="h-3 w-24 bg-gray-200 rounded mt-2"></div>
+                      <div className="h-4 w-20 bg-black/40 rounded"></div>
+                      <div className="h-3 w-24 bg-black/40 rounded mt-2"></div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : salesError ? (
               <div className="text-center py-6">
-                <p className="text-red-500 mb-2">Error loading recent sales</p>
-                <p className="text-gray-400 text-sm">{salesError}</p>
+                <p className="text-red-400 mb-2">Error loading recent sales</p>
+                <p className="text-white/60 text-sm">{salesError}</p>
               </div>
             ) : !sales || sales.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-gray-500">No recent sales</p>
-                <p className="text-gray-400 text-sm">Create a sale from the POS to see it here.</p>
+                <p className="text-white/60">No recent sales</p>
+                <p className="text-white/60 text-sm">Create a sale from the POS to see it here.</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -422,21 +422,21 @@ export default function Dashboard() {
                   <div 
                     key={sale.id} 
                     onClick={() => handleSaleClick(sale)}
-                    className="flex justify-between items-center hover:bg-gray-50 p-2 rounded transition-colors cursor-pointer"
+                    className="flex justify-between items-center hover:bg-zana-yellow/10 p-2 rounded transition-colors cursor-pointer"
                   >
                     <div>
-                      <p className="text-sm font-medium text-gray-900">
+                      <p className="text-sm font-medium text-white">
                         {sale.invoiceNumber}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-white/60">
                         {sale.Customer?.name || sale.customer?.name || 'Walk-in Customer'}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-medium text-gray-900">
+                      <p className="text-sm font-medium text-white">
                         {formatCurrency(sale.total)}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-white/60">
                         {formatDate(sale.createdAt)}
                       </p>
                     </div>
@@ -448,9 +448,9 @@ export default function Dashboard() {
         </div>
 
         {/* Low Stock Products */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Low Stock Alert</h3>
+        <div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint">
+          <div className="p-6 border-b border-zana-borderTint">
+            <h3 className="text-lg font-medium text-zana-yellow">Low Stock Alert</h3>
           </div>
           <div className="p-6">
             {productsLoading ? (
@@ -458,20 +458,20 @@ export default function Dashboard() {
                 {[...Array(5)].map((_, i) => (
                   <div key={i} className="flex justify-between items-center">
                     <div>
-                      <div className="h-4 w-32 bg-gray-200 rounded"></div>
-                      <div className="h-3 w-24 bg-gray-200 rounded mt-2"></div>
+                      <div className="h-4 w-32 bg-black/40 rounded"></div>
+                      <div className="h-3 w-24 bg-black/40 rounded mt-2"></div>
                     </div>
                     <div className="text-right">
-                      <div className="h-4 w-16 bg-gray-200 rounded"></div>
-                      <div className="h-3 w-20 bg-gray-200 rounded mt-2"></div>
+                      <div className="h-4 w-16 bg-black/40 rounded"></div>
+                      <div className="h-3 w-20 bg-black/40 rounded mt-2"></div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : products.filter(p => p.stockQuantity <= p.reorderPoint).length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-gray-500">All products are well stocked!</p>
-                <p className="text-gray-400 text-sm">Update stock levels from the Products page.</p>
+                <p className="text-white/60">All products are well stocked!</p>
+                <p className="text-white/60 text-sm">Update stock levels from the Products page.</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -481,18 +481,18 @@ export default function Dashboard() {
                   .map((product) => (
                     <div key={product.id} className="flex justify-between items-center">
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-medium text-white">
                           {product.name}
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-white/60">
                           SKU: {product.sku}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-medium text-red-600">
+                        <p className="text-sm font-medium text-red-400">
                           {product.stockQuantity} left
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-white/60">
                           Reorder: {product.reorderPoint}
                         </p>
                       </div>
@@ -505,40 +505,40 @@ export default function Dashboard() {
       </div>
 
       {/* AI Insights Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900">AI Business Insights</h3>
-          <button className="text-sm text-blue-600 hover:text-blue-800">
+          <h3 className="text-lg font-medium text-zana-yellow">AI Business Insights</h3>
+          <button className="text-sm text-zana-yellow hover:text-zana-yellow/80">
             View All
           </button>
         </div>
         {forecastLoading ? (
-          <div className="mb-4 p-4 rounded border border-blue-200 bg-blue-50">
+          <div className="mb-4 p-4 rounded border border-zana-borderTint bg-black/40">
             <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
-              <span className="text-blue-600">Loading forecast...</span>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-zana-yellow mr-3"></div>
+              <span className="text-zana-yellow">Loading forecast...</span>
             </div>
           </div>
         ) : forecastError ? (
-          <div className="mb-4 p-4 rounded border border-red-200 bg-red-50">
-            <div className="text-sm text-red-600">Error loading forecast</div>
-            <div className="text-red-700">{forecastError}</div>
+          <div className="mb-4 p-4 rounded border border-red-500/30 bg-black/40">
+            <div className="text-sm text-red-400">Error loading forecast</div>
+            <div className="text-red-300">{forecastError}</div>
             <button 
               onClick={fetchForecast}
-              className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+              className="mt-2 text-sm text-red-400 hover:text-red-300 underline"
             >
               Retry
             </button>
           </div>
         ) : forecast && (
-          <div className="mb-4 p-4 rounded border border-blue-200 bg-blue-50">
-            <div className="text-sm text-gray-600">Forecast</div>
+          <div className="mb-4 p-4 rounded border border-zana-borderTint bg-black/40">
+            <div className="text-sm text-white/70">Forecast</div>
             <div className="text-xl font-semibold">Next period expected sales: {formatCurrency(forecast.next || 0)}</div>
           </div>
         )}
         {insightsLoading ? (
           <div className="flex justify-center items-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zana-yellow"></div>
           </div>
         ) : (
           <BusinessInsights insights={insights} />
@@ -546,36 +546,36 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
+      <div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6">
+        <h3 className="text-lg font-medium text-zana-yellow mb-4">Quick Actions</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <button 
             onClick={() => navigate('/pos')}
-            className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center transition-colors"
+            className="p-4 border border-zana-borderTint rounded-lg hover:bg-zana-yellow/10 text-center transition-colors"
           >
-            <ShoppingBagIcon className="h-8 w-8 text-green-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-900">New Sale</p>
+            <ShoppingBagIcon className="h-8 w-8 text-zana-yellow mx-auto mb-2" />
+            <p className="text-sm font-medium text-white">New Sale</p>
           </button>
           <button 
             onClick={() => navigate('/products/new')}
-            className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center transition-colors"
+            className="p-4 border border-zana-borderTint rounded-lg hover:bg-zana-yellow/10 text-center transition-colors"
           >
-            <TagIcon className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-900">Add Product</p>
+            <TagIcon className="h-8 w-8 text-zana-yellow mx-auto mb-2" />
+            <p className="text-sm font-medium text-white">Add Product</p>
           </button>
           <button 
             onClick={() => navigate('/customers/new')}
-            className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center transition-colors"
+            className="p-4 border border-zana-borderTint rounded-lg hover:bg-zana-yellow/10 text-center transition-colors"
           >
-            <UsersIcon className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-900">Add Customer</p>
+            <UsersIcon className="h-8 w-8 text-zana-yellow mx-auto mb-2" />
+            <p className="text-sm font-medium text-white">Add Customer</p>
           </button>
           <button 
             onClick={() => navigate('/reports')}
-            className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center transition-colors"
+            className="p-4 border border-zana-borderTint rounded-lg hover:bg-zana-yellow/10 text-center transition-colors"
           >
-            <ChartBarIcon className="h-8 w-8 text-orange-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-900">View Reports</p>
+            <ChartBarIcon className="h-8 w-8 text-zana-yellow mx-auto mb-2" />
+            <p className="text-sm font-medium text-white">View Reports</p>
           </button>
         </div>
       </div>

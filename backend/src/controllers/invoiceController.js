@@ -5,7 +5,6 @@ const User = require('../models/User');
 const Shop = require('../models/Shop');
 const { Op } = require('sequelize');
 const PDFDocument = require('pdfkit');
-const emailService = require('../services/emailService');
 const { formatCurrency } = require('../utils/currency');
 
 // Helper function to build query options
@@ -256,40 +255,11 @@ exports.generatePDF = async (req, res) => {
   }
 };
 
-// Send invoice by email
+// Send invoice by email - temporarily disabled
 exports.sendByEmail = async (req, res) => {
-  try {
-    const invoice = await Invoice.findByPk(req.params.id, {
-      include: ['customer', 'issuer', 'shop']
-    });
-
-    if (!invoice) {
-      return res.status(404).json({ error: 'Invoice not found' });
-    }
-
-    // Check permission
-    if (req.user.role !== 'admin' && invoice.shopId !== req.user.shopId) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    // Generate PDF
-    const pdfBuffer = await generateInvoicePDF(invoice);
-
-    // Send email
-    await emailService.sendInvoice({
-      to: req.body.email || invoice.customer.email,
-      invoiceNumber: invoice.invoiceNumber,
-      pdf: pdfBuffer
-    });
-
-    // Update email sent timestamp
-    await invoice.update({ emailSentAt: new Date() });
-
-    res.json({ message: 'Invoice sent successfully' });
-  } catch (error) {
-    console.error('Error sending invoice:', error);
-    res.status(500).json({ error: 'Failed to send invoice' });
-  }
+  return res.status(501).json({
+    message: 'Email service is temporarily disabled'
+  });
 };
 
 // Get invoice statistics

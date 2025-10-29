@@ -121,28 +121,28 @@ export default function Sales() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-brand-black text-white min-h-screen p-6 rounded-lg">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-zana-yellow">
             {isAdmin ? 'Sales Management' : 'My Sales'}
           </h1>
-          <p className="text-gray-600">
+          <p className="text-white/70">
             {isAdmin ? 'View and manage all sales transactions' : 'View your sales transactions'}
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center gap-2"
+            className="px-4 py-2 rounded-lg flex items-center gap-2 border border-zana-borderTint text-zana-yellow bg-transparent hover:bg-zana-yellow/10 focus:outline-none focus:ring-2 focus:ring-zana-yellow/40"
           >
             <FunnelIcon className="h-5 w-5" />
             Filters
           </button>
           <button
             onClick={() => setShowPOSModal(true)}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+            className="px-4 py-2 rounded-lg flex items-center gap-2 bg-zana-yellow text-black shadow-zana hover:bg-zana-yellow/90 hover:shadow-zana-lg focus:outline-none focus:ring-2 focus:ring-zana-yellow/50"
           >
             <PlusIcon className="h-5 w-5" />
             New Sale
@@ -152,39 +152,39 @@ export default function Sales() {
 
       {/* Filters */}
       {showFilters && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-brand-gray rounded-lg shadow-zana p-6 border border-zana-borderTint">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-zana-yellow mb-1">
                 Start Date
               </label>
               <input
                 type="date"
                 value={filters.startDate}
                 onChange={(e) => handleFilterChange('startDate', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-md bg-black/40 text-white placeholder:text-zana-yellow/40 border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-zana-yellow mb-1">
                 End Date
               </label>
               <input
                 type="date"
                 value={filters.endDate}
                 onChange={(e) => handleFilterChange('endDate', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-md bg-black/40 text-white placeholder:text-zana-yellow/40 border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
               />
             </div>
             {isAdmin && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-zana-yellow mb-1">
                   Cashier
                 </label>
                 <select
                   value={filters.cashierId}
                   onChange={(e) => handleFilterChange('cashierId', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 rounded-md bg-black/40 text-white border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
                 >
                   <option value="">All Cashiers</option>
                   {employees.map(employee => (
@@ -196,13 +196,13 @@ export default function Sales() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-zana-yellow mb-1">
                 Sort By
               </label>
               <select
                 value={filters.sortBy}
                 onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-md bg-black/40 text-white border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
               >
                 <option value="createdAt">Date</option>
                 <option value="total">Total</option>
@@ -210,13 +210,13 @@ export default function Sales() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-zana-yellow mb-1">
                 Order
               </label>
               <select
                 value={filters.sortOrder}
                 onChange={(e) => handleFilterChange('sortOrder', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-md bg-black/40 text-white border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
               >
                 <option value="DESC">Descending</option>
                 <option value="ASC">Ascending</option>
@@ -226,7 +226,7 @@ export default function Sales() {
           <div className="mt-4 flex justify-end">
             <button
               onClick={clearFilters}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+              className="px-4 py-2 text-sm text-zana-yellow hover:text-zana-yellow/80"
             >
               Clear Filters
             </button>
@@ -235,95 +235,95 @@ export default function Sales() {
       )}
 
       {/* Sales Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-brand-black rounded-lg shadow-zana overflow-hidden border border-zana-borderTint">
         {loading ? (
           <div className="p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading sales...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zana-yellow mx-auto"></div>
+            <p className="mt-2 text-white/70">Loading sales...</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-zana-borderTint">
+              <thead className="bg-black">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
                     Invoice
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
                     Customer
                   </th>
                   {isAdmin && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
                       Cashier
                     </th>
                   )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
                     Items
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
                     Total
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
                     Payment
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-zana-borderTint">
                 {sales.map((sale) => (
-                  <tr key={sale.id} className="hover:bg-gray-50">
+                  <tr key={sale.id} className="odd:bg-black/30 even:bg-black/20 hover:bg-zana-yellow/5">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{sale.invoiceNumber}</div>
+                      <div className="text-sm font-medium text-white">{sale.invoiceNumber}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                      <div className="text-sm text-white">
                         {sale.Customer?.name || sale.customerName || 'Walk-in Customer'}
                       </div>
                     </td>
                     {isAdmin && (
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-sm text-white">
                           {getCashierName(sale)}
                         </div>
                       </td>
                     )}
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                      <div className="text-sm text-white">
                         {sale.SaleItems?.length || 0} item(s)
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-white/60">
                         {sale.SaleItems?.map(item => item.Product?.name).join(', ') || 'No items'}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                       {formatCurrency(sale.total)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(sale.paymentStatus)}`}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPaymentStatusColor(sale.paymentStatus)}`}>
                         {sale.paymentStatus}
                       </span>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-white/60 mt-1">
                         {sale.paymentMethod}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                       {formatDate(sale.createdAt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-2">
                         <button
-                          className="text-blue-600 hover:text-blue-900"
+                          className="text-zana-yellow hover:text-zana-yellow/80 hover:drop-shadow-[0_0_6px_rgba(255,214,0,0.6)]"
                           title="View Details"
                         >
                           <EyeIcon className="h-4 w-4" />
                         </button>
                         <button
-                          className="text-gray-600 hover:text-gray-900"
+                          className="text-white/80 hover:text-white"
                           title="Print Receipt"
                         >
                           <PrinterIcon className="h-4 w-4" />
@@ -339,26 +339,26 @@ export default function Sales() {
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+          <div className="bg-black/30 px-4 py-3 flex items-center justify-between border-t border-zana-borderTint sm:px-6">
             <div className="flex-1 flex justify-between sm:hidden">
               <button
                 onClick={() => setCurrentPage(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                className="relative inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md text-white border-zana-borderTint bg-black hover:bg-zana-yellow/10 disabled:opacity-50"
               >
                 Previous
               </button>
               <button
                 onClick={() => setCurrentPage(currentPage + 1)}
                 disabled={currentPage === pagination.totalPages}
-                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                className="ml-3 relative inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md text-white border-zana-borderTint bg-black hover:bg-zana-yellow/10 disabled:opacity-50"
               >
                 Next
               </button>
             </div>
             <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm text-gray-700">
+                <p className="text-sm text-white/80">
                   Showing page <span className="font-medium">{currentPage}</span> of{' '}
                   <span className="font-medium">{pagination.totalPages}</span>
                 </p>
@@ -371,8 +371,8 @@ export default function Sales() {
                       onClick={() => setCurrentPage(page)}
                       className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                         page === currentPage
-                          ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          ? 'z-10 bg-zana-yellow text-black border-zana-yellow'
+                          : 'bg-black text-white/70 border-zana-borderTint hover:bg-zana-yellow/10'
                       }`}
                     >
                       {page}

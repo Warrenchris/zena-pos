@@ -1,5 +1,5 @@
 const { body } = require('express-validator');
-const { validate } = require('./validate');
+const { validate } = require('../validate');
 
 const invoiceValidation = {
   create: [

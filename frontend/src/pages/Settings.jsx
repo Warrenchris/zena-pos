@@ -601,32 +601,32 @@ const Settings = () => {
 
   if (loading && !settings) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-brand-black text-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading settings...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-zana-yellow mx-auto"></div>
+          <p className="mt-4 text-white/70">Loading settings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-brand-black text-white min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-        <p className="mt-2 text-gray-600">
+        <h1 className="text-3xl font-bold text-zana-yellow">Settings</h1>
+        <p className="mt-2 text-white/70">
           Manage your system configuration and preferences
         </p>
       </div>
 
       {/* Status Messages */}
       {saveStatus === 'success' && (
-        <div className="mb-6 bg-green-50 border border-green-200 rounded-md p-4">
+        <div className="mb-6 bg-black/40 border border-green-500/30 rounded-md p-4">
           <div className="flex">
             <CheckIcon className="h-5 w-5 text-green-400" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-green-800">
+              <p className="text-sm font-medium text-green-300">
                 Settings saved successfully!
               </p>
             </div>
@@ -635,11 +635,11 @@ const Settings = () => {
       )}
 
       {saveStatus === 'error' && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
+        <div className="mb-6 bg-black/40 border border-red-500/30 rounded-md p-4">
           <div className="flex">
             <XMarkIcon className="h-5 w-5 text-red-400" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-red-800">
+              <p className="text-sm font-medium text-red-300">
                 Failed to save settings. Please try again.
               </p>
             </div>
@@ -648,11 +648,11 @@ const Settings = () => {
       )}
 
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
+        <div className="mb-6 bg-black/40 border border-red-500/30 rounded-md p-4">
           <div className="flex">
             <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-red-800">
+              <p className="text-sm font-medium text-red-300">
                 {error}
               </p>
             </div>
@@ -660,10 +660,10 @@ const Settings = () => {
         </div>
       )}
 
-      <div className="bg-white shadow rounded-lg">
+      <div className="bg-brand-black shadow-zana border border-zana-borderTint rounded-lg">
         <div className="flex">
           {/* Sidebar */}
-          <div className="w-64 bg-gray-50 rounded-l-lg">
+          <div className="w-64 bg-black rounded-l-lg border-r border-zana-borderTint">
             <nav className="p-4 space-y-2">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
@@ -671,10 +671,10 @@ const Settings = () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                    className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors border ${
                       activeTab === tab.id
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                        ? 'bg-zana-yellow text-black border-zana-yellow'
+                        : 'text-zana-yellow border-zana-borderTint hover:bg-zana-yellow/10'
                     }`}
                   >
                     <Icon className="mr-3 h-5 w-5" />
@@ -688,10 +688,10 @@ const Settings = () => {
           {/* Main Content */}
           <div className="flex-1 p-6">
             <div className="mb-6">
-              <h2 className="text-lg font-medium text-gray-900 capitalize">
+              <h2 className="text-lg font-medium text-zana-yellow capitalize">
                 {tabs.find(tab => tab.id === activeTab)?.name} Settings
               </h2>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-white/70 mt-1">
                 Configure your {tabs.find(tab => tab.id === activeTab)?.name.toLowerCase()} preferences
               </p>
             </div>
@@ -702,7 +702,7 @@ const Settings = () => {
             <div className="mt-8 flex justify-between">
               <button
                 onClick={() => setShowResetConfirm(true)}
-                className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="px-4 py-2 text-sm font-medium text-red-400 bg-black/40 border border-red-500/30 rounded-md hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500/40"
               >
                 Reset to Defaults
               </button>
@@ -714,14 +714,14 @@ const Settings = () => {
                     setHasChanges(false);
                   }}
                   disabled={!hasChanges}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-black/40 border border-zana-borderTint rounded-md hover:bg-zana-yellow/10 focus:outline-none focus:ring-2 focus:ring-zana-yellow disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={!hasChanges || saveStatus === 'saving'}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-black bg-zana-yellow border border-zana-yellow rounded-md hover:bg-zana-yellow/90 focus:outline-none focus:ring-2 focus:ring-zana-yellow disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -733,31 +733,28 @@ const Settings = () => {
 
       {/* Reset Confirmation Modal */}
       {showResetConfirm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-zana rounded-md bg-brand-black border-zana-borderTint">
             <div className="mt-3 text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-500/10 border border-red-500/30">
+                <ExclamationTriangleIcon className="h-6 w-6 text-red-400" />
               </div>
               <h3 className="text-lg font-medium text-gray-900 mt-4">
-                Reset Settings
+                <span className="text-white">Reset Settings</span>
               </h3>
               <div className="mt-2 px-7 py-3">
-                <p className="text-sm text-gray-500">
-                  Are you sure you want to reset all settings to their default values? 
-                  This action cannot be undone.
-                </p>
+                <p className="text-sm text-white/70">Are you sure you want to reset all settings to their default values? This action cannot be undone.</p>
               </div>
               <div className="flex justify-center space-x-4 mt-4">
                 <button
                   onClick={() => setShowResetConfirm(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
+                  className="px-4 py-2 text-sm font-medium text-white bg-black/40 border border-zana-borderTint rounded-md hover:bg-zana-yellow/10"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleReset}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700"
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600/80 border border-red-500/30 rounded-md hover:bg-red-600"
                 >
                   Reset Settings
                 </button>

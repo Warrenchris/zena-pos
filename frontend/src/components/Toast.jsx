@@ -73,20 +73,20 @@ const iconsByType = {
   info: InformationCircleIcon
 };
 
-const baseStyles = 'pointer-events-auto w-full max-w-sm overflow-hidden rounded-xl shadow-lg ring-1 ring-black/10 backdrop-blur-md transform transition-all duration-300 ease-in-out';
+const baseStyles = 'pointer-events-auto w-full max-w-sm overflow-hidden rounded-xl shadow-zana ring-1 ring-[rgba(255,214,0,0.2)] backdrop-blur-md transform transition-all duration-300 ease-in-out bg-brand-black border border-zana-borderTint';
 
 const bgByType = {
-  success: 'bg-green-600/15 border border-green-500/30',
-  error: 'bg-red-600/15 border border-red-500/30',
-  warning: 'bg-yellow-600/15 border border-yellow-500/30',
-  info: 'bg-blue-600/15 border border-blue-500/30'
+  success: 'bg-brand-black',
+  error: 'bg-brand-black',
+  warning: 'bg-brand-black',
+  info: 'bg-brand-black'
 };
 
 const textByType = {
-  success: 'text-green-500',
-  error: 'text-red-500',
-  warning: 'text-yellow-500',
-  info: 'text-blue-500'
+  success: 'text-green-400',
+  error: 'text-red-400',
+  warning: 'text-zana-yellow',
+  info: 'text-zana-yellow'
 };
 
 function Toast({ type = 'info', title, message, onClose }) {
@@ -100,12 +100,12 @@ function Toast({ type = 'info', title, message, onClose }) {
         </div>
         <div className="ml-3 w-0 flex-1">
           {title && <p className={`text-sm font-medium ${textByType[type]}`}>{title}</p>}
-          {message && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{message}</p>}
+          {message && <p className="mt-1 text-sm text-white/80">{message}</p>}
         </div>
         <div className="ml-4 flex flex-shrink-0">
           <button
             type="button"
-            className={`inline-flex rounded-md ${textByType[type]} hover:opacity-75 focus:outline-none focus:ring-2 focus:ring-offset-2`}
+            className={`inline-flex rounded-md ${textByType[type]} hover:opacity-75 focus:outline-none focus:ring-2 focus:ring-zana-yellow/50`}
             onClick={onClose}
           >
             <span className="sr-only">Close</span>

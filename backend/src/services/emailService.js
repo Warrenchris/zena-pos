@@ -4,12 +4,25 @@ const logger = require('../utils/logger');
 // Create reusable transporter object using SMTP transport
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
+  port: parseInt(process.env.SMTP_PORT),
   secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
+  },
+  // Force IPv4
+  connection: {
+    family: 4
   }
+});
+
+// Log email configuration (without sensitive data)
+logger.info('Email Configuration:', {
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: process.env.SMTP_SECURE === 'true',
+  from: process.env.SMTP_FROM,
+  company: process.env.COMPANY_NAME
 });
 
 // Verify connection configuration
@@ -25,20 +38,19 @@ const emailService = {
   async sendInvoice({ to, invoiceNumber, pdf }) {
     try {
       const info = await transporter.sendMail({
-        from: \`"\${process.env.COMPANY_NAME}" <\${process.env.SMTP_FROM}>\`,
+        from: '"' + process.env.COMPANY_NAME + '" <' + process.env.SMTP_FROM + '>',
         to: to,
-        subject: \`Invoice #\${invoiceNumber}\`,
-        html: \`
-          <h2>Invoice #\${invoiceNumber}</h2>
-          <p>Thank you for your business. Please find your invoice attached.</p>
-          <p>If you have any questions, please don't hesitate to contact us.</p>
-          <br>
-          <p>Best regards,</p>
-          <p>\${process.env.COMPANY_NAME}</p>
-        \`,
+        subject: 'Invoice #' + invoiceNumber,
+        html: 
+          '<h2>Invoice #' + invoiceNumber + '</h2>' +
+          '<p>Thank you for your business. Please find your invoice attached.</p>' +
+          '<p>If you have any questions, please don\'t hesitate to contact us.</p>' +
+          '<br>' +
+          '<p>Best regards,</p>' +
+          '<p>' + process.env.COMPANY_NAME + '</p>',
         attachments: [
           {
-            filename: \`invoice-\${invoiceNumber}.pdf\`,
+            filename: 'invoice-' + invoiceNumber + '.pdf',
             content: pdf,
             contentType: 'application/pdf'
           }

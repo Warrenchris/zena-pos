@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { body } = require('express-validator');
 const { auth, checkRole } = require('../middleware/auth');
 const invoiceController = require('../controllers/invoiceController');
 const { invoiceValidation } = require('../middleware/validations/invoiceValidation');
@@ -28,9 +29,11 @@ router.delete('/:id', checkRole(['admin']), invoiceController.deleteInvoice);
 // Generate PDF
 router.get('/:id/pdf', invoiceController.generatePDF);
 
-// Send invoice by email
-router.post('/:id/send', [
-  body('email').optional().isEmail()
-], invoiceController.sendByEmail);
+// Send invoice by email - temporarily disabled
+router.post('/:id/send', (req, res) => {
+  res.status(501).json({
+    message: 'Email service is temporarily disabled'
+  });
+});
 
 module.exports = router;
