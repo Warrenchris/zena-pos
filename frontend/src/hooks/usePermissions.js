@@ -34,6 +34,11 @@ export const usePermissions = () => {
           { path: '/employees', label: 'Employees' },
           { path: '/admin/employees', label: 'Employees' },
           { path: '/admin/users', label: 'Users' },
+          // AI & Analytics
+          { path: '/admin/ai', label: 'AI Services' },
+          { path: '/ai/forecasting', label: 'AI Forecasting' },
+          { path: '/ai/insights', label: 'AI Insights' },
+          { path: '/ai/finance', label: 'AI Finance' },
           { path: '/settings', label: 'Settings' },
           { path: '/reports', label: 'Reports' },
         ];
