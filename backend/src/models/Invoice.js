@@ -1,4 +1,4 @@
-const { Model, DataTypes } = require('sequelize');
+const { Model, DataTypes, Op } = require('sequelize');
 const sequelize = require('../config/database');
 
 class Invoice extends Model {}
@@ -22,17 +22,9 @@ Invoice.init({
       key: 'id',
     },
   },
-  customerId: {
+  userId: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    references: {
-      model: 'Customers',
-      key: 'id',
-    },
-  },
-  issuerId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
     references: {
       model: 'Users',
       key: 'id',
@@ -46,104 +38,78 @@ Invoice.init({
       key: 'id',
     },
   },
-  status: {
-    type: DataTypes.ENUM('draft', 'pending', 'paid', 'overdue', 'cancelled'),
-    defaultValue: 'pending',
-  },
   subtotal: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false,
   },
   tax: {
     type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
     defaultValue: 0,
   },
   discount: {
     type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
     defaultValue: 0,
   },
   total: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false,
   },
-  notes: {
-    type: DataTypes.TEXT,
-  },
-  dueDate: {
-    type: DataTypes.DATE,
+  status: {
+    type: DataTypes.ENUM('paid', 'pending', 'canceled'),
+    allowNull: false,
+    defaultValue: 'pending',
   },
   paymentMethod: {
     type: DataTypes.STRING,
+    allowNull: true,
   },
   paymentDate: {
     type: DataTypes.DATE,
-  },
-  emailSentAt: {
-    type: DataTypes.DATE,
+    allowNull: true,
   },
   createdAt: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,
+    allowNull: false,
   },
   updatedAt: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,
+    allowNull: false,
   }
 }, {
   sequelize,
   modelName: 'Invoice',
   tableName: 'invoices',
   timestamps: true,
-  hooks: {
-    beforeCreate: async (invoice) => {
-      // Generate invoice number if not provided
-      if (!invoice.invoiceNumber) {
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        
-        // Get the last invoice number for this month
-        const lastInvoice = await Invoice.findOne({
-          where: {
-            invoiceNumber: {
-              [Op.like]: 'INV-' + year + month + '%'
-            }
-          },
-          order: [['invoiceNumber', 'DESC']]
-        });
+});
 
-        let sequence = '001';
-        if (lastInvoice) {
-          const lastSequence = parseInt(lastInvoice.invoiceNumber.slice(-3));
-          sequence = String(lastSequence + 1).padStart(3, '0');
-        }
-
-        invoice.invoiceNumber = 'INV-' + year + month + sequence;
-      }
-    }
+// Invoice number generation: INV-{timestamp}-{shopId}
+Invoice.addHook('beforeCreate', async (invoice) => {
+  if (!invoice.invoiceNumber) {
+    invoice.invoiceNumber = `INV-${Date.now()}-${invoice.shopId}`;
   }
 });
 
-// Define associations
+// Associations
 Invoice.associate = (models) => {
+  Invoice.belongsTo(models.User, {
+    foreignKey: 'userId',
+    as: 'user'
+  });
+  Invoice.belongsTo(models.Shop, {
+    foreignKey: 'shopId',
+    as: 'shop'
+  });
   Invoice.belongsTo(models.Sale, {
     foreignKey: 'saleId',
     as: 'sale'
   });
-  
-  Invoice.belongsTo(models.Customer, {
-    foreignKey: 'customerId',
-    as: 'customer'
-  });
-  
-  Invoice.belongsTo(models.User, {
-    foreignKey: 'issuerId',
-    as: 'issuer'
-  });
-  
-  Invoice.belongsTo(models.Shop, {
-    foreignKey: 'shopId',
-    as: 'shop'
+  Invoice.hasMany(models.InvoiceItem, {
+    foreignKey: 'invoiceId',
+    as: 'items'
   });
 };
 

@@ -13,6 +13,8 @@ const Store = require('./Store');
 const ActivityLog = require('./ActivityLog');
 const Employee = require('./Employee');
 const SystemSettings = require('./SystemSettings');
+const Invoice = require('./Invoice');
+const InvoiceItem = require('./InvoiceItem');
 
 // Define model associations
 Product.belongsTo(Category);
@@ -57,6 +59,15 @@ Shop.hasMany(Employee, { foreignKey: 'shopId' });
 Shop.hasOne(SystemSettings, { foreignKey: 'shopId' });
 SystemSettings.belongsTo(Shop, { foreignKey: 'shopId' });
 
+// Invoice associations
+Invoice.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+Invoice.belongsTo(Shop, { foreignKey: 'shopId', as: 'shop' });
+Invoice.belongsTo(Sale, { foreignKey: 'saleId', as: 'sale' });
+Sale.hasMany(Invoice, { foreignKey: 'saleId', as: 'invoices' });
+Invoice.hasMany(InvoiceItem, { foreignKey: 'invoiceId', as: 'items' });
+InvoiceItem.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
+InvoiceItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+
 // Export models and sequelize instance
 module.exports = {
   sequelize,
@@ -71,5 +82,7 @@ module.exports = {
   Store,
   ActivityLog,
   Employee,
-  SystemSettings
+  SystemSettings,
+  Invoice,
+  InvoiceItem
 };
