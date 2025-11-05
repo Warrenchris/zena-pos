@@ -35,6 +35,9 @@ export default function Sales() {
   })
 
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
+  const urlCustomerId = (() => {
+    try { return new URLSearchParams(window.location.search).get('customerId') || '' } catch { return '' }
+  })()
 
   useEffect(() => {
     if (isAdmin) {
@@ -275,7 +278,7 @@ export default function Sales() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zana-borderTint">
-                {sales.map((sale) => (
+                {(urlCustomerId ? sales.filter(s => (s.Customer?.id === urlCustomerId) || (s.customerId === urlCustomerId)) : sales).map((sale) => (
                   <tr key={sale.id} className="odd:bg-black/30 even:bg-black/20 hover:bg-zana-yellow/5">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-white">{sale.invoiceNumber}</div>

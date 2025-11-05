@@ -2,9 +2,11 @@ import { Fragment, useEffect } from 'react'
 import { Transition } from '@headlessui/react'
 import { XMarkIcon, EnvelopeIcon, PhoneIcon, MapPinIcon, CurrencyDollarIcon, ClockIcon } from '@heroicons/react/24/outline'
 import useCurrency from '../hooks/useCurrency'
+import { useNavigate } from 'react-router-dom'
 
 export default function CustomerDetailsCard({ customer, onClose }) {
   const { format } = useCurrency()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const onEsc = (e) => { if (e.key === 'Escape') onClose() }
@@ -99,10 +101,10 @@ export default function CustomerDetailsCard({ customer, onClose }) {
               </div>
             </div>
 
-            {/* Actions */}
+				{/* Actions */}
             <div className="px-6 py-4 border-t border-brand-yellow/20 bg-black/40 rounded-b-2xl flex flex-wrap gap-3 justify-end">
-              <button className="px-4 py-2 rounded-xl bg-brand-yellow text-brand-black font-semibold hover:bg-yellow-400">New Sale</button>
-              <button className="px-4 py-2 rounded-xl border border-brand-yellow/40 text-gray-100 hover:bg-black/50">View Orders</button>
+					<button onClick={() => navigate(`/pos?customerId=${encodeURIComponent(customer.id)}`)} className="px-4 py-2 rounded-xl bg-brand-yellow text-brand-black font-semibold hover:bg-yellow-400">New Sale</button>
+					<button onClick={() => navigate(`/sales?customerId=${encodeURIComponent(customer.id)}`)} className="px-4 py-2 rounded-xl border border-brand-yellow/40 text-gray-100 hover:bg-black/50">View Orders</button>
               <button className="px-4 py-2 rounded-xl border border-red-400/40 text-red-300 hover:bg-red-500/10">Remove</button>
             </div>
           </div>
