@@ -581,24 +581,32 @@ export default function Reports() {
             )}
 
             {tab==='pl' && data && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Stat label="Gross Revenue" value={data.grossRevenue} />
-                <Stat label="Total Tax" value={data.totalTax} />
-                <Stat label="Discounts" value={data.totalDiscount} />
-                <Stat label="Net Revenue" value={data.netRevenue} />
-                <Stat label="Expenses" value={data.totalExpenses} />
-                <Stat label="Profit" value={data.profit} highlight />
-              </div>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <Stat label="Gross Revenue (Pre-discount)" value={data.grossRevenue} formatCurrency={formatCurrency} />
+                  <Stat label="Total Tax (Sales Tax)" value={data.totalTax} formatCurrency={formatCurrency} />
+                  <Stat label="Discounts" value={data.totalDiscount} formatCurrency={formatCurrency} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <Stat label="Revenue (After Discounts)" value={data.revenue ?? data.netRevenue} formatCurrency={formatCurrency} />
+                  <Stat label="COGS" value={data.cogs} formatCurrency={formatCurrency} />
+                  <Stat label="Gross Profit" value={data.grossProfit ?? ((data.revenue ?? data.netRevenue) - (data.cogs || 0))} highlight formatCurrency={formatCurrency} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Stat label="Operating Expenses" value={data.operatingExpenses ?? data.totalExpenses} formatCurrency={formatCurrency} />
+                  <Stat label="Net Profit" value={data.profit} highlight formatCurrency={formatCurrency} />
+                </div>
+              </>
             )}
 
             {tab==='tax' && data && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Stat label="Taxable Revenue" value={data.taxableRevenue} />
+                <Stat label="Taxable Revenue" value={data.taxableRevenue} formatCurrency={formatCurrency} />
                 <div className="p-4 rounded-lg border border-yellow-500/20 bg-white/5">
                   <div className="text-sm text-gray-300">Tax Rate</div>
                   <div className="text-xl font-semibold text-[#FFD600]">{(Number(data.taxRate)*100).toFixed(2)}%</div>
                 </div>
-                <Stat label="Estimated Tax" value={data.estimatedTax} highlight />
+                <Stat label="Estimated Tax" value={data.estimatedTax} highlight formatCurrency={formatCurrency} />
               </div>
             )}
 
@@ -663,11 +671,11 @@ export default function Reports() {
   )
 }
 
-function Stat({ label, value, highlight }){
+function Stat({ label, value, highlight, formatCurrency: fmt }){
   return (
     <div className={`p-4 rounded-lg border ${highlight ? 'border-yellow-500/30 bg-[#FFD600]/10' : 'border-yellow-500/20 bg-white/5'}`}>
       <div className="text-sm text-gray-300">{label}</div>
-      <div className="text-xl font-semibold text-[#FFD600]">{formatCurrency(Number(value||0))}</div>
+      <div className="text-xl font-semibold text-[#FFD600]">{(fmt ? fmt(Number(value||0)) : Number(value||0).toLocaleString())}</div>
     </div>
   )
 }

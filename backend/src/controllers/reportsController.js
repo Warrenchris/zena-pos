@@ -164,22 +164,67 @@ exports.getProfitAndLoss = async (req, res) => {
       where.createdAt = { [Op.between]: [ s, e ] };
     }
 
-    const [revenue, tax, discount, expenses] = await Promise.all([
-      Sale.sum('total', { where }),
-      Sale.sum('tax', { where }),
+    // Revenue components (exclude tax, subtract discounts)
+    const [subtotalSum, discountSum, taxSum] = await Promise.all([
+      Sale.sum('subtotal', { where }),
       Sale.sum('discount', { where }),
-      Expense.sum('amount', { where }),
+      Sale.sum('tax', { where }),
     ]);
 
-    const grossRevenue = Number(revenue || 0);
-    const totalTax = Number(tax || 0);
-    const totalDiscount = Number(discount || 0);
-    const totalExpenses = Number(expenses || 0);
-    const netRevenue = grossRevenue - totalTax + totalDiscount; // business-defined
-    const profit = netRevenue - totalExpenses;
+    // If subtotal is null in some records, reconstruct revenue from items
+    let revenuePreDiscount = Number(subtotalSum || 0);
+    if (!revenuePreDiscount) {
+      const row = await SaleItem.findOne({
+        include: [{ model: Sale, required: true, where, attributes: [] }],
+        attributes: [
+          [sequelize.literal('SUM(SaleItem.quantity * COALESCE(NULLIF(SaleItem.price, 0), SaleItem.unitPrice, SaleItem.originalPrice, 0))'), 'amount']
+        ],
+        raw: true
+      });
+      revenuePreDiscount = Number(row?.amount || 0);
+    }
+    const totalDiscount = Number(discountSum || 0);
+    const revenue = Math.max(0, revenuePreDiscount - totalDiscount);
 
-    res.json({ grossRevenue, totalTax, totalDiscount, netRevenue, totalExpenses, profit });
+    // COGS from items (quantity * Product.cost)
+    const cogsRow = await SaleItem.findOne({
+      include: [
+        { model: Sale, required: true, where, attributes: [] },
+        { model: Product, required: true, attributes: [] }
+      ],
+      attributes: [[sequelize.literal('SUM(SaleItem.quantity * COALESCE(Product.cost, 0))'), 'cogs']],
+      raw: true
+    });
+    const cogs = Number(cogsRow?.cogs || 0);
+
+    // Operating expenses
+    const operatingExpenses = Number(await Expense.sum('amount', { where }) || 0);
+
+    const grossProfit = revenue - cogs;
+    const profit = grossProfit - operatingExpenses;
+
+    // Backward-compatible fields
+    const grossRevenue = revenuePreDiscount; // pre-discount, pre-tax subtotal
+    const totalTax = Number(taxSum || 0);
+    const netRevenue = revenue; // after discounts, before tax
+    const totalExpenses = operatingExpenses;
+
+    res.json({
+      // New fields
+      revenue,
+      cogs,
+      grossProfit,
+      operatingExpenses,
+      profit,
+      // Legacy fields (kept for UI compatibility)
+      grossRevenue,
+      totalTax,
+      totalDiscount,
+      netRevenue,
+      totalExpenses,
+    });
   } catch (e) {
+    console.error('getProfitAndLoss error:', e);
     res.status(500).json({ error: 'Failed to compute profit & loss' });
   }
 };
