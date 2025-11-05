@@ -480,6 +480,20 @@ function ProductsContent() {
                           </th>
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400">
                             <button
+                              onClick={() => handleSort('weightGrams')}
+                              className="uppercase tracking-wider hover:text-brand-yellow flex items-center gap-1"
+                              aria-label="Sort by weight"
+                            >
+                              Weight
+                              {sortConfig.field === 'weightGrams' && (
+                                <span className="text-brand-yellow">
+                                  {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </button>
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400">
+                            <button
                               onClick={() => handleSort('stockQuantity')}
                               className="uppercase tracking-wider hover:text-brand-yellow flex items-center gap-1"
                               aria-label="Sort by stock"
@@ -522,6 +536,11 @@ function ProductsContent() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-bold text-brand-yellow">{formatCurrency(product.price)}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-300" title={product.weightGrams ? `${product.weightGrams} grams` : 'No weight set'}>
+                                  {typeof product.weightGrams === 'number' ? `${product.weightGrams} g` : (product.weightGrams ? `${product.weightGrams} g` : '-')}
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span 

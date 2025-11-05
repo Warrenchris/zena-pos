@@ -139,3 +139,93 @@ body {
     transform: scale(1) translateY(0);
   }
 }
+
+/* Dark theme overrides for react-calendar popover used in CreateProduct */
+.zena-calendar {
+  background-color: #0b0b0b !important; /* deep dark */
+  color: #e6e6e6 !important; /* light text */
+  border-radius: 0.5rem !important;
+  padding: 0.5rem !important;
+  box-shadow: 0 8px 24px rgba(2,6,23,0.6) !important;
+  border: 1px solid rgba(250,204,21,0.12) !important; /* subtle yellow tint */
+  width: auto !important;
+}
+
+.zena-calendar * {
+  box-sizing: border-box;
+}
+
+.zena-calendar .react-calendar__navigation {
+  display: flex !important;
+  gap: 0.5rem !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.zena-calendar .react-calendar__navigation button {
+  background: transparent !important;
+  color: #f3f4f6 !important;
+  border: 1px solid transparent !important;
+  padding: 0.35rem 0.5rem !important;
+  border-radius: 0.375rem !important;
+}
+
+.zena-calendar .react-calendar__navigation button:hover {
+  background: rgba(250,204,21,0.08) !important;
+  border-color: rgba(250,204,21,0.14) !important;
+}
+
+.zena-calendar .react-calendar__month-view__weekdays {
+  color: #9ca3af !important; /* muted weekdays */
+  font-size: 0.75rem !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.zena-calendar .react-calendar__tile {
+  background: transparent !important;
+  color: #e6e6e6 !important;
+  border-radius: 0.375rem !important;
+  padding: 0.35rem 0.4rem !important;
+  margin: 0 !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.875rem !important;
+}
+
+.zena-calendar .react-calendar__tile:hover {
+  background: rgba(250,204,21,0.08) !important;
+  color: #fff !important;
+}
+
+.zena-calendar .react-calendar__tile--now {
+  box-shadow: inset 0 0 0 1px rgba(250,204,21,0.18) !important;
+}
+
+.zena-calendar .react-calendar__tile--active {
+  background: #facc15 !important; /* brand yellow */
+  color: #0b0b0b !important; /* dark text on yellow */
+}
+
+.zena-calendar .react-calendar__tile--active:enabled:hover {
+  background: #facc15 !important;
+}
+
+.zena-calendar .react-calendar__month-view__days__day--neighboring-month {
+  opacity: 0.45 !important;
+}
+
+.zena-calendar .react-calendar__tile:disabled {
+  opacity: 0.35 !important;
+  cursor: not-allowed !important;
+}
+
+/* Small responsive adjustment for popover */
+@media (max-width: 640px) {
+  .zena-calendar {
+    transform: translateX(-0.25rem) !important;
+  }
+}

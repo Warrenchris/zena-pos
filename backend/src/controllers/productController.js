@@ -122,7 +122,8 @@ exports.createProduct = async (req, res) => {
       stockQuantity,
       reorderPoint,
       CategoryId,
-      expirationDate
+      expirationDate,
+      weightGrams
     } = req.body;
 
     const product = await Product.create({
@@ -136,6 +137,7 @@ exports.createProduct = async (req, res) => {
       reorderPoint,
       CategoryId,
       expirationDate: expirationDate || null,
+      weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
       shopId: req.user.shopId
     });
 
@@ -179,7 +181,9 @@ exports.updateProduct = async (req, res) => {
       cost,
       stockQuantity,
       reorderPoint,
-      CategoryId
+      CategoryId,
+      expirationDate,
+      weightGrams
     } = req.body;
 
     await product.update({
@@ -192,7 +196,8 @@ exports.updateProduct = async (req, res) => {
       stockQuantity,
       reorderPoint,
       CategoryId,
-      expirationDate: expirationDate || null
+      expirationDate: expirationDate || null,
+      weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : product.weightGrams)
     });
 
     const updatedProduct = await Product.findOne({

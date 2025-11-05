@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { categoriesAPI, productsAPI } from '../services/api'
 import { useToast } from '../components/Toast'
-import { 
+import {
   PhotoIcon,
   ArrowLeftIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
+import Calendar from 'react-calendar'
+import { format, parseISO } from 'date-fns'
+import 'react-calendar/dist/Calendar.css'
 
 const initialForm = {
   name: '',
@@ -20,6 +23,7 @@ const initialForm = {
   reorderPoint: '10',
   CategoryId: '',
   expirationDate: 'never',
+  weightGrams: ''
 }
 
 export default function CreateProduct() {
@@ -31,6 +35,8 @@ export default function CreateProduct() {
   const [error, setError] = useState(null)
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState('')
+  const [showCalendar, setShowCalendar] = useState(false)
+  const calendarRef = useRef(null)
 
   useEffect(() => {
     let mounted = true
@@ -72,6 +78,17 @@ export default function CreateProduct() {
     setForm((f) => ({ ...f, [name]: value }))
   }
 
+  // click outside to close calendar
+  useEffect(() => {
+    function handleClick(e) {
+      if (calendarRef.current && !calendarRef.current.contains(e.target)) {
+        setShowCalendar(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
   const onImageChange = (e) => {
     const file = e.target.files?.[0]
     setImageFile(file || null)
@@ -103,6 +120,7 @@ export default function CreateProduct() {
         reorderPoint: parseInt(form.reorderPoint, 10),
         CategoryId: parseInt(form.CategoryId, 10),
         ...(form.expirationDate && form.expirationDate !== 'never' ? { expirationDate: form.expirationDate } : {}),
+        ...(form.weightGrams !== '' ? { weightGrams: parseInt(form.weightGrams, 10) } : {})
       }
 
       await productsAPI.create(payload)
@@ -164,6 +182,10 @@ export default function CreateProduct() {
               <label className="block text-xs text-gray-400 mb-1">Cost</label>
               <input name="cost" type="number" step="0.01" value={form.cost} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
             </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Weight (grams)</label>
+            <input name="weightGrams" type="number" min="0" step="1" value={form.weightGrams} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" placeholder="e.g. 750" />
+          </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Stock Quantity</label>
               <input name="stockQuantity" type="number" value={form.stockQuantity} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
@@ -174,26 +196,64 @@ export default function CreateProduct() {
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Expiration Date</label>
-              <div className="flex gap-2">
-                <select
-                  value={form.expirationDate === 'never' ? 'never' : 'date'}
-                  onChange={(e) => {
-                    const mode = e.target.value
-                    setForm((f) => ({ ...f, expirationDate: mode === 'never' ? 'never' : '' }))
-                  }}
-                  className="px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow"
-                >
-                  <option value="never">Never</option>
-                  <option value="date">Set date…</option>
-                </select>
-                <input
-                  type="date"
-                  name="expirationDate"
-                  value={form.expirationDate === 'never' ? '' : form.expirationDate}
-                  onChange={onChange}
-                  disabled={form.expirationDate === 'never'}
-                  className="flex-1 px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow disabled:opacity-50"
-                />
+              <div className="relative" ref={calendarRef}>
+                <div className="flex gap-2">
+                  <select
+                    value={form.expirationDate === 'never' ? 'never' : 'date'}
+                    onChange={(e) => {
+                      const mode = e.target.value
+                      setForm((f) => ({ ...f, expirationDate: mode === 'never' ? 'never' : '' }))
+                      if (mode === 'never') setShowCalendar(false)
+                    }}
+                    className="px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow"
+                  >
+                    <option value="never">Never</option>
+                    <option value="date">Set date…</option>
+                  </select>
+
+                  {/* Read-only input showing dd/mm/yyyy; open calendar on focus/click */}
+                  <input
+                    type="text"
+                    readOnly
+                    name="expirationDate"
+                    value={
+                      form.expirationDate === 'never' || !form.expirationDate
+                        ? ''
+                        : (() => {
+                            try {
+                              return format(parseISO(form.expirationDate), 'dd/MM/yyyy')
+                            } catch (err) {
+                              return form.expirationDate
+                            }
+                          })()
+                    }
+                    onClick={() => {
+                      if (form.expirationDate !== 'never') setShowCalendar((s) => !s)
+                    }}
+                    onFocus={() => {
+                      if (form.expirationDate !== 'never') setShowCalendar(true)
+                    }}
+                    placeholder="dd/mm/yyyy"
+                    className="flex-1 px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow disabled:opacity-50 cursor-pointer"
+                  />
+                </div>
+
+                {/* Calendar popover */}
+                {showCalendar && form.expirationDate !== 'never' && (
+                  <div className="absolute z-30 mt-2">
+                    <Calendar
+                      onChange={(date) => {
+                        if (!date) return
+                        // store as ISO yyyy-MM-dd which backend typically expects
+                        const iso = date.toISOString().split('T')[0]
+                        setForm((f) => ({ ...f, expirationDate: iso }))
+                        setShowCalendar(false)
+                      }}
+                      value={form.expirationDate ? parseISO(form.expirationDate) : null}
+                      className="zena-calendar"
+                    />
+                  </div>
+                )}
               </div>
               <p className="mt-1 text-xs text-gray-500">Default is "Never"; choose a date to enable.</p>
             </div>

@@ -57,6 +57,11 @@ const validateProduct = [
     .optional({ nullable: true })
     .isISO8601()
     .withMessage('Invalid expiration date')
+  ,
+  body('weightGrams')
+    .optional({ nullable: true })
+    .isInt({ min: 0 })
+    .withMessage('Weight (grams) must be a non-negative integer')
 ];
 
 const validateStockUpdate = [

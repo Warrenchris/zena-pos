@@ -34,6 +34,10 @@ const Product = sequelize.define('Product', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
   },
+  weightGrams: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
   stockQuantity: {
     type: DataTypes.INTEGER,
     allowNull: false,
