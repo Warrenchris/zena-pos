@@ -37,6 +37,8 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
               fill={color}
               fillOpacity={0.2}
               strokeWidth={2}
+              dot={{ r: 2 }}
+              activeDot={{ r: 4 }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -68,7 +70,10 @@ const StatsGrid = () => {
             value: format(orderStats?.totalRevenue || 0),
             percentage: orderStats?.revenuePercentageChange || 0,
             trend: 'Compared to last month',
-            data: (orderStats?.orderData || []).map(h => ({ value: h?.revenue || 0 })),
+            data: (orderStats?.orderData || []).map(h => ({
+              name: h.date,
+              value: parseFloat(h?.revenue || 0)
+            })),
             color: '#4F46E5'
           },
           {
@@ -76,7 +81,10 @@ const StatsGrid = () => {
             value: (orderStats?.totalOrders || 0).toLocaleString(),
             percentage: orderStats?.orderPercentageChange || 0,
             trend: 'Compared to last month',
-            data: (orderStats?.orderData || []).map(h => ({ value: h?.orders || 0 })),
+            data: (orderStats?.orderData || []).map(h => ({ 
+              name: h.date,
+              value: parseInt(h?.count || 0)
+            })),
             color: '#10B981'
           },
           {
@@ -84,7 +92,10 @@ const StatsGrid = () => {
             value: (visitorStats?.totalVisitors || 0).toLocaleString(),
             percentage: visitorStats?.percentageChange || 0,
             trend: 'Compared to last month',
-            data: (visitorStats?.visitorData || []).map(h => ({ value: h?.visitors || 0 })),
+            data: (visitorStats?.visitorData || []).map(h => ({
+              name: h.date,
+              value: parseInt(h?.visitors || 0)
+            })),
             color: '#F59E0B'
           },
           {

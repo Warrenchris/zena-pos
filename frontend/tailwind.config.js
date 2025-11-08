@@ -3,6 +3,11 @@ module.exports = {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    // Ensure all component files are scanned
+    "./src/**/*.jsx",
+    "./src/**/*.tsx",
+    "./src/**/*.js",
+    "./src/**/*.ts",
   ],
   darkMode: 'class',
   theme: {

@@ -1,0 +1,21 @@
+# Frontend Docker ignore
+
+node_modules/
+npm-debug.log
+.env
+.env.local
+.env.*.local
+dist/
+build/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+coverage/
+__tests__/
+*.test.js
+*.test.tsx
+*.spec.js
+*.spec.tsx
+

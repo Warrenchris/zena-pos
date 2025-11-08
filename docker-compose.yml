@@ -1,0 +1,97 @@
+services:
+  # MySQL Database
+  # Note: If you already have MySQL running, you can comment this out
+  # and update backend/.env to use DB_HOST=host.docker.internal
+  mysql:
+    image: mysql:8
+    container_name: zana-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-zana_pos}
+      MYSQL_USER: ${DB_USER:-root}
+      MYSQL_PASSWORD: ${DB_PASS:-}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - zana-network
+
+  # Backend Service (Node.js/Express)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zana-backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override DB_HOST to use service name in Docker network
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      # Override AI_SERVICE_URL to use service name
+      - AI_SERVICE_URL=http://ai_service:8000
+    restart: unless-stopped
+    networks:
+      - zana-network
+
+  # Frontend Service (React/Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: zana-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:3000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - zana-network
+
+  # AI Service (Python/FastAPI)
+  ai_service:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: zana-ai-service
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai_service:/app
+    env_file:
+      - ./ai_service/.env
+    environment:
+      # Use RS256 public key verification (backend signs with private key)
+      - JWT_ALGORITHM=RS256
+      - JWT_PUBLIC_KEY_PATH=/app/jwt_public_key.pem
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - zana-network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  zana-network:
+    driver: bridge
+

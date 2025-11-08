@@ -1,0 +1,71 @@
+# Docker ignore file for root level
+
+# Node modules
+**/node_modules/
+node_modules/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.venv/
+**/venv/
+**/env/
+**/.env.local
+
+# Logs
+**/logs/
+**/*.log
+*.log
+
+# Database
+**/database.sqlite
+**/*.sqlite
+**/*.db
+
+# IDE
+**/.vscode/
+**/.idea/
+**/*.swp
+**/*.swo
+**/.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Environment files (should be mounted, not copied)
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+**/dist/
+**/build/
+**/.next/
+
+# Test files
+**/__tests__/
+**/*.test.js
+**/*.test.ts
+**/*.spec.js
+**/*.spec.ts
+
+# Coverage
+**/coverage/
+
+# Temporary files
+**/tmp/
+**/temp/
+*.tmp
+

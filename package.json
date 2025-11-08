@@ -1,0 +1,40 @@
+{
+  "name": "zana-platform",
+  "version": "1.0.0",
+  "description": "Zana POS, ERM, and CRM Platform - Unified Development Scripts",
+  "private": true,
+  "scripts": {
+    "dev:all": "docker-compose up --build -d",
+    "dev:up": "docker-compose up --build -d",
+    "dev:down": "docker-compose down",
+    "dev:stop": "docker-compose stop",
+    "dev:restart": "docker-compose restart",
+    "dev:logs": "docker-compose logs -f",
+    "dev:ps": "docker-compose ps",
+    "dev:build": "docker-compose build",
+    "dev:clean": "docker-compose down -v --rmi all",
+    "backend:logs": "docker-compose logs -f backend",
+    "frontend:logs": "docker-compose logs -f frontend",
+    "ai:logs": "docker-compose logs -f ai_service",
+    "mysql:logs": "docker-compose logs -f mysql",
+    "backend:shell": "docker-compose exec backend sh",
+    "frontend:shell": "docker-compose exec frontend sh",
+    "ai:shell": "docker-compose exec ai_service bash",
+    "install:all": "npm run install:backend && npm run install:frontend && npm run install:ai",
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "install:ai": "cd ai_service && poetry install",
+    "health": "node -e \"const http = require('http'); ['http://localhost:3000/api/system-health', 'http://localhost:5173', 'http://localhost:8000/'].forEach(url => { http.get(url, (r) => console.log(url + ':', r.statusCode === 200 ? 'OK' : r.statusCode)).on('error', () => console.log(url + ': DOWN')); });\""
+  },
+  "keywords": [
+    "zana",
+    "pos",
+    "erp",
+    "crm",
+    "docker",
+    "development"
+  ],
+  "author": "",
+  "license": "ISC"
+}
+

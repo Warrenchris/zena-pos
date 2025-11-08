@@ -1,0 +1,19 @@
+# docker-compose.override.yml
+# Copy this file to docker-compose.override.yml if you want to use an existing MySQL container
+# This file is automatically loaded by docker-compose and will override the base configuration
+
+version: '3.8'
+
+services:
+  # Comment out or remove mysql service to use existing container
+  # mysql:
+  #   profiles: ["disabled"]
+
+  backend:
+    environment:
+      # Use host.docker.internal to connect to MySQL running on host
+      - DB_HOST=host.docker.internal
+      - DB_PORT=3307
+      # Or use the existing container name if it's on the same network
+      # - DB_HOST=zana-mysql
+

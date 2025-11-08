@@ -15,14 +15,16 @@ import {
   UserGroupIcon,
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
+import { lazy, Suspense } from 'react';
 import BusinessInsights from '../components/financial/BusinessInsights';
 import StatsGrid from '../components/dashboard/StatsGrid';
-import RevenueChart from '../components/dashboard/RevenueChart';
-import VisitorGraph from '../components/dashboard/VisitorGraph';
-import OrderTracking from '../components/dashboard/OrderTracking';
-import SellingPlatform from '../components/dashboard/SellingPlatform';
-import LocationAudience from '../components/dashboard/LocationAudience';
-import TopSellingProducts from '../components/dashboard/TopSellingProducts';
+// Lazy load chart components to reduce initial bundle size
+const RevenueChart = lazy(() => import('../components/dashboard/RevenueChart'));
+const VisitorGraph = lazy(() => import('../components/dashboard/VisitorGraph'));
+const OrderTracking = lazy(() => import('../components/dashboard/OrderTracking'));
+const SellingPlatform = lazy(() => import('../components/dashboard/SellingPlatform'));
+const LocationAudience = lazy(() => import('../components/dashboard/LocationAudience'));
+const TopSellingProducts = lazy(() => import('../components/dashboard/TopSellingProducts'));
 import CashierDashboard from './CashierDashboard';
 import SaleDetailModal from '../components/SaleDetailModal';
 import { formatCurrency, formatDate } from '../utils/formatters';
@@ -364,23 +366,35 @@ export default function Dashboard() {
 
       {/* Revenue and Visitors Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RevenueChart />
-        <VisitorGraph />
+        <Suspense fallback={<div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6 h-[400px] flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-zana-yellow" /></div>}>
+          <RevenueChart />
+        </Suspense>
+        <Suspense fallback={<div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6 h-[400px] flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-zana-yellow" /></div>}>
+          <VisitorGraph />
+        </Suspense>
       </div>
 
       {/* Orders and Platform Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <OrderTracking />
-        <SellingPlatform />
+        <Suspense fallback={<div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6 h-[400px] flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-zana-yellow" /></div>}>
+          <OrderTracking />
+        </Suspense>
+        <Suspense fallback={<div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6 h-[400px] flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-zana-yellow" /></div>}>
+          <SellingPlatform />
+        </Suspense>
       </div>
 
       {/* Location and Products Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
-          <LocationAudience />
+          <Suspense fallback={<div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6 h-[400px] flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-zana-yellow" /></div>}>
+            <LocationAudience />
+          </Suspense>
         </div>
         <div className="lg:col-span-2">
-          <TopSellingProducts />
+          <Suspense fallback={<div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6 h-[400px] flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-zana-yellow" /></div>}>
+            <TopSellingProducts />
+          </Suspense>
         </div>
       </div>
 

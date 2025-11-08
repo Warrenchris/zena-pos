@@ -94,19 +94,62 @@ const analyticsController = {
       const now = new Date();
       const startDate = calculateStartDate(now, period);
 
-      const orders = await Sale.findAll({
+      // Get raw data first
+      const sales = await Sale.findAll({
         where: {
           shopId,
           createdAt: { [Op.between]: [startDate, now] }
         },
-        attributes: [
-          [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-          [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'revenue']
-        ],
-        group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
+        attributes: ['createdAt', 'total'],
+        order: [['createdAt', 'ASC']],
         raw: true
       });
+
+      // Group data by hour if period is within 24 hours
+      const isWithin24Hours = (now - startDate) <= 24 * 60 * 60 * 1000;
+      
+      let orders = [];
+      if (isWithin24Hours) {
+        // Group by hour for last 24 hours
+        const byHour = {};
+        sales.forEach(sale => {
+          const hour = new Date(sale.createdAt).getHours();
+          if (!byHour[hour]) {
+            byHour[hour] = { count: 0, revenue: 0 };
+          }
+          byHour[hour].count++;
+          byHour[hour].revenue += parseFloat(sale.total || 0);
+        });
+
+        // Fill in missing hours
+        const startHour = startDate.getHours();
+        for (let h = 0; h < 24; h++) {
+          const hour = (startHour + h) % 24;
+          orders.push({
+            date: `${hour}:00`,
+            count: byHour[hour]?.count || 0,
+            revenue: byHour[hour]?.revenue || 0
+          });
+        }
+      } else {
+        // Group by date for longer periods
+        const byDate = {};
+        sales.forEach(sale => {
+          const date = new Date(sale.createdAt).toISOString().split('T')[0];
+          if (!byDate[date]) {
+            byDate[date] = { count: 0, revenue: 0 };
+          }
+          byDate[date].count++;
+          byDate[date].revenue += parseFloat(sale.total || 0);
+        });
+
+        // Convert to array and sort by date
+        orders = Object.entries(byDate).map(([date, data]) => ({
+          date,
+          count: data.count,
+          revenue: data.revenue
+        })).sort((a, b) => a.date.localeCompare(b.date));
+      }
 
       const currentPeriodOrders = orders.reduce((sum, day) => sum + parseInt(day.count), 0);
       const currentPeriodRevenue = orders.reduce((sum, day) => sum + parseFloat(day.revenue || 0), 0);

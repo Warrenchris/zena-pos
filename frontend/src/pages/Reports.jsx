@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useCallback, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { reportsAPI } from '../services/api'
 import useCurrency from '../hooks/useCurrency'
@@ -10,6 +10,7 @@ import { fetchCategories } from '../store/slices/categoriesSlice'
 import { employeesAPI } from '../services/api'
 import aiAPI from '../services/ai.service'
 import analyticsService from '../services/analytics.service'
+import DateRangePicker from '../components/DateRangePicker'
 
 export default function Reports() {
   const { format: formatCurrency } = useCurrency();
@@ -19,6 +20,7 @@ export default function Reports() {
   const [tab, setTab] = useState('sales')
   const [range, setRange] = useState('monthly')
   const [quick, setQuick] = useState('month') // today | week | month | custom
+  const [isWithin24Hours, setIsWithin24Hours] = useState(false)
   // Set default start date to first day of current month
   const [startDate, setStartDate] = useState(() => {
     const date = new Date()
@@ -62,7 +64,8 @@ export default function Reports() {
       const today = toISO(now)
       setStartDate(today)
       setEndDate(today)
-      setRange('daily')
+      setRange('hourly')
+      setIsWithin24Hours(true)
     } else if (quick === 'week') {
       const day = now.getDay() || 7
       const start = new Date(now)
@@ -70,12 +73,14 @@ export default function Reports() {
       setStartDate(toISO(start))
       setEndDate(toISO(now))
       setRange('daily')
+      setIsWithin24Hours(false)
     } else if (quick === 'month') {
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
       setStartDate(toISO(firstDay))
       setEndDate(toISO(now))
       // Use daily granularity within the month so trend has enough points
       setRange('daily')
+      setIsWithin24Hours(false)
     }
   }, [quick])
 
@@ -84,8 +89,15 @@ export default function Reports() {
       console.log('Loading reports with user:', user)
       setLoading(true)
       setError(null)
+      
+      // Check if dates are within 24 hours
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const diffHours = (end - start) / (1000 * 60 * 60);
+      const useHourly = diffHours <= 24;
+      
       const baseParams = {
-        range,
+        range: useHourly ? 'hourly' : range,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         shopId: user?.shopId || user?.shop?.id,
@@ -238,7 +250,7 @@ export default function Reports() {
   }, [tab, charts.salesTrend, charts.paymentBreakdown])
 
   // Ensure at least two points so lines render even with a single data point
-  const ensureTwoPoints = (rows, valueKeys = [], periodKey = 'period') => {
+  const ensureTwoPoints = (rows, _, periodKey = 'period') => {
     const dataRows = Array.isArray(rows) ? rows.slice() : []
     if (dataRows.length >= 2) return dataRows
     if (dataRows.length === 1) {
@@ -246,15 +258,34 @@ export default function Reports() {
       const label = only?.[periodKey]
       let prevLabel = 'prev'
       if (typeof label === 'string') {
-        const m = label.match(/^(\d{4})-(\d{1,2})/)
-        if (m) {
-          const y = Number(m[1])
-          const mo = Number(m[2])
-          const d = new Date(y, mo - 2, 1)
-          const pm = String(d.getMonth() + 1).padStart(2, '0')
-          prevLabel = `${d.getFullYear()}-${pm}`
+        if (isWithin24Hours) {
+          // For hourly data, support labels which may already be "HH:00".
+          if (/^\d{2}:\d{2}$/.test(label)) {
+            const h = parseInt(label.split(':')[0], 10)
+            const ph = (h + 23) % 24
+            prevLabel = `${String(ph).padStart(2, '0')}:00`
+          } else {
+            // Fallback to date arithmetic when label is a full date string
+            const date = new Date(label);
+            if (!isNaN(date)) {
+              date.setHours(date.getHours() - 1);
+              // Keep same short format as backend for hourly
+              prevLabel = `${String(date.getHours()).padStart(2, '0')}:00`
+            } else {
+              prevLabel = `${label} (prev)`
+            }
+          }
         } else {
-          prevLabel = `${label} (prev)`
+          const m = label.match(/^(\d{4})-(\d{1,2})/)
+          if (m) {
+            const y = Number(m[1])
+            const mo = Number(m[2])
+            const d = new Date(y, mo - 2, 1)
+            const pm = String(d.getMonth() + 1).padStart(2, '0')
+            prevLabel = `${d.getFullYear()}-${pm}`
+          } else {
+            prevLabel = `${label} (prev)`
+          }
         }
       }
       const clone = { ...only, [periodKey]: prevLabel }
@@ -263,8 +294,28 @@ export default function Reports() {
     return dataRows
   }
 
-  const salesTrendData = useMemo(() => ensureTwoPoints(charts.salesTrend, ['revenue','sales']), [charts.salesTrend])
-  const revVsExpData = useMemo(() => ensureTwoPoints(revVsExp, ['revenue','expenses']), [revVsExp])
+  const ensurePointsMemoized = useCallback(ensureTwoPoints, [isWithin24Hours]);
+  
+  const salesTrendData = useMemo(() => 
+    ensurePointsMemoized(charts.salesTrend, ['revenue','sales']), 
+    [charts.salesTrend, ensurePointsMemoized]
+  );
+  
+  const revVsExpData = useMemo(() => 
+    ensurePointsMemoized(revVsExp, ['revenue','expenses']), 
+    [revVsExp, ensurePointsMemoized]
+  );
+
+  // Check if dates are within 24 hours whenever they change
+  useEffect(() => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffHours = (end - start) / (1000 * 60 * 60);
+    setIsWithin24Hours(diffHours <= 24);
+    if (diffHours <= 24 && range !== 'hourly') {
+      setRange('hourly');
+    }
+  }, [startDate, endDate, range]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -349,7 +400,7 @@ export default function Reports() {
         y += 16
         const rows = (charts.salesTrend||[]).slice(0,20)
         rows.forEach(r => {
-          doc.text(`${r.period}  sales:${r.sales||0}  revenue:${r.revenue||0}`, 40, y)
+          range: 'hourly',
           y += 14
         })
       }
@@ -381,10 +432,17 @@ export default function Reports() {
             <QuickFilter label="Month" value="month" current={quick} setCurrent={setQuick} />
             <QuickFilter label="Custom" value="custom" current={quick} setCurrent={setQuick} />
           </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <input type="date" value={startDate} onChange={(e)=>{ setStartDate(e.target.value); setQuick('custom') }} className="h-9 rounded-lg border border-yellow-500/30 px-3 bg-black/60 text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#FFD600]/50" />
-            <span className="text-gray-400">—</span>
-            <input type="date" value={endDate} onChange={(e)=>{ setEndDate(e.target.value); setQuick('custom') }} className="h-9 rounded-lg border border-yellow-500/30 px-3 bg-black/60 text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#FFD600]/50" />
+          <div className="flex items-center gap-2">
+            <DateRangePicker 
+              startDate={new Date(startDate)} 
+              endDate={new Date(endDate)} 
+              onChange={([start, end]) => {
+                setStartDate(start.toISOString().split('T')[0]);
+                setEndDate(end.toISOString().split('T')[0]);
+                setQuick('custom');
+              }}
+              className="dark"
+            />
             <select value={cashierId} onChange={(e)=>setCashierId(e.target.value)} className="h-9 rounded-lg border border-yellow-500/30 px-3 bg-black/60 text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#FFD600]/50">
               <option value="">All Employees</option>
               {cashiers.map(c => (
@@ -459,9 +517,39 @@ export default function Reports() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                        <XAxis dataKey="period" stroke="#d1d5db" fontSize={12} tickLine={false} />
+                        <XAxis 
+                          dataKey="period" 
+                          stroke="#d1d5db" 
+                          fontSize={12} 
+                          tickLine={false}
+                          tickFormatter={(value) => {
+                            if (isWithin24Hours) {
+                              // If the backend already returns HH:00 strings, return as-is.
+                              if (typeof value === 'string' && /^\d{2}:\d{2}$/.test(value)) return value
+                              // Otherwise try to parse as date and fall back to the raw value
+                              const date = new Date(value)
+                              if (!isNaN(date)) return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                              return String(value)
+                            }
+                            return value;
+                          }}
+                        />
                         <YAxis stroke="#d1d5db" fontSize={12} tickLine={false} tickFormatter={(v)=>formatCurrency(v)} />
-                        <Tooltip contentStyle={{ background: '#0b0b0c', color: '#fff', border: '1px solid rgba(255,214,0,0.25)' }} labelStyle={{ color: '#FFD600' }} formatter={(v, n)=>[n==='revenue'?formatCurrency(v):v, n]} />
+                        <Tooltip 
+                          contentStyle={{ background: '#0b0b0c', color: '#fff', border: '1px solid rgba(255,214,0,0.25)' }} 
+                          labelStyle={{ color: '#FFD600' }} 
+                          labelFormatter={(value) => {
+                            if (isWithin24Hours) {
+                              // For hourly data, if we have HH:MM string show it directly, otherwise format parsed date
+                              if (typeof value === 'string' && /^\d{2}:\d{2}$/.test(value)) return value
+                              const date = new Date(value)
+                              if (!isNaN(date)) return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              return String(value)
+                            }
+                            return value;
+                          }}
+                          formatter={(v, n)=>[n==='revenue'?formatCurrency(v):v, n]}
+                        />
                         <Legend wrapperStyle={{ color: '#e5e7eb' }} />
                         {/* Halo layers (hidden in legend) for dark background */}
                         <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeOpacity={0.35} strokeWidth={8} dot={false} legendType="none" connectNulls />

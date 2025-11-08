@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Line } from 'react-chartjs-2';
-// Register ChartJS components
-import 'chart.js/auto';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import axios from 'axios';
 
 const FinancialDashboard = () => {
@@ -79,40 +86,65 @@ const FinancialDashboard = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-2xl font-bold mb-4">Revenue Forecast</h2>
           <div className="h-96">
-            <Line
-              data={{
-                labels: forecasts.dates,
-                datasets: [
-                  {
-                    label: 'Predicted Revenue',
-                    data: forecasts.predictions,
-                    borderColor: 'rgb(75, 192, 192)',
-                    fill: false,
-                  },
-                  {
-                    label: 'Lower Bound',
-                    data: forecasts.lower_bounds,
-                    borderColor: 'rgba(75, 192, 192, 0.2)',
-                    fill: false,
-                  },
-                  {
-                    label: 'Upper Bound',
-                    data: forecasts.upper_bounds,
-                    borderColor: 'rgba(75, 192, 192, 0.2)',
-                    fill: '-1',
-                  },
-                ],
-              }}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                  },
-                },
-              }}
-            />
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={forecasts.dates.map((date: string, index: number) => ({
+                  date: new Date(date).toLocaleDateString(),
+                  predicted: forecasts.predictions[index],
+                  lowerBound: forecasts.lower_bounds[index],
+                  upperBound: forecasts.upper_bounds[index],
+                }))}
+                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#6b7280"
+                  fontSize={12}
+                  tickLine={false}
+                />
+                <YAxis
+                  stroke="#6b7280"
+                  fontSize={12}
+                  tickLine={false}
+                  tickFormatter={(value) => 
+                    value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+                  }
+                />
+                <Tooltip
+                  formatter={(value: number) => 
+                    value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+                  }
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="predicted"
+                  stroke="#4ade80"
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  name="Predicted Revenue"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="lowerBound"
+                  stroke="#93c5fd"
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  dot={false}
+                  name="Lower Bound"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="upperBound"
+                  stroke="#93c5fd"
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  dot={false}
+                  name="Upper Bound"
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}

@@ -1,0 +1,13 @@
+# AI Service Requirements
+# Generated from pyproject.toml for Docker compatibility
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+pandas>=2.0.3
+numpy>=1.25.1
+scikit-learn>=1.3.0
+python-jose[cryptography]>=3.3.0
+prophet>=1.1.4
+python-dotenv>=1.0.0
+pydantic>=2.1.1
+sqlalchemy>=2.0.19
+

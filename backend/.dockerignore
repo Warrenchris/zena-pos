@@ -1,0 +1,23 @@
+# Backend Docker ignore
+
+node_modules/
+npm-debug.log
+.env
+.env.local
+.env.*.local
+logs/
+*.log
+database.sqlite
+*.db
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+coverage/
+__tests__/
+*.test.js
+*.spec.js
+dist/
+build/
+

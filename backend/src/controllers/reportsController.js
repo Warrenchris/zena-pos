@@ -13,16 +13,25 @@ exports.getSalesSummary = async (req, res) => {
     const normalizeRange = (s, e) => {
       const start = s ? new Date(s) : null;
       const end = e ? new Date(e) : null;
-      if (start) start.setHours(0, 0, 0, 0);
-      if (end) end.setHours(23, 59, 59, 999);
+      // Don't modify hours for hourly range
+      if (range !== 'hourly') {
+        if (start) start.setHours(0, 0, 0, 0);
+        if (end) end.setHours(23, 59, 59, 999);
+      }
       return [start, end];
     };
-    const fmt = range === 'monthly' ? '%Y-%m' : '%Y-%m-%d';
+    
+    // Check if date range is within 24 hours
+    const start = new Date(startDate);
+    const end = new Date(endDate || new Date());
+    const isWithin24Hours = (end - start) <= 24 * 60 * 60 * 1000;
+    const actualRange = isWithin24Hours ? 'hourly' : range;
+    const fmt = actualRange === 'monthly' ? '%Y-%m' : 
+               actualRange === 'hourly' ? '%H:00' : '%Y-%m-%d';
     
     // First, let's find the date range of existing sales
     const shopId = req.user.shopId;
     const salesRange = await Sale.findOne({
-      where: { shopId },
       attributes: [
         [sequelize.fn('MIN', sequelize.col('createdAt')), 'minDate'],
         [sequelize.fn('MAX', sequelize.col('createdAt')), 'maxDate']
@@ -45,21 +54,112 @@ exports.getSalesSummary = async (req, res) => {
       where.createdAt = { [Op.between]: [ s, e ] };
     }
 
-    // First, let's log the total count of sales for debugging
-    const totalSales = await Sale.count({ where });
-    console.log(`Total sales for shop ${req.user.shopId}:`, totalSales);
-    
-    // Get total stats
-    const [totalStats, salesTrend, activeCustomers] = await Promise.all([
-      Sale.findOne({
-        where,
-        attributes: [
-          [sequelize.fn('COUNT', sequelize.col('id')), 'totalSales'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'totalRevenue'],
-          [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('customerId'))), 'activeCustomers']
-        ]
-      }),
-      Sale.findAll({
+    // If caller requested hourly granularity for a single day (e.g. "today"),
+    // ensure we expand the bounds to cover the full day so hourly aggregation
+    // returns all hours for that day instead of an empty/zero-filled set.
+    if (actualRange === 'hourly' && startDate) {
+      try {
+        const s = new Date(startDate);
+        const e = new Date(endDate || startDate);
+        s.setHours(0, 0, 0, 0);
+        e.setHours(23, 59, 59, 999);
+        where.createdAt = { [Op.between]: [s, e] };
+      } catch (err) {
+        // ignore parsing errors and keep previous where
+      }
+    }
+
+    console.log('getSalesSummary: actualRange=', actualRange, ' where=', JSON.stringify(where));
+
+    // Get total stats first and compute salesTrend separately so we can
+    // isolate and log errors for hourly aggregation without failing the whole
+    // endpoint. This also makes debugging the 500 for single-day hourly easier.
+    const totalStats = await Sale.findOne({
+      where,
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('id')), 'totalSales'],
+        [sequelize.fn('SUM', sequelize.col('total')), 'totalRevenue'],
+        [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('customerId'))), 'activeCustomers']
+      ]
+    });
+
+    const activeCustomers = await Sale.count({ where, distinct: true, col: 'customerId' });
+
+    let salesTrend = [];
+    if (actualRange === 'hourly') {
+      try {
+        const results = await Sale.findAll({
+          where,
+          attributes: [
+            [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), fmt), 'hour'],
+            [sequelize.fn('COUNT', sequelize.col('id')), 'sales'],
+            [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+            [sequelize.fn('SUM', sequelize.col('tax')), 'tax'],
+            [sequelize.fn('SUM', sequelize.col('discount')), 'discount'],
+          ],
+          group: [sequelize.fn('HOUR', sequelize.col('createdAt'))],
+          order: [[sequelize.fn('HOUR', sequelize.col('createdAt')), 'ASC']],
+          raw: true
+        });
+
+        // Fill in missing hours with zero values. Use bounds from where.createdAt if available
+        const hourlyData = {};
+        let fillStart = start;
+        let fillEnd = end;
+        try {
+          if (where && where.createdAt && Array.isArray(where.createdAt[Op.between])) {
+            fillStart = where.createdAt[Op.between][0];
+            fillEnd = where.createdAt[Op.between][1];
+          }
+        } catch (err) {
+          // ignore and fallback to original start/end
+        }
+        const startHour = (fillStart && typeof fillStart.getHours === 'function') ? fillStart.getHours() : 0;
+        const endHour = (fillEnd && typeof fillEnd.getHours === 'function') ? fillEnd.getHours() : 23;
+
+        // Initialize all hours with zero values
+        for (let h = 0; h <= 23; h++) {
+          hourlyData[h] = {
+            period: `${h.toString().padStart(2, '0')}:00`,
+            sales: 0,
+            revenue: 0,
+            tax: 0,
+            discount: 0
+          };
+        }
+
+        // Overlay actual values
+        results.forEach(row => {
+          // row.hour might be '08:00' or '08' depending on dialect; parseInt handles both
+          const hour = parseInt(row.hour);
+          if (Number.isNaN(hour)) return;
+          hourlyData[hour] = {
+            period: `${hour.toString().padStart(2, '0')}:00`,
+            sales: parseInt(row.sales) || 0,
+            revenue: parseFloat(row.revenue) || 0,
+            tax: parseFloat(row.tax) || 0,
+            discount: parseFloat(row.discount) || 0
+          };
+        });
+
+        salesTrend = Object.values(hourlyData);
+      } catch (err) {
+        console.error('hourly aggregation failed:', err?.message || err);
+        console.error(err?.stack || err);
+        // Fallback: return a 24-hour zero-filled series so frontend still works
+        for (let h = 0; h <= 23; h++) {
+          salesTrend.push({
+            period: `${h.toString().padStart(2, '0')}:00`,
+            sales: 0,
+            revenue: 0,
+            tax: 0,
+            discount: 0
+          });
+        }
+      }
+    } else {
+      // daily/monthly
+      salesTrend = await Sale.findAll({
         where,
         attributes: [
           [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), fmt), 'period'],
@@ -70,13 +170,8 @@ exports.getSalesSummary = async (req, res) => {
         ],
         group: [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), fmt)],
         order: [[sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), fmt), 'ASC']],
-      }),
-      Sale.count({
-        where,
-        distinct: true,
-        col: 'customerId'
-      })
-    ]);
+      });
+    }
 
     // Additional analytics aligned to the same date range
     let paymentRows = []
@@ -123,13 +218,16 @@ exports.getSalesSummary = async (req, res) => {
         activeCustomers: activeCustomers || 0,
         topProduct: productRows?.[0]?.Product?.name || '-'
       },
-      salesTrend: salesTrend.map(row => ({
-        period: row.getDataValue('period'),
-        sales: Number(row.getDataValue('sales') || 0),
-        revenue: Number(row.getDataValue('revenue') || 0),
-        tax: Number(row.getDataValue('tax') || 0),
-        discount: Number(row.getDataValue('discount') || 0)
-      })),
+      salesTrend: (salesTrend || []).map(row => {
+        const get = (r, k) => (r && typeof r.getDataValue === 'function' ? r.getDataValue(k) : r && r[k]);
+        return {
+          period: get(row, 'period') || get(row, 'hour') || get(row, 'period'),
+          sales: Number(get(row, 'sales') || 0),
+          revenue: Number(get(row, 'revenue') || 0),
+          tax: Number(get(row, 'tax') || 0),
+          discount: Number(get(row, 'discount') || 0)
+        };
+      }),
       paymentBreakdown: paymentRows.map(r => ({
         method: r.getDataValue('paymentMethod') || 'Cash',
         value: Number(r.getDataValue('count') || 0),
@@ -147,7 +245,10 @@ exports.getSalesSummary = async (req, res) => {
     console.log('Response:', JSON.stringify(response, null, 2));
     res.json(response);
   } catch (e) {
-    res.status(500).json({ error: 'Failed to compute sales summary' });
+    // Log detailed error for debugging (temporarily include stack in response)
+    console.error('getSalesSummary error:', e?.message || e);
+    console.error(e?.stack || e);
+    res.status(500).json({ error: 'Failed to compute sales summary', message: e?.message, stack: e?.stack });
   }
 };
 
