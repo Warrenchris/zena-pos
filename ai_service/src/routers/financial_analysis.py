@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
+from ..middleware.auth import get_current_user
 
 router = APIRouter()
 
@@ -23,7 +24,10 @@ class FinancialData(BaseModel):
     date: datetime
 
 @router.post("/analyze", response_model=FinancialMetrics)
-async def analyze_financials(data: FinancialData):
+async def analyze_financials(
+    data: FinancialData,
+    user: dict = Depends(get_current_user)
+):
     """
     Analyze financial data and return key financial metrics
     """

@@ -3,8 +3,23 @@ const app = require('../../src/app')
 
 // Helper to craft tokens quickly
 function tokenFor(user) {
-  const jwt = require('jsonwebtoken')
-  return 'Bearer ' + jwt.sign(user, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' })
+  const jwt = require('jsonwebtoken');
+  const fs = require('fs');
+  const path = require('path');
+
+  const privateKey = fs.readFileSync(
+    process.env.JWT_PRIVATE_KEY_PATH || path.join(__dirname, '../../jwt_private_key.pem'),
+    'utf8'
+  );
+
+  return 'Bearer ' + jwt.sign(
+    user,
+    privateKey,
+    { 
+      algorithm: 'RS256',
+      expiresIn: '1h'
+    }
+  );
 }
 
 describe('Multi-tenant isolation', () => {

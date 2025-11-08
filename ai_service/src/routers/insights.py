@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict
 from datetime import datetime
+from ..middleware.auth import get_current_user
 
 router = APIRouter()
 
@@ -19,7 +20,10 @@ class BusinessInsight(BaseModel):
     recommendations: List[str]
 
 @router.post("/analyze", response_model=List[BusinessInsight])
-async def analyze_business(data: BusinessData):
+async def analyze_business(
+    data: BusinessData,
+    user: dict = Depends(get_current_user)
+):
     """
     Generate business insights using ML techniques
     """

@@ -16,3 +16,8 @@ docker-compose.override.yml
 
 # VS Code
 .vscode/
+
+# RSA Keys
+*.pem
+jwt_private_key.pem
+jwt_public_key.pem

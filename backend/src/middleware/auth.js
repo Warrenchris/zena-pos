@@ -1,4 +1,12 @@
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
+
+// Load public key for verification
+const publicKey = fs.readFileSync(
+  process.env.JWT_PUBLIC_KEY_PATH || path.join(__dirname, '../../jwt_public_key.pem'),
+  'utf8'
+);
 
 const auth = (req, res, next) => {
   try {
@@ -7,7 +15,7 @@ const auth = (req, res, next) => {
       return res.status(401).json({ error: 'Authorization token required.' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
     req.user = decoded;
     req.shopId = decoded.shopId;
 

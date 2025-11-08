@@ -1,7 +1,15 @@
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
+const fs = require('fs');
+const path = require('path');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
+
+// Load private key for signing
+const privateKey = fs.readFileSync(
+  process.env.JWT_PRIVATE_KEY_PATH || path.join(__dirname, '../../jwt_private_key.pem'),
+  'utf8'
+);
 const Shop = require('../models/Shop');
 const logger = require('../utils/logger');
 
@@ -44,8 +52,11 @@ exports.register = async (req, res) => {
         shopId: createdShop?.id,
         isEmployee: false
       },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      privateKey,
+      { 
+        algorithm: 'RS256',
+        expiresIn: process.env.JWT_EXPIRES_IN || '24h'
+      }
     );
 
     res.status(201).json({
@@ -114,21 +125,20 @@ exports.login = async (req, res) => {
       }
     }
 
-    if (!process.env.JWT_SECRET) {
-      logger.error('JWT_SECRET is not configured');
-      return res.status(500).json({ error: 'Authentication service not configured properly' });
-    }
-
-    const token = jwt.sign(
-      { 
-        id: user.id, 
-        role: user.role, 
-        shopId: user.shopId,
-        isEmployee: !!user.isEmployee
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
-    );
+      try {
+        const token = jwt.sign(
+          { 
+            id: user.id, 
+            role: user.role, 
+            shopId: user.shopId,
+            isEmployee: !!user.isEmployee
+          },
+          privateKey,
+          { 
+            algorithm: 'RS256',
+            expiresIn: process.env.JWT_EXPIRES_IN || '24h'
+          }
+        );
 
     res.json({
       user: {
@@ -141,6 +151,10 @@ exports.login = async (req, res) => {
       },
       token
     });
+      } catch (error) {
+        logger.error('JWT signing error:', error);
+        return res.status(500).json({ error: 'Authentication service error' });
+      }
   } catch (error) {
     logger.error('Login error:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
@@ -157,7 +171,14 @@ exports.forgotPassword = async (req, res) => {
       return res.json({ message: 'If the email exists, a reset link has been sent.' });
     }
     // Create a short-lived token (in real life email it)
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const token = jwt.sign(
+      { id: user.id },
+      privateKey,
+      { 
+        algorithm: 'RS256',
+        expiresIn: '15m'
+      }
+    );
     logger.info('Password reset token (dev only):', token);
     return res.json({ message: 'Reset instructions sent', token });
   } catch (error) {
@@ -169,7 +190,7 @@ exports.forgotPassword = async (req, res) => {
 exports.resetPassword = async (req, res) => {
   try {
     const { token, password } = req.body;
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, privateKey, { algorithms: ['RS256'] });
     const user = await User.findByPk(decoded.id);
     if (!user) return res.status(400).json({ error: 'Invalid token' });
     user.password = password;

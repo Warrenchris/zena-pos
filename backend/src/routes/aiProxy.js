@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const router = express.Router();
+const { auth } = require('../middleware/auth');
 require('dotenv').config();
 
 // Prefer explicit loopback address to avoid potential IPv6/host name resolution issues on Windows
@@ -36,6 +37,9 @@ router.get('/status', async (req, res) => {
     return res.status(502).json({ ok: false, error: 'AI health probe failed', details: err.message });
   }
 });
+
+// All AI proxy routes require authentication
+router.use(auth);
 
 // Generic forwarder for GET/POST/DELETE to AI service.
 // We avoid complex path-to-regexp patterns here by using a middleware that

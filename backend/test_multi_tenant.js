@@ -6,9 +6,17 @@
  */
 
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 
 const BASE_URL = 'http://localhost:3000/api';
+
+// Load private key for signing
+const privateKey = fs.readFileSync(
+  process.env.JWT_PRIVATE_KEY_PATH || path.join(__dirname, 'jwt_private_key.pem'),
+  'utf8'
+);
 
 // Test configuration
 const TEST_CONFIG = {

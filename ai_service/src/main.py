@@ -9,6 +9,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Health check endpoint (no authentication required)
+@app.get("/")
+async def root():
+    """Root endpoint for health checks"""
+    return {"status": "ok", "service": "Zana AI Financial Helper"}
+
+@app.get("/openapi.json")
+async def openapi():
+    """OpenAPI schema endpoint (no authentication required for health checks)"""
+    return app.openapi()
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,

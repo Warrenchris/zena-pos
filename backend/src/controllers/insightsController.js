@@ -370,11 +370,17 @@ const getInsights = async (req, res) => {
         average_transaction_value.push(s.tx > 0 ? s.revenue / s.tx : 0);
       }
 
+      // Get JWT token from request headers to forward to AI service
+      const authHeader = req.headers.authorization || req.headers.Authorization;
+      
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3500);
       const resp = await fetch(`${aiServiceUrl}/api/insights/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authHeader ? { 'Authorization': authHeader } : {})
+        },
         body: JSON.stringify({ revenue, costs, customer_count, transaction_count, average_transaction_value }),
         signal: controller.signal,
       });

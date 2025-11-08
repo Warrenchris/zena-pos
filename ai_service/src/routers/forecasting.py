@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List
 from datetime import datetime, timedelta
+from ..middleware.auth import get_current_user
 
 router = APIRouter()
 
@@ -16,7 +17,11 @@ class ForecastResult(BaseModel):
     upper_bounds: List[float]
 
 @router.post("/forecast", response_model=ForecastResult)
-async def create_forecast(data: TimeSeriesData, periods: int = 30):
+async def create_forecast(
+    data: TimeSeriesData,
+    periods: int = 30,
+    user: dict = Depends(get_current_user)
+):
     """
     Create time series forecast using Facebook Prophet
     """

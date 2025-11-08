@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const sequelize = require('../config/database');
 const RolePermission = require('./RolePermission');
 const Permission = require('./Permission');
+const permissionCache = require('../services/permissionCache');
 
 const User = sequelize.define('User', {
   id: {
@@ -58,6 +59,23 @@ const User = sequelize.define('User', {
       if (user.changed('password')) {
         user.password = await bcrypt.hash(user.password, 8);
       }
+      // Invalidate user cache if role changes
+      if (user.changed('role')) {
+        permissionCache.invalidateUserCache(user.id);
+        permissionCache.invalidateRoleCache(user.role);
+        // Also invalidate old role cache if role was changed
+        if (user.previous('role')) {
+          permissionCache.invalidateRoleCache(user.previous('role'));
+        }
+      }
+    },
+    afterUpdate: async (user) => {
+      // Invalidate user cache after update (in case role or other relevant fields changed)
+      permissionCache.invalidateUserCache(user.id);
+    },
+    afterDestroy: async (user) => {
+      // Invalidate user cache when user is deleted
+      permissionCache.invalidateUserCache(user.id);
     }
   }
 });
@@ -72,33 +90,14 @@ User.prototype.toJSON = function() {
   return values;
 };
 
-User.prototype.validatePassword = async function(password) {
-  return bcrypt.compare(password, this.password);
-};
-
-// Instance method to check permissions
+// Instance method to check permissions (uses cache)
 User.prototype.hasPermission = async function(permissionName) {
-  if (this.role === 'admin') return true;
-  
-  const rolePermission = await RolePermission.findOne({
-    include: [{
-      model: Permission,
-      where: { name: permissionName }
-    }],
-    where: { role: this.role }
-  });
-
-  return !!rolePermission;
+  return permissionCache.userHasPermission(this.id, this.role, permissionName);
 };
 
-// Instance method to get all permissions
+// Instance method to get all permissions (uses cache)
 User.prototype.getPermissions = async function() {
-  const rolePermissions = await RolePermission.findAll({
-    include: [Permission],
-    where: { role: this.role }
-  });
-
-  return rolePermissions.map(rp => rp.Permission.name);
+  return permissionCache.getUserPermissions(this.id, this.role);
 };
 
 module.exports = User;
