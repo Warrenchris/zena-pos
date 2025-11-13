@@ -23,9 +23,9 @@ const VisitorGraph = () => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-3 shadow-lg rounded-lg border">
-          <p className="font-medium text-gray-900">{label}</p>
-          <p className="text-purple-600 font-semibold">
+        <div className="rounded-[14px] border border-yellow-400/40 bg-[#0b0f1d] px-4 py-3 text-sm text-white shadow-[0_0_20px_rgba(250,204,21,0.18)]">
+          <p className="font-semibold text-yellow-200">{label}</p>
+          <p className="mt-1 font-semibold text-fuchsia-300">
             {payload[0].value.toLocaleString()} visitors
           </p>
         </div>
@@ -36,9 +36,9 @@ const VisitorGraph = () => {
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm">
-        <div className="flex justify-center items-center h-[300px]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+      <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
+        <div className="flex h-[300px] items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-fuchsia-400" />
         </div>
       </div>
     );
@@ -46,54 +46,52 @@ const VisitorGraph = () => {
 
   if (error) {
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm">
-        <div className="flex flex-col justify-center items-center h-[300px]">
-          <p className="text-red-500 mb-2">Error loading visitor statistics</p>
-          <p className="text-gray-500 text-sm">{error}</p>
+      <div className="rounded-[20px] border border-red-400/30 bg-black/50 p-6 shadow-[0_0_20px_rgba(248,113,113,0.25)]">
+        <div className="flex h-[300px] flex-col items-center justify-center text-center">
+          <p className="text-red-300 mb-2">Error loading visitor statistics</p>
+          <p className="text-white/60 text-sm">{error}</p>
         </div>
       </div>
     );
   }
 
-  // Show empty state if no data
   if (!visitorData || visitorData.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm">
+      <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Daily Visitors</h2>
-            <p className="text-sm text-gray-500">No visitor data available</p>
+            <h2 className="text-lg font-semibold text-yellow-200">Daily Visitors</h2>
+            <p className="text-sm text-white/60">No visitor data available</p>
           </div>
         </div>
-        <div className="flex justify-center items-center h-[300px]">
-          <p className="text-gray-400">No visitor data for the selected period</p>
+        <div className="flex h-[300px] items-center justify-center text-white/60">
+          No visitor data for the selected period
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm">
-      <div className="flex justify-between items-center mb-6">
+    <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Daily Visitors</h2>
-          <p className="text-sm text-gray-500">
+          <h2 className="text-lg font-semibold text-yellow-200">Daily Visitors</h2>
+          <p className="text-sm text-white/70">
             Total Visitors: {totalVisitors?.toLocaleString()}
           </p>
         </div>
         <div className="flex items-center space-x-4">
           <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full bg-purple-500 mr-2" />
-            <span className="text-sm text-gray-600">Visitors</span>
+            <div className="mr-2 h-3 w-3 rounded-full bg-fuchsia-400 shadow-[0_0_12px_rgba(232,121,249,0.8)]" />
+            <span className="text-sm text-white/70">Visitors</span>
           </div>
           {percentageChange !== undefined && (
             <div
-              className={`text-sm font-medium ${
-                percentageChange >= 0 ? 'text-green-500' : 'text-red-500'
+              className={`text-sm font-semibold ${
+                percentageChange >= 0 ? 'text-emerald-300' : 'text-rose-300'
               }`}
             >
-              {percentageChange >= 0 ? '↑' : '↓'}{' '}
-              {Math.abs(percentageChange).toFixed(1)}%
+              {percentageChange >= 0 ? '↑' : '↓'} {Math.abs(percentageChange).toFixed(1)}%
             </div>
           )}
         </div>
@@ -103,29 +101,36 @@ const VisitorGraph = () => {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={visitorData || []}
-            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <defs>
+              <linearGradient id="visitorGradientDashboard" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="12%" stopColor="#d946ef" stopOpacity={0.6} />
+                <stop offset="100%" stopColor="#d946ef" stopOpacity={0.08} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="4 4" stroke="rgba(250,204,21,0.12)" />
             <XAxis
               dataKey="date"
-              stroke="#6b7280"
-              fontSize={12}
+              stroke="#facc15"
+              tick={{ fill: 'rgba(255,255,255,0.65)', fontSize: 12 }}
               tickLine={false}
             />
             <YAxis
-              stroke="#6b7280"
-              fontSize={12}
+              stroke="#facc15"
+              tick={{ fill: 'rgba(255,255,255,0.65)', fontSize: 12 }}
               tickLine={false}
-              tickFormatter={(value) => `${value}`}
+              tickFormatter={(value) => `${value.toLocaleString()}`}
             />
             <Tooltip content={<CustomTooltip />} />
             <Line
               type="monotone"
               dataKey="visitors"
-              stroke="#8B5CF6"
-              strokeWidth={2}
-              dot={{ fill: '#8B5CF6', strokeWidth: 2 }}
-              activeDot={{ r: 8, strokeWidth: 2 }}
+              stroke="#d946ef"
+              strokeWidth={3}
+              dot={{ fill: '#d946ef', strokeWidth: 2 }}
+              activeDot={{ r: 7, strokeWidth: 2 }}
+              fill="url(#visitorGradientDashboard)"
             />
           </LineChart>
         </ResponsiveContainer>

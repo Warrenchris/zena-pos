@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
-import api from '../../services/api';
 import analyticsService from '../../services/analytics.service';
 import useCurrency from '../../hooks/useCurrency';
 
@@ -9,24 +8,24 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
   const isPositive = percentage > 0;
 
   return (
-    <div className="bg-brand-gray p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-brand-yellow/20">
-      <div className="flex justify-between items-start mb-4">
+    <div className="rounded-[20px] border border-yellow-400/20 bg-black/40 p-6 shadow-[0_0_18px_rgba(250,204,21,0.08)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_24px_rgba(250,204,21,0.15)] animate-fadeUp">
+      <div className="mb-4 flex items-start justify-between">
         <div>
-          <h3 className="text-gray-300 text-sm font-medium">{title}</h3>
-          <p className="text-2xl font-semibold mt-1 text-brand-yellow">{value}</p>
+          <h3 className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">{title}</h3>
+          <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
         </div>
-        <div className={`flex items-center px-2.5 py-1 rounded-full ${
-          isPositive ? 'bg-brand-yellow/20 text-brand-yellow' : 'bg-red-500/20 text-red-500'
-        }`}>
-          {isPositive ? (
-            <HiArrowUp className="w-4 h-4 mr-1" />
-          ) : (
-            <HiArrowDown className="w-4 h-4 mr-1" />
-          )}
-          <span className="text-sm font-medium">{Math.abs(percentage)}%</span>
+        <div
+          className={`flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${
+            isPositive
+              ? 'bg-emerald-500/15 text-emerald-300'
+              : 'bg-rose-500/15 text-rose-300'
+          }`}
+        >
+          {isPositive ? <HiArrowUp className="h-4 w-4" /> : <HiArrowDown className="h-4 w-4" />}
+          <span>{Math.abs(percentage)}%</span>
         </div>
       </div>
-      
+
       <div className="h-16">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
@@ -35,18 +34,14 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
               dataKey="value"
               stroke={color}
               fill={color}
-              fillOpacity={0.2}
+              fillOpacity={0.25}
               strokeWidth={2}
-              dot={{ r: 2 }}
-              activeDot={{ r: 4 }}
             />
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      
-      <p className="mt-2 text-sm text-gray-500">
-        {trend}
-      </p>
+
+      <p className="mt-4 text-xs uppercase tracking-[0.2em] text-yellow-100/60">{trend}</p>
     </div>
   );
 };
@@ -74,18 +69,18 @@ const StatsGrid = () => {
               name: h.date,
               value: parseFloat(h?.revenue || 0)
             })),
-            color: '#4F46E5'
+            color: '#38bdf8'
           },
           {
             title: 'Total Orders',
             value: (orderStats?.totalOrders || 0).toLocaleString(),
             percentage: orderStats?.orderPercentageChange || 0,
             trend: 'Compared to last month',
-            data: (orderStats?.orderData || []).map(h => ({ 
+            data: (orderStats?.orderData || []).map(h => ({
               name: h.date,
               value: parseInt(h?.count || 0)
             })),
-            color: '#10B981'
+            color: '#22d3ee'
           },
           {
             title: 'Total Visitors',
@@ -96,29 +91,28 @@ const StatsGrid = () => {
               name: h.date,
               value: parseInt(h?.visitors || 0)
             })),
-            color: '#F59E0B'
+            color: '#f97316'
           },
           {
             title: 'Conversion Rate',
-            value: orderStats?.totalOrders && visitorStats?.totalVisitors 
+            value: orderStats?.totalOrders && visitorStats?.totalVisitors
               ? `${((orderStats.totalOrders / visitorStats.totalVisitors) * 100).toFixed(1)}%`
               : '0.0%',
             percentage: visitorStats?.percentageChange || 0,
             trend: 'Compared to last month',
             data: (visitorStats?.visitorData || []).map(h => ({ value: h?.visitors || 0 })),
-            color: '#6366F1'
+            color: '#a855f7'
           }
         ];
 
         setStats(formattedStats);
       } catch (error) {
         console.error('Error loading stats:', error);
-        // Set default empty stats on error
         setStats([
-          { title: 'Total Income', value: format(0), percentage: 0, trend: 'No data', data: [], color: '#4F46E5' },
-          { title: 'Total Orders', value: '0', percentage: 0, trend: 'No data', data: [], color: '#10B981' },
-          { title: 'Total Visitors', value: '0', percentage: 0, trend: 'No data', data: [], color: '#F59E0B' },
-          { title: 'Conversion Rate', value: '0.0%', percentage: 0, trend: 'No data', data: [], color: '#6366F1' }
+          { title: 'Total Income', value: format(0), percentage: 0, trend: 'No data', data: [], color: '#38bdf8' },
+          { title: 'Total Orders', value: '0', percentage: 0, trend: 'No data', data: [], color: '#22d3ee' },
+          { title: 'Total Visitors', value: '0', percentage: 0, trend: 'No data', data: [], color: '#f97316' },
+          { title: 'Conversion Rate', value: '0.0%', percentage: 0, trend: 'No data', data: [], color: '#a855f7' }
         ]);
       } finally {
         setLoading(false);
@@ -130,12 +124,12 @@ const StatsGrid = () => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white p-6 rounded-xl shadow-sm animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
-            <div className="h-8 bg-gray-200 rounded w-1/2 mb-4"></div>
-            <div className="h-16 bg-gray-200 rounded"></div>
+          <div key={i} className="rounded-[20px] border border-yellow-400/10 bg-black/40 p-6 shadow-[0_0_16px_rgba(250,204,21,0.1)] animate-pulse">
+            <div className="mb-4 h-4 w-3/4 rounded bg-black/30" />
+            <div className="mb-4 h-8 w-1/2 rounded bg-black/30" />
+            <div className="h-16 rounded bg-black/30" />
           </div>
         ))}
       </div>
@@ -143,7 +137,7 @@ const StatsGrid = () => {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
       {stats.map((stat, index) => (
         <StatsCard key={index} {...stat} />
       ))}

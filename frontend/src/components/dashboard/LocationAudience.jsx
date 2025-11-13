@@ -4,28 +4,27 @@ import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
 import Flags from 'country-flag-icons/react/3x2';
 import { fetchCustomerLocations } from '../../store/slices/analyticsSlice';
 
-// Map of country codes for known African countries
 const COUNTRY_CODES = {
-  'Nigeria': 'NG',
-  'Kenya': 'KE',
+  Nigeria: 'NG',
+  Kenya: 'KE',
   'South Africa': 'ZA',
-  'Ghana': 'GH',
-  'Tanzania': 'TZ',
-  'Uganda': 'UG',
-  'Rwanda': 'RW',
-  'Ethiopia': 'ET',
-  'Senegal': 'SN',
-  'Morocco': 'MA',
-  'Egypt': 'EG',
-  'Cameroon': 'CM',
+  Ghana: 'GH',
+  Tanzania: 'TZ',
+  Uganda: 'UG',
+  Rwanda: 'RW',
+  Ethiopia: 'ET',
+  Senegal: 'SN',
+  Morocco: 'MA',
+  Egypt: 'EG',
+  Cameroon: 'CM',
   'Ivory Coast': 'CI',
-  'Zimbabwe': 'ZW',
-  'Zambia': 'ZM'
+  Zimbabwe: 'ZW',
+  Zambia: 'ZM'
 };
 
 const LocationAudience = () => {
   const dispatch = useDispatch();
-  const { locations, totalCustomers, percentageChange, loading, error } = 
+  const { locations, totalCustomers, percentageChange, loading, error } =
     useSelector((state) => state.analytics.customerLocations);
   const [selectedPeriod, setSelectedPeriod] = useState('week');
 
@@ -37,21 +36,21 @@ const LocationAudience = () => {
     if (!location || !location.country) {
       return {
         ...location,
-        code: 'XX' // Default code for invalid/missing location data
+        code: 'XX'
       };
     }
     const countryName = location.country.split(',')[0].trim();
     return {
       ...location,
-      code: COUNTRY_CODES[countryName] || 'XX' // Use XX for unknown countries
+      code: COUNTRY_CODES[countryName] || 'XX'
     };
   };
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm">
-        <div className="flex justify-center items-center h-[400px]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+      <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
+        <div className="flex h-[400px] items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-yellow-400" />
         </div>
       </div>
     );
@@ -59,8 +58,8 @@ const LocationAudience = () => {
 
   if (error) {
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm">
-        <div className="flex justify-center items-center h-[400px] text-red-500">
+      <div className="rounded-[20px] border border-red-400/30 bg-black/50 p-6 shadow-[0_0_20px_rgba(248,113,113,0.25)]">
+        <div className="flex h-[400px] items-center justify-center text-center text-red-300">
           Error loading customer locations: {error}
         </div>
       </div>
@@ -68,15 +67,15 @@ const LocationAudience = () => {
   }
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm">
-      <div className="flex justify-between items-center mb-6">
+    <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-yellow-200">
             Location of Audience
           </h2>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-white/70">
             Total Customers: {totalCustomers?.toLocaleString()}
-            <span className={`ml-2 ${percentageChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            <span className={`ml-2 ${percentageChange >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
               {percentageChange >= 0 ? '↑' : '↓'} {Math.abs(percentageChange).toFixed(1)}%
             </span>
           </div>
@@ -84,11 +83,11 @@ const LocationAudience = () => {
         <select
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          className="rounded-full border border-yellow-400/30 bg-black/40 px-4 py-2 text-sm font-medium text-yellow-100 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
         >
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
+          <option value="week" className="bg-[#0b0f1b] text-white">This Week</option>
+          <option value="month" className="bg-[#0b0f1b] text-white">This Month</option>
+          <option value="year" className="bg-[#0b0f1b] text-white">This Year</option>
         </select>
       </div>
 
@@ -96,27 +95,29 @@ const LocationAudience = () => {
         {locations.map((location) => {
           const locationDetails = getLocationDetails(location);
           const Flag = Flags[locationDetails.code];
+          const change = location.percentageChange ?? location.trend ?? 0;
+          const isPositive = change >= 0;
 
           return (
             <div
               key={`${location.country}-${location.city}`}
-              className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors"
+              className="flex items-center justify-between rounded-[16px] border border-yellow-400/15 bg-black/30 px-4 py-3 transition hover:border-yellow-400/40 hover:bg-yellow-500/5"
             >
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-6 overflow-hidden rounded shadow-sm">
+                <div className="h-7 w-10 overflow-hidden rounded-[8px] border border-yellow-400/20 shadow-[0_0_12px_rgba(250,204,21,0.12)]">
                   {Flag ? (
                     <Flag title={location.country} />
                   ) : (
-                    <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs">
+                    <div className="flex h-full w-full items-center justify-center text-xs text-white/70">
                       {locationDetails.code}
                     </div>
                   )}
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-medium text-gray-900">
+                  <span className="font-semibold text-white">
                     {location.city}
                   </span>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-white/60">
                     {location.state}, {location.country}
                   </span>
                 </div>
@@ -124,18 +125,26 @@ const LocationAudience = () => {
 
               <div className="flex items-center space-x-4">
                 <div className="flex flex-col items-end">
-                  <span className="text-gray-900 font-medium">
+                  <span className="font-semibold text-yellow-100">
                     {location.percentage.toFixed(1)}%
                   </span>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-white/60">
                     {location.customers} customers
                   </span>
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-white/60">
                   {location.orders} orders
                 </div>
-                <div className="text-sm font-medium text-gray-900">
-                  ${location.revenue.toLocaleString()}
+                <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                  ₦{location.revenue.toLocaleString()}
+                  <span
+                    className={`flex items-center gap-1 text-xs font-semibold ${
+                      isPositive ? 'text-emerald-300' : 'text-rose-300'
+                    }`}
+                  >
+                    {isPositive ? <HiArrowUp className="h-3 w-3" /> : <HiArrowDown className="h-3 w-3" />}
+                    {Math.abs(change).toFixed(1)}%
+                  </span>
                 </div>
               </div>
             </div>

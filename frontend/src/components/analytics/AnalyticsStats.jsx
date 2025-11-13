@@ -1,78 +1,34 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
 import useCurrency from '../../hooks/useCurrency';
 
-const AnalyticsStats = () => {
-  const mockData = [
-    { value: 10 },
-    { value: 25 },
-    { value: 15 },
-    { value: 30 },
-    { value: 20 },
-    { value: 35 },
-    { value: 25 },
-  ];
-
-  const { format: formatCurrency } = useCurrency();
-  
-  const stats = [
-    {
-      title: 'Total Income',
-      value: formatCurrency(54235),
-      percentage: 12.5,
-      trend: 'Compared to last month',
-      data: mockData,
-      color: '#4F46E5'
-    },
-    {
-      title: 'Total Sales',
-      value: '1,235',
-      percentage: 8.2,
-      trend: 'Compared to last month',
-      data: mockData,
-      color: '#10B981'
-    },
-    {
-      title: 'Total Users',
-      value: '12,453',
-      percentage: -2.4,
-      trend: 'Compared to last month',
-      data: mockData,
-      color: '#F59E0B'
-    },
-    {
-      title: 'Total Transactions',
-      value: '4,325',
-      percentage: 15.3,
-      trend: 'Compared to last month',
-      data: mockData,
-      color: '#6366F1'
-    }
-  ];
-
-  const StatCard = ({ title, value, percentage, trend, data, color }) => {
-    const isPositive = percentage > 0;
-
-    return (
-      <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-gray-500 text-sm font-medium">{title}</h3>
-            <p className="text-2xl font-semibold mt-1">{value}</p>
-          </div>
-          <div className={`flex items-center px-2.5 py-1 rounded-full ${
-            isPositive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-          }`}>
-            {isPositive ? (
-              <HiArrowUp className="w-4 h-4 mr-1" />
-            ) : (
-              <HiArrowDown className="w-4 h-4 mr-1" />
-            )}
-            <span className="text-sm font-medium">{Math.abs(percentage)}%</span>
-          </div>
+const StatCard = ({ title, displayValue, percentage, trend, data, color }) => {
+  const hasPercentage = typeof percentage === 'number' && !Number.isNaN(percentage);
+  return (
+    <div className="rounded-[20px] border border-yellow-400/20 bg-black/40 p-6 shadow-[0_0_18px_rgba(250,204,21,0.08)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_24px_rgba(250,204,21,0.15)] animate-fadeUp">
+      <div className="mb-5 flex items-start justify-between">
+        <div>
+          <h3 className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">{title}</h3>
+          <p className="mt-2 text-2xl font-semibold text-white">{displayValue}</p>
         </div>
-        
+        {hasPercentage && (
+          <div
+            className={`flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${
+              percentage >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'
+            }`}
+          >
+            {percentage >= 0 ? (
+              <HiArrowUp className="h-4 w-4" />
+            ) : (
+              <HiArrowDown className="h-4 w-4" />
+            )}
+            <span>{Math.abs(percentage).toFixed(1)}%</span>
+          </div>
+        )}
+      </div>
+
+      {data && data.length > 0 ? (
         <div className="h-16">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data}>
@@ -81,24 +37,102 @@ const AnalyticsStats = () => {
                 dataKey="value"
                 stroke={color}
                 fill={color}
-                fillOpacity={0.2}
+                fillOpacity={0.25}
                 strokeWidth={2}
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        
-        <p className="mt-2 text-sm text-gray-500">
-          {trend}
-        </p>
+      ) : (
+        <div className="h-16 flex items-center justify-center text-xs uppercase tracking-[0.2em] text-yellow-100/40">
+          No trend data
+        </div>
+      )}
+
+      <p className="mt-4 text-xs uppercase tracking-[0.2em] text-yellow-100/60">
+        {trend}
+      </p>
+    </div>
+  );
+};
+
+const AnalyticsStats = ({ selectedPeriod, orderStats, visitorStats, invoiceStats, expenseStats, loading }) => {
+  const { format: formatCurrency } = useCurrency();
+
+  const stats = useMemo(() => {
+    const orderSeries = (orderStats?.orderData || []).map((point) => ({
+      value: Number(point.orders || point.count || 0),
+    }));
+
+    const visitorSeries = (visitorStats?.visitorData || []).map((point) => ({
+      value: Number(point.visitors || 0),
+    }));
+
+    const expenseSeries = (expenseStats?.monthlyTrend || []).map((entry) => {
+      const raw = entry.total ?? entry.value ?? entry?.getDataValue?.('total');
+      return { value: Number(raw || 0) };
+    });
+
+    const pendingInvoices = Number(invoiceStats?.pendingCount || 0);
+    const totalExpenses = Number(expenseStats?.totalExpenses || 0);
+
+    return [
+      {
+        title: 'Total Orders',
+        displayValue: Number(orderStats?.totalOrders || 0).toLocaleString(),
+        percentage: Number(orderStats?.orderPercentageChange || 0),
+        trend: 'Orders vs previous period',
+        data: orderSeries,
+        color: '#38bdf8',
+      },
+      {
+        title: 'Active Users',
+        displayValue: Number(visitorStats?.totalVisitors || 0).toLocaleString(),
+        percentage: Number(visitorStats?.percentageChange || 0),
+        trend: 'Visitors vs previous period',
+        data: visitorSeries,
+        color: '#22d3ee',
+      },
+      {
+        title: 'Pending Invoices',
+        displayValue: pendingInvoices.toLocaleString(),
+        percentage: null,
+        trend: 'Invoices awaiting payment',
+        data: [],
+        color: '#f97316',
+      },
+      {
+        title: 'Total Expenses',
+        displayValue: formatCurrency(totalExpenses),
+        percentage: null,
+        trend: `Expenses for the ${selectedPeriod} period`,
+        data: expenseSeries,
+        color: '#a855f7',
+      },
+    ];
+  }, [orderStats, visitorStats, invoiceStats, expenseStats, formatCurrency, selectedPeriod]);
+
+  if (loading && !orderStats && !visitorStats) {
+    return (
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="rounded-[20px] border border-yellow-400/10 bg-black/40 p-6 shadow-[0_0_16px_rgba(250,204,21,0.1)] animate-pulse"
+          >
+            <div className="mb-4 h-4 w-3/4 rounded bg-black/30" />
+            <div className="mb-4 h-8 w-1/2 rounded bg-black/30" />
+            <div className="h-16 rounded bg-black/30" />
+          </div>
+        ))}
       </div>
     );
-  };
+  }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      {stats.map((stat, index) => (
-        <StatCard key={index} {...stat} />
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+      {stats.map((stat) => (
+        <StatCard key={stat.title} {...stat} />
       ))}
     </div>
   );
