@@ -91,22 +91,22 @@ const settingsValidation = [
   body('requireEmailVerification').optional().isBoolean()
 ];
 
-// All routes require authentication and admin role
+// All routes require authentication
 router.use(auth);
-router.use(checkPermission('manage_settings'));
 
-// Get all settings
+// GET endpoints - Allow all authenticated users to read settings
 router.get('/', getSettings);
+router.get('/currency', getCurrencyFormat);
+router.get('/theme', getThemeSettings);
+router.get('/notifications', getNotificationSettings);
+
+// Modification endpoints - Require admin permission
+router.use(checkPermission('manage_settings'));
 
 // Update settings
 router.put('/', settingsValidation, updateSettings);
 
 // Reset settings to defaults
 router.post('/reset', resetSettings);
-
-// Get specific setting groups
-router.get('/currency', getCurrencyFormat);
-router.get('/theme', getThemeSettings);
-router.get('/notifications', getNotificationSettings);
 
 module.exports = router;

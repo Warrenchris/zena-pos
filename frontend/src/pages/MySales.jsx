@@ -166,24 +166,19 @@ const MySales = () => {
 
       // Keep original sale data for modal, add normalized fields for display
       const normalized = rows.map((s) => {
-        const customer = s.Customer || s.customer || null;
-        const saleItems = s.SaleItems || s.items || [];
-        const products = saleItems.map((it) => ({
-          id: it.ProductId || it.productId || it.Product?.id || it.id,
-          name: it.Product?.name || it.name || 'Item',
-          quantity: it.quantity || 1,
-          priceAtSale: parseFloat(it.price ?? it.unitPrice ?? it.originalPrice ?? it.Product?.price ?? 0)
-        }));
+        const customer = s.customer || s.Customer || null;
+        // Backend already provides products array, use it directly
+        const products = Array.isArray(s.products) ? s.products : [];
         return {
           ...s, // Keep all original fields for modal
           // Normalized fields for display in table
           customer,
           products,
-          totalAmount: parseFloat(s.total ?? s.totalAmount ?? 0),
+          totalAmount: parseFloat(s.totalAmount ?? s.total ?? 0),
           subtotal: parseFloat(s.subtotal ?? 0),
           discount: parseFloat(s.discount ?? 0),
-          paymentMethod: s.paymentMethod?.toUpperCase?.() || 'CASH',
-          status: s.saleStatus?.toUpperCase?.() || 'COMPLETED',
+          paymentMethod: (s.paymentMethod || 'CASH').toUpperCase(),
+          status: (s.status || 'COMPLETED').toUpperCase(),
           employee: s.Employee ? `${s.Employee.firstName || ''} ${s.Employee.lastName || ''}`.trim() : null
         };
       });

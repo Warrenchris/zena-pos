@@ -31,6 +31,7 @@ const Users = lazyLoad(() => import('./pages/Users'))
 const CompanySettings = lazyLoad(() => import('./pages/CompanySettings'))
 const Employees = lazyLoad(() => import('./pages/Employees'))
 const Reports = lazyLoad(() => import('./pages/Reports'))
+const MySales = lazyLoad(() => import('./pages/MySales'))
 const CreateProduct = lazyLoad(() => import('./pages/CreateProduct'))
 const Brands = lazyLoad(() => import('./pages/Brands'))
 const Units = lazyLoad(() => import('./pages/Units'))
@@ -87,6 +88,7 @@ export default function AppRoutes() {
           {/* Debug route */}
           <Route path="/debug-routes" element={<div>Routes are working!</div>} />
           <Route path="/sales" element={<Sales />} />
+          <Route path="/my-sales" element={<MySales />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/employees" element={<Employees />} />

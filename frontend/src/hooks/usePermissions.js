@@ -59,7 +59,12 @@ export const usePermissions = () => {
       case 'cashier':
         return [
           { path: '/dashboard', label: 'POS' },
-          { path: '/sales', label: 'My Sales' },
+          { path: '/my-sales', label: 'My Sales' },
+          { path: '/products', label: 'Products' },
+          { path: '/customers', label: 'Customers' },
+          { path: '/invoices', label: 'Invoices' },
+          { path: '/sales/returns', label: 'Sales Return' },
+          { path: '/settings', label: 'Settings' },
         ];
       default:
         return [];

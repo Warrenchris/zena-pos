@@ -22,6 +22,17 @@ export default function Layout() {
 			const allowedRoutes = getRoutesByRole().map(route => route.path)
 			const currentPath = location.pathname
 			const isAllowed = allowedRoutes.some(path => currentPath === path || currentPath.startsWith(`${path}/`))
+			
+			// Debug logging
+			if (process.env.NODE_ENV === 'development') {
+				console.log('🔐 Layout Route Check:', {
+					currentPath,
+					allowedRoutes,
+					isAllowed,
+					userRole: user?.role
+				})
+			}
+			
 			if (!isAllowed) {
 				if (currentPath === '/') {
 					navigate('/dashboard')

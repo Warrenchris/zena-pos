@@ -149,8 +149,22 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
       title: 'Main',
       items: [
         { name: 'POS', path: '/dashboard', icon: ShoppingCartIcon },
-        { name: 'My Sales', path: '/sales', icon: BanknotesIcon },
-        { name: 'Products', path: '/products/view', icon: CubeIcon }
+        { name: 'My Sales', path: '/my-sales', icon: BanknotesIcon },
+        { name: 'Products', path: '/products', icon: CubeIcon }
+      ]
+    },
+    {
+      title: 'Operations',
+      items: [
+        { name: 'Customers', path: '/customers', icon: UserGroupIcon },
+        { name: 'Invoices', path: '/invoices', icon: DocumentTextIcon },
+        { name: 'Sales Return', path: '/sales/returns', icon: ArrowUturnLeftIcon }
+      ]
+    },
+    {
+      title: 'Admin',
+      items: [
+        { name: 'Settings', path: '/settings', icon: CogIcon }
       ]
     }
   ];
