@@ -743,7 +743,7 @@ export default function CashierDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-black via-gray-900 to-brand-black">
+    <div className="min-h-screen bg-gradient-to-br from-[#0b0b0c] via-[#0f0f11] to-[#0b0b0c]">
       {/* Animated background elements */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-20 left-20 w-72 h-72 bg-brand-yellow/5 rounded-full blur-3xl opacity-20"></div>
@@ -831,7 +831,7 @@ export default function CashierDashboard() {
                         label="Today's Revenue"
                         value={formatCurrency(cashierStats.today.totalSales)}
                         subtext={`From ${cashierStats.today.orderCount} sales`}
-                        gradient="bg-gradient-to-br from-green-500 to-emerald-600"
+                        gradient="bg-gradient-to-br from-brand-green to-[#059669]"
                         animated
                       />
                       
@@ -840,7 +840,7 @@ export default function CashierDashboard() {
                         label="Total Transactions"
                         value={cashierStats.today.orderCount}
                         subtext="Completed today"
-                        gradient="bg-gradient-to-br from-blue-500 to-cyan-600"
+                        gradient="bg-gradient-to-br from-brand-blue to-[#2563eb]"
                         animated
                       />
                       
@@ -849,7 +849,7 @@ export default function CashierDashboard() {
                         label="This Week's Revenue"
                         value={formatCurrency(cashierStats.week.totalSales)}
                         subtext={`${cashierStats.week.orderCount} transactions`}
-                        gradient="bg-gradient-to-br from-purple-500 to-indigo-600"
+                        gradient="bg-gradient-to-br from-brand-cyan to-[#06b6d4]"
                         animated
                       />
                       
@@ -858,7 +858,7 @@ export default function CashierDashboard() {
                         label="Items Sold"
                         value={(currentSale.items || []).reduce((sum, item) => sum + item.quantity, 0)}
                         subtext="Current session"
-                        gradient="bg-gradient-to-br from-orange-500 to-red-600"
+                        gradient="bg-gradient-to-br from-brand-amber to-[#d97706]"
                         animated
                       />
                     </div>
@@ -908,7 +908,7 @@ export default function CashierDashboard() {
               {/* POS Terminal - Main Area */}
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Sale Header - Premium Design */}
-                <div className="bg-gradient-to-r from-brand-gray/80 to-brand-gray/40 backdrop-blur-md border-b border-brand-yellow/20 p-4 sm:p-6 shadow-2xl sticky top-0 z-30">
+                <div className="bg-gradient-to-r from-[#0f0f11]/80 to-[#0b0b0c]/40 backdrop-blur-md border-b border-brand-yellow/20 p-4 sm:p-6 shadow-2xl sticky top-0 z-30">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center space-x-3">
                       <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
@@ -942,7 +942,7 @@ export default function CashierDashboard() {
                 </div>
 
                 {/* Search and Filters - Premium Design */}
-                <div className="p-4 sm:p-6 space-y-4 bg-brand-black/30 border-b border-brand-yellow/10">
+                <div className="p-4 sm:p-6 space-y-4 bg-[#0b0b0c]/30 border-b border-brand-yellow/20">
                   <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1 relative group">
                       <div className="absolute inset-0 bg-gradient-to-r from-brand-yellow/20 to-transparent rounded-xl blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-300"></div>
@@ -952,7 +952,7 @@ export default function CashierDashboard() {
                         placeholder="Search products, barcode, or SKU..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="relative w-full pl-12 pr-4 py-3 sm:py-4 bg-brand-black/50 text-gray-100 border border-brand-yellow/20 rounded-xl focus:ring-2 focus:ring-brand-yellow focus:border-transparent transition-all duration-200 placeholder-gray-500"
+                        className="relative w-full pl-12 pr-4 py-3 sm:py-4 bg-[#0b0b0c]/50 text-brand-text border border-brand-yellow/20 rounded-xl focus:ring-2 focus:ring-brand-yellow focus:border-transparent transition-all duration-200 placeholder-gray-500"
                       />
                     </div>
                     <button
@@ -975,7 +975,7 @@ export default function CashierDashboard() {
                         className={`px-5 py-2 rounded-xl font-semibold transition-all duration-200 whitespace-nowrap text-sm border ${
                           selectedCategory === category
                             ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-lg shadow-brand-yellow/30'
-                            : 'bg-brand-black/40 text-gray-200 border-brand-yellow/20 hover:border-brand-yellow/40 hover:bg-brand-black/60'
+                            : 'bg-[#0b0b0c]/40 text-brand-text border-brand-yellow/20 hover:border-brand-yellow/40 hover:bg-[#0b0b0c]/60'
                         }`}
                       >
                         {category === 'all' ? '🎯 All' : category}
@@ -1007,7 +1007,7 @@ export default function CashierDashboard() {
                         <div className="w-20 h-20 bg-brand-yellow/10 rounded-3xl flex items-center justify-center mx-auto mb-6">
                           <MagnifyingGlassIcon className="h-10 w-10 text-brand-yellow" />
                         </div>
-                        <h3 className="text-xl font-bold text-gray-100 mb-2">No Products Found</h3>
+                        <h3 className="text-xl font-bold text-brand-text mb-2">No Products Found</h3>
                         <p className="text-gray-400 max-w-xs">Try adjusting your search or category filter to find what you need</p>
                       </div>
                     ) : (
@@ -1017,7 +1017,7 @@ export default function CashierDashboard() {
                           key={product.id}
                           onClick={withTrustedClick(() => addToCart(product))}
                           disabled={product.stockQuantity <= 0}
-                          className="group relative h-full bg-gradient-to-br from-brand-gray/50 to-brand-gray/30 border border-brand-yellow/20 rounded-2xl overflow-hidden hover:border-brand-yellow/50 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-brand-yellow/20 hover:shadow-2xl hover:shadow-brand-yellow/20 hover:scale-105 active:scale-95"
+                          className="group relative h-full bg-gradient-to-br from-[#0f0f11]/50 to-[#0b0b0c]/50 border border-brand-yellow/20 rounded-2xl overflow-hidden hover:border-brand-yellow/50 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-brand-yellow/20 hover:shadow-2xl hover:shadow-brand-yellow/20 hover:scale-105 active:scale-95"
                           style={{ transitionDelay: `${idx * 0.02}s` }}
                         >
                           {/* Stock Badge */}
@@ -1036,7 +1036,7 @@ export default function CashierDashboard() {
                           )}
 
                           {/* Image Container */}
-                          <div className="relative w-full aspect-square bg-gradient-to-br from-brand-black/60 to-brand-black/40 flex items-center justify-center overflow-hidden">
+                          <div className="relative w-full aspect-square bg-gradient-to-br from-[#0b0b0c]/60 to-[#0b0b0c]/40 flex items-center justify-center overflow-hidden">
                             {product.image ? (
                               <img 
                                 src={product.image} 
@@ -1052,7 +1052,7 @@ export default function CashierDashboard() {
 
                           {/* Content */}
                           <div className="p-3 sm:p-4 relative">
-                            <h3 className="font-bold text-gray-100 text-sm line-clamp-2 group-hover:text-white transition-colors mb-1">
+                            <h3 className="font-bold text-brand-text text-sm line-clamp-2 group-hover:text-white transition-colors mb-1">
                               {product.name}
                             </h3>
                             <p className="text-xs text-gray-400 mb-3">SKU: {product.sku || 'N/A'}</p>
@@ -1088,9 +1088,9 @@ export default function CashierDashboard() {
               {/* Cart Panel - Mobile Bottom Sheet / Desktop Sidebar */}
               <div className={`${
                 showCart ? 'translate-y-0' : 'translate-y-full lg:translate-y-0'
-              } fixed lg:static bottom-0 left-0 right-0 lg:right-auto lg:w-96 bg-gradient-to-b from-brand-gray/90 to-brand-gray/70 backdrop-blur-md border-t lg:border-t-0 lg:border-l border-brand-yellow/30 flex flex-col h-[60vh] lg:h-full transition-transform duration-300 ease-out z-50 lg:z-auto shadow-2xl`}>
+              } fixed lg:static bottom-0 left-0 right-0 lg:right-auto lg:w-96 bg-gradient-to-b from-[#0f0f11]/90 to-[#0b0b0c]/70 backdrop-blur-md border-t lg:border-t-0 lg:border-l border-brand-yellow/20 flex flex-col h-[60vh] lg:h-full transition-transform duration-300 ease-out z-50 lg:z-auto shadow-2xl`}>
                 {/* Cart Header */}
-                <div className="p-4 sm:p-6 border-b border-brand-yellow/20 bg-gradient-to-r from-brand-gray/80 to-brand-gray/40">
+                <div className="p-4 sm:p-6 border-b border-brand-yellow/20 bg-gradient-to-r from-[#0f0f11]/80 to-[#0b0b0c]/40">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-brand-yellow/20 rounded-xl flex items-center justify-center">
@@ -1098,7 +1098,7 @@ export default function CashierDashboard() {
                       </div>
                       <div>
                         <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Shopping Cart</p>
-                        <p className="text-lg font-bold text-white">{currentSale.items.length} items</p>
+                        <p className="text-lg font-bold text-brand-text">{currentSale.items.length} items</p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -1137,12 +1137,12 @@ export default function CashierDashboard() {
                     currentSale.items.map((item, idx) => (
                       <div 
                         key={item.id} 
-                        className="group bg-gradient-to-br from-brand-black/60 to-brand-black/40 rounded-xl p-4 hover:from-brand-black/80 hover:to-brand-black/60 transition-all duration-200 border border-brand-yellow/10 hover:border-brand-yellow/30"
+                        className="group bg-gradient-to-br from-[#0b0b0c]/60 to-[#0b0b0c]/40 rounded-xl p-4 hover:from-[#0b0b0c]/80 hover:to-[#0b0b0c]/60 transition-all duration-200 border border-brand-yellow/10 hover:border-brand-yellow/30"
                         style={{ animationDelay: `${idx * 0.05}s` }}
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
-                            <h4 className="font-bold text-gray-100 text-sm group-hover:text-white transition-colors line-clamp-2">{item.name}</h4>
+                            <h4 className="font-bold text-brand-text text-sm group-hover:text-white transition-colors line-clamp-2">{item.name}</h4>
                             <div className="flex items-center space-x-1 mt-1">
                               <p className="text-xs text-gray-400">
                                 {formatCurrency(parseFloat(item.price || 0))}/ea
@@ -1164,7 +1164,7 @@ export default function CashierDashboard() {
                         
                         {/* Quantity Control */}
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-1 bg-brand-black/40 rounded-lg p-1">
+                          <div className="flex items-center space-x-1 bg-[#0b0b0c]/40 rounded-lg p-1">
                             <button
                               type="button"
                               onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity - 1))}
@@ -1213,18 +1213,18 @@ export default function CashierDashboard() {
 
                 {/* Total and Checkout */}
                 {currentSale.items.length > 0 && (
-                  <div className="p-4 sm:p-6 border-t border-brand-yellow/20 bg-gradient-to-t from-brand-gray to-brand-gray/50 space-y-4">
+                  <div className="p-4 sm:p-6 border-t border-brand-yellow/20 bg-gradient-to-t from-[#0f0f11] to-[#0b0b0c]/50 space-y-4">
                     {/* Summary */}
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-300">Subtotal:</span>
-                        <span className="text-gray-100 font-semibold">
+                        <span className="text-brand-text font-semibold">
                           {formatCurrency(currentSale.items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0))}
                         </span>
                       </div>
                       <div className="h-px bg-gradient-to-r from-transparent via-brand-yellow/20 to-transparent"></div>
                       <div className="flex justify-between items-center">
-                        <span className="text-base font-bold text-gray-100">Total:</span>
+                        <span className="text-base font-bold text-brand-text">Total:</span>
                         <span className="text-2xl sm:text-3xl font-black text-brand-yellow">
                           {formatCurrency(currentSale.total)}
                         </span>
@@ -1318,12 +1318,12 @@ export default function CashierDashboard() {
       {/* Stats Panel Overlay - Premium Design */}
       {showStatsPanel && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-50 flex items-center justify-end" onClick={withTrustedClick(() => setShowStatsPanel(false))}>
-          <div className="absolute right-4 sm:right-8 top-24 w-96 max-w-[calc(100vw-2rem)] bg-gradient-to-br from-brand-gray to-brand-gray/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-brand-yellow/20 p-6 sm:p-8 animate-slideIn" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute right-4 sm:right-8 top-24 w-96 max-w-[calc(100vw-2rem)] bg-gradient-to-br from-[#0f0f11] to-[#0b0b0c]/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-brand-yellow/20 p-6 sm:p-8 animate-slideIn" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
               <div>
                 <p className="text-xs text-brand-yellow uppercase tracking-widest font-bold">Performance Dashboard</p>
-                <h3 className="text-3xl font-black text-white mt-1">My Stats</h3>
+                <h3 className="text-3xl font-black text-brand-text mt-1">My Stats</h3>
               </div>
               <button
                 onClick={withTrustedClick(() => setShowStatsPanel(false))}
@@ -1335,46 +1335,46 @@ export default function CashierDashboard() {
 
             <div className="space-y-4">
               {/* Today's Sales */}
-              <div className="group relative bg-gradient-to-br from-green-500/20 to-emerald-600/10 border border-green-500/30 hover:border-green-500/60 rounded-2xl p-5 sm:p-6 transition-all duration-300 cursor-default">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-green-500/10 rounded-full blur-2xl group-hover:blur-3xl transition-all"></div>
+              <div className="group relative bg-gradient-to-br from-brand-green/20 to-brand-green/10 border border-brand-green/30 hover:border-brand-green/60 rounded-2xl p-5 sm:p-6 transition-all duration-300 cursor-default">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-brand-green/10 rounded-full blur-2xl group-hover:blur-3xl transition-all"></div>
                 <div className="relative flex items-start justify-between">
                   <div>
-                    <p className="text-xs text-green-300/80 uppercase tracking-wide font-semibold mb-1">Today's Revenue</p>
-                    <p className="text-3xl font-black text-white mb-1">{formatCurrency(cashierStats?.today?.totalSales || 0)}</p>
-                    <p className="text-sm text-green-200/70">{cashierStats?.today?.orderCount || 0} completed transactions</p>
+                    <p className="text-xs text-brand-green/80 uppercase tracking-wide font-semibold mb-1">Today's Revenue</p>
+                    <p className="text-3xl font-black text-brand-text mb-1">{formatCurrency(cashierStats?.today?.totalSales || 0)}</p>
+                    <p className="text-sm text-brand-green/70">{cashierStats?.today?.orderCount || 0} completed transactions</p>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
-                    <ArrowTrendingUpIcon className="h-6 w-6 text-green-400" />
+                  <div className="w-12 h-12 rounded-xl bg-brand-green/20 flex items-center justify-center">
+                    <ArrowTrendingUpIcon className="h-6 w-6 text-brand-green" />
                   </div>
                 </div>
               </div>
 
               {/* This Week */}
-              <div className="group relative bg-gradient-to-br from-purple-500/20 to-indigo-600/10 border border-purple-500/30 hover:border-purple-500/60 rounded-2xl p-5 sm:p-6 transition-all duration-300 cursor-default">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full blur-2xl group-hover:blur-3xl transition-all"></div>
+              <div className="group relative bg-gradient-to-br from-brand-cyan/20 to-brand-cyan/10 border border-brand-cyan/30 hover:border-brand-cyan/60 rounded-2xl p-5 sm:p-6 transition-all duration-300 cursor-default">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-brand-cyan/10 rounded-full blur-2xl group-hover:blur-3xl transition-all"></div>
                 <div className="relative flex items-start justify-between">
                   <div>
-                    <p className="text-xs text-purple-300/80 uppercase tracking-wide font-semibold mb-1">Weekly Revenue</p>
-                    <p className="text-3xl font-black text-white mb-1">{formatCurrency(cashierStats?.week?.totalSales || 0)}</p>
-                    <p className="text-sm text-purple-200/70">{cashierStats?.week?.orderCount || 0} transactions this week</p>
+                    <p className="text-xs text-brand-cyan/80 uppercase tracking-wide font-semibold mb-1">Weekly Revenue</p>
+                    <p className="text-3xl font-black text-brand-text mb-1">{formatCurrency(cashierStats?.week?.totalSales || 0)}</p>
+                    <p className="text-sm text-brand-cyan/70">{cashierStats?.week?.orderCount || 0} transactions this week</p>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                    <ChartBarIcon className="h-6 w-6 text-purple-400" />
+                  <div className="w-12 h-12 rounded-xl bg-brand-cyan/20 flex items-center justify-center">
+                    <ChartBarIcon className="h-6 w-6 text-brand-cyan" />
                   </div>
                 </div>
               </div>
 
               {/* Recent Sales */}
-              <div className="bg-gradient-to-br from-brand-black/60 to-brand-black/40 border border-brand-yellow/10 rounded-2xl p-5 sm:p-6">
+              <div className="bg-gradient-to-br from-[#0b0b0c]/60 to-[#0b0b0c]/40 border border-brand-yellow/10 rounded-2xl p-5 sm:p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-bold text-white text-lg">Recent Sales</h4>
+                  <h4 className="font-bold text-brand-text text-lg">Recent Sales</h4>
                   <ShoppingCartIcon className="h-5 w-5 text-brand-yellow/60" />
                 </div>
                 <div className="space-y-2">
                   {(recentSales || []).slice(0, 4).map((sale, index) => (
-                    <div key={index} className="flex justify-between items-center p-3 bg-black/30 hover:bg-black/50 rounded-lg transition-colors group">
+                    <div key={index} className="flex justify-between items-center p-3 bg-[#0b0b0c]/30 hover:bg-[#0b0b0c]/50 rounded-lg transition-colors group">
                       <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 rounded-full bg-green-400 group-hover:animate-pulse"></div>
+                        <div className="w-2 h-2 rounded-full bg-brand-green group-hover:animate-pulse"></div>
                         <span className="text-sm text-gray-300 font-medium">Receipt #{sale?.id || 'N/A'}</span>
                       </div>
                       <span className="font-bold text-brand-yellow">{formatCurrency(sale?.total || 0)}</span>

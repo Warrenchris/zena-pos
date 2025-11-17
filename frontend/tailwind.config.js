@@ -25,15 +25,27 @@ module.exports = {
       colors: {
         brand: {
           black: '#0b0b0c',
+          darkGray: '#0f0f11',
           gray: '#121214',
+          text: '#e5e7eb',
           yellow: '#FFD600',
           yellowDark: '#E6C200',
-          accent: '#FFE166'
+          accent: '#FFE166',
+          blue: '#3b82f6',
+          green: '#10b981',
+          amber: '#f59e0b',
+          cyan: '#0ea5e9',
+          red: '#ef4444',
         },
         zana: {
           yellow: '#FFD600',
           yellowDark: '#E6C200',
-          borderTint: 'rgba(255, 214, 0, 0.2)'
+          borderTint: 'rgba(255, 214, 0, 0.2)',
+          blue: '#3b82f6',
+          green: '#10b981',
+          amber: '#f59e0b',
+          cyan: '#0ea5e9',
+          red: '#ef4444'
         }
       },
       boxShadow: {
