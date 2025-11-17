@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -12,13 +12,20 @@ import useCurrency from '../../hooks/useCurrency';
 
 const AnalyticsRevenue = ({ selectedPeriod, orderStats, loading }) => {
   const { format } = useCurrency();
-  const chartData = (orderStats?.orderData || []).map((point) => ({
-    date: point.date,
-    revenue: Number(point.revenue || point.total || 0),
-  }));
+  const chartData = useMemo(
+    () =>
+      (orderStats?.orderData || []).map((point) => ({
+        date: point.date,
+        revenue: Number(point.revenue || point.total || 0),
+      })),
+    [orderStats?.orderData]
+  );
 
-  const total = Number(orderStats?.totalRevenue || 0);
-  const average = chartData.length ? total / chartData.length : 0;
+  const { total, average } = useMemo(() => {
+    const computedTotal = Number(orderStats?.totalRevenue || 0);
+    const computedAverage = chartData.length ? computedTotal / chartData.length : 0;
+    return { total: computedTotal, average: computedAverage };
+  }, [chartData, orderStats?.totalRevenue]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -36,34 +43,34 @@ const AnalyticsRevenue = ({ selectedPeriod, orderStats, loading }) => {
 
   return (
     <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-yellow-200">Revenue Overview</h2>
-          <p className="mt-1 text-sm text-white/70">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
+        <header>
+          <h2 className="text-lg md:text-xl font-semibold text-yellow-200">Revenue Overview</h2>
+          <p className="mt-1 text-sm md:text-base text-white/70">
             {selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)} revenue trend
           </p>
-        </div>
-        <div className="flex gap-6 text-sm">
-          <div>
-            <span className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">
+        </header>
+        <dl className="flex flex-wrap gap-6 text-sm">
+          <div className="min-w-[120px]">
+            <dt className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">
               Total
-            </span>
-            <p className="mt-1 text-base font-semibold text-white">
+            </dt>
+            <dd className="mt-1 text-base font-semibold text-white">
               {format(total)}
-            </p>
+            </dd>
           </div>
-          <div>
-            <span className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">
+          <div className="min-w-[120px]">
+            <dt className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">
               Average
-            </span>
-            <p className="mt-1 text-base font-semibold text-white">
+            </dt>
+            <dd className="mt-1 text-base font-semibold text-white">
               {format(average)}
-            </p>
+            </dd>
           </div>
-        </div>
+        </dl>
       </div>
 
-      <div className="h-[400px]">
+      <div className="h-[clamp(18rem,40vh,26rem)]">
         {loading ? (
           <div className="flex h-full w-full items-center justify-center">
             <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-sky-400" />

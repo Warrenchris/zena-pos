@@ -53,22 +53,32 @@ export default function ExpenseTable({
     return 0
   })
 
-  const SortHeader = ({ field, children, alignRight }) => (
-    <th
-      className={`px-4 py-3 text-left text-xs font-semibold ${alignRight ? 'text-right' : ''}`}
-    >
-      <button onClick={() => onSortChange(field)} className="inline-flex items-center gap-1 text-yellow-400 hover:underline">
-        <span>{children}</span>
-        {sortField === field && (
-          <span className="text-[10px]">{sortDirection === 'asc' ? '▲' : '▼'}</span>
-        )}
-      </button>
-    </th>
-  )
+  const SortHeader = ({ field, children, alignRight }) => {
+    const isActiveSort = sortField === field;
+    const ariaSortValue = isActiveSort ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
+
+    return (
+      <th
+        scope="col"
+        aria-sort={ariaSortValue}
+        className={`px-4 py-3 text-left text-xs font-semibold ${alignRight ? 'text-right' : ''}`}
+      >
+        <button
+          onClick={() => onSortChange(field)}
+          className="inline-flex items-center gap-1 text-yellow-400 hover:underline focus:outline-none focus:ring-2 focus:ring-yellow-300/40 rounded"
+        >
+          <span>{children}</span>
+          {sortField === field && (
+            <span className="text-[10px]">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+          )}
+        </button>
+      </th>
+    );
+  }
 
   return (
     <div className="overflow-x-auto border border-yellow-600/20 rounded-lg">
-      <table className="min-w-full bg-black text-gray-200">
+      <table className="responsive-table bg-black text-gray-200">
         <thead className="bg-yellow-500/10 text-yellow-400">
           <tr>
             <SortHeader field="description">Description</SortHeader>
@@ -94,25 +104,27 @@ export default function ExpenseTable({
           )}
 
           {!loading && sorted?.map((e) => (
-            <tr key={e.id} className="border-t border-yellow-600/10 hover:bg-yellow-500/5">
-              <td className="px-4 py-3">{e.description}</td>
-              <td className="px-4 py-3 capitalize">{e.category?.replace('_', ' ')}</td>
-              <td className="px-4 py-3 text-yellow-300 font-semibold">{formatCurrency ? formatCurrency(e.amount) : e.amount}</td>
-              <td className="px-4 py-3">{e.date ? new Date(e.date).toLocaleDateString() : '-'}</td>
-              <td className="px-4 py-3 capitalize">{e.paymentMethod?.replace('_', ' ')}</td>
-              <td className="px-4 py-3">{e.recordedBy?.name || e.user?.name || '—'}</td>
+            <tr key={e.id} className="border-t border-yellow-600/10 hover:bg-yellow-500/5 transition-colors duration-200">
+              <td className="px-4 py-3" data-label="Description">{e.description}</td>
+              <td className="px-4 py-3 capitalize" data-label="Category">{e.category?.replace('_', ' ')}</td>
+              <td className="px-4 py-3 text-yellow-300 font-semibold" data-label="Amount">{formatCurrency ? formatCurrency(e.amount) : e.amount}</td>
+              <td className="px-4 py-3" data-label="Date">{e.date ? new Date(e.date).toLocaleDateString() : '-'}</td>
+              <td className="px-4 py-3 capitalize" data-label="Payment">{e.paymentMethod?.replace('_', ' ')}</td>
+              <td className="px-4 py-3" data-label="Added By">{e.recordedBy?.name || e.user?.name || '—'}</td>
               {canManage && (
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" data-label="Actions">
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => onEdit(e)}
-                      className="px-2 py-1 rounded-md border border-yellow-600/30 text-yellow-300 hover:bg-yellow-600/10"
+                      className="touch-target flex items-center justify-center px-2 py-1 rounded-md border border-yellow-600/30 text-yellow-300 hover:bg-yellow-600/10 focus:outline-none focus:ring-2 focus:ring-yellow-300/40 focus:ring-offset-2 focus:ring-offset-black"
+                      aria-label={`Edit expense ${e.description}`}
                     >
                       <PencilIcon className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => onDelete(e)}
-                      className="px-2 py-1 rounded-md border border-red-600/30 text-red-400 hover:bg-red-600/10"
+                      className="touch-target flex items-center justify-center px-2 py-1 rounded-md border border-red-600/30 text-red-400 hover:bg-red-600/10 focus:outline-none focus:ring-2 focus:ring-red-400/40 focus:ring-offset-2 focus:ring-offset-black"
+                      aria-label={`Delete expense ${e.description}`}
                     >
                       <TrashIcon className="h-4 w-4" />
                     </button>
@@ -131,7 +143,8 @@ export default function ExpenseTable({
           <select
             value={limit}
             onChange={(e) => onLimitChange(parseInt(e.target.value))}
-            className="bg-black text-gray-200 border border-yellow-600/30 rounded-md px-2 py-1"
+            className="bg-black text-gray-200 border border-yellow-600/30 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-300/40"
+            aria-label="Items per page"
           >
             {[10, 20, 50].map((n) => (
               <option key={n} value={n}>{n} / page</option>
@@ -141,14 +154,14 @@ export default function ExpenseTable({
             <button
               onClick={() => onPageChange(Math.max(1, page - 1))}
               disabled={page <= 1}
-              className="px-3 py-1 rounded-md border border-yellow-600/30 text-gray-200 disabled:opacity-40"
+              className="px-3 py-1 rounded-md border border-yellow-600/30 text-gray-200 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-yellow-300/40"
             >
               Prev
             </button>
             <button
               onClick={() => onPageChange(Math.min(totalPages, page + 1))}
               disabled={page >= totalPages}
-              className="px-3 py-1 rounded-md border border-yellow-600/30 text-gray-200 disabled:opacity-40"
+              className="px-3 py-1 rounded-md border border-yellow-600/30 text-gray-200 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-yellow-300/40"
             >
               Next
             </button>

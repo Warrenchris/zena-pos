@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   HomeIcon,
@@ -44,6 +44,10 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
   const location = useLocation();
   const [expandedSections, setExpandedSections] = useState({});
   const [hoveredItem, setHoveredItem] = useState(null);
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : false
+  );
+  const sidebarLabelId = useId();
 
   // Define menu structure
   const menuSections = [
@@ -178,6 +182,28 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
     setExpandedSections(newExpandedSections);
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && isOpen) {
+        onClose?.();
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('keydown', handleKeyDown);
+    handleResize();
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   const renderNavItem = (item) => {
     const active = isActive(item.path);
     const isHovered = hoveredItem === item.path;
@@ -217,6 +243,8 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         <button
           onClick={() => toggleSection(section.title)}
           className="flex items-center justify-between w-full px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-300 transition-colors duration-200 group"
+        aria-expanded={Boolean(isExpanded)}
+        aria-controls={`sidebar-section-${section.title}`}
         >
           <span className="flex items-center">
             <span className="w-1 h-4 bg-brand-yellow rounded-full mr-3 group-hover:bg-yellow-400 transition-colors duration-200"></span>
@@ -229,9 +257,14 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
           )}
         </button>
         
-        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+        <div
+          id={`sidebar-section-${section.title}`}
+          className={`overflow-hidden transition-all duration-300 ease-in-out ${
           isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-        }`}>
+        }`}
+          role="group"
+          aria-hidden={!isExpanded}
+        >
           <div className="space-y-1 pl-4 mt-2">
             {section.items.map(item => renderNavItem(item))}
           </div>
@@ -248,12 +281,18 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
           isOpen ? 'opacity-100 z-40' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
+        aria-hidden={!isOpen}
       />
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-30 w-80 bg-gradient-to-b from-brand-black via-black to-brand-black backdrop-blur-sm border-r border-brand-yellow/20 shadow-2xl transform transition-all duration-300 ease-in-out ${
-        isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      }`}>
+      <div
+        className={`fixed inset-y-0 left-0 z-40 xs:w-72 md:w-80 2xl:w-96 bg-gradient-to-b from-brand-black via-black to-brand-black backdrop-blur-sm border-r border-brand-yellow/20 shadow-2xl transform transition-all duration-300 ease-in-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+        role="navigation"
+        aria-labelledby={sidebarLabelId}
+        aria-hidden={!isOpen && !isDesktop}
+      >
         <div className="flex h-full flex-col">
           {/* Header with Logo */}
           <div className="flex items-center justify-between h-20 px-6 border-b border-brand-yellow/20 bg-gradient-to-r from-brand-black to-black backdrop-blur-sm">
@@ -262,7 +301,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
                 <StoreIcon className="h-7 w-7 text-brand-black" />
               </div>
               <div className="ml-4">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-brand-yellow to-yellow-400 bg-clip-text text-transparent">
+                <h1 id={sidebarLabelId} className="text-xl font-bold bg-gradient-to-r from-brand-yellow to-yellow-400 bg-clip-text text-transparent">
                   {variant === 'admin' ? 'Admin Panel' : 'Cashier Panel'}
                 </h1>
                 <p className="text-xs text-gray-400 font-medium">
@@ -272,7 +311,8 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
             </div>
             <button
               onClick={onClose}
-              className="lg:hidden p-2 rounded-lg text-gray-200 hover:text-white hover:bg-gray-700 transition-colors duration-200"
+              className="lg:hidden p-2 rounded-lg text-gray-200 hover:text-white hover:bg-gray-700 transition-colors duration-200 mobile-nav-trigger focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-black"
+              aria-label="Close navigation menu"
             >
               <XMarkIcon className="h-6 w-6" />
             </button>
@@ -280,7 +320,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
 
           {/* Navigation Items */}
           <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800 mt-16">
-            <nav className="px-4 py-6 space-y-6">
+            <nav className="px-4 py-6 space-y-6" aria-label="Primary navigation">
               {sidebarSections.map(renderSection)}
             </nav>
           </div>

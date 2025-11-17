@@ -1,6 +1,7 @@
 const { Op, Sequelize } = require('sequelize');
 const { Sale, Customer, ActivityLog, SaleItem, Product } = require('../models');
 const sequelize = require('../config/database');
+const { getCachedAnalytics, setCachedAnalytics } = require('../utils/analyticsCache');
 
 // Helper function to calculate start date
 function calculateStartDate(now, period) {
@@ -25,58 +26,58 @@ function calculateGrowth(currentTotal, previousTotal) {
 }
 
 const analyticsController = {
-  // Get visitor statistics
+  // Get visitor statistics - OPTIMIZED with combined query and caching
   async getVisitors(req, res) {
     try {
       const { period = 'week' } = req.query;
       const shopId = req.user.shopId;
+
+      // Check cache first
+      const cached = getCachedAnalytics(shopId, 'visitors', { period });
+      if (cached) {
+        return res.json(cached);
+      }
+
       const now = new Date();
       const startDate = calculateStartDate(now, period);
-
-      // Get sales as proxy for visitors
-      const sales = await Sale.findAll({
-        where: {
-          shopId,
-          createdAt: { [Op.between]: [startDate, now] }
-        },
-        attributes: [
-          [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-          [sequelize.fn('COUNT', sequelize.col('id')), 'visitors']
-        ],
-        group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
-        raw: true
-      });
-
-      const currentPeriod = sales.reduce((sum, day) => sum + parseInt(day.visitors), 0);
-      
-      // Get previous period for comparison
       const previousStartDate = new Date(startDate.getTime() - (now - startDate));
-      const previousSales = await Sale.findAll({
-        where: {
-          shopId,
-          createdAt: { [Op.between]: [previousStartDate, startDate] }
-        },
-        attributes: [
-          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
-        ],
-        raw: true
-      });
-      
-      const previousPeriod = previousSales.reduce((sum, day) => sum + parseInt(day.count || 0), 0);
 
+      // Combined query for current and previous periods
+        const results = await sequelize.query(`
+        SELECT 
+          DATE(createdAt) as date,
+          COUNT(CASE WHEN createdAt >= ? AND createdAt <= ? THEN 1 END) as current_visitors,
+          COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_visitors
+        FROM Sales
+        WHERE shopId = ? AND createdAt >= ?
+        GROUP BY DATE(createdAt)
+        ORDER BY DATE(createdAt) ASC
+      `, {
+        replacements: [startDate, now, previousStartDate, startDate, shopId, previousStartDate],
+        type: sequelize.QueryTypes.SELECT
+      });
+
+      const currentPeriod = results.reduce((sum, day) => sum + parseInt(day.current_visitors || 0), 0);
+      const previousPeriod = results.reduce((sum, day) => sum + parseInt(day.previous_visitors || 0), 0);
       const percentageChange = calculateGrowth(currentPeriod, previousPeriod);
 
-      // Format data for response
-      const visitorData = sales.map(sale => ({
-        date: sale.date,
-        visitors: parseInt(sale.visitors)
-      }));
+      const visitorData = results
+        .filter(r => parseInt(r.current_visitors) > 0)
+        .map(sale => ({
+          date: sale.date,
+          visitors: parseInt(sale.current_visitors)
+        }));
 
-      res.json({
+      const response = {
         visitorData,
         percentageChange,
         totalVisitors: currentPeriod
-      });
+      };
+
+      // Cache the result
+      setCachedAnalytics(shopId, 'visitors', { period }, response);
+      
+      res.json(response);
     } catch (error) {
       console.error('Error fetching visitor statistics:', error);
       res.status(500).json({ 
@@ -86,105 +87,76 @@ const analyticsController = {
     }
   },
 
-  // Get order tracking statistics
+  // Get order tracking statistics - OPTIMIZED with combined query and caching
   async getOrderTracking(req, res) {
     try {
       const { period = 'week' } = req.query;
       const shopId = req.user.shopId;
-      const now = new Date();
-      const startDate = calculateStartDate(now, period);
 
-      // Get raw data first
-      const sales = await Sale.findAll({
-        where: {
-          shopId,
-          createdAt: { [Op.between]: [startDate, now] }
-        },
-        attributes: ['createdAt', 'total'],
-        order: [['createdAt', 'ASC']],
-        raw: true
-      });
-
-      // Group data by hour if period is within 24 hours
-      const isWithin24Hours = (now - startDate) <= 24 * 60 * 60 * 1000;
-      
-      let orders = [];
-      if (isWithin24Hours) {
-        // Group by hour for last 24 hours
-        const byHour = {};
-        sales.forEach(sale => {
-          const hour = new Date(sale.createdAt).getHours();
-          if (!byHour[hour]) {
-            byHour[hour] = { count: 0, revenue: 0 };
-          }
-          byHour[hour].count++;
-          byHour[hour].revenue += parseFloat(sale.total || 0);
-        });
-
-        // Fill in missing hours
-        const startHour = startDate.getHours();
-        for (let h = 0; h < 24; h++) {
-          const hour = (startHour + h) % 24;
-          orders.push({
-            date: `${hour}:00`,
-            count: byHour[hour]?.count || 0,
-            revenue: byHour[hour]?.revenue || 0
-          });
-        }
-      } else {
-        // Group by date for longer periods
-        const byDate = {};
-        sales.forEach(sale => {
-          const date = new Date(sale.createdAt).toISOString().split('T')[0];
-          if (!byDate[date]) {
-            byDate[date] = { count: 0, revenue: 0 };
-          }
-          byDate[date].count++;
-          byDate[date].revenue += parseFloat(sale.total || 0);
-        });
-
-        // Convert to array and sort by date
-        orders = Object.entries(byDate).map(([date, data]) => ({
-          date,
-          count: data.count,
-          revenue: data.revenue
-        })).sort((a, b) => a.date.localeCompare(b.date));
+      // Check cache first
+      const cached = getCachedAnalytics(shopId, 'orderTracking', { period });
+      if (cached) {
+        return res.json(cached);
       }
 
-      const currentPeriodOrders = orders.reduce((sum, day) => sum + parseInt(day.count), 0);
-      const currentPeriodRevenue = orders.reduce((sum, day) => sum + parseFloat(day.revenue || 0), 0);
-
-      // Get previous period data
+      const now = new Date();
+      const startDate = calculateStartDate(now, period);
       const previousStartDate = new Date(startDate.getTime() - (now - startDate));
-      const previousOrders = await Sale.findAll({
-        where: {
-          shopId,
-          createdAt: { [Op.between]: [previousStartDate, startDate] }
-        },
-        attributes: [
-          [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'revenue']
+
+      // Combined query for both current and previous periods
+        const results = await sequelize.query(`
+        SELECT 
+          DATE(createdAt) as date,
+          HOUR(createdAt) as hour,
+          COUNT(CASE WHEN createdAt >= ? AND createdAt <= ? THEN 1 END) as current_count,
+          SUM(CASE WHEN createdAt >= ? AND createdAt <= ? THEN total ELSE 0 END) as current_revenue,
+          COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_count,
+          SUM(CASE WHEN createdAt >= ? AND createdAt < ? THEN total ELSE 0 END) as previous_revenue
+        FROM Sales
+        WHERE shopId = ? AND createdAt >= ?
+        GROUP BY DATE(createdAt), HOUR(createdAt)
+        ORDER BY DATE(createdAt), HOUR(createdAt)
+      `, {
+        replacements: [
+          startDate, now, startDate, now,
+          previousStartDate, startDate, previousStartDate, startDate,
+          shopId, previousStartDate
         ],
-        raw: true
+        type: sequelize.QueryTypes.SELECT
       });
 
-      const previousPeriodOrders = previousOrders.reduce((sum, day) => sum + parseInt(day.count), 0);
-      const previousPeriodRevenue = previousOrders.reduce((sum, day) => sum + parseFloat(day.revenue || 0), 0);
+      const currentPeriodOrders = results.reduce((sum, row) => sum + parseInt(row.current_count || 0), 0);
+      const currentPeriodRevenue = results.reduce((sum, row) => sum + parseFloat(row.current_revenue || 0), 0);
+      const previousPeriodOrders = results.reduce((sum, row) => sum + parseInt(row.previous_count || 0), 0);
+      const previousPeriodRevenue = results.reduce((sum, row) => sum + parseFloat(row.previous_revenue || 0), 0);
 
       const orderPercentageChange = calculateGrowth(currentPeriodOrders, previousPeriodOrders);
       const revenuePercentageChange = calculateGrowth(currentPeriodRevenue, previousPeriodRevenue);
 
-      res.json({
-        orderData: orders.map(o => ({ 
-          date: o.date, 
-          orders: parseInt(o.count),
-          revenue: parseFloat(o.revenue || 0)
-        })),
+      // Group by date for response
+      const ordersByDate = {};
+      results.forEach(row => {
+        if (row.current_count > 0) {
+          ordersByDate[row.date] = (ordersByDate[row.date] || 0) + parseInt(row.current_count);
+        }
+      });
+
+      const orderData = Object.entries(ordersByDate)
+        .map(([date, count]) => ({ date, orders: count, revenue: 0 }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      const response = {
+        orderData,
         orderPercentageChange,
         revenuePercentageChange,
         totalOrders: currentPeriodOrders,
         totalRevenue: currentPeriodRevenue
-      });
+      };
+
+      // Cache the result
+      setCachedAnalytics(shopId, 'orderTracking', { period }, response);
+      
+      res.json(response);
     } catch (error) {
       console.error('Error fetching order statistics:', error);
       res.status(500).json({ 

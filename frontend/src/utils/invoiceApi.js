@@ -10,7 +10,7 @@ export const getInvoices = async (params = {}) => {
     ...(params.sortOrder && { sortOrder: params.sortOrder })
   }).toString();
 
-  const response = await axiosInstance.get(`/invoices?${queryString}`);
+  const response = await axiosInstance.get(`/api/invoices?${queryString}`);
   return {
     data: response.data,
     status: response.status
@@ -18,7 +18,7 @@ export const getInvoices = async (params = {}) => {
 };
 
 export const getInvoiceById = async (id) => {
-  const response = await axiosInstance.get(`/invoices/${id}`);
+  const response = await axiosInstance.get(`/api/invoices/${id}`);
   return {
     data: response.data,
     status: response.status
@@ -26,7 +26,7 @@ export const getInvoiceById = async (id) => {
 };
 
 export const createInvoice = async (data) => {
-  const response = await axiosInstance.post('/invoices', data);
+  const response = await axiosInstance.post('/api/invoices', data);
   return {
     data: response.data,
     status: response.status
@@ -34,7 +34,7 @@ export const createInvoice = async (data) => {
 };
 
 export const updateInvoice = async (id, data) => {
-  const response = await axiosInstance.put(`/invoices/${id}`, data);
+  const response = await axiosInstance.put(`/api/invoices/${id}`, data);
   return {
     data: response.data,
     status: response.status
@@ -42,14 +42,14 @@ export const updateInvoice = async (id, data) => {
 };
 
 export const deleteInvoice = async (id) => {
-  const response = await axiosInstance.delete(`/invoices/${id}`);
+  const response = await axiosInstance.delete(`/api/invoices/${id}`);
   return {
     status: response.status
   };
 };
 
 export const getInvoicePDF = async (id) => {
-  const response = await axiosInstance.get(`/invoices/${id}/pdf`, {
+  const response = await axiosInstance.get(`/api/invoices/${id}/pdf`, {
     responseType: 'blob'
   });
   return {

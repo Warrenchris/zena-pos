@@ -95,11 +95,16 @@ export default function ExpenseFormModal({ open, onClose, onSaved, editing }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="relative bg-black border border-yellow-600/30 rounded-lg w-full max-w-lg mx-4 p-4">
-        <h3 className="text-xl font-semibold text-yellow-400 mb-3">{editing ? 'Edit Expense' : 'Add Expense'}</h3>
-        <form onSubmit={submit} className="space-y-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 sm:px-6">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} aria-hidden="true" />
+      <div
+        className="relative bg-black border border-yellow-600/30 rounded-lg responsive-modal mx-auto p-4 sm:p-6 safe-area-padding overflow-y-auto max-h-[92vh]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="expense-form-heading"
+      >
+        <h3 id="expense-form-heading" className="text-xl font-semibold text-yellow-400 mb-3">{editing ? 'Edit Expense' : 'Add Expense'}</h3>
+        <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="block text-xs text-gray-400 mb-1">Description</label>
             <input
@@ -191,11 +196,17 @@ export default function ExpenseFormModal({ open, onClose, onSaved, editing }) {
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-md border border-yellow-600/30 text-gray-200">Cancel</button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-md border border-yellow-600/30 text-gray-200 hover:bg-black/40 focus:outline-none focus:ring-2 focus:ring-yellow-500/40 touch-target"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-2 rounded-md bg-yellow-500 text-black hover:bg-yellow-400 disabled:opacity-60"
+              className="px-4 py-2 rounded-md bg-yellow-500 text-black hover:bg-yellow-400 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-yellow-500/60 touch-target"
             >
               {submitting ? 'Saving...' : editing ? 'Save Changes' : 'Add Expense'}
             </button>

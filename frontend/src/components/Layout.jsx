@@ -7,7 +7,9 @@ import ModernSidebar from './ModernSidebar'
 import TopNavBar from './navigation/TopNavBar'
 
 export default function Layout() {
-	const [sidebarOpen, setSidebarOpen] = useState(true)
+	const [sidebarOpen, setSidebarOpen] = useState(
+		typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+	)
 	const location = useLocation()
 	const navigate = useNavigate()
 	const dispatch = useDispatch()
@@ -29,6 +31,22 @@ export default function Layout() {
 			}
 		}
 	}, [location.pathname, getRoutesByRole, navigate, isLoginPage])
+
+	useEffect(() => {
+		if (typeof window === 'undefined') return
+
+		const handleResize = () => {
+			if (window.innerWidth >= 1024) {
+				setSidebarOpen(true)
+			} else {
+				setSidebarOpen(false)
+			}
+		}
+
+		handleResize()
+		window.addEventListener('resize', handleResize)
+		return () => window.removeEventListener('resize', handleResize)
+	}, [])
 
 	const handleLogout = () => {
 		dispatch(logout())
@@ -61,10 +79,14 @@ export default function Layout() {
 				user={user} 
 				variant={user?.role === 'admin' ? 'admin' : 'cashier'}
 			/>
-			<div className={`${user?.role === 'admin' ? 'lg:pl-80' : 'lg:pl-80'} flex flex-col min-h-screen`}>
-				<TopNavBar onMenuClick={() => setSidebarOpen(true)} className="z-40" />
-				<main className="flex-1 pt-16">
-					<div className="w-full px-6">
+			<div className={`${user?.role === 'admin' ? 'lg:pl-80 2xl:pl-96' : 'lg:pl-72 2xl:pl-80'} flex flex-col min-h-screen transition-[padding-left] duration-300 ease-out`}>
+				<TopNavBar 
+					onMenuClick={() => setSidebarOpen(true)} 
+					className="z-40"
+					isSidebarOpen={sidebarOpen}
+				/>
+				<main className="flex-1 pt-16 pb-10 safe-area-padding">
+					<div className="app-shell app-shell--wide">
 						<Outlet />
 					</div>
 				</main>

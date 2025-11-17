@@ -274,13 +274,34 @@ module.exports = {
       }
     });
 
-    // Add indexes
-    await queryInterface.addIndex('invoices', ['invoiceNumber']);
-    await queryInterface.addIndex('invoices', ['shopId']);
-    await queryInterface.addIndex('invoices', ['employeeId']);
-    await queryInterface.addIndex('invoices', ['customerId']);
-    await queryInterface.addIndex('invoices', ['status']);
-    await queryInterface.addIndex('invoices', ['createdAt']);
+    // Add indexes - with error handling
+    const indexColumns = [
+      ['invoiceNumber'],
+      ['shopId'],
+      ['customerId'],
+      ['status'],
+      ['createdAt']
+    ];
+    
+    for (const cols of indexColumns) {
+      try {
+        await queryInterface.addIndex('invoices', cols);
+      } catch (error) {
+        console.log(`Index on ${cols.join(',')} skipped:`, error.message);
+      }
+    }
+    
+    // Try to add employeeId index only if column exists
+    try {
+      const [columns] = await queryInterface.sequelize.query(
+        `SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'invoices' AND COLUMN_NAME = 'employeeId'`
+      );
+      if (columns.length > 0) {
+        await queryInterface.addIndex('invoices', ['employeeId']);
+      }
+    } catch (error) {
+      console.log('employeeId index skipped:', error.message);
+    }
   },
 
   down: async (queryInterface, Sequelize) => {
