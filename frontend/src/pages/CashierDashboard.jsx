@@ -924,7 +924,7 @@ export default function CashierDashboard() {
                       <button
                         type="button"
                         onClick={withTrustedClick(cancelSale)}
-                        className="px-4 py-2 text-red-300 hover:bg-red-500/20 hover:text-red-100 border border-red-500/20 rounded-xl transition-all duration-200 text-sm font-medium hover:border-red-500/40"
+                        className="px-4 py-2 text-gray-300 hover:bg-brand-yellow/10 hover:text-brand-yellow border border-brand-yellow/20 rounded-xl transition-all duration-200 text-sm font-medium hover:border-brand-yellow/40"
                       >
                         ✕ Cancel
                       </button>
@@ -975,7 +975,7 @@ export default function CashierDashboard() {
                         className={`px-5 py-2 rounded-xl font-semibold transition-all duration-200 whitespace-nowrap text-sm border ${
                           selectedCategory === category
                             ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-lg shadow-brand-yellow/30'
-                            : 'bg-brand-gray/40 text-gray-300 border-brand-yellow/10 hover:border-brand-yellow/30 hover:bg-brand-gray/60'
+                            : 'bg-brand-black/40 text-gray-200 border-brand-yellow/20 hover:border-brand-yellow/40 hover:bg-brand-black/60'
                         }`}
                       >
                         {category === 'all' ? '🎯 All' : category}
@@ -1106,7 +1106,7 @@ export default function CashierDashboard() {
                         <button
                           type="button"
                           onClick={withTrustedClick(() => setCurrentSale(prev => ({ ...prev, items: [], total: 0 })))}
-                          className="w-10 h-10 flex items-center justify-center text-red-300 hover:bg-red-500/20 hover:text-red-100 border border-red-500/20 rounded-xl transition-all duration-200"
+                          className="w-10 h-10 flex items-center justify-center text-brand-yellow/60 hover:bg-brand-yellow/20 hover:text-brand-yellow border border-brand-yellow/20 rounded-xl transition-all duration-200"
                           title="Clear cart"
                         >
                           <TrashIcon className="h-5 w-5" />
@@ -1114,7 +1114,7 @@ export default function CashierDashboard() {
                       )}
                       <button
                         type="button"
-                        className="lg:hidden w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-300 hover:bg-white/10 rounded-xl transition-all"
+                        className="lg:hidden w-10 h-10 flex items-center justify-center text-brand-yellow/60 hover:text-brand-yellow hover:bg-brand-yellow/10 rounded-xl transition-all"
                         onClick={withTrustedClick(() => setShowCart(!showCart))}
                       >
                         <ChevronDownIcon className={`h-5 w-5 transition-transform duration-300 ${showCart ? 'rotate-180' : ''}`} />
@@ -1155,7 +1155,7 @@ export default function CashierDashboard() {
                           <button
                             type="button"
                             onClick={withTrustedClick(() => removeFromCart(item.id))}
-                            className="w-8 h-8 flex items-center justify-center text-red-300 hover:bg-red-500/20 hover:text-red-100 border border-red-500/20 rounded-lg transition-all duration-200"
+                            className="w-8 h-8 flex items-center justify-center text-brand-yellow/60 hover:bg-brand-yellow/20 hover:text-brand-yellow border border-brand-yellow/20 rounded-lg transition-all duration-200"
                             title="Remove item"
                           >
                             <XMarkIcon className="h-4 w-4" />
@@ -1168,7 +1168,7 @@ export default function CashierDashboard() {
                             <button
                               type="button"
                               onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity - 1))}
-                              className="w-7 h-7 bg-brand-yellow/20 hover:bg-brand-yellow/40 text-brand-yellow rounded-md flex items-center justify-center transition-colors disabled:opacity-40"
+                              className="w-7 h-7 bg-brand-yellow text-brand-black rounded-md flex items-center justify-center transition-colors disabled:opacity-40 hover:bg-brand-yellowDark font-bold"
                               disabled={item.quantity <= 1}
                               title="Decrease quantity"
                             >
@@ -1190,7 +1190,7 @@ export default function CashierDashboard() {
                             <button
                               type="button"
                               onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity + 1))}
-                              className="w-7 h-7 bg-brand-yellow/20 hover:bg-brand-yellow/40 text-brand-yellow rounded-md flex items-center justify-center transition-colors disabled:opacity-40"
+                              className="w-7 h-7 bg-brand-yellow text-brand-black rounded-md flex items-center justify-center transition-colors disabled:opacity-40 hover:bg-brand-yellowDark font-bold"
                               disabled={item.quantity >= item.stockQuantity}
                               title="Increase quantity"
                             >
@@ -1327,7 +1327,7 @@ export default function CashierDashboard() {
               </div>
               <button
                 onClick={withTrustedClick(() => setShowStatsPanel(false))}
-                className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-300 hover:bg-white/10 rounded-xl transition-all duration-200"
+                className="w-10 h-10 flex items-center justify-center text-brand-yellow/60 hover:text-brand-yellow hover:bg-brand-yellow/10 rounded-xl transition-all duration-200"
               >
                 <XMarkIcon className="h-6 w-6" />
               </button>
