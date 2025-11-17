@@ -73,46 +73,67 @@ const iconsByType = {
   info: InformationCircleIcon
 };
 
-const baseStyles = 'pointer-events-auto w-full max-w-md md:max-w-sm overflow-hidden rounded-xl shadow-zana ring-1 ring-[rgba(255,214,0,0.2)] backdrop-blur-md transform transition-all duration-300 ease-in-out bg-brand-black border border-zana-borderTint';
+const baseStyles = 'pointer-events-auto w-full max-w-md md:max-w-lg overflow-hidden rounded-2xl shadow-2xl ring-1 backdrop-blur-xl transform transition-all duration-300 ease-out animate-toast-in border';
 
-const bgByType = {
-  success: 'bg-brand-black',
-  error: 'bg-red-700',
-  warning: 'bg-brand-black',
-  info: 'bg-brand-black'
+const stylesByType = {
+  success: 'bg-gradient-to-r from-green-900/80 to-emerald-900/60 border-green-500/40 ring-green-500/30',
+  error: 'bg-gradient-to-r from-red-900/80 to-red-800/60 border-red-500/40 ring-red-500/30',
+  warning: 'bg-gradient-to-r from-brand-black/80 to-brand-gray/60 border-brand-yellow/40 ring-brand-yellow/30',
+  info: 'bg-gradient-to-r from-brand-black/80 to-brand-gray/60 border-brand-yellow/40 ring-brand-yellow/30'
 };
 
-const textByType = {
+const iconColorByType = {
   success: 'text-green-400',
   error: 'text-red-400',
-  warning: 'text-zana-yellow',
-  info: 'text-zana-yellow'
+  warning: 'text-brand-yellow',
+  info: 'text-brand-yellow'
+};
+
+const textColorByType = {
+  success: 'text-green-100',
+  error: 'text-red-100',
+  warning: 'text-brand-yellow/90',
+  info: 'text-brand-yellow/90'
 };
 
 function Toast({ type = 'info', title, message, onClose }) {
   const Icon = iconsByType[type];
 
   return (
-    <div className={`${baseStyles} ${bgByType[type]} animate-slideIn min-h-[52px]`}>
-      <div className="flex items-start p-4 gap-3">
-        <div className="flex-shrink-0">
-          <Icon className={`h-6 w-6 ${textByType[type]}`} aria-hidden="true" />
+    <div className={`${baseStyles} ${stylesByType[type]} min-h-[56px] group`}>
+      <div className="flex items-start p-5 gap-4">
+        <div className={`flex-shrink-0 mt-0.5 ${iconColorByType[type]} animate-pulse`}>
+          <Icon className="h-6 w-6" aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0">
-          {title && <p className={`text-sm font-medium ${textByType[type]} break-words break-all`}>{title}</p>}
-          {message && <p className="mt-1 text-sm text-white/85 break-words break-all whitespace-normal leading-snug">{message}</p>}
+          {title && (
+            <p className={`text-sm font-bold ${textColorByType[type]} break-words break-all`}>
+              {title}
+            </p>
+          )}
+          {message && (
+            <p className="mt-1 text-sm text-white/80 break-words break-all whitespace-normal leading-snug font-medium">
+              {message}
+            </p>
+          )}
         </div>
-        <div className="ml-2 flex flex-shrink-0">
+        <div className="ml-3 flex flex-shrink-0">
           <button
             type="button"
-            className={`inline-flex rounded-md ${textByType[type]} hover:opacity-75 focus:outline-none focus:ring-2 focus:ring-zana-yellow/50`}
+            className={`inline-flex rounded-lg transition-all duration-200 opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2 ${iconColorByType[type]}`}
             onClick={onClose}
           >
-            <span className="sr-only">Close</span>
+            <span className="sr-only">Dismiss</span>
             <XMarkIcon className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
       </div>
+      {/* Progress bar indicator */}
+      <div className={`h-1 bg-gradient-to-r ${
+        type === 'success' ? 'from-green-400 to-emerald-400' :
+        type === 'error' ? 'from-red-400 to-red-500' :
+        'from-brand-yellow to-brand-yellowDark'
+      } animate-pulse`}></div>
     </div>
   );
 }

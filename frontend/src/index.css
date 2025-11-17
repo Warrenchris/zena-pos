@@ -417,3 +417,237 @@ body {
     transform: translateX(-0.25rem) !important;
   }
 }
+
+/* ===========================
+   PREMIUM POS CASHIER DASHBOARD
+   ============================= */
+
+/* Hide scrollbar while keeping functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth gradient backgrounds for premium feel */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Premium glow effect for CTA buttons */
+@keyframes glowPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(255, 214, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(255, 214, 0, 0.6);
+  }
+}
+
+/* Smooth card entrance animation */
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Product grid item entrance with stagger */
+@keyframes itemFade {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Soft pulse for stock indicators */
+@keyframes softPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Loading skeleton animation */
+@keyframes skeletonLoading {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Button press effect */
+@keyframes buttonPress {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.96);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Toast notification slide in */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Premium utility classes for animations */
+.animate-card-enter {
+  animation: cardSlideIn 0.5s ease-out;
+}
+
+.animate-item-fade {
+  animation: itemFade 0.4s ease-out;
+}
+
+.animate-glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+.animate-soft-pulse {
+  animation: softPulse 2s ease-in-out infinite;
+}
+
+.animate-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 214, 0, 0.1) 25%,
+    rgba(255, 214, 0, 0.2) 50%,
+    rgba(255, 214, 0, 0.1) 75%
+  );
+  background-size: 1000px 100%;
+  animation: skeletonLoading 2s infinite;
+}
+
+.animate-button-press {
+  animation: buttonPress 0.3s ease;
+}
+
+.animate-toast-in {
+  animation: toastSlideIn 0.3s ease-out;
+}
+
+/* Premium blur and glassmorphism effects */
+.glass-effect {
+  background: rgba(18, 18, 20, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 214, 0, 0.15);
+}
+
+.glass-effect-strong {
+  background: rgba(18, 18, 20, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 214, 0, 0.2);
+}
+
+/* Premium shadows */
+.shadow-brand {
+  box-shadow: 0 8px 24px rgba(255, 214, 0, 0.12);
+}
+
+.shadow-brand-lg {
+  box-shadow: 0 12px 32px rgba(255, 214, 0, 0.2);
+}
+
+.shadow-brand-xl {
+  box-shadow: 0 20px 48px rgba(255, 214, 0, 0.25);
+}
+
+/* Smooth transitions for interactive elements */
+.transition-premium {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-premium-fast {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* POS-optimized touch targets */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  [role='button'],
+  a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Mobile-first responsive utilities for POS */
+@media (max-width: 640px) {
+  .pos-mobile-lg {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .pos-button-mobile {
+    padding: 1rem;
+    font-size: 1rem;
+    min-height: 48px;
+  }
+}
+
+/* Tablet POS terminal optimizations */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .pos-tablet-spacious {
+    padding: 2rem;
+  }
+}
+
+/* Desktop POS terminal optimizations */
+@media (min-width: 1024px) {
+  .pos-desktop-compact {
+    max-width: 1400px;
+  }
+}
+
+/* Performance: GPU acceleration for transforms */
+.will-animate {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

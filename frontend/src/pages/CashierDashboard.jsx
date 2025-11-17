@@ -102,6 +102,32 @@ export default function CashierDashboard() {
     return handler(event, ...rest);
   };
 
+  // Render premium metric card with consistent styling
+  const MetricCard = ({ icon: Icon, label, value, subtext, gradient, animated = false }) => (
+    <div className={`relative overflow-hidden rounded-2xl backdrop-blur-sm border border-brand-yellow/20 transition-all duration-300 hover:shadow-2xl hover:border-brand-yellow/50 group ${animated ? 'animate-slideIn' : ''}`}>
+      {/* Gradient background */}
+      <div className={`absolute inset-0 ${gradient} opacity-10 group-hover:opacity-20 transition-opacity duration-300`}></div>
+      
+      {/* Content */}
+      <div className="relative p-6 sm:p-8">
+        <div className="flex items-start justify-between mb-4">
+          <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 ${gradient}`}>
+            <Icon className="h-7 w-7 sm:h-8 sm:w-8 text-brand-black" />
+          </div>
+          <div className="text-brand-yellow/60 text-xs">TODAY</div>
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-sm sm:text-base text-gray-300 font-medium">{label}</h3>
+          <p className="text-2xl sm:text-3xl font-bold text-white">{value}</p>
+          {subtext && <p className="text-xs sm:text-sm text-gray-400">{subtext}</p>}
+        </div>
+      </div>
+      
+      {/* Hover accent line */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-brand-yellow to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+    </div>
+  );
+
   useEffect(() => {
     dispatch(fetchProducts());
     fetchCashierStats();
@@ -717,82 +743,163 @@ export default function CashierDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-black to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-brand-black via-gray-900 to-brand-black">
+      {/* Animated background elements */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-20 left-20 w-72 h-72 bg-brand-yellow/5 rounded-full blur-3xl opacity-20"></div>
+        <div className="absolute bottom-32 right-20 w-96 h-96 bg-brand-yellow/3 rounded-full blur-3xl opacity-10"></div>
+      </div>
+
       {/* Main Content */}
-      <div className="flex flex-col min-h-screen">
+      <div className="flex flex-col min-h-screen relative z-10">
         {/* Page content wrapper */}
         <div className="flex-1 overflow-hidden">
           {/* Sales Mode Content */}
           {salesMode === 'idle' && (
-            <div className="p-4 sm:p-6">
-              {/* Welcome Screen with New Sale Button */}
-              <div className="max-w-6xl mx-auto">
-                <div className="text-center mb-8">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 bg-brand-yellow rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg">
-                    <ShoppingBagIcon className="h-10 w-10 sm:h-12 sm:w-12 text-brand-black" />
+            <div className="min-h-screen flex flex-col overflow-y-auto">
+              {/* Hero Section */}
+              <div className="p-4 sm:p-8 md:p-12 text-center">
+                <div className="max-w-4xl mx-auto mb-8 sm:mb-12 animate-fadeIn">
+                  <div className="inline-flex items-center justify-center space-x-2 mb-6">
+                    <div className="h-1 w-8 bg-brand-yellow rounded-full"></div>
+                    <p className="text-brand-yellow text-sm font-semibold tracking-wider uppercase">WELCOME</p>
+                    <div className="h-1 w-8 bg-brand-yellow rounded-full"></div>
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-100 mb-4">Ready to Start a Sale?</h2>
-                  <p className="text-gray-400 mb-8 max-w-md mx-auto">Click the button below to begin processing a new transaction</p>
                   
-                  <button
-                    type="button"
-                    onClick={withTrustedClick(startNewSale)}
-                    className="px-6 py-3 sm:px-8 sm:py-4 bg-brand-yellow text-brand-black rounded-2xl font-bold text-lg sm:text-xl hover:bg-brand-yellowDark transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
-                  >
-                    Start New Sale
-                  </button>
-                </div>
+                  <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
+                    Ready to <span className="text-brand-yellow">Process</span> Sales?
+                  </h1>
+                  
+                  <p className="text-lg sm:text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+                    Fast, secure, and reliable POS processing. Start a new transaction to begin selling.
+                  </p>
 
-                {/* Quick Stats */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                  {/* Primary Action Button */}
+                  <div className="mb-8">
+                    <button
+                      type="button"
+                      onClick={withTrustedClick(startNewSale)}
+                      className="relative inline-flex items-center justify-center space-x-3 px-8 sm:px-10 py-4 sm:py-5 bg-brand-yellow text-brand-black rounded-2xl sm:rounded-3xl font-bold text-base sm:text-lg transition-all duration-300 hover:shadow-2xl hover:shadow-brand-yellow/50 hover:scale-105 active:scale-95 group"
+                    >
+                      <ShoppingBagIcon className="h-6 w-6 transition-transform group-hover:translate-y-0.5" />
+                      <span>Start New Sale</span>
+                      <div className="absolute inset-0 rounded-2xl sm:rounded-3xl bg-brand-yellow opacity-0 group-hover:opacity-20 transition-opacity duration-300 -z-10"></div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Metrics Dashboard */}
+              <div className="px-4 sm:px-8 md:px-12 pb-8 sm:pb-12">
+                <div className="max-w-6xl mx-auto">
+                  {/* Section Header */}
+                  <div className="mb-8">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Your Performance Today</h2>
+                    <p className="text-gray-400">Key metrics and insights at a glance</p>
+                  </div>
+
+                  {/* Metrics Grid */}
                   {error ? (
-                    <div className="col-span-full bg-red-500/10 border border-red-500/20 rounded-xl p-6 text-center">
-                      <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                        <XMarkIcon className="h-6 w-6 text-red-600" />
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-8 text-center animate-fadeIn">
+                      <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <XMarkIcon className="h-8 w-8 text-red-400" />
                       </div>
-                      <p className="text-red-400">{error}</p>
+                      <p className="text-red-300 text-lg font-medium">{error}</p>
+                      <button
+                        onClick={withTrustedClick(fetchCashierStats)}
+                        className="mt-4 px-6 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-colors text-sm font-medium"
+                      >
+                        Try Again
+                      </button>
                     </div>
                   ) : statsLoading ? (
-                    <>
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="bg-brand-gray border border-brand-yellow/20 rounded-xl p-6 text-center animate-pulse">
-                          <div className="w-12 h-12 bg-gray-700 rounded-xl flex items-center justify-center mx-auto mb-4">
-                            <div className="w-6 h-6 bg-gray-600 rounded"></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="rounded-2xl bg-gradient-to-br from-brand-gray to-brand-gray/50 border border-brand-yellow/10 p-6 sm:p-8 animate-pulse">
+                          <div className="space-y-3">
+                            <div className="w-14 h-14 bg-brand-yellow/10 rounded-2xl"></div>
+                            <div className="h-4 w-24 bg-brand-yellow/10 rounded"></div>
+                            <div className="h-8 w-32 bg-brand-yellow/20 rounded"></div>
                           </div>
-                          <div className="h-6 w-32 bg-gray-700 rounded mx-auto mb-2"></div>
-                          <div className="h-8 w-24 bg-gray-700 rounded mx-auto"></div>
                         </div>
                       ))}
-                    </>
+                    </div>
                   ) : (
-                    <>
-                      <div className="bg-brand-gray border border-brand-yellow/20 rounded-xl p-6 text-center hover:shadow-lg transition-all duration-200">
-                        <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                          <CurrencyDollarIcon className="h-6 w-6 text-green-600" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-100">Today's Revenue</h3>
-                        <p className="text-2xl font-bold text-green-400">{formatCurrency(cashierStats.today.totalSales)}</p>
-                      </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                      <MetricCard
+                        icon={CurrencyDollarIcon}
+                        label="Today's Revenue"
+                        value={formatCurrency(cashierStats.today.totalSales)}
+                        subtext={`From ${cashierStats.today.orderCount} sales`}
+                        gradient="bg-gradient-to-br from-green-500 to-emerald-600"
+                        animated
+                      />
                       
-                      <div className="bg-brand-gray border border-brand-yellow/20 rounded-xl p-6 text-center hover:shadow-lg transition-all duration-200">
-                        <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                          <ShoppingCartIcon className="h-6 w-6 text-blue-600" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-100">Transactions</h3>
-                        <p className="text-2xl font-bold text-blue-400">{cashierStats.today.orderCount}</p>
-                      </div>
+                      <MetricCard
+                        icon={ShoppingCartIcon}
+                        label="Total Transactions"
+                        value={cashierStats.today.orderCount}
+                        subtext="Completed today"
+                        gradient="bg-gradient-to-br from-blue-500 to-cyan-600"
+                        animated
+                      />
                       
-                      <div className="bg-brand-gray border border-brand-yellow/20 rounded-xl p-6 text-center hover:shadow-lg transition-all duration-200 sm:col-span-2 lg:col-span-1">
-                        <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                          <ChartBarIcon className="h-6 w-6 text-purple-600" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-100">This Week</h3>
-                        <p className="text-2xl font-bold text-purple-400">{formatCurrency(cashierStats.week.totalSales)}</p>
-                      </div>
-                    </>
+                      <MetricCard
+                        icon={ChartBarIcon}
+                        label="This Week's Revenue"
+                        value={formatCurrency(cashierStats.week.totalSales)}
+                        subtext={`${cashierStats.week.orderCount} transactions`}
+                        gradient="bg-gradient-to-br from-purple-500 to-indigo-600"
+                        animated
+                      />
+                      
+                      <MetricCard
+                        icon={ShoppingBagIcon}
+                        label="Items Sold"
+                        value={(currentSale.items || []).reduce((sum, item) => sum + item.quantity, 0)}
+                        subtext="Current session"
+                        gradient="bg-gradient-to-br from-orange-500 to-red-600"
+                        animated
+                      />
+                    </div>
                   )}
                 </div>
               </div>
+
+              {/* Recent Activity Section */}
+              {recentSales.length > 0 && (
+                <div className="px-4 sm:px-8 md:px-12 pb-12">
+                  <div className="max-w-6xl mx-auto">
+                    <div className="mb-6">
+                      <h3 className="text-2xl font-bold text-white mb-2">Recent Sales</h3>
+                      <p className="text-gray-400">Your latest transactions</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {recentSales.slice(0, 3).map((sale, idx) => (
+                        <div
+                          key={idx}
+                          className="group bg-gradient-to-br from-brand-gray/50 to-brand-gray/30 border border-brand-yellow/20 rounded-2xl p-6 hover:border-brand-yellow/40 transition-all duration-300 hover:shadow-lg"
+                          style={{ animationDelay: `${idx * 0.1}s` }}
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div>
+                              <p className="text-sm text-gray-400">Receipt #</p>
+                              <p className="text-lg font-bold text-white">{sale?.id || 'N/A'}</p>
+                            </div>
+                            <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center">
+                              <ShoppingCartIcon className="h-5 w-5 text-green-400" />
+                            </div>
+                          </div>
+                          <div className="border-t border-brand-yellow/10 pt-4">
+                            <p className="text-sm text-gray-400 mb-1">Total Amount</p>
+                            <p className="text-2xl font-bold text-brand-yellow">{formatCurrency(sale?.total || 0)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -800,82 +907,84 @@ export default function CashierDashboard() {
             <div className="flex flex-col lg:flex-row h-screen">
               {/* POS Terminal - Main Area */}
               <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Sale Header */}
-                <div className="bg-brand-gray/50 backdrop-blur-sm border-b border-brand-yellow/20 p-4 sm:p-6 shadow-lg">
+                {/* Sale Header - Premium Design */}
+                <div className="bg-gradient-to-r from-brand-gray/80 to-brand-gray/40 backdrop-blur-md border-b border-brand-yellow/20 p-4 sm:p-6 shadow-2xl sticky top-0 z-30">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-100">Current Sale</h2>
-                      <p className="text-gray-300">
-                        Customer: <span className="font-medium">{currentSale.customer.name}</span>
+                    <div className="flex items-center space-x-3">
+                      <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Current Sale</p>
+                        <h2 className="text-xl font-bold text-white">{currentSale.customer.name}</h2>
                         {currentSale.customer.location && (
-                          <span className="ml-2">• {currentSale.customer.location}</span>
+                          <p className="text-sm text-gray-300">📍 {currentSale.customer.location}</p>
                         )}
-                      </p>
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2 sm:gap-3">
                       <button
                         type="button"
                         onClick={withTrustedClick(cancelSale)}
-                        className="px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors text-sm"
+                        className="px-4 py-2 text-red-300 hover:bg-red-500/20 hover:text-red-100 border border-red-500/20 rounded-xl transition-all duration-200 text-sm font-medium hover:border-red-500/40"
                       >
-                        Cancel Sale
+                        ✕ Cancel
                       </button>
                       {currentSale.items.length > 0 && (
                         <button
                           type="button"
                           onClick={withTrustedClick(() => setShowPaymentModal(true))}
-                          className="px-4 py-2 bg-brand-yellow text-brand-black rounded-lg font-medium hover:bg-brand-yellowDark transition-all duration-200 text-sm"
+                          className="px-5 py-2 bg-brand-yellow text-brand-black rounded-xl font-bold hover:bg-brand-yellowDark transition-all duration-200 text-sm shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
                         >
-                          Proceed to Payment
+                          ✓ Proceed to Payment
                         </button>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Search and Filters */}
-                <div className="p-4 sm:p-6 space-y-4 bg-brand-black/30">
+                {/* Search and Filters - Premium Design */}
+                <div className="p-4 sm:p-6 space-y-4 bg-brand-black/30 border-b border-brand-yellow/10">
                   <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1 relative">
-                      <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <div className="flex-1 relative group">
+                      <div className="absolute inset-0 bg-gradient-to-r from-brand-yellow/20 to-transparent rounded-xl blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-300"></div>
+                      <MagnifyingGlassIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-brand-yellow/60 group-focus-within:text-brand-yellow transition-colors" />
                       <input
                         type="text"
-                        placeholder="Search products by name, barcode, or SKU..."
+                        placeholder="Search products, barcode, or SKU..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-brand-black text-gray-100 border border-brand-yellow/20 rounded-xl focus:ring-2 focus:ring-brand-yellow focus:border-transparent transition-all duration-200"
+                        className="relative w-full pl-12 pr-4 py-3 sm:py-4 bg-brand-black/50 text-gray-100 border border-brand-yellow/20 rounded-xl focus:ring-2 focus:ring-brand-yellow focus:border-transparent transition-all duration-200 placeholder-gray-500"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={withTrustedClick(handleBarcodeScan)}
-                      className="px-4 py-3 bg-brand-yellow text-brand-black rounded-xl hover:bg-brand-yellowDark transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl text-sm font-medium"
+                      className="group relative px-5 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-brand-yellow to-brand-yellowDark text-brand-black rounded-xl hover:shadow-2xl hover:shadow-brand-yellow/40 transition-all duration-300 flex items-center justify-center space-x-2 font-bold text-sm sm:text-base hover:scale-105 active:scale-95"
                     >
-                      <QrCodeIcon className="h-5 w-5" />
-                      <span className="hidden sm:inline">Scan Barcode</span>
+                      <QrCodeIcon className="h-5 w-5 transition-transform group-hover:rotate-12" />
+                      <span className="hidden sm:inline">Scan</span>
                     </button>
                   </div>
 
-                  {/* Category Filter */}
-                  <div className="flex space-x-2 overflow-x-auto pb-2">
+                  {/* Category Filter - Horizontal Scroll */}
+                  <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
                     {categories.map(category => (
                       <button
                         type="button"
                         key={category}
                         onClick={withTrustedClick(() => setSelectedCategory(category))}
-                        className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap text-sm ${
+                        className={`px-5 py-2 rounded-xl font-semibold transition-all duration-200 whitespace-nowrap text-sm border ${
                           selectedCategory === category
-                            ? 'bg-brand-yellow text-brand-black shadow-lg'
-                            : 'bg-brand-gray text-gray-200 hover:bg-black/40'
+                            ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-lg shadow-brand-yellow/30'
+                            : 'bg-brand-gray/40 text-gray-300 border-brand-yellow/10 hover:border-brand-yellow/30 hover:bg-brand-gray/60'
                         }`}
                       >
-                        {category === 'all' ? 'All Products' : category}
+                        {category === 'all' ? '🎯 All' : category}
                       </button>
                     ))}
                   </div>
                 </div>
                 
-                {/* Product Grid */}
+                {/* Product Grid - Premium Card Design */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                   <div className={`grid ${
                     view === 'grid' 
@@ -884,50 +993,91 @@ export default function CashierDashboard() {
                   } gap-3 sm:gap-4`}>
                     {productsLoading ? (
                       Array.from({ length: 10 }).map((_, i) => (
-                        <div key={i} className="bg-brand-gray/50 backdrop-blur-sm border border-brand-yellow/20 rounded-xl p-4 animate-pulse">
-                          <div className="w-full aspect-square bg-black/40 rounded-lg mb-3"></div>
-                          <div className="h-4 bg-black/40 rounded mb-2"></div>
-                          <div className="h-4 bg-black/40 rounded w-3/4 mb-2"></div>
-                          <div className="h-6 bg-brand-yellow/20 rounded w-1/2"></div>
-                          <div className="h-4 bg-black/40 rounded w-1/3 mt-2"></div>
+                        <div key={i} className="bg-brand-gray/30 border border-brand-yellow/10 rounded-2xl overflow-hidden animate-pulse">
+                          <div className="w-full aspect-square bg-brand-black/40"></div>
+                          <div className="p-4 space-y-2">
+                            <div className="h-4 bg-brand-yellow/10 rounded w-3/4"></div>
+                            <div className="h-3 bg-brand-yellow/10 rounded w-1/2"></div>
+                            <div className="h-6 bg-brand-yellow/20 rounded w-2/3 mt-3"></div>
+                          </div>
                         </div>
                       ))
                     ) : filteredProducts.length === 0 ? (
-                      <div className="col-span-full text-center py-12">
-                        <div className="w-16 h-16 bg-brand-yellow/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <MagnifyingGlassIcon className="h-8 w-8 text-brand-yellow" />
+                      <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
+                        <div className="w-20 h-20 bg-brand-yellow/10 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                          <MagnifyingGlassIcon className="h-10 w-10 text-brand-yellow" />
                         </div>
-                        <h3 className="text-lg font-semibold text-gray-100 mb-2">No Products Found</h3>
-                        <p className="text-gray-400">Try adjusting your search or category filter</p>
+                        <h3 className="text-xl font-bold text-gray-100 mb-2">No Products Found</h3>
+                        <p className="text-gray-400 max-w-xs">Try adjusting your search or category filter to find what you need</p>
                       </div>
                     ) : (
-                      filteredProducts.map(product => (
+                      filteredProducts.map((product, idx) => (
                         <button
                           type="button"
                           key={product.id}
                           onClick={withTrustedClick(() => addToCart(product))}
                           disabled={product.stockQuantity <= 0}
-                          className="group bg-brand-gray border border-brand-yellow/20 rounded-xl p-3 sm:p-4 hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+                          className="group relative h-full bg-gradient-to-br from-brand-gray/50 to-brand-gray/30 border border-brand-yellow/20 rounded-2xl overflow-hidden hover:border-brand-yellow/50 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-brand-yellow/20 hover:shadow-2xl hover:shadow-brand-yellow/20 hover:scale-105 active:scale-95"
+                          style={{ transitionDelay: `${idx * 0.02}s` }}
                         >
-                          <div className="aspect-square w-full bg-black/40 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                          {/* Stock Badge */}
+                          {product.stockQuantity <= 5 && product.stockQuantity > 0 && (
+                            <div className="absolute top-3 right-3 z-10 bg-red-500/90 px-3 py-1 rounded-lg text-xs font-bold text-white flex items-center space-x-1">
+                              <span>⚠️</span>
+                              <span>Low Stock</span>
+                            </div>
+                          )}
+                          {product.stockQuantity <= 0 && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
+                              <div className="text-center">
+                                <p className="text-sm font-bold text-white mb-1">OUT OF STOCK</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Image Container */}
+                          <div className="relative w-full aspect-square bg-gradient-to-br from-brand-black/60 to-brand-black/40 flex items-center justify-center overflow-hidden">
                             {product.image ? (
-                              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                              <img 
+                                src={product.image} 
+                                alt={product.name} 
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                              />
                             ) : (
-                              <div className="text-2xl sm:text-4xl text-gray-300">📦</div>
+                              <div className="text-5xl group-hover:scale-125 transition-transform duration-300">📦</div>
                             )}
+                            {/* Overlay on hover */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                           </div>
-                          <h3 className="font-semibold text-gray-100 text-sm mb-1 line-clamp-2">{product.name}</h3>
-                          <p className="text-lg font-bold text-brand-yellow mb-1">
-                            {formatCurrency(typeof product.price === 'number' 
-                              ? product.price 
-                              : parseFloat(product.price || 0))}
-                          </p>
-                          <p className="text-xs text-gray-300">
-                            Stock: {product.stockQuantity}
-                            {product.stockQuantity <= 5 && (
-                              <span className="text-red-400 ml-1">⚠️</span>
-                            )}
-                          </p>
+
+                          {/* Content */}
+                          <div className="p-3 sm:p-4 relative">
+                            <h3 className="font-bold text-gray-100 text-sm line-clamp-2 group-hover:text-white transition-colors mb-1">
+                              {product.name}
+                            </h3>
+                            <p className="text-xs text-gray-400 mb-3">SKU: {product.sku || 'N/A'}</p>
+                            
+                            {/* Price and Action */}
+                            <div className="flex items-end justify-between">
+                              <div>
+                                <p className="text-xs text-gray-400 mb-1">Price</p>
+                                <p className="text-lg sm:text-xl font-black text-brand-yellow">
+                                  {formatCurrency(typeof product.price === 'number' 
+                                    ? product.price 
+                                    : parseFloat(product.price || 0))}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-gray-400 mb-1">Stock</p>
+                                <p className={`font-bold text-sm ${product.stockQuantity > 5 ? 'text-green-400' : product.stockQuantity > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                  {product.stockQuantity}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Add to Cart Indicator */}
+                          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-brand-yellow to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
                         </button>
                       ))
                     )}
@@ -938,19 +1088,25 @@ export default function CashierDashboard() {
               {/* Cart Panel - Mobile Bottom Sheet / Desktop Sidebar */}
               <div className={`${
                 showCart ? 'translate-y-0' : 'translate-y-full lg:translate-y-0'
-              } fixed lg:static bottom-0 left-0 right-0 lg:right-auto lg:w-96 bg-brand-gray border-t lg:border-t-0 lg:border-l border-brand-yellow/20 flex flex-col h-[60vh] lg:h-full transition-transform duration-300 ease-in-out z-50 lg:z-auto`}>
-                <div className="p-4 sm:p-6 border-b border-brand-yellow/20">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-gray-100 flex items-center space-x-2">
-                      <ShoppingCartIcon className="h-6 w-6" />
-                      <span>Cart ({currentSale.items.length})</span>
-                    </h2>
-                    <div className="flex items-center space-x-4">
+              } fixed lg:static bottom-0 left-0 right-0 lg:right-auto lg:w-96 bg-gradient-to-b from-brand-gray/90 to-brand-gray/70 backdrop-blur-md border-t lg:border-t-0 lg:border-l border-brand-yellow/30 flex flex-col h-[60vh] lg:h-full transition-transform duration-300 ease-out z-50 lg:z-auto shadow-2xl`}>
+                {/* Cart Header */}
+                <div className="p-4 sm:p-6 border-b border-brand-yellow/20 bg-gradient-to-r from-brand-gray/80 to-brand-gray/40">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-brand-yellow/20 rounded-xl flex items-center justify-center">
+                        <ShoppingCartIcon className="h-5 w-5 text-brand-yellow" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Shopping Cart</p>
+                        <p className="text-lg font-bold text-white">{currentSale.items.length} items</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
                       {currentSale.items.length > 0 && (
                         <button
                           type="button"
                           onClick={withTrustedClick(() => setCurrentSale(prev => ({ ...prev, items: [], total: 0 })))}
-                          className="text-red-400 hover:text-red-300 transition-colors"
+                          className="w-10 h-10 flex items-center justify-center text-red-300 hover:bg-red-500/20 hover:text-red-100 border border-red-500/20 rounded-xl transition-all duration-200"
                           title="Clear cart"
                         >
                           <TrashIcon className="h-5 w-5" />
@@ -958,10 +1114,10 @@ export default function CashierDashboard() {
                       )}
                       <button
                         type="button"
-                        className="lg:hidden text-gray-400 hover:text-gray-300"
+                        className="lg:hidden w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-300 hover:bg-white/10 rounded-xl transition-all"
                         onClick={withTrustedClick(() => setShowCart(!showCart))}
                       >
-                        <ChevronDownIcon className={`h-5 w-5 transition-transform ${showCart ? 'rotate-180' : ''}`} />
+                        <ChevronDownIcon className={`h-5 w-5 transition-transform duration-300 ${showCart ? 'rotate-180' : ''}`} />
                       </button>
                     </div>
                   </div>
@@ -970,85 +1126,84 @@ export default function CashierDashboard() {
                 {/* Cart Items */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
                   {currentSale.items.length === 0 ? (
-                    <div className="text-center py-12">
-                      <ShoppingCartIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-300">Cart is empty</p>
+                    <div className="h-full flex flex-col items-center justify-center text-center py-8">
+                      <div className="w-16 h-16 bg-brand-yellow/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <ShoppingCartIcon className="h-8 w-8 text-brand-yellow/60" />
+                      </div>
+                      <p className="text-gray-300 font-medium mb-1">Cart is Empty</p>
                       <p className="text-sm text-gray-400">Add products to get started</p>
                     </div>
                   ) : (
-                    currentSale.items.map(item => (
-                      <div key={item.id} className="bg-black/40 rounded-xl p-4 hover:bg-black/50 transition-colors">
-                        <div className="flex items-start justify-between mb-2">
+                    currentSale.items.map((item, idx) => (
+                      <div 
+                        key={item.id} 
+                        className="group bg-gradient-to-br from-brand-black/60 to-brand-black/40 rounded-xl p-4 hover:from-brand-black/80 hover:to-brand-black/60 transition-all duration-200 border border-brand-yellow/10 hover:border-brand-yellow/30"
+                        style={{ animationDelay: `${idx * 0.05}s` }}
+                      >
+                        <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
-                            <h4 className="font-semibold text-gray-100 text-sm">{item.name}</h4>
-                            <div className="flex items-center space-x-2">
-                              <p className="text-xs text-gray-300">
-                                {formatCurrency(parseFloat(item.price || 0))} each
+                            <h4 className="font-bold text-gray-100 text-sm group-hover:text-white transition-colors line-clamp-2">{item.name}</h4>
+                            <div className="flex items-center space-x-1 mt-1">
+                              <p className="text-xs text-gray-400">
+                                {formatCurrency(parseFloat(item.price || 0))}/ea
                               </p>
                               {item.quantity >= item.stockQuantity && (
-                                <span className="text-xs text-yellow-400">Max stock reached</span>
+                                <span className="text-xs text-yellow-400 font-semibold">📍 Max</span>
                               )}
                             </div>
                           </div>
                           <button
                             type="button"
                             onClick={withTrustedClick(() => removeFromCart(item.id))}
-                            className="text-red-400 hover:text-red-300 transition-colors"
+                            className="w-8 h-8 flex items-center justify-center text-red-300 hover:bg-red-500/20 hover:text-red-100 border border-red-500/20 rounded-lg transition-all duration-200"
                             title="Remove item"
                           >
                             <XMarkIcon className="h-4 w-4" />
                           </button>
                         </div>
+                        
+                        {/* Quantity Control */}
                         <div className="flex items-center justify-between">
-                          <div className="flex flex-col items-start space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <button
-                                type="button"
-                                onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity - 1))}
-                                className="w-8 h-8 bg-brand-black border border-brand-yellow/20 rounded-lg flex items-center justify-center hover:bg-black/60 transition-colors disabled:opacity-50"
-                                disabled={item.quantity <= 1}
-                                title="Decrease quantity"
-                              >
-                                <MinusIcon className="h-4 w-4" />
-                              </button>
-                              <div className="relative">
-                                <input
-                                  type="number"
-                                  value={item.quantity}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value);
-                                    if (!isNaN(val)) {
-                                      updateQuantity(item.id, val);
-                                    }
-                                  }}
-                                  min="1"
-                                  max={item.stockQuantity}
-                                  className="w-16 px-2 py-1 text-center bg-brand-black border border-brand-yellow/20 rounded-lg text-gray-100 text-sm"
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity + 1))}
-                                className="w-8 h-8 bg-brand-black border border-brand-yellow/20 rounded-lg flex items-center justify-center hover:bg-black/60 transition-colors disabled:opacity-50"
-                                disabled={item.quantity >= item.stockQuantity}
-                                title={item.quantity >= item.stockQuantity ? 'Maximum stock reached' : 'Increase quantity'}
-                              >
-                                <PlusIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              In stock: {item.stockQuantity}
-                            </div>
+                          <div className="flex items-center space-x-1 bg-brand-black/40 rounded-lg p-1">
+                            <button
+                              type="button"
+                              onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity - 1))}
+                              className="w-7 h-7 bg-brand-yellow/20 hover:bg-brand-yellow/40 text-brand-yellow rounded-md flex items-center justify-center transition-colors disabled:opacity-40"
+                              disabled={item.quantity <= 1}
+                              title="Decrease quantity"
+                            >
+                              <MinusIcon className="h-3 w-3" />
+                            </button>
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (!isNaN(val)) {
+                                  updateQuantity(item.id, val);
+                                }
+                              }}
+                              min="1"
+                              max={item.stockQuantity}
+                              className="w-12 px-1 py-1 text-center bg-transparent text-white text-sm font-bold focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={withTrustedClick(() => updateQuantity(item.id, item.quantity + 1))}
+                              className="w-7 h-7 bg-brand-yellow/20 hover:bg-brand-yellow/40 text-brand-yellow rounded-md flex items-center justify-center transition-colors disabled:opacity-40"
+                              disabled={item.quantity >= item.stockQuantity}
+                              title="Increase quantity"
+                            >
+                              <PlusIcon className="h-3 w-3" />
+                            </button>
                           </div>
                           <div className="text-right">
-                            <span className="font-bold text-brand-yellow">
-                              ${item.subtotal.toFixed(2)}
-                            </span>
-                            {item.quantity > 1 && (
-                              <div className="text-xs text-gray-400">
-                                ${item.price.toFixed(2)} × {item.quantity}
-                              </div>
-                            )}
+                            <p className="font-black text-brand-yellow text-lg">
+                              {formatCurrency(parseFloat((item.price * item.quantity).toFixed(2)))}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {item.quantity}x @ {formatCurrency(parseFloat(item.price || 0))}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -1058,17 +1213,32 @@ export default function CashierDashboard() {
 
                 {/* Total and Checkout */}
                 {currentSale.items.length > 0 && (
-                  <div className="p-4 sm:p-6 border-t border-brand-yellow/20 bg-brand-gray">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-lg font-bold text-gray-100">Total:</span>
-                      <span className="text-2xl font-bold text-brand-yellow">{formatCurrency(currentSale.total)}</span>
+                  <div className="p-4 sm:p-6 border-t border-brand-yellow/20 bg-gradient-to-t from-brand-gray to-brand-gray/50 space-y-4">
+                    {/* Summary */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-300">Subtotal:</span>
+                        <span className="text-gray-100 font-semibold">
+                          {formatCurrency(currentSale.items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0))}
+                        </span>
+                      </div>
+                      <div className="h-px bg-gradient-to-r from-transparent via-brand-yellow/20 to-transparent"></div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-base font-bold text-gray-100">Total:</span>
+                        <span className="text-2xl sm:text-3xl font-black text-brand-yellow">
+                          {formatCurrency(currentSale.total)}
+                        </span>
+                      </div>
                     </div>
+                    
+                    {/* Checkout Button */}
                     <button
                       type="button"
                       onClick={withTrustedClick(() => setShowPaymentModal(true))}
-                      className="w-full py-4 bg-brand-yellow text-brand-black rounded-xl font-bold hover:bg-brand-yellowDark transition-all duration-200 shadow-lg hover:shadow-xl"
+                      className="w-full group relative py-4 sm:py-5 bg-gradient-to-r from-brand-yellow to-brand-yellowDark text-brand-black rounded-xl sm:rounded-2xl font-bold text-base sm:text-lg shadow-lg hover:shadow-2xl hover:shadow-brand-yellow/40 transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center space-x-2"
                     >
-                      Proceed to Payment
+                      <span>💳 Proceed to Payment</span>
+                      <ArrowTrendingUpIcon className="h-5 w-5 transition-transform group-hover:translate-x-1" />
                     </button>
                   </div>
                 )}
@@ -1080,18 +1250,20 @@ export default function CashierDashboard() {
 
       {/* Mobile Cart Toggle Button */}
       {salesMode === 'product-selection' && (
-        <div className="lg:hidden fixed bottom-4 right-4 z-40">
+        <div className="lg:hidden fixed bottom-6 right-6 z-40">
           <button
             type="button"
             onClick={withTrustedClick(() => setShowCart(!showCart))}
-            className="w-14 h-14 bg-brand-yellow text-brand-black rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
+            className="group relative w-16 h-16 bg-gradient-to-br from-brand-yellow to-brand-yellowDark text-brand-black rounded-2xl shadow-2xl hover:shadow-brand-yellow/50 transition-all duration-300 flex items-center justify-center hover:scale-110 active:scale-95"
           >
-            <ShoppingCartIcon className="h-6 w-6" />
+            <ShoppingCartIcon className="h-7 w-7" />
             {currentSale.items.length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center">
+              <span className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-bold rounded-full h-7 w-7 flex items-center justify-center shadow-lg animate-bounce-gentle">
                 {currentSale.items.length}
               </span>
             )}
+            {/* Glow effect */}
+            <div className="absolute inset-0 rounded-2xl bg-brand-yellow opacity-0 group-hover:opacity-20 transition-opacity duration-300 -z-10"></div>
           </button>
         </div>
       )}
@@ -1120,75 +1292,99 @@ export default function CashierDashboard() {
       />
 
       {/* Floating Action Buttons */}
-      <div className="fixed bottom-6 right-6 flex flex-col space-y-3 z-40">
+      <div className="fixed bottom-6 right-6 lg:bottom-8 lg:right-8 flex flex-col space-y-3 z-40">
         <button
           type="button"
           onClick={withTrustedClick(() => window.print())}
-          className="w-14 h-14 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center text-gray-600 hover:text-blue-600"
+          className="group relative w-14 h-14 lg:w-16 lg:h-16 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center justify-center text-gray-700 hover:text-blue-600 hover:bg-white active:scale-95"
           title="Print Last Receipt"
         >
-          <PrinterIcon className="h-6 w-6" />
+          <PrinterIcon className="h-6 w-6 lg:h-7 lg:w-7" />
+          <div className="absolute inset-0 rounded-2xl bg-white opacity-0 group-hover:opacity-40 transition-opacity duration-300 -z-10"></div>
         </button>
         <button
           type="button"
           onClick={withTrustedClick(() => setShowStatsPanel(!showStatsPanel))}
-          className="w-14 h-14 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center text-gray-600 hover:text-green-600"
-          title="View Stats"
+          className="group relative w-14 h-14 lg:w-16 lg:h-16 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center justify-center text-gray-700 hover:text-green-600 hover:bg-white active:scale-95"
+          title="View Performance Stats"
         >
-          <ChartBarIcon className="h-6 w-6" />
+          <ChartBarIcon className="h-6 w-6 lg:h-7 lg:w-7" />
+          <div className="absolute inset-0 rounded-2xl bg-white opacity-0 group-hover:opacity-40 transition-opacity duration-300 -z-10"></div>
         </button>
       </div>
       
 
 
-      {/* Stats Panel Overlay */}
+      {/* Stats Panel Overlay - Premium Design */}
       {showStatsPanel && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" onClick={withTrustedClick(() => setShowStatsPanel(false))}>
-          <div className="absolute right-4 top-20 w-80 max-w-[calc(100vw-2rem)] bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">My Performance</h3>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-50 flex items-center justify-end" onClick={withTrustedClick(() => setShowStatsPanel(false))}>
+          <div className="absolute right-4 sm:right-8 top-24 w-96 max-w-[calc(100vw-2rem)] bg-gradient-to-br from-brand-gray to-brand-gray/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-brand-yellow/20 p-6 sm:p-8 animate-slideIn" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <p className="text-xs text-brand-yellow uppercase tracking-widest font-bold">Performance Dashboard</p>
+                <h3 className="text-3xl font-black text-white mt-1">My Stats</h3>
+              </div>
               <button
                 onClick={withTrustedClick(() => setShowStatsPanel(false))}
-                className="text-gray-500 hover:text-gray-700"
+                className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-300 hover:bg-white/10 rounded-xl transition-all duration-200"
               >
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
 
             <div className="space-y-4">
-              <div className="bg-gradient-to-r from-green-500 to-blue-500 rounded-xl p-4 text-white">
-                <div className="flex items-center justify-between">
+              {/* Today's Sales */}
+              <div className="group relative bg-gradient-to-br from-green-500/20 to-emerald-600/10 border border-green-500/30 hover:border-green-500/60 rounded-2xl p-5 sm:p-6 transition-all duration-300 cursor-default">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-green-500/10 rounded-full blur-2xl group-hover:blur-3xl transition-all"></div>
+                <div className="relative flex items-start justify-between">
                   <div>
-                    <p className="text-sm opacity-90">Today's Sales</p>
-                    <p className="text-2xl font-bold">{formatCurrency(cashierStats?.today?.totalSales || 0)}</p>
-                    <p className="text-sm opacity-90">{cashierStats?.today?.orderCount || 0} transactions</p>
+                    <p className="text-xs text-green-300/80 uppercase tracking-wide font-semibold mb-1">Today's Revenue</p>
+                    <p className="text-3xl font-black text-white mb-1">{formatCurrency(cashierStats?.today?.totalSales || 0)}</p>
+                    <p className="text-sm text-green-200/70">{cashierStats?.today?.orderCount || 0} completed transactions</p>
                   </div>
-                  <ArrowTrendingUpIcon className="h-8 w-8 opacity-80" />
+                  <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                    <ArrowTrendingUpIcon className="h-6 w-6 text-green-400" />
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl p-4 text-white">
-                <div className="flex items-center justify-between">
+              {/* This Week */}
+              <div className="group relative bg-gradient-to-br from-purple-500/20 to-indigo-600/10 border border-purple-500/30 hover:border-purple-500/60 rounded-2xl p-5 sm:p-6 transition-all duration-300 cursor-default">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full blur-2xl group-hover:blur-3xl transition-all"></div>
+                <div className="relative flex items-start justify-between">
                   <div>
-                    <p className="text-sm opacity-90">This Week</p>
-                    <p className="text-2xl font-bold">{formatCurrency(cashierStats?.week?.totalSales || 0)}</p>
-                    <p className="text-sm opacity-90">{cashierStats?.week?.orderCount || 0} transactions</p>
+                    <p className="text-xs text-purple-300/80 uppercase tracking-wide font-semibold mb-1">Weekly Revenue</p>
+                    <p className="text-3xl font-black text-white mb-1">{formatCurrency(cashierStats?.week?.totalSales || 0)}</p>
+                    <p className="text-sm text-purple-200/70">{cashierStats?.week?.orderCount || 0} transactions this week</p>
                   </div>
-                  <ChartBarIcon className="h-8 w-8 opacity-80" />
+                  <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                    <ChartBarIcon className="h-6 w-6 text-purple-400" />
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-4">
-                <h4 className="font-semibold text-gray-800 mb-3">Recent Sales</h4>
+              {/* Recent Sales */}
+              <div className="bg-gradient-to-br from-brand-black/60 to-brand-black/40 border border-brand-yellow/10 rounded-2xl p-5 sm:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-bold text-white text-lg">Recent Sales</h4>
+                  <ShoppingCartIcon className="h-5 w-5 text-brand-yellow/60" />
+                </div>
                 <div className="space-y-2">
-                  {(recentSales || []).slice(0, 3).map((sale, index) => (
-                    <div key={index} className="flex justify-between items-center text-sm">
-                      <span className="text-gray-600">#{sale?.id || 'N/A'}</span>
-                      <span className="font-medium">{formatCurrency(sale?.total || 0)}</span>
+                  {(recentSales || []).slice(0, 4).map((sale, index) => (
+                    <div key={index} className="flex justify-between items-center p-3 bg-black/30 hover:bg-black/50 rounded-lg transition-colors group">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 rounded-full bg-green-400 group-hover:animate-pulse"></div>
+                        <span className="text-sm text-gray-300 font-medium">Receipt #{sale?.id || 'N/A'}</span>
+                      </div>
+                      <span className="font-bold text-brand-yellow">{formatCurrency(sale?.total || 0)}</span>
                     </div>
                   ))}
                   {recentSales.length === 0 && (
-                    <p className="text-gray-500 text-sm">No recent sales</p>
+                    <div className="text-center py-6">
+                      <ShoppingCartIcon className="h-8 w-8 text-gray-500 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">No recent sales</p>
+                    </div>
                   )}
                 </div>
               </div>
