@@ -70,12 +70,13 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
 
   const customer = sale.Customer || sale.customer || null;
   const employee = sale.Employee || sale.employee || null;
-  
-  // Try to get items from multiple possible sources
-  let saleItems = sale.SaleItems || sale.items || [];
-  
+
+  // Try to get items from multiple possible sources and ensure it's an array
+  let saleItems = Array.isArray(sale.SaleItems) ? sale.SaleItems :
+    Array.isArray(sale.items) ? sale.items : [];
+
   // If no SaleItems, try to use normalized 'products' array
-  if (saleItems.length === 0 && sale.products && sale.products.length > 0) {
+  if (saleItems.length === 0 && Array.isArray(sale.products) && sale.products.length > 0) {
     saleItems = sale.products.map(p => ({
       id: p.id,
       quantity: p.quantity,
@@ -90,12 +91,12 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
       }
     }));
   }
-  
+
   const totalDiscount = parseFloat(sale.discount || 0);
   const tax = parseFloat(sale.tax || 0);
   const subtotal = parseFloat(sale.subtotal || sale.totalAmount || 0);
   const total = parseFloat(sale.total || sale.totalAmount || 0);
-  
+
   // Debug logging (remove in production)
   console.log('Sale Detail Modal - Sale Data:', {
     sale,
@@ -207,8 +208,8 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                       <div>
                         <p className="text-sm text-gray-500">Cashier</p>
                         <p className="font-medium text-gray-900">
-                          {employee 
-                            ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim() 
+                          {employee
+                            ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim()
                             : sale.employeeId || 'Unknown'
                           }
                         </p>
@@ -241,26 +242,26 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                     <CurrencyDollarIcon className="h-5 w-5 mr-2 text-brand-yellow" />
                     Payment Details
                   </h3>
-                  
+
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-500">Amount Paid</span>
                     <span className="font-medium">{formatCurrency(total)}</span>
                   </div>
-                  
+
                   {sale.paymentAmount && parseFloat(sale.paymentAmount) !== total && (
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-500">Received</span>
                       <span className="font-medium">{formatCurrency(parseFloat(sale.paymentAmount))}</span>
                     </div>
                   )}
-                  
+
                   {sale.change && parseFloat(sale.change) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-500">Change</span>
                       <span className="font-medium text-green-600">{formatCurrency(parseFloat(sale.change))}</span>
                     </div>
                   )}
-                  
+
                   {sale.paymentReference && (
                     <div>
                       <span className="text-sm text-gray-500">Reference</span>
@@ -285,7 +286,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                 <ShoppingCartIcon className="h-5 w-5 mr-2 text-brand-yellow" />
                 Products ({saleItems.length})
               </h3>
-              
+
               {saleItems.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No items found for this sale</p>
@@ -317,7 +318,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                         const unitPrice = parseFloat(item.price || item.unitPrice || item.priceAtSale || product?.price || 0);
                         const quantity = parseInt(item.quantity || 0);
                         const subtotal = unitPrice * quantity;
-                        
+
                         return (
                           <tr key={item.id || index} className="hover:bg-gray-50">
                             <td className="px-4 py-4 whitespace-nowrap">
@@ -367,7 +368,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                   <span className="font-medium">{formatCurrency(subtotal)}</span>
                 </div>
               )}
-              
+
               {totalDiscount > 0 && (
                 <div className="flex justify-between text-red-600">
                   <span className="flex items-center">
@@ -377,14 +378,14 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                   <span className="font-medium">-{formatCurrency(totalDiscount)}</span>
                 </div>
               )}
-              
+
               {tax > 0 && (
                 <div className="flex justify-between text-gray-700">
                   <span>Tax</span>
                   <span className="font-medium">{formatCurrency(tax)}</span>
                 </div>
               )}
-              
+
               <div className="flex justify-between items-center pt-2 border-t">
                 <span className="text-lg font-bold text-gray-900">Total</span>
                 <span className="text-2xl font-bold text-brand-yellow">

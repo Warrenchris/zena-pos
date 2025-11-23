@@ -8,7 +8,7 @@ export const usePermissions = () => {
 
   const hasPermission = (permission) => {
     if (!user) return false;
-    
+
     // Admin has all permissions
     if (userRole === 'admin' || ROLE_PERMISSIONS[userRole].permissions.includes('all')) {
       return true;
@@ -57,6 +57,7 @@ export const usePermissions = () => {
           { path: '/reports', label: 'Reports' },
         ];
       case 'cashier':
+      case 'employee':
         return [
           { path: '/dashboard', label: 'POS' },
           { path: '/my-sales', label: 'My Sales' },
@@ -69,7 +70,7 @@ export const usePermissions = () => {
       default:
         return [];
     }
-  }, [userRole]);
+  }, [userRole, user]);
 
   return {
     hasPermission,

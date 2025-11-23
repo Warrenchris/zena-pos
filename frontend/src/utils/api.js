@@ -59,15 +59,15 @@ export const api = {
   // Auth endpoints
   login: (credentials) => axiosInstance.post('/auth/login', credentials),
   register: (userData) => axiosInstance.post('/auth/register', userData),
-  
-  // Invoice endpoints
-  getInvoices: (params) => axiosInstance.get('/api/invoices', { params }),
-  getInvoiceById: (id) => axiosInstance.get(`/api/invoices/${id}`),
-  createInvoice: (data) => axiosInstance.post('/api/invoices', data),
-  updateInvoice: (id, data) => axiosInstance.put(`/api/invoices/${id}`, data),
-  deleteInvoice: (id) => axiosInstance.delete(`/api/invoices/${id}`),
-  generateInvoicePDF: (id) => axiosInstance.get(`/api/invoices/${id}/pdf`, { responseType: 'blob' }),
-  sendInvoiceEmail: (id, data) => axiosInstance.post(`/api/invoices/${id}/send`, data),
+
+  // Invoice endpoints (removed /api prefix since BASE_URL already includes it)
+  getInvoices: (params) => axiosInstance.get('/invoices', { params }),
+  getInvoiceById: (id) => axiosInstance.get(`/invoices/${id}`),
+  createInvoice: (data) => axiosInstance.post('/invoices', data),
+  updateInvoice: (id, data) => axiosInstance.put(`/invoices/${id}`, data),
+  deleteInvoice: (id) => axiosInstance.delete(`/invoices/${id}`),
+  generateInvoicePDF: (id) => axiosInstance.get(`/invoices/${id}/pdf`, { responseType: 'blob' }),
+  sendInvoiceEmail: (id, data) => axiosInstance.post(`/invoices/${id}/send`, data),
 
   // Sale endpoints
   getSales: (params) => axiosInstance.get('/sales', { params }),

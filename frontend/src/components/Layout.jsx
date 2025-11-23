@@ -22,7 +22,7 @@ export default function Layout() {
 			const allowedRoutes = getRoutesByRole().map(route => route.path)
 			const currentPath = location.pathname
 			const isAllowed = allowedRoutes.some(path => currentPath === path || currentPath.startsWith(`${path}/`))
-			
+
 			// Debug logging
 			if (process.env.NODE_ENV === 'development') {
 				console.log('🔐 Layout Route Check:', {
@@ -32,7 +32,7 @@ export default function Layout() {
 					userRole: user?.role
 				})
 			}
-			
+
 			if (!isAllowed) {
 				if (currentPath === '/') {
 					navigate('/dashboard')
@@ -41,7 +41,7 @@ export default function Layout() {
 				}
 			}
 		}
-	}, [location.pathname, getRoutesByRole, navigate, isLoginPage])
+	}, [location.pathname, getRoutesByRole, navigate, isLoginPage, user])
 
 	useEffect(() => {
 		if (typeof window === 'undefined') return
@@ -84,15 +84,15 @@ export default function Layout() {
 	// Return the layout with the appropriate sidebar variant
 	return (
 		<Shell>
-			<ModernSidebar 
-				isOpen={sidebarOpen} 
-				onClose={() => setSidebarOpen(false)} 
-				user={user} 
+			<ModernSidebar
+				isOpen={sidebarOpen}
+				onClose={() => setSidebarOpen(false)}
+				user={user}
 				variant={user?.role === 'admin' ? 'admin' : 'cashier'}
 			/>
 			<div className={`${user?.role === 'admin' ? 'lg:pl-80 2xl:pl-96' : 'lg:pl-72 2xl:pl-80'} flex flex-col min-h-screen transition-[padding-left] duration-300 ease-out`}>
-				<TopNavBar 
-					onMenuClick={() => setSidebarOpen(true)} 
+				<TopNavBar
+					onMenuClick={() => setSidebarOpen(true)}
 					className="z-40"
 					isSidebarOpen={sidebarOpen}
 				/>

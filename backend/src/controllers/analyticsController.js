@@ -134,15 +134,23 @@ const analyticsController = {
       const revenuePercentageChange = calculateGrowth(currentPeriodRevenue, previousPeriodRevenue);
 
       // Group by date for response
-      const ordersByDate = {};
+      const statsByDate = {};
       results.forEach(row => {
-        if (row.current_count > 0) {
-          ordersByDate[row.date] = (ordersByDate[row.date] || 0) + parseInt(row.current_count);
+        if (row.current_count > 0 || row.current_revenue > 0) {
+          if (!statsByDate[row.date]) {
+            statsByDate[row.date] = { orders: 0, revenue: 0 };
+          }
+          statsByDate[row.date].orders += parseInt(row.current_count || 0);
+          statsByDate[row.date].revenue += parseFloat(row.current_revenue || 0);
         }
       });
 
-      const orderData = Object.entries(ordersByDate)
-        .map(([date, count]) => ({ date, orders: count, revenue: 0 }))
+      const orderData = Object.entries(statsByDate)
+        .map(([date, stats]) => ({ 
+          date, 
+          orders: stats.orders, 
+          revenue: stats.revenue 
+        }))
         .sort((a, b) => a.date.localeCompare(b.date));
 
       const response = {

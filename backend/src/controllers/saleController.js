@@ -16,24 +16,24 @@ exports.getAllSales = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-     // Get the sales with their items
-     const sales = await Sale.findAndCountAll({
-       where: { 
-         shopId: req.user.shopId
-       },
-       attributes: {
-         exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
-       },
-       include: [
-         { 
-           model: SaleItem,
-           required: false, // Make this LEFT JOIN to get sales even without items
-           include: [{ 
-             model: Product,
-             required: false, // Also make this LEFT JOIN
-             attributes: ['id', 'name', 'sku', 'price']
-           }]
-         },
+    // Get the sales with their items
+    const sales = await Sale.findAndCountAll({
+      where: {
+        shopId: req.user.shopId
+      },
+      attributes: {
+        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
+      },
+      include: [
+        {
+          model: SaleItem,
+          required: false, // Make this LEFT JOIN to get sales even without items
+          include: [{
+            model: Product,
+            required: false, // Also make this LEFT JOIN
+            attributes: ['id', 'name', 'sku', 'price']
+          }]
+        },
         {
           model: Customer,
           required: false, // Make this a LEFT JOIN
@@ -66,7 +66,7 @@ exports.updateSale = async (req, res) => {
 
     // Find the sale
     const sale = await Sale.findOne({
-      where: { 
+      where: {
         id,
         shopId: req.user.shopId
       }
@@ -103,18 +103,18 @@ exports.updateSale = async (req, res) => {
 // Delete a sale (soft delete)
 exports.deleteSale = async (req, res) => {
   const t = await sequelize.transaction();
-  
+
   try {
     const { id } = req.params;
 
     // Find the sale
     const sale = await Sale.findOne({
-      where: { 
+      where: {
         id,
         shopId: req.user.shopId
       },
       include: [
-        { 
+        {
           model: SaleItem,
           include: [Product]
         }
@@ -163,7 +163,7 @@ exports.getSaleById = async (req, res) => {
       include: [
         {
           model: SaleItem,
-          include: [{ 
+          include: [{
             model: Product,
             attributes: ['id', 'name', 'sku', 'price'],
             where: { shopId: req.user.shopId }
@@ -210,7 +210,7 @@ exports.createSale = async (req, res) => {
       change: frontendChange,
       employeeId: frontendEmployeeId
     } = req.body;
-    
+
     // Always use the current user's ID as the employeeId for cashiers
     const employeeId = req.user.id;
 
@@ -236,7 +236,7 @@ exports.createSale = async (req, res) => {
 
       if (product.stockQuantity < item.quantity) {
         await t.rollback();
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: `Insufficient stock for product ${product.name}`
         });
       }
@@ -263,14 +263,14 @@ exports.createSale = async (req, res) => {
 
     // Use frontend total if provided and valid, otherwise calculate
     const total = frontendTotal && frontendTotal > 0 ? parseFloat(frontendTotal) : (subtotal + tax - discount);
-    
+
     // Calculate change if payment amount is provided
     const change = frontendChange !== undefined ? parseFloat(frontendChange) : (paymentAmount ? parseFloat(paymentAmount) - total : 0);
 
     // Generate invoice number (YYYYMMDD-XXXX format) with transaction lock
     const date = new Date();
-    const dateStr = date.toISOString().slice(0,10).replace(/-/g,'');
-    
+    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+
     const [lastSale] = await Sale.findAll({
       where: {
         invoiceNumber: {
@@ -316,15 +316,16 @@ exports.createSale = async (req, res) => {
       customerPhone: customer?.phone || null,
       customerEmail: customer?.email || null,
       customerId,
-      userId: resolvedUserId, // Only set when numeric
-      employeeId: employeeId || jwtId, // Track which employee/cashier made the sale
+      customerId,
+      userId: !req.user.isEmployee ? resolvedUserId : null,
+      employeeId: req.user.isEmployee ? req.user.id : null, // Track which employee/cashier made the sale
       notes,
       shopId: req.user.shopId
     }, { transaction: t });
 
     // Create sale items
     try {
-      await Promise.all(saleItems.map(item => 
+      await Promise.all(saleItems.map(item =>
         SaleItem.create({
           ...item,
           saleId: sale.id,
@@ -347,11 +348,11 @@ exports.createSale = async (req, res) => {
 
     // Handle customer creation/update for customer relationship management
     let finalCustomerId = customerId;
-    
+
     if (customer && customer.name && customer.name !== 'Walk-in Customer') {
       // Try to find existing customer by email, phone, or name
       let customerRecord = await Customer.findOne({
-        where: { 
+        where: {
           shopId: req.user.shopId,
           [Op.or]: [
             ...(customer.email ? [{ email: customer.email }] : []),
@@ -385,9 +386,9 @@ exports.createSale = async (req, res) => {
           ...(customer.location && { location: customer.location })
         }, { transaction: t });
       }
-      
+
       finalCustomerId = customerRecord.id;
-      
+
       // Update sale with customer ID
       await sale.update({ customerId: finalCustomerId }, { transaction: t });
     } else if (customerId) {
@@ -429,7 +430,7 @@ exports.createSale = async (req, res) => {
       include: [
         {
           model: SaleItem,
-          include: [{ 
+          include: [{
             model: Product,
             attributes: ['id', 'name', 'sku', 'price']
           }]
@@ -480,7 +481,7 @@ exports.updatePaymentStatus = async (req, res) => {
 exports.getCashierStats = async (req, res) => {
   try {
     const { employeeId, startDate, endDate } = req.query;
-    
+
     // Default the dates if not provided (use UTC day boundaries to avoid TZ drift)
     const now = new Date();
     const start = startDate
@@ -500,39 +501,30 @@ exports.getCashierStats = async (req, res) => {
 
     // For cashiers and employees, always show their own stats only
     if (req.user.role === 'cashier' || req.user.role === 'employee') {
-      try {
-        whereClause.employeeId = UuidHelper.validate(req.user.id);
-      } catch (error) {
-        return res.status(400).json({
-          error: 'Invalid employee ID format',
-          details: error.message
-        });
-      }
-    }
-    // For managers/admins, filter by employeeId if provided
-    else if (employeeId) {
-      try {
-        const validEmployeeId = UuidHelper.validate(employeeId);
-        const employee = await Employee.findOne({
-          where: { 
-            id: validEmployeeId,
-            shopId: req.user.shopId 
-          }
-        });
-        
-        if (!employee) {
-          return res.status(404).json({ 
-            error: 'Employee not found',
-            details: `No employee found with ID ${employeeId} in shop ${req.user.shopId}`
+      if (req.user.isEmployee) {
+        try {
+          whereClause.employeeId = UuidHelper.validate(req.user.id);
+        } catch (error) {
+          return res.status(400).json({
+            error: 'Invalid employee ID format',
+            details: error.message
           });
         }
-        whereClause.employeeId = validEmployeeId;
-      } catch (err) {
-        console.error('Error finding employee:', err);
-        return res.status(400).json({
-          error: 'Invalid employee ID format',
-          details: err.message
-        });
+      } else {
+        // It's a User (Integer ID)
+        whereClause.userId = req.user.id;
+      }
+    }
+    // For managers/admins, filter by employeeId or userId if provided
+    else if (employeeId) {
+      // Check if it's a UUID (Employee) or Integer (User)
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId);
+
+      if (isUuid) {
+        whereClause.employeeId = employeeId;
+      } else {
+        // Assume it's a User ID
+        whereClause.userId = employeeId;
       }
     }
 
@@ -585,7 +577,7 @@ exports.getCashierStats = async (req, res) => {
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
     weekStart.setHours(0, 0, 0, 0);
-    
+
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
@@ -618,11 +610,11 @@ exports.getCashierStats = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching cashier stats:', error);
-    
+
     // More descriptive error response
     let errorMessage = 'Failed to fetch cashier statistics';
     let statusCode = 500;
-    
+
     if (error.name === 'SequelizeDatabaseError' && error.message.includes('invalid input syntax')) {
       errorMessage = 'Invalid employee ID format';
       statusCode = 400;
@@ -630,8 +622,8 @@ exports.getCashierStats = async (req, res) => {
       errorMessage = error.message;
       statusCode = 400;
     }
-    
-    res.status(statusCode).json({ 
+
+    res.status(statusCode).json({
       error: errorMessage,
       details: error.message
     });
@@ -647,8 +639,8 @@ exports.getSalesStatistics = async (req, res) => {
       shopId: req.user.shopId,
       createdAt: {
         [Op.between]: [
-          startDate || new Date(new Date().setHours(0,0,0,0)),
-          endDate || new Date(new Date().setHours(23,59,59,999))
+          startDate || new Date(new Date().setHours(0, 0, 0, 0)),
+          endDate || new Date(new Date().setHours(23, 59, 59, 999))
         ]
       }
     };
@@ -698,15 +690,20 @@ exports.getAllSalesForAdmin = async (req, res) => {
     if (startDate || endDate) {
       whereClause.createdAt = {
         [Op.between]: [
-          startDate || new Date(new Date().setHours(0,0,0,0)),
-          endDate || new Date(new Date().setHours(23,59,59,999))
+          startDate || new Date(new Date().setHours(0, 0, 0, 0)),
+          endDate || new Date(new Date().setHours(23, 59, 59, 999))
         ]
       };
     }
 
     // Add cashier filter
     if (cashierId) {
-      whereClause.employeeId = cashierId;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cashierId);
+      if (isUuid) {
+        whereClause.employeeId = cashierId;
+      } else {
+        whereClause.userId = cashierId;
+      }
     }
 
     const sales = await Sale.findAndCountAll({
@@ -715,11 +712,11 @@ exports.getAllSalesForAdmin = async (req, res) => {
         exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
       },
       include: [
-        { 
+        {
           model: SaleItem,
           required: false,
           as: 'SaleItems', // Explicitly set the alias
-          include: [{ 
+          include: [{
             model: Product,
             as: 'Product',
             attributes: ['id', 'name', 'sku', 'price'],
@@ -778,17 +775,21 @@ exports.getMySales = async (req, res) => {
     const { startDate, endDate, sortBy = 'createdAt', sortOrder = 'DESC' } = req.query;
 
     // Build where clause - only show sales made by this cashier
+    // Use OR to check both userId and employeeId to handle legacy sales
     const whereClause = {
       shopId: req.user.shopId,
-      employeeId: req.user.id // Only show sales made by this cashier
+      [Op.or]: [
+        { userId: req.user.id },
+        { employeeId: req.user.id }
+      ]
     };
 
     // Add date range filter
     if (startDate || endDate) {
       whereClause.createdAt = {
         [Op.between]: [
-          startDate || new Date(new Date().setHours(0,0,0,0)),
-          endDate || new Date(new Date().setHours(23,59,59,999))
+          startDate || new Date(new Date().setHours(0, 0, 0, 0)),
+          endDate || new Date(new Date().setHours(23, 59, 59, 999))
         ]
       };
     }
@@ -799,10 +800,10 @@ exports.getMySales = async (req, res) => {
         exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
       },
       include: [
-        { 
+        {
           model: SaleItem,
           required: false,
-          include: [{ 
+          include: [{
             model: Product,
             attributes: ['id', 'name', 'sku'],
             required: false
@@ -834,7 +835,7 @@ exports.getMySales = async (req, res) => {
         )
       }));
 
-      const itemsText = saleItems.map(item => 
+      const itemsText = saleItems.map(item =>
         `${item.quantity}x ${item.Product?.name || 'Unknown Product'}`
       ).join(', ');
 
@@ -842,7 +843,7 @@ exports.getMySales = async (req, res) => {
         id: sale.id,
         createdAt: sale.createdAt,
         invoiceNumber: sale.invoiceNumber,
-        customer: sale.Customer ? { 
+        customer: sale.Customer ? {
           id: sale.Customer.id,
           name: sale.Customer.name,
           email: sale.Customer.email,
