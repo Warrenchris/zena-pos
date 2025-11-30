@@ -14,7 +14,7 @@ import analyticsService from '../../services/analytics.service';
 
 const RevenueChart = () => {
   const { format } = useCurrency();
-  const [selectedPeriod, setSelectedPeriod] = useState('weekly');
+  const [selectedPeriod, setSelectedPeriod] = useState('week');
   const [revenueData, setRevenueData] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -48,9 +48,15 @@ const RevenueChart = () => {
   }, [selectedPeriod]);
 
   const periods = {
-    weekly: revenueData.weekly || [],
-    monthly: revenueData.monthly || [],
-    yearly: revenueData.yearly || []
+    week: revenueData.week || [],
+    month: revenueData.month || [],
+    year: revenueData.year || []
+  };
+
+  const periodLabels = {
+    week: 'Weekly',
+    month: 'Monthly',
+    year: 'Yearly'
   };
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -96,15 +102,14 @@ const RevenueChart = () => {
             <Tab
               key={period}
               className={({ selected }) =>
-                `rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-                  selected
-                    ? 'border-yellow-400 bg-yellow-400 text-black shadow-[0_0_18px_rgba(250,204,21,0.35)]'
-                    : 'border-yellow-400/30 bg-black/40 text-yellow-200 hover:border-yellow-300 hover:text-yellow-100'
+                `rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${selected
+                  ? 'border-yellow-400 bg-yellow-400 text-black shadow-[0_0_18px_rgba(250,204,21,0.35)]'
+                  : 'border-yellow-400/30 bg-black/40 text-yellow-200 hover:border-yellow-300 hover:text-yellow-100'
                 }`
               }
               onClick={() => setSelectedPeriod(period)}
             >
-              {period.charAt(0).toUpperCase() + period.slice(1)}
+              {periodLabels[period]}
             </Tab>
           ))}
         </Tab.List>

@@ -12,39 +12,39 @@ const initialState = {
   timezone: 'Africa/Nairobi',
   language: 'en',
   theme: 'dark',
-  
+
   // Currency Settings
   defaultCurrency: 'KES',
   currencySymbol: 'KSh',
   currencyPosition: 'before',
   decimalPlaces: 2,
-  
+
   // Notification Settings
   enableNotifications: true,
   enableSoundAlerts: true,
   enableEmailAlerts: false,
   enableSuccessToasts: true,
   enableErrorToasts: true,
-  
+
   // Security Settings
   passwordMinLength: 8,
   requireSpecialChars: false,
   sessionTimeout: 480,
   enableTwoFactor: false,
   maxLoginAttempts: 5,
-  
+
   // Data & Backup Settings
   autoBackupEnabled: true,
   backupFrequency: 'daily',
   backupRetentionDays: 30,
-  
+
   // User Management Settings
   allowUserRegistration: false,
   requireEmailVerification: true,
-  
+
   // Additional Settings
   additionalSettings: {},
-  
+
   loading: false,
   error: null,
   lastUpdated: null,
@@ -60,7 +60,7 @@ export const updateCurrency = createAsyncThunk(
         defaultCurrency: currencyCode,
         currencySymbol
       });
-      
+
       toast.success(`Currency updated to ${currencyCode}`);
       return response.data;
     } catch (error) {
@@ -257,7 +257,7 @@ export const settingsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Update settings
       .addCase(updateSettings.pending, (state) => {
         state.loading = true;
@@ -273,7 +273,7 @@ export const settingsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Reset settings
       .addCase(resetSettings.pending, (state) => {
         state.loading = true;
@@ -288,22 +288,22 @@ export const settingsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Fetch currency settings
       .addCase(fetchCurrencySettings.fulfilled, (state, action) => {
         Object.assign(state, action.payload);
       })
-      
+
       // Fetch theme settings
       .addCase(fetchThemeSettings.fulfilled, (state, action) => {
         Object.assign(state, action.payload);
       })
-      
+
       // Fetch notification settings
       .addCase(fetchNotificationSettings.fulfilled, (state, action) => {
         Object.assign(state, action.payload);
       })
-      
+
       // Refresh currency settings
       .addCase(refreshCurrencySettings.fulfilled, (state, action) => {
         // Update only currency-related settings
@@ -318,12 +318,12 @@ export const settingsSlice = createSlice({
 });
 
 // Action creators
-export const { 
-  setLoading, 
-  setError, 
-  clearError, 
-  updateSetting, 
-  updateMultipleSettings 
+export const {
+  setLoading,
+  setError,
+  clearError,
+  updateSetting,
+  updateMultipleSettings
 } = settingsSlice.actions;
 
 // Selectors with memoization
@@ -390,6 +390,7 @@ export const selectUserManagementSettings = createSelector(
     requireEmailVerification: settings.requireEmailVerification,
   })
 );
+
 export const selectLoading = (state) => state.settings.loading;
 export const selectError = (state) => state.settings.error;
 export const selectLastUpdated = (state) => state.settings.lastUpdated;
@@ -397,8 +398,15 @@ export const selectLastUpdated = (state) => state.settings.lastUpdated;
 // Currency formatting utility
 export const formatCurrency = (amount, settings) => {
   const { currencySymbol, currencyPosition, decimalPlaces } = settings;
-  const formattedAmount = parseFloat(amount).toFixed(decimalPlaces);
-  
+
+  // Use Intl.NumberFormat for proper formatting with commas
+  const formatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: decimalPlaces,
+    maximumFractionDigits: decimalPlaces,
+  });
+
+  const formattedAmount = formatter.format(parseFloat(amount) || 0);
+
   if (currencyPosition === 'before') {
     return `${currencySymbol} ${formattedAmount}`;
   } else {

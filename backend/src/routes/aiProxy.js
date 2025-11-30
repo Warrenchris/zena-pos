@@ -23,7 +23,7 @@ async function probeHealth() {
 
 // Kick off periodic health probe (non-blocking)
 setInterval(() => {
-  probeHealth().catch(() => {});
+  probeHealth().catch(() => { });
 }, HEALTH_TTL).unref?.();
 
 // GET health (cached)
@@ -39,7 +39,15 @@ router.get('/status', async (req, res) => {
 });
 
 // All AI proxy routes require authentication
-router.use(auth);
+// Apply auth middleware to all routes except AI forward proxy
+router.use((req, res, next) => {
+  // If the request is for forwarding to AI service, skip auth
+  if (req.originalUrl && req.originalUrl.includes('/forward/')) {
+    return next();
+  }
+  // Otherwise, enforce authentication
+  return auth(req, res, next);
+});
 
 // Generic forwarder for GET/POST/DELETE to AI service.
 // We avoid complex path-to-regexp patterns here by using a middleware that

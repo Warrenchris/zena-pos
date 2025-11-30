@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 const Sale = require('../models/Sale');
 const Customer = require('../models/Customer');
 const Product = require('../models/Product');
@@ -9,7 +10,7 @@ const User = require('../models/User');
 const getDateRange = (period) => {
   const now = new Date();
   const start = new Date();
-  
+
   switch (period) {
     case 'weekly':
       start.setDate(now.getDate() - 7);
@@ -23,8 +24,14 @@ const getDateRange = (period) => {
     default:
       start.setDate(now.getDate() - 7);
   }
-  
+
   return { start, end: now };
+};
+
+// Helper function to calculate growth and handle division by zero
+const calculateGrowth = (current, previous) => {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return ((current - previous) / previous) * 100;
 };
 
 const dashboardController = {
@@ -52,15 +59,15 @@ const dashboardController = {
       ]);
 
       // Calculate sales metrics
-      const totalIncome = salesStats.reduce((sum, sale) => 
+      const totalIncome = salesStats.reduce((sum, sale) =>
         sum + sale.total, 0);
-      
+
       const totalTransactions = salesStats.length;
-      
+
       // Calculate previous period metrics for comparison
       const prevStart = new Date(start);
       prevStart.setDate(prevStart.getDate() - (end - start));
-      
+
       const prevSales = await Sale.findAll({
         where: {
           shopId,
@@ -68,20 +75,22 @@ const dashboardController = {
         }
       });
 
-      const prevIncome = prevSales.reduce((sum, sale) => 
+      const prevIncome = prevSales.reduce((sum, sale) =>
         sum + sale.total, 0);
-      
+
       const prevTransactions = prevSales.length;
-      
+
       // Calculate growth percentages
-      const incomeGrowth = ((totalIncome - prevIncome) / prevIncome) * 100;
-      const transactionGrowth = ((totalTransactions - prevTransactions) / prevTransactions) * 100;
-      const customerGrowth = (customerStats.count / await Customer.count({
+      const prevCustomerCount = await Customer.count({
         where: {
           shopId,
           createdAt: { [Op.between]: [prevStart, start] }
         }
-      })) * 100 - 100;
+      });
+
+      const incomeGrowth = calculateGrowth(totalIncome, prevIncome);
+      const transactionGrowth = calculateGrowth(totalTransactions, prevTransactions);
+      const customerGrowth = calculateGrowth(customerStats.count, prevCustomerCount);
 
       res.json({
         totalIncome,
@@ -117,7 +126,7 @@ const dashboardController = {
       const revenueData = sales.reduce((acc, sale) => {
         const date = new Date(sale.createdAt);
         let key;
-        
+
         switch (period) {
           case 'weekly':
             key = date.toLocaleDateString('en-US', { weekday: 'short' });
@@ -174,6 +183,195 @@ const dashboardController = {
     } catch (error) {
       console.error('Error fetching top products:', error);
       res.status(500).json({ error: 'Error fetching top products' });
+    }
+  },
+
+  // Get visitor statistics
+  async getVisitorStats(req, res) {
+    try {
+      const { period = 'week' } = req.query;
+      const shopId = req.user.shopId;
+      const now = new Date();
+      const { start, end } = getDateRange(period);
+      const prevStart = new Date(start);
+      prevStart.setDate(prevStart.getDate() - (end - start) / (1000 * 60 * 60 * 24));
+
+      // Get visitor data from sales (unique customers per day)
+      const visitorData = await Sale.findAll({
+        where: {
+          shopId,
+          createdAt: { [Op.between]: [start, end] }
+        },
+        attributes: [
+          [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
+          [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('customerId'))), 'visitors']
+        ],
+        group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
+        order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']],
+        raw: true
+      });
+
+      const totalVisitors = visitorData.reduce((sum, day) => sum + parseInt(day.visitors || 0), 0);
+
+      // Get previous period visitors
+      const prevVisitors = await Sale.count({
+        where: {
+          shopId,
+          createdAt: { [Op.between]: [prevStart, start] }
+        },
+        distinct: true,
+        col: 'customerId'
+      });
+
+      const percentageChange = calculateGrowth(totalVisitors, prevVisitors);
+
+      res.json({
+        visitorData,
+        totalVisitors,
+        percentageChange
+      });
+    } catch (error) {
+      console.error('Error fetching visitor stats:', error);
+      res.status(500).json({ error: 'Error fetching visitor statistics' });
+    }
+  },
+
+  // Get order statistics
+  async getOrderStats(req, res) {
+    try {
+      const { period = 'week' } = req.query;
+      const shopId = req.user.shopId;
+      const now = new Date();
+      const { start, end } = getDateRange(period);
+      const prevStart = new Date(start);
+      prevStart.setDate(prevStart.getDate() - (end - start) / (1000 * 60 * 60 * 24));
+
+      // Get order data
+      const orderData = await Sale.findAll({
+        where: {
+          shopId,
+          createdAt: { [Op.between]: [start, end] }
+        },
+        attributes: [
+          [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
+          [sequelize.fn('COUNT', sequelize.col('id')), 'orders'],
+          [sequelize.fn('SUM', sequelize.col('total')), 'revenue']
+        ],
+        group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
+        order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']],
+        raw: true
+      });
+
+      const totalOrders = orderData.reduce((sum, day) => sum + parseInt(day.orders || 0), 0);
+      const totalRevenue = orderData.reduce((sum, day) => sum + parseFloat(day.revenue || 0), 0);
+
+      // Get previous period data
+      const prevOrders = await Sale.count({
+        where: {
+          shopId,
+          createdAt: { [Op.between]: [prevStart, start] }
+        }
+      });
+
+      const prevRevenue = await Sale.sum('total', {
+        where: {
+          shopId,
+          createdAt: { [Op.between]: [prevStart, start] }
+        }
+      }) || 0;
+
+      const orderPercentageChange = calculateGrowth(totalOrders, prevOrders);
+      const revenuePercentageChange = calculateGrowth(totalRevenue, prevRevenue);
+
+      res.json({
+        orderData,
+        totalOrders,
+        totalRevenue,
+        orderPercentageChange,
+        revenuePercentageChange
+      });
+    } catch (error) {
+      console.error('Error fetching order stats:', error);
+      res.status(500).json({ error: 'Error fetching order statistics' });
+    }
+  },
+
+  // Get platform distribution statistics
+  async getPlatformStats(req, res) {
+    try {
+      const { period = 'week' } = req.query;
+      const shopId = req.user.shopId;
+      const { start, end } = getDateRange(period);
+
+      const platforms = await Sale.findAll({
+        where: {
+          shopId,
+          createdAt: { [Op.between]: [start, end] }
+        },
+        attributes: [
+          'paymentMethod',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'orders'],
+          [sequelize.fn('SUM', sequelize.col('total')), 'revenue']
+        ],
+        group: ['paymentMethod'],
+        raw: true
+      });
+
+      const totalOrders = platforms.reduce((sum, p) => sum + parseInt(p.orders || 0), 0);
+
+      const formattedPlatforms = platforms.map(p => ({
+        name: p.paymentMethod || 'Cash',
+        orders: parseInt(p.orders || 0),
+        revenue: parseFloat(p.revenue || 0),
+        percentage: totalOrders > 0 ? (parseInt(p.orders || 0) / totalOrders) * 100 : 0
+      }));
+
+      res.json({
+        platforms: formattedPlatforms,
+        totalOrders
+      });
+    } catch (error) {
+      console.error('Error fetching platform stats:', error);
+      res.status(500).json({ error: 'Error fetching platform statistics' });
+    }
+  },
+
+  // Get location-based statistics
+  async getLocationStats(req, res) {
+    try {
+      const { period = 'week' } = req.query;
+      const shopId = req.user.shopId;
+      const { start, end } = getDateRange(period);
+
+      // Get customer locations
+      const locations = await Customer.findAll({
+        where: {
+          shopId,
+          createdAt: { [Op.between]: [start, end] }
+        },
+        attributes: [
+          'address',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'customers']
+        ],
+        group: ['address'],
+        raw: true
+      });
+
+      const totalCustomers = locations.reduce((sum, loc) => sum + parseInt(loc.customers || 0), 0);
+
+      const formattedLocations = locations.map(loc => ({
+        address: loc.address || 'Unknown',
+        customers: parseInt(loc.customers || 0),
+        percentage: totalCustomers > 0 ? (parseInt(loc.customers || 0) / totalCustomers) * 100 : 0
+      }));
+
+      res.json({
+        locations: formattedLocations,
+        totalCustomers
+      });
+    } catch (error) {
+      console.error('Error fetching location stats:', error);
+      res.status(500).json({ error: 'Error fetching location statistics' });
     }
   }
 };

@@ -10,9 +10,11 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { fetchOrderStats } from '../../store/slices/analyticsSlice';
+import useCurrency from '../../hooks/useCurrency';
 
 const OrderTracking = () => {
   const dispatch = useDispatch();
+  const { format } = useCurrency();
   const { orderData, orderPercentageChange, revenuePercentageChange, totalOrders, totalRevenue, loading, error } =
     useSelector((state) => state.analytics.orderStats);
   const [selectedPeriod, setSelectedPeriod] = useState('week');
@@ -28,7 +30,7 @@ const OrderTracking = () => {
           <p className="font-semibold text-yellow-200">{label}</p>
           <p className="mt-1 font-semibold text-orange-300">{payload[0].value} orders</p>
           {payload[1] && (
-            <p className="text-emerald-300 font-semibold">{`₦${payload[1].value.toLocaleString()}`}</p>
+            <p className="text-emerald-300 font-semibold">{format(payload[1].value)}</p>
           )}
         </div>
       );
@@ -69,7 +71,7 @@ const OrderTracking = () => {
               </span>
             </p>
             <p>
-              Revenue: ₦{totalRevenue?.toLocaleString()}
+              Revenue: {format(totalRevenue)}
               <span className={`ml-2 ${revenuePercentageChange >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
                 {revenuePercentageChange >= 0 ? '↑' : '↓'} {Math.abs(revenuePercentageChange).toFixed(1)}%
               </span>
@@ -122,7 +124,7 @@ const OrderTracking = () => {
               tick={{ fill: 'rgba(52,211,153,0.75)', fontSize: 12 }}
               tickLine={false}
               orientation="right"
-              tickFormatter={(value) => `₦${value.toLocaleString()}`}
+              tickFormatter={(value) => format(value)}
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar

@@ -15,11 +15,10 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
           <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
         </div>
         <div
-          className={`flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${
-            isPositive
+          className={`flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${isPositive
               ? 'bg-emerald-500/15 text-emerald-300'
               : 'bg-rose-500/15 text-rose-300'
-          }`}
+            }`}
         >
           {isPositive ? <HiArrowUp className="h-4 w-4" /> : <HiArrowDown className="h-4 w-4" />}
           <span>{Math.abs(percentage)}%</span>
@@ -78,7 +77,7 @@ const StatsGrid = () => {
             trend: 'Compared to last month',
             data: (orderStats?.orderData || []).map(h => ({
               name: h.date,
-              value: parseInt(h?.count || 0)
+              value: parseInt(h?.orders || 0)
             })),
             color: '#22d3ee'
           },

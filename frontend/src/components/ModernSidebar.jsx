@@ -229,7 +229,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
           active
             ? 'bg-gradient-to-r from-brand-yellow to-yellow-400 text-brand-black shadow-lg transform scale-[1.02]'
-            : 'text-gray-300 hover:bg-gray-800/50 hover:text-white hover:transform hover:scale-[1.01]'
+            : 'text-gray-200 hover:bg-white/10 hover:text-white hover:transform hover:scale-[1.01]'
         }`}
         onMouseEnter={() => setHoveredItem(item.path)}
         onMouseLeave={() => setHoveredItem(null)}
@@ -291,7 +291,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
     <>
       {/* Mobile overlay */}
       <div 
-        className={`fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-300 ease-in-out lg:hidden ${
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ease-in-out lg:hidden ${
           isOpen ? 'opacity-100 z-40' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
@@ -300,7 +300,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
 
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-40 xs:w-72 md:w-80 2xl:w-96 bg-gradient-to-b from-brand-black via-black to-brand-black backdrop-blur-sm border-r border-brand-yellow/20 shadow-2xl transform transition-all duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-40 xs:w-72 md:w-80 2xl:w-96 bg-black/60 backdrop-blur-md border-r border-white/10 shadow-2xl transform transition-all duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
         role="navigation"
@@ -309,7 +309,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
       >
         <div className="flex h-full flex-col">
           {/* Header with Logo */}
-          <div className="flex items-center justify-between h-20 px-6 border-b border-brand-yellow/20 bg-gradient-to-r from-brand-black to-black backdrop-blur-sm">
+          <div className="flex items-center justify-between h-20 px-6 border-b border-white/10 bg-white/5 backdrop-blur-md">
             <div className="flex items-center justify-center w-full">
               <div className="w-12 h-12 bg-gradient-to-tr from-brand-yellow to-yellow-400 rounded-xl flex items-center justify-center shadow-lg transform transition-transform duration-300 hover:scale-105">
                 <StoreIcon className="h-7 w-7 text-brand-black" />
@@ -340,7 +340,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
           </div>
 
           {/* User Info */}
-          <div className="p-4 border-t border-brand-yellow/20 bg-gradient-to-r from-gray-800 to-gray-900">
+          <div className="p-4 border-t border-white/10 bg-white/5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-yellow to-yellow-400 flex items-center justify-center shadow-lg">

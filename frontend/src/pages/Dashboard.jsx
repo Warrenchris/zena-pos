@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import forecastingService from '../services/forecasting.service';
-import { 
+import {
   ShoppingBagIcon,
   CurrencyDollarIcon,
   UsersIcon,
@@ -68,21 +68,22 @@ export default function Dashboard() {
 
   const fetchForecast = useCallback(async () => {
     if (forecastLoading) return; // Prevent multiple simultaneous calls
-    
+
     try {
       setForecastLoading(true);
       setForecastError(null);
-      
+
       // Only attempt forecast if we have statistics
       if (!statistics?.totalRevenue) {
         setForecast({ next: 0 });
+        setForecastLoading(false); // Clear loading state before early return
         return;
       }
 
       const dates = [];
       const values = [];
       const end = new Date();
-      
+
       // Generate historical data points
       for (let i = 29; i >= 0; i--) {
         const d = new Date(end);
@@ -91,11 +92,11 @@ export default function Dashboard() {
         const dayValue = i === 0 ? statistics.totalRevenue : 0;
         values.push(dayValue);
       }
-      
+
       const data = await forecastingService.getForecast(dates, values);
-      
+
       if (data?.predictions?.length > 0) {
-        setForecast({ 
+        setForecast({
           next: data.predictions[0],
           confidence: {
             lower: data.lower_bounds?.[0] || 0,
@@ -116,12 +117,12 @@ export default function Dashboard() {
 
   const fetchInsights = useCallback(async () => {
     if (insightsLoading) return; // Prevent multiple simultaneous calls
-    
+
     try {
       setInsightsLoading(true);
       const response = await api.get('/api/insights');
       const data = response?.data || {};
-      
+
       // Transform and validate insights data
       const validInsights = (data.insights || [])
         .filter(insight => insight?.message && insight?.type) // Only include valid insights
@@ -178,7 +179,7 @@ export default function Dashboard() {
           dispatch(fetchCustomers({ limit: 5 })),
           dispatch(fetchProducts({ limit: 5 }))
         ]);
-        
+
         // Only fetch insights and forecast after main data is loaded
         await fetchInsights();
         await fetchForecast();
@@ -193,10 +194,10 @@ export default function Dashboard() {
   // Check for low stock products
   useEffect(() => {
     if (products && products.length > 0) {
-      const lowStockProducts = products.filter(product => 
+      const lowStockProducts = products.filter(product =>
         product.stockQuantity <= product.reorderPoint && product.active
       );
-      
+
       if (lowStockProducts.length > 0 && user?.role === 'admin') {
         lowStockProducts.forEach(product => {
           notifyLowStock(
@@ -284,7 +285,7 @@ export default function Dashboard() {
             Please log in to access your dashboard.
           </p>
           <div className="mt-4">
-            <button 
+            <button
               onClick={() => navigate('/login')}
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
             >
@@ -309,7 +310,7 @@ export default function Dashboard() {
             Your account is not properly configured. Please contact support.
           </p>
           <div className="mt-4">
-            <button 
+            <button
               onClick={() => {
                 localStorage.removeItem('token');
                 navigate('/login');
@@ -433,8 +434,8 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-4">
                 {(Array.isArray(sales) ? sales : []).slice(0, 5).map((sale) => (
-                  <div 
-                    key={sale.id} 
+                  <div
+                    key={sale.id}
                     onClick={() => handleSaleClick(sale)}
                     className="flex justify-between items-center hover:bg-zana-yellow/10 p-2 rounded transition-colors cursor-pointer"
                   >
@@ -537,7 +538,7 @@ export default function Dashboard() {
           <div className="mb-4 p-4 rounded border border-red-500/30 bg-black/40">
             <div className="text-sm text-red-400">Error loading forecast</div>
             <div className="text-red-300">{forecastError}</div>
-            <button 
+            <button
               onClick={fetchForecast}
               className="mt-2 text-sm text-red-400 hover:text-red-300 underline"
             >
@@ -563,28 +564,28 @@ export default function Dashboard() {
       <div className="bg-brand-black rounded-lg shadow-zana border border-zana-borderTint p-6">
         <h3 className="text-lg font-medium text-zana-yellow mb-4">Quick Actions</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <button 
+          <button
             onClick={() => navigate('/pos')}
             className="p-4 border border-zana-borderTint rounded-lg hover:bg-zana-yellow/10 text-center transition-colors"
           >
             <ShoppingBagIcon className="h-8 w-8 text-zana-yellow mx-auto mb-2" />
             <p className="text-sm font-medium text-white">New Sale</p>
           </button>
-          <button 
+          <button
             onClick={() => navigate('/products/new')}
             className="p-4 border border-zana-borderTint rounded-lg hover:bg-zana-yellow/10 text-center transition-colors"
           >
             <TagIcon className="h-8 w-8 text-zana-yellow mx-auto mb-2" />
             <p className="text-sm font-medium text-white">Add Product</p>
           </button>
-          <button 
+          <button
             onClick={() => navigate('/customers/new')}
             className="p-4 border border-zana-borderTint rounded-lg hover:bg-zana-yellow/10 text-center transition-colors"
           >
             <UsersIcon className="h-8 w-8 text-zana-yellow mx-auto mb-2" />
             <p className="text-sm font-medium text-white">Add Customer</p>
           </button>
-          <button 
+          <button
             onClick={() => navigate('/reports')}
             className="p-4 border border-zana-borderTint rounded-lg hover:bg-zana-yellow/10 text-center transition-colors"
           >

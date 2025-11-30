@@ -73,7 +73,6 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ai', aiProxyRoutes);
 app.use('/api/system/health', systemHealthRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/invoices', invoiceRoutes);
