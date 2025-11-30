@@ -20,9 +20,8 @@ const validateSale = [
     .withMessage('At least one item is required'),
   body('items.*.productId')
     .notEmpty()
-    .withMessage('Product ID is required')
-    .isInt()
-    .withMessage('Invalid product ID'),
+    .withMessage('Product ID is required'),
+  // .isInt() removed to allow UUIDs
   body('items.*.quantity')
     .isInt({ min: 1 })
     .withMessage('Quantity must be at least 1'),
@@ -114,7 +113,7 @@ const validateSale = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Location must be less than 100 characters'),
-  
+
   // Payment fields validation  
   body('paymentMethod')
     .optional()
@@ -136,7 +135,7 @@ const validateSale = [
     .optional()
     .isString()
     .withMessage('Payment notes must be a string'),
-  
+
   // Amount fields
   body('subtotal')
     .optional()
@@ -232,18 +231,18 @@ const validatePaymentStatus = [
 ];
 
 // Basic routes with role-based access
-router.get('/', 
-  checkRole(['admin', 'manager']), 
+router.get('/',
+  checkRole(['admin', 'manager']),
   saleController.getAllSales
 );
 
-router.get('/statistics', 
+router.get('/statistics',
   checkRole(['admin', 'manager']),
   validateDateRange,
   saleController.getSalesStatistics
 );
 
-router.get('/cashier-stats', 
+router.get('/cashier-stats',
   auth,
   checkRole(['admin', 'manager', 'cashier', 'employee']),
   validateDateRange,
@@ -251,21 +250,21 @@ router.get('/cashier-stats',
 );
 
 // Admin route to get all sales with filtering
-router.get('/admin/all', 
+router.get('/admin/all',
   checkRole(['admin', 'manager']),
   validateDateRange,
   saleController.getAllSalesForAdmin
 );
 
 // Cashier route to get only their own sales
-router.get('/my-sales', 
+router.get('/my-sales',
   checkPermission('view_own_sales'),
   validateDateRange,
   saleController.getMySales
 );
 
 // Get specific sale - Permission check is handled in controller
-router.get('/:id', 
+router.get('/:id',
   async (req, res, next) => {
     // Admin and managers can view all sales
     if (req.user.role === 'admin' || req.user.role === 'manager') {
@@ -273,8 +272,8 @@ router.get('/:id',
     }
     // Cashiers and employees can only view their own sales
     if (req.user.role === 'cashier' || req.user.role === 'employee') {
-      const sale = await Sale.findOne({ 
-        where: { 
+      const sale = await Sale.findOne({
+        where: {
           id: req.params.id,
           employeeId: req.user.id,
           shopId: req.user.shopId
@@ -291,7 +290,7 @@ router.get('/:id',
 );
 
 // Create new sale - Cashiers can only create sales for their shop
-router.post('/', 
+router.post('/',
   checkPermission('create_sales'),
   validateSale,
   saleController.createSale
@@ -312,9 +311,9 @@ router.delete('/:id',
   saleController.deleteSale
 );
 
-router.patch('/:id/payment-status', 
+router.patch('/:id/payment-status',
   auth,
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager']),
   validatePaymentStatus,
   saleController.updatePaymentStatus
 );
