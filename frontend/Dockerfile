@@ -1,5 +1,6 @@
 # Frontend Dockerfile
-# Use Node 20.19 which satisfies plugin engine requirements (@vitejs/plugin-react)
+# Using Node 20.19 which satisfies plugin engine requirements (@vitejs/plugin-react)
+# This version is required to avoid compatibility issues with Vite plugins
 FROM node:20.19-bullseye
 
 WORKDIR /app

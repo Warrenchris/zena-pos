@@ -7,6 +7,7 @@ import DashboardRouter from './components/DashboardRouter';
 import ErrorBoundary from './components/ErrorBoundary';
 
 const Login = lazy(() => import('./pages/Login'));
+const Signup = lazy(() => import('./pages/Signup'));
 const ToastExample = lazy(() => import('./pages/ToastExample'));
 const CashierDashboard = lazy(() => import('./pages/CashierDashboard.jsx'));
 const Products = lazy(() => import('./pages/Products'));
@@ -56,6 +57,10 @@ export const routes = [
         element: <Login />
       },
       {
+        path: 'signup',
+        element: <Signup />
+      },
+      {
         path: 'toast-example',
         element: <ToastExample />
       },
@@ -69,7 +74,7 @@ export const routes = [
                 <DashboardRouter />
               </PrivateRoute>
             )
-              },
+          },
           {
             path: 'products/view',
             element: <PrivateRoute><Products /></PrivateRoute>
@@ -146,154 +151,154 @@ export const routes = [
             path: 'settings',
             element: <PrivateRoute><Settings /></PrivateRoute>
           },
-           {
-             path: 'test-date-picker',
-             element: <TestDatePicker />
-           },
-           // Main sections
-           {
-             path: 'super-admin',
-             element: <PlaceholderPage />
-           },
-           {
-             path: 'applications',
-             element: <PlaceholderPage />
-           },
-           {
-             path: 'layouts',
-             element: <PlaceholderPage />
-           },
-           // Inventory sections
-           {
-             path: 'products/create',
-             element: <PrivateRoute><Products /></PrivateRoute>
-           },
-           {
-             path: 'products/expired',
-             element: <PrivateRoute><Products /></PrivateRoute>
-           },
-           {
-             path: 'products/low-stock',
-             element: <PrivateRoute><Products /></PrivateRoute>
-           },
-           {
-             path: 'categories',
-             element: <PrivateRoute><CategoriesPage /></PrivateRoute>
-           },
-           {
-             path: 'categories/sub',
-             element: <PrivateRoute><SubCategories /></PrivateRoute>
-           },
-           {
-             path: 'brands',
-             element: <PrivateRoute><Brands /></PrivateRoute>
-           },
-           {
-             path: 'units',
-             element: <PrivateRoute><Units /></PrivateRoute>
-           },
-           {
-             path: 'variants',
-             element: <PrivateRoute><Variants /></PrivateRoute>
-           },
-           {
-             path: 'warranties',
-             element: <PrivateRoute><Warranties /></PrivateRoute>
-           },
-           {
-             path: 'print/barcode',
-             element: <PrivateRoute><PrintBarcode /></PrivateRoute>
-           },
-           {
-             path: 'print/qr',
-             element: <PrivateRoute><PrintQR /></PrivateRoute>
-           },
-           // Stock sections
-           {
-             path: 'stock/manage',
-             element: <PrivateRoute><ManageStock /></PrivateRoute>
-           },
-           {
-             path: 'stock/adjustment',
-             element: <PrivateRoute><StockAdjustment /></PrivateRoute>
-           },
-           {
-             path: 'stock/transfer',
-             element: <PrivateRoute><StockTransfer /></PrivateRoute>
-           },
-           // Sales sections
-           {
-             path: 'invoices',
-             element: <PrivateRoute><Invoices /></PrivateRoute>
-           },
-           {
-             path: 'sales/returns',
-             element: <PrivateRoute><SalesReturns /></PrivateRoute>
-           },
-           {
-             path: 'quotations',
-             element: <PrivateRoute><Quotations /></PrivateRoute>
-           },
-           {
-             path: 'pos',
+          {
+            path: 'test-date-picker',
+            element: <TestDatePicker />
+          },
+          // Main sections
+          {
+            path: 'super-admin',
+            element: <PlaceholderPage />
+          },
+          {
+            path: 'applications',
+            element: <PlaceholderPage />
+          },
+          {
+            path: 'layouts',
+            element: <PlaceholderPage />
+          },
+          // Inventory sections
+          {
+            path: 'products/create',
+            element: <PrivateRoute><Products /></PrivateRoute>
+          },
+          {
+            path: 'products/expired',
+            element: <PrivateRoute><Products /></PrivateRoute>
+          },
+          {
+            path: 'products/low-stock',
+            element: <PrivateRoute><Products /></PrivateRoute>
+          },
+          {
+            path: 'categories',
+            element: <PrivateRoute><CategoriesPage /></PrivateRoute>
+          },
+          {
+            path: 'categories/sub',
+            element: <PrivateRoute><SubCategories /></PrivateRoute>
+          },
+          {
+            path: 'brands',
+            element: <PrivateRoute><Brands /></PrivateRoute>
+          },
+          {
+            path: 'units',
+            element: <PrivateRoute><Units /></PrivateRoute>
+          },
+          {
+            path: 'variants',
+            element: <PrivateRoute><Variants /></PrivateRoute>
+          },
+          {
+            path: 'warranties',
+            element: <PrivateRoute><Warranties /></PrivateRoute>
+          },
+          {
+            path: 'print/barcode',
+            element: <PrivateRoute><PrintBarcode /></PrivateRoute>
+          },
+          {
+            path: 'print/qr',
+            element: <PrivateRoute><PrintQR /></PrivateRoute>
+          },
+          // Stock sections
+          {
+            path: 'stock/manage',
+            element: <PrivateRoute><ManageStock /></PrivateRoute>
+          },
+          {
+            path: 'stock/adjustment',
+            element: <PrivateRoute><StockAdjustment /></PrivateRoute>
+          },
+          {
+            path: 'stock/transfer',
+            element: <PrivateRoute><StockTransfer /></PrivateRoute>
+          },
+          // Sales sections
+          {
+            path: 'invoices',
+            element: <PrivateRoute><Invoices /></PrivateRoute>
+          },
+          {
+            path: 'sales/returns',
+            element: <PrivateRoute><SalesReturns /></PrivateRoute>
+          },
+          {
+            path: 'quotations',
+            element: <PrivateRoute><Quotations /></PrivateRoute>
+          },
+          {
+            path: 'pos',
             element: <PrivateRoute><CashierDashboard /></PrivateRoute>
-           },
-           // AI & Analytics
-           {
-             path: 'ai/forecasting',
-             element: (
-               <PrivateRoute>
-                 <AiServices />
-               </PrivateRoute>
-             )
-           },
-           {
-             path: 'ai/insights',
-             element: (
-               <PrivateRoute>
-                 <AiServices />
-               </PrivateRoute>
-             )
-           },
-           {
-             path: 'ai/finance',
-             element: (
-               <PrivateRoute>
-                 <AiServices />
-               </PrivateRoute>
-             )
-           },
-           // Promo sections
-           {
-             path: 'coupons',
-             element: <PrivateRoute><Coupons /></PrivateRoute>
-           },
-           {
-             path: 'gift-cards',
-             element: <PrivateRoute><GiftCards /></PrivateRoute>
-           },
-           {
-             path: 'discounts',
-             element: <PrivateRoute><Discounts /></PrivateRoute>
-           },
-           // Purchases sections
-           {
-             path: 'purchases',
-             element: <PrivateRoute><Purchases /></PrivateRoute>
-           },
-           {
-             path: 'purchase-orders',
-             element: <PrivateRoute><PurchaseOrders /></PrivateRoute>
-           },
-           {
-             path: 'purchase-returns',
-             element: <PrivateRoute><PurchaseReturns /></PrivateRoute>
-           },
-           // Finance sections
-           {
-             path: 'expenses',
-             element: <PrivateRoute><ExpensesPage /></PrivateRoute>
-           }
+          },
+          // AI & Analytics
+          {
+            path: 'ai/forecasting',
+            element: (
+              <PrivateRoute>
+                <AiServices />
+              </PrivateRoute>
+            )
+          },
+          {
+            path: 'ai/insights',
+            element: (
+              <PrivateRoute>
+                <AiServices />
+              </PrivateRoute>
+            )
+          },
+          {
+            path: 'ai/finance',
+            element: (
+              <PrivateRoute>
+                <AiServices />
+              </PrivateRoute>
+            )
+          },
+          // Promo sections
+          {
+            path: 'coupons',
+            element: <PrivateRoute><Coupons /></PrivateRoute>
+          },
+          {
+            path: 'gift-cards',
+            element: <PrivateRoute><GiftCards /></PrivateRoute>
+          },
+          {
+            path: 'discounts',
+            element: <PrivateRoute><Discounts /></PrivateRoute>
+          },
+          // Purchases sections
+          {
+            path: 'purchases',
+            element: <PrivateRoute><Purchases /></PrivateRoute>
+          },
+          {
+            path: 'purchase-orders',
+            element: <PrivateRoute><PurchaseOrders /></PrivateRoute>
+          },
+          {
+            path: 'purchase-returns',
+            element: <PrivateRoute><PurchaseReturns /></PrivateRoute>
+          },
+          // Finance sections
+          {
+            path: 'expenses',
+            element: <PrivateRoute><ExpensesPage /></PrivateRoute>
+          }
         ]
       }
     ]

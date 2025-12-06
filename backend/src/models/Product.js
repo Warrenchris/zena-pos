@@ -68,8 +68,6 @@ const Product = sequelize.define('Product', {
   timestamps: true
 });
 
-// Relationships
-Product.belongsTo(Category);
-Category.hasMany(Product);
+// Relationships are defined in models/index.js
 
 module.exports = Product;

@@ -307,9 +307,13 @@ export default function CashierDashboard() {
         totalAmount: currentSale.total,
         paymentMethod: currentSale.paymentMethod,
         paymentAmount: parseFloat(currentSale.paymentAmount),
-        customerName: currentSale.customer.name,
-        customerPhone: currentSale.customer.phone,
-        customerEmail: currentSale.customer.email,
+        // Send customer object as expected by the backend
+        customer: {
+          name: currentSale.customer.name,
+          phone: currentSale.customer.phone,
+          email: currentSale.customer.email,
+          location: currentSale.customer.location
+        },
         notes: currentSale.notes
       };
 

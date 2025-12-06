@@ -2,6 +2,16 @@
 
 ## 🚀 Quick Start
 
+### Option 0: Using PowerShell Script (Windows Recommended)
+
+```powershell
+# Start all services
+.\start-docker.ps1
+
+# If you get a security error, run this instead:
+# powershell -ExecutionPolicy Bypass -File .\start-docker.ps1
+```
+
 ### Option 1: Using Makefile (Recommended)
 
 ```bash

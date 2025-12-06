@@ -138,6 +138,7 @@ const seedDatabase = async () => {
     ]);
 
     // Create sample sales
+    // Create sample sales
     const sales = await Sale.bulkCreate([
       {
         invoiceNumber: '20250916-0001',
@@ -146,6 +147,8 @@ const seedDatabase = async () => {
         discount: 10.00,
         total: 671.98,
         paymentMethod: 'card',
+        paymentAmount: 671.98,
+        change: 0,
         paymentStatus: 'completed',
         userId: users[2].id,
         customerId: customers[0].id,
@@ -158,6 +161,8 @@ const seedDatabase = async () => {
         discount: 0,
         total: 39.58,
         paymentMethod: 'cash',
+        paymentAmount: 39.58,
+        change: 0,
         paymentStatus: 'completed',
         userId: users[2].id,
         customerId: customers[1].id,
@@ -236,7 +241,7 @@ const seedDatabase = async () => {
     ]);
 
     console.log('Seed data created successfully');
-    
+
   } catch (error) {
     console.error('Error seeding database:', error);
     throw error;

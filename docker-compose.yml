@@ -8,14 +8,14 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
       MYSQL_DATABASE: ${DB_NAME:-zana_pos}
-      MYSQL_USER: ${DB_USER:-root}
-      MYSQL_PASSWORD: ${DB_PASS:-}
+      # MYSQL_USER: ${DB_USER:-root}  <-- Commented out to avoid error when DB_USER is root
+      # MYSQL_PASSWORD: ${DB_PASS:-}
     ports:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root}"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,6 +40,7 @@ services:
       # Override DB_HOST to use service name in Docker network
       - DB_HOST=mysql
       - DB_PORT=3306
+      - DB_SYNC=true  # Enable auto-sync for Docker setup
       # Override AI_SERVICE_URL to use service name
       - AI_SERVICE_URL=http://ai_service:8000
     restart: unless-stopped
@@ -94,4 +95,3 @@ volumes:
 networks:
   zana-network:
     driver: bridge
-

@@ -1,0 +1,19 @@
+services:
+  # Disable the built-in MySQL service when you want to use an existing MySQL instance
+  mysql:
+    profiles: ["disabled"]
+
+  backend:
+    environment:
+      # Use host.docker.internal to connect to MySQL running on host
+      - DB_HOST=host.docker.internal
+      - DB_PORT=3307
+      # Or use the existing container name if it's on the same network
+      # - DB_HOST=zana-mysql
+
+  # Make sure other services start properly even without MySQL
+  frontend:
+    depends_on: []
+  
+  ai_service:
+    depends_on: []

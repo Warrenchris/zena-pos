@@ -19,10 +19,14 @@ export const CurrencyProvider = ({ children }) => {
   const loading = useSelector(selectLoading);
   const currencyUtils = useCurrency();
 
+  const token = useSelector((state) => state.auth.token);
+
   // Load all settings when component mounts to ensure currency settings are available
   useEffect(() => {
-    dispatch(fetchSettings());
-  }, [dispatch]);
+    if (token) {
+      dispatch(fetchSettings());
+    }
+  }, [dispatch, token]);
 
   const value = {
     ...currencyUtils,

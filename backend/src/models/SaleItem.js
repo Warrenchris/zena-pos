@@ -115,10 +115,6 @@ const SaleItem = sequelize.define('SaleItem', {
   ]
 });
 
-// Relationships
-SaleItem.belongsTo(Sale);
-SaleItem.belongsTo(Product);
-Sale.hasMany(SaleItem);
-Product.hasMany(SaleItem);
+// Relationships are defined in models/index.js
 
 module.exports = SaleItem;

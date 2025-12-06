@@ -15,7 +15,7 @@ const InvoiceItem = sequelize.define('InvoiceItem', {
     references: { model: 'invoices', key: 'id' },
   },
   productId: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     allowNull: false,
     references: { model: 'Products', key: 'id' },
   },

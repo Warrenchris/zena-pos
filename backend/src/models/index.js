@@ -27,10 +27,10 @@ User.hasMany(Sale, { foreignKey: 'userId' });
 Customer.hasMany(Sale, { foreignKey: 'customerId' });
 Employee.hasMany(Sale, { foreignKey: 'employeeId' });
 
-SaleItem.belongsTo(Sale);
-SaleItem.belongsTo(Product);
-Sale.hasMany(SaleItem);
-Product.hasMany(SaleItem);
+SaleItem.belongsTo(Sale, { foreignKey: 'saleId' });
+SaleItem.belongsTo(Product, { foreignKey: 'productId' });
+Sale.hasMany(SaleItem, { foreignKey: 'saleId' });
+Product.hasMany(SaleItem, { foreignKey: 'productId' });
 
 Expense.belongsTo(User, { as: 'recordedBy', foreignKey: 'userId' });
 
