@@ -4,18 +4,17 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Install dependencies in a separate layer so rebuilds are fast when only source changes.
+# package*.json are copied first; npm ci installs exactly what package-lock.json specifies.
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci
 
-# Copy application code
+# Application source is copied after node_modules so dependency layer stays cached.
 COPY . .
 
-# Expose port
+RUN chmod +x scripts/docker-entrypoint.sh
+
 EXPOSE 3000
 
-# Use nodemon for development (hot reload)
-CMD ["npm", "run", "dev"]
-
+# Entrypoint syncs node_modules on start (dev bind-mount + named volume) then runs nodemon.
+ENTRYPOINT ["sh", "scripts/docker-entrypoint.sh"]

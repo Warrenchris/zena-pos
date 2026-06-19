@@ -1,19 +1,20 @@
 const request = require('supertest');
 const app = require('../../src/app');
-const { Sale, Product, Expense } = require('../../src/models');
+const { Sale, Product, Expense, SaleItem, Shop } = require('../../src/models');
 const sequelize = require('../../src/config/database');
 
 describe('Insights Controller', () => {
   let token;
 
   beforeAll(async () => {
-    // Generate valid JWT token directly to avoid login dependency
+    await sequelize.authenticate();
+
     const jwt = require('jsonwebtoken');
     const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
     token = jwt.sign(
       { id: 101, role: 'admin', shopId: 1 },
       privateKey,
-      { 
+      {
         algorithm: 'RS256',
         expiresIn: '1h'
       }
@@ -21,14 +22,23 @@ describe('Insights Controller', () => {
   });
 
   beforeEach(async () => {
-    await sequelize.sync({ force: true });
-    const Shop = require('../../src/models/Shop');
-    await Shop.create({ id: 1, name: 'Test Shop' });
+    await SaleItem.destroy({ where: { shopId: 1 } });
+    await Sale.destroy({ where: { shopId: 1 } });
+    await Expense.destroy({ where: { shopId: 1 } });
+    await Product.destroy({ where: { shopId: 1 } });
+
+    await Shop.findOrCreate({
+      where: { id: 1 },
+      defaults: { name: 'Test Shop', active: true }
+    });
   }, 30000);
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
 
   describe('GET /api/insights', () => {
     it('should return insights with trends, recommendations, and alerts', async () => {
-      // Create test data
       await Product.create({
         name: 'Test Product',
         sku: 'TEST123',
@@ -63,7 +73,6 @@ describe('Insights Controller', () => {
       expect(response.body).toHaveProperty('recommendations');
       expect(response.body).toHaveProperty('alerts');
 
-      // Check recommendations
       expect(response.body.recommendations).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -73,7 +82,6 @@ describe('Insights Controller', () => {
         ])
       );
 
-      // Check alerts
       expect(response.body.alerts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -85,7 +93,6 @@ describe('Insights Controller', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      // Mock a database error
       jest.spyOn(Sale, 'findAll').mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)

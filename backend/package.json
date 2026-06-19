@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest",
+    "check-deps": "node scripts/check-dependencies.js",
+    "test": "jest --runInBand --forceExit --detectOpenHandles",
     "lint": "eslint src/",
     "db:create": "mysql -u root -p < database/init.sql"
   },
@@ -42,5 +43,11 @@
     "jest": "^30.1.3",
     "nodemon": "^3.1.10",
     "supertest": "^6.3.3"
+  },
+  "jest": {
+    "globalSetup": "./tests/setup.js",
+    "globalTeardown": "./tests/teardown.js",
+    "testEnvironment": "node",
+    "testTimeout": 30000
   }
 }

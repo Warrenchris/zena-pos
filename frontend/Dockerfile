@@ -1,25 +1,19 @@
 # Frontend Dockerfile
 # Using Node 20.19 which satisfies plugin engine requirements (@vitejs/plugin-react)
-# This version is required to avoid compatibility issues with Vite plugins
 FROM node:20.19-bullseye
 
 WORKDIR /app
 
-# Copy package files
+# Copy lockfiles first — Docker caches this layer until dependencies change.
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-# Use `npm install` here to avoid build failures when package.json and
-# package-lock.json are out of sync in development branches. For reproducible
-# CI builds prefer `npm ci` after syncing the lockfile locally and committing it.
-RUN npm install --no-audit --no-fund
-
-# Copy application code
+# Source code after dependencies so npm ci layer is reused across code-only edits.
 COPY . .
 
-# Expose port (Vite default is 5173)
+RUN chmod +x scripts/docker-entrypoint.sh
+
 EXPOSE 5173
 
-# Start development server
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
-
+# Entrypoint syncs node_modules on start (dev bind-mount + named volume) then runs Vite.
+ENTRYPOINT ["sh", "scripts/docker-entrypoint.sh"]
