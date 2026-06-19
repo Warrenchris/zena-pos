@@ -189,8 +189,6 @@ exports.getSaleById = async (req, res) => {
 
 // Create new sale
 exports.createSale = async (req, res) => {
-  const t = await sequelize.transaction();
-
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -208,205 +206,177 @@ exports.createSale = async (req, res) => {
       notes,
       total: frontendTotal,
       change: frontendChange,
-      employeeId: frontendEmployeeId
     } = req.body;
 
-    // Always use the current user's ID as the employeeId for cashiers
-    const employeeId = req.user.id;
-
-    // Validate items array
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Sale must include at least one item' });
     }
 
-    // Calculate totals and validate stock
-    let subtotal = 0;
-    const productUpdates = [];
-    const saleItems = [];
+    const shopId = req.shopId || req.user.shopId;
 
-    for (const item of items) {
-      const product = await Product.findOne({
-        where: { id: item.productId, active: true, shopId: req.user.shopId }
-      });
+    const saleResult = await sequelize.transaction(async (t) => {
+      let subtotal = 0;
+      const lockedProducts = [];
+      const saleItems = [];
 
-      if (!product) {
-        await t.rollback();
-        return res.status(400).json({ error: `Product ${item.productId} not found` });
-      }
+      for (const item of items) {
+        const product = await Product.findOne({
+          where: { id: item.productId, active: true, shopId },
+          lock: t.LOCK.UPDATE,
+          transaction: t
+        });
 
-      if (product.stockQuantity < item.quantity) {
-        await t.rollback();
-        return res.status(400).json({
-          error: `Insufficient stock for product ${product.name}`
+        if (!product) {
+          const err = new Error(`Product ${item.productId} not found`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (product.stockQuantity < item.quantity) {
+          const err = new Error(`Insufficient stock for product: ${product.name}`);
+          err.statusCode = 409;
+          throw err;
+        }
+
+        const itemPrice = item.price || product.price;
+        const itemSubtotal = itemPrice * item.quantity;
+        subtotal += itemSubtotal;
+
+        lockedProducts.push({ product, item, itemPrice, itemSubtotal });
+
+        saleItems.push({
+          productId: product.id,
+          quantity: item.quantity,
+          unitPrice: product.price,
+          price: itemPrice,
+          subtotal: itemSubtotal,
+          discount: item.discount || 0
         });
       }
 
-      // Use frontend price if provided, otherwise use product price
-      const itemPrice = item.price || product.price;
-      const itemSubtotal = itemPrice * item.quantity;
-      subtotal += itemSubtotal;
+      const total = frontendTotal && frontendTotal > 0 ? parseFloat(frontendTotal) : (subtotal + tax - discount);
+      const change = frontendChange !== undefined ? parseFloat(frontendChange) : (paymentAmount ? parseFloat(paymentAmount) - total : 0);
 
-      productUpdates.push({
-        id: product.id,
-        stockQuantity: product.stockQuantity - item.quantity
-      });
+      const date = new Date();
+      const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
 
-      saleItems.push({
-        productId: product.id,
-        quantity: item.quantity,
-        unitPrice: product.price, // Always store the original product price
-        price: itemPrice, // Store the actual price used (frontend or product)
-        subtotal: itemSubtotal,
-        discount: item.discount || 0
-      });
-    }
-
-    // Use frontend total if provided and valid, otherwise calculate
-    const total = frontendTotal && frontendTotal > 0 ? parseFloat(frontendTotal) : (subtotal + tax - discount);
-
-    // Calculate change if payment amount is provided
-    const change = frontendChange !== undefined ? parseFloat(frontendChange) : (paymentAmount ? parseFloat(paymentAmount) - total : 0);
-
-    // Generate invoice number (YYYYMMDD-XXXX format) with transaction lock
-    const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-
-    const [lastSale] = await Sale.findAll({
-      where: {
-        invoiceNumber: {
-          [Op.like]: `${dateStr}-%`
+      const [lastSale] = await Sale.findAll({
+        where: {
+          invoiceNumber: { [Op.like]: `${dateStr}-%` },
+          shopId
         },
-        shopId: req.user.shopId
-      },
-      order: [['invoiceNumber', 'DESC']],
-      limit: 1,
-      lock: true,
-      transaction: t
-    });
+        order: [['invoiceNumber', 'DESC']],
+        limit: 1,
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
 
-    let sequence = '0001';
-    if (lastSale) {
-      const lastSequence = parseInt(lastSale.invoiceNumber.split('-')[1]);
-      sequence = String(lastSequence + 1).padStart(4, '0');
-    }
-    const invoiceNumber = `${dateStr}-${sequence}`;
+      let sequence = '0001';
+      if (lastSale) {
+        const lastSequence = parseInt(lastSale.invoiceNumber.split('-')[1], 10);
+        sequence = String(lastSequence + 1).padStart(4, '0');
+      }
+      const invoiceNumber = `${dateStr}-${sequence}`;
 
-    // Resolve userId (integer) vs employeeId (UUID)
-    const jwtId = req.user?.id;
-    const resolvedUserId = (typeof jwtId === 'number')
-      ? jwtId
-      : (typeof jwtId === 'string' && /^\d+$/.test(jwtId))
-        ? parseInt(jwtId, 10)
-        : null;
+      const jwtId = req.user?.id;
+      const resolvedUserId = (typeof jwtId === 'number')
+        ? jwtId
+        : (typeof jwtId === 'string' && /^\d+$/.test(jwtId))
+          ? parseInt(jwtId, 10)
+          : null;
 
-    // Create sale with customer information and employee tracking
-    const sale = await Sale.create({
-      invoiceNumber,
-      subtotal,
-      tax,
-      discount,
-      total,
-      paymentMethod,
-      paymentAmount: paymentAmount ? parseFloat(paymentAmount) : null,
-      change: change > 0 ? change : 0,
-      paymentStatus: 'completed',
-      // Store customer information directly in sale record
-      customerName: customer?.name || 'Walk-in Customer',
-      customerLocation: customer?.location || null,
-      customerPhone: customer?.phone || null,
-      customerEmail: customer?.email || null,
-      customerId,
-      customerId,
-      userId: !req.user.isEmployee ? resolvedUserId : null,
-      employeeId: req.user.isEmployee ? req.user.id : null, // Track which employee/cashier made the sale
-      notes,
-      shopId: req.user.shopId
-    }, { transaction: t });
+      const sale = await Sale.create({
+        invoiceNumber,
+        subtotal,
+        tax,
+        discount,
+        total,
+        paymentMethod,
+        paymentAmount: paymentAmount ? parseFloat(paymentAmount) : null,
+        change: change > 0 ? change : 0,
+        paymentStatus: 'completed',
+        customerName: customer?.name || 'Walk-in Customer',
+        customerLocation: customer?.location || null,
+        customerPhone: customer?.phone || null,
+        customerEmail: customer?.email || null,
+        customerId,
+        userId: !req.user.isEmployee ? resolvedUserId : null,
+        employeeId: req.user.isEmployee ? req.user.id : null,
+        notes,
+        shopId
+      }, { transaction: t });
 
-    // Create sale items
-    try {
       await Promise.all(saleItems.map(item =>
         SaleItem.create({
           ...item,
           saleId: sale.id,
-          shopId: req.user.shopId
+          shopId
         }, { transaction: t })
       ));
 
-      // Update product stock
-      await Promise.all(productUpdates.map(update =>
-        Product.update(
-          { stockQuantity: update.stockQuantity },
-          { where: { id: update.id }, transaction: t }
-        )
+      await Promise.all(lockedProducts.map(({ product, item }) =>
+        product.decrement('stockQuantity', { by: item.quantity, transaction: t })
       ));
-    } catch (error) {
-      await t.rollback();
-      console.error('Error creating sale items or updating stock:', error);
-      return res.status(500).json({ error: 'Failed to process sale items' });
-    }
 
-    // Handle customer creation/update for customer relationship management
-    let finalCustomerId = customerId;
+      let finalCustomerId = customerId;
 
-    if (customer && customer.name && customer.name !== 'Walk-in Customer') {
-      // Try to find existing customer by email, phone, or name
-      let customerRecord = await Customer.findOne({
-        where: {
-          shopId: req.user.shopId,
-          [Op.or]: [
-            ...(customer.email ? [{ email: customer.email }] : []),
-            ...(customer.phone ? [{ phone: customer.phone }] : []),
-            { name: customer.name }
-          ]
-        },
-        transaction: t
-      });
+      if (customer && customer.name && customer.name !== 'Walk-in Customer') {
+        let customerRecord = await Customer.findOne({
+          where: {
+            shopId,
+            [Op.or]: [
+              ...(customer.email ? [{ email: customer.email }] : []),
+              ...(customer.phone ? [{ phone: customer.phone }] : []),
+              { name: customer.name }
+            ]
+          },
+          transaction: t
+        });
 
-      if (!customerRecord) {
-        // Create new customer
-        customerRecord = await Customer.create({
-          name: customer.name,
-          email: customer.email || null,
-          phone: customer.phone || null,
-          location: customer.location || null,
-          totalPurchases: total,
-          lastVisit: new Date(),
-          shopId: req.user.shopId
-        }, { transaction: t });
-      } else {
-        // Update existing customer
-        const loyaltyPoints = Math.floor(total); // 1 point per currency unit
-        await customerRecord.update({
-          totalPurchases: parseFloat(customerRecord.totalPurchases) + total,
-          loyaltyPoints: customerRecord.loyaltyPoints + loyaltyPoints,
-          lastVisit: new Date(),
-          ...(customer.email && { email: customer.email }),
-          ...(customer.phone && { phone: customer.phone }),
-          ...(customer.location && { location: customer.location })
-        }, { transaction: t });
+        if (!customerRecord) {
+          customerRecord = await Customer.create({
+            name: customer.name,
+            email: customer.email || null,
+            phone: customer.phone || null,
+            location: customer.location || null,
+            totalPurchases: total,
+            lastVisit: new Date(),
+            shopId
+          }, { transaction: t });
+        } else {
+          const loyaltyPoints = Math.floor(total);
+          await customerRecord.update({
+            totalPurchases: parseFloat(customerRecord.totalPurchases) + total,
+            loyaltyPoints: customerRecord.loyaltyPoints + loyaltyPoints,
+            lastVisit: new Date(),
+            ...(customer.email && { email: customer.email }),
+            ...(customer.phone && { phone: customer.phone }),
+            ...(customer.location && { location: customer.location })
+          }, { transaction: t });
+        }
+
+        finalCustomerId = customerRecord.id;
+        await sale.update({ customerId: finalCustomerId }, { transaction: t });
+      } else if (customerId) {
+        const existingCustomer = await Customer.findOne({
+          where: { id: customerId, shopId },
+          transaction: t
+        });
+        if (existingCustomer) {
+          const loyaltyPoints = Math.floor(total);
+          await existingCustomer.update({
+            totalPurchases: existingCustomer.totalPurchases + total,
+            loyaltyPoints: existingCustomer.loyaltyPoints + loyaltyPoints,
+            lastVisit: new Date()
+          }, { transaction: t });
+        }
       }
 
-      finalCustomerId = customerRecord.id;
+      return { sale, invoiceNumber, total };
+    });
 
-      // Update sale with customer ID
-      await sale.update({ customerId: finalCustomerId }, { transaction: t });
-    } else if (customerId) {
-      // Update existing customer's total purchases and loyalty points
-      const customer = await Customer.findByPk(customerId, { transaction: t });
-      if (customer) {
-        const loyaltyPoints = Math.floor(total); // 1 point per currency unit
-        await customer.update({
-          totalPurchases: customer.totalPurchases + total,
-          loyaltyPoints: customer.loyaltyPoints + loyaltyPoints,
-          lastVisit: new Date()
-        }, { transaction: t });
-      }
-    }
+    const { sale, invoiceNumber, total } = saleResult;
 
-    await t.commit();
-
-    // Log activity
     try {
       await logActivity({
         userId: req.user.id,
@@ -414,18 +384,16 @@ exports.createSale = async (req, res) => {
         details: `Created sale ${invoiceNumber} with total ${total}`,
         entityId: sale.id,
         entityType: 'sale',
-        shopId: req.user.shopId
+        shopId: req.shopId || req.user.shopId
       });
     } catch (error) {
       console.warn('Failed to log sale activity:', error);
-      // Continue execution as this is non-critical
     }
 
-    // Fetch complete sale with relations
     const completeSale = await Sale.findOne({
-      where: { id: sale.id },
+      where: { id: sale.id, shopId: req.shopId || req.user.shopId },
       attributes: {
-        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
+        exclude: ['UserId', 'CustomerId']
       },
       include: [
         {
@@ -449,9 +417,14 @@ exports.createSale = async (req, res) => {
 
     res.status(201).json(completeSale);
   } catch (error) {
-    await t.rollback();
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({ error: 'Invoice number conflict. Please retry the sale.' });
+    }
     console.error('Sale creation error:', error);
-    res.status(500).json({ error: 'Failed to create sale' });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
+      error: statusCode === 500 ? 'Failed to create sale' : error.message
+    });
   }
 };
 
@@ -464,7 +437,9 @@ exports.updatePaymentStatus = async (req, res) => {
     }
 
     const { paymentStatus } = req.body;
-    const sale = await Sale.findByPk(req.params.id);
+    const sale = await Sale.findOne({
+      where: { id: req.params.id, shopId: req.shopId || req.user.shopId }
+    });
 
     if (!sale) {
       return res.status(404).json({ error: 'Sale not found' });

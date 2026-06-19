@@ -1,2 +1,5 @@
 node_modules/
 .env
+*.pem
+jwt_private_key.pem
+jwt_public_key.pem

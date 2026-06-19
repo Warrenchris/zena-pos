@@ -1,25 +1,30 @@
 const request = require('supertest');
 const app = require('../../src/app');
 const { Sale, Product, Expense } = require('../../src/models');
-const { sequelize } = require('../../src/config/database');
+const sequelize = require('../../src/config/database');
 
 describe('Insights Controller', () => {
   let token;
 
   beforeAll(async () => {
-    // Create test user and get token
-    const response = await request(app)
-      .post('/api/auth/login')
-      .send({
-        email: 'test@example.com',
-        password: 'password123'
-      });
-    token = response.body.token;
+    // Generate valid JWT token directly to avoid login dependency
+    const jwt = require('jsonwebtoken');
+    const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+    token = jwt.sign(
+      { id: 101, role: 'admin', shopId: 1 },
+      privateKey,
+      { 
+        algorithm: 'RS256',
+        expiresIn: '1h'
+      }
+    );
   });
 
   beforeEach(async () => {
     await sequelize.sync({ force: true });
-  });
+    const Shop = require('../../src/models/Shop');
+    await Shop.create({ id: 1, name: 'Test Shop' });
+  }, 30000);
 
   describe('GET /api/insights', () => {
     it('should return insights with trends, recommendations, and alerts', async () => {
@@ -28,28 +33,25 @@ describe('Insights Controller', () => {
         name: 'Test Product',
         sku: 'TEST123',
         price: 100,
+        cost: 60,
         stockQuantity: 5,
         reorderPoint: 10,
-        currencyCode: 'KES'
+        shopId: 1
       });
 
       await Sale.create({
-        totalAmount: 500,
-        customerId: 1,
-        currencyCode: 'KES',
-        items: [{
-          productId: 1,
-          quantity: 2,
-          price: 100,
-          currencyCode: 'KES'
-        }]
+        total: 500,
+        paymentAmount: 500,
+        shopId: 1,
+        customerId: null
       });
 
       await Expense.create({
-        category: 'Supplies',
+        category: 'other',
         amount: 6000,
         description: 'Test expense',
-        currencyCode: 'KES'
+        paymentMethod: 'cash',
+        shopId: 1
       });
 
       const response = await request(app)

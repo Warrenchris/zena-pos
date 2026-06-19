@@ -1,11 +1,9 @@
-import axios from 'axios';
-
-const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:8000';
+import api from './api';
 
 const forecastingService = {
   async getForecast(dates, values) {
     try {
-      const response = await axios.post(`${AI_SERVICE_URL}/api/forecasting/forecast`, {
+      const response = await api.post('/api/ai/forward/api/forecasting/forecast', {
         dates: dates.map(d => new Date(d).toISOString()),
         values
       }, {

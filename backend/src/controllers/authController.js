@@ -5,11 +5,9 @@ const path = require('path');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
 
-// Load private key for signing
-const privateKey = fs.readFileSync(
-  process.env.JWT_PRIVATE_KEY_PATH || path.join(__dirname, '../../jwt_private_key.pem'),
-  'utf8'
-);
+// Load private key for signing from environment variables
+// Note: The old key pair has been compromised. All existing tokens signed with the old key are now invalid. Users will need to log in again.
+const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const Shop = require('../models/Shop');
 const logger = require('../utils/logger');
 
@@ -180,7 +178,7 @@ exports.forgotPassword = async (req, res) => {
       }
     );
     logger.info('Password reset token (dev only):', token);
-    return res.json({ message: 'Reset instructions sent', token });
+    return res.json({ message: 'If the email exists, a reset link has been sent.' });
   } catch (error) {
     return res.status(500).json({ error: 'Server error' });
   }

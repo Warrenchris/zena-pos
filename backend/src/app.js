@@ -2,12 +2,18 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+// Ensure JWT keys are loaded from environment variables
+if (!process.env.JWT_PRIVATE_KEY || !process.env.JWT_PUBLIC_KEY) {
+  throw new Error('FATAL ERROR: JWT_PRIVATE_KEY and JWT_PUBLIC_KEY environment variables must be defined.');
+}
 
 // Create logs directory if it doesn't exist
 const fs = require('fs');
-const path = require('path');
 const logsDir = path.join(__dirname, '../logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir);
@@ -43,7 +49,25 @@ const requestLogger = require('./middleware/requestLogger');
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [process.env.FRONTEND_URL || 'http://localhost:5173'];
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(generalLimiter);
+
 // HTTP request logs
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms', {
   stream: {
@@ -77,10 +101,7 @@ app.use('/api/stores', storeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/invoices', invoiceRoutes);
 
-// Error handling
-app.use((err, req, res, next) => {
-  logger.error('Unhandled application error', err);
-  res.status(500).json({ error: 'Something broke!' });
-});
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
 
 module.exports = app;

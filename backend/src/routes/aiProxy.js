@@ -1,19 +1,47 @@
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
+const NodeCache = require('node-cache');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, checkRole } = require('../middleware/auth');
 require('dotenv').config();
 
-// Prefer explicit loopback address to avoid potential IPv6/host name resolution issues on Windows
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
-// Simple in-memory cache for health status
+const forecastCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
+
+function buildForecastCacheKey(shopId, requestBody, periods) {
+  const dataHash = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({
+      dates: requestBody.dates,
+      values: requestBody.values,
+      periods: periods ?? requestBody.periods
+    }))
+    .digest('hex')
+    .substring(0, 16);
+  return `forecast:${shopId}:${dataHash}`;
+}
+
+const aiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many AI requests. Please wait before requesting new forecasts.',
+    retryAfter: '15 minutes'
+  },
+  keyGenerator: (req) => req.shopId || ipKeyGenerator(req),
+});
+
 let lastHealth = { ok: null, timestamp: 0, details: null };
-const HEALTH_TTL = 5000; // ms
+const HEALTH_TTL = 5000;
 
 async function probeHealth() {
   try {
-    // /openapi.json is lightweight and reliable for health checks
     const resp = await axios.get(`${AI_SERVICE_URL}/openapi.json`, { timeout: 3000 });
     lastHealth = { ok: true, timestamp: Date.now(), details: { upstream: AI_SERVICE_URL } };
   } catch (err) {
@@ -21,12 +49,12 @@ async function probeHealth() {
   }
 }
 
-// Kick off periodic health probe (non-blocking)
 setInterval(() => {
-  probeHealth().catch(() => { });
+  probeHealth().catch((err) => {
+    console.error('[aiProxy] Health probe failed:', err.message);
+  });
 }, HEALTH_TTL).unref?.();
 
-// GET health (cached)
 router.get('/status', async (req, res) => {
   try {
     if (!lastHealth || (Date.now() - lastHealth.timestamp) > HEALTH_TTL) {
@@ -38,36 +66,78 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// All AI proxy routes require authentication
-// Apply auth middleware to all routes except AI forward proxy
-router.use((req, res, next) => {
-  // If the request is for forwarding to AI service, skip auth
-  if (req.originalUrl && req.originalUrl.includes('/forward/')) {
-    return next();
-  }
-  // Otherwise, enforce authentication
-  return auth(req, res, next);
+router.use(auth);
+
+router.use('/forward/api/forecasting', aiRateLimiter);
+router.use('/forward/api/insights', aiRateLimiter);
+router.use('/forward/api/finance', aiRateLimiter);
+
+router.delete('/cache/:shopId', checkRole(['admin']), (req, res) => {
+  const { shopId } = req.params;
+  const keys = forecastCache.keys().filter((key) => key.startsWith(`forecast:${shopId}:`));
+  keys.forEach((key) => forecastCache.del(key));
+  return res.json({ message: 'Forecast cache cleared', keysCleared: keys.length });
 });
 
-// Generic forwarder for GET/POST/DELETE to AI service.
-// We avoid complex path-to-regexp patterns here by using a middleware that
-// extracts the forwarded path from req.originalUrl (looks for '/forward/').
+router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
+  try {
+    const shopId = req.shopId || req.user?.shopId;
+    const periods = req.query.periods || req.body.periods || 30;
+    const cacheKey = buildForecastCacheKey(shopId, req.body, periods);
+    const cached = forecastCache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true, cache_hit: true });
+    }
+
+    const url = `${AI_SERVICE_URL}/api/forecasting/forecast?periods=${periods}`;
+
+    const forwardHeaders = { ...req.headers };
+    delete forwardHeaders['host'];
+    delete forwardHeaders['content-length'];
+
+    const resp = await axios({
+      method: 'POST',
+      url,
+      data: req.body,
+      headers: forwardHeaders,
+      timeout: 30000,
+      validateStatus: () => true,
+    });
+
+    if (resp.status >= 200 && resp.status < 300) {
+      const responseData = typeof resp.data === 'object' && resp.data !== null
+        ? { ...resp.data, cached: false }
+        : { data: resp.data, cached: false };
+      forecastCache.set(cacheKey, responseData);
+      return res.status(resp.status).json(responseData);
+    }
+
+    return res.status(resp.status).json(resp.data);
+  } catch (err) {
+    const status = err.response?.status || 503;
+    const data = err.response?.data || {
+      error: 'Upstream AI service unreachable',
+      details: err.message,
+      upstream: AI_SERVICE_URL,
+    };
+    return res.status(status).json(data);
+  }
+});
+
 router.use(async (req, res, next) => {
   try {
     const orig = req.originalUrl || req.url || '';
     const m = orig.match(/\/forward\/?(.*)$/);
-    if (!m) return next(); // not a forward request
+    if (!m) return next();
     const path = m[1] || '';
     const url = `${AI_SERVICE_URL}/${path}`;
 
     const forwardHeaders = { ...req.headers };
-    // Remove hop-by-hop headers
     delete forwardHeaders['host'];
     delete forwardHeaders['content-length'];
 
     const axiosConfig = {
       headers: forwardHeaders,
-      // raise timeout slightly to account for heavier ML endpoints during dev
       timeout: 30000,
       validateStatus: () => true,
     };
@@ -79,13 +149,16 @@ router.use(async (req, res, next) => {
       resp = await axios({ method: req.method, url, data: req.body, params: req.query, ...axiosConfig });
     }
 
-    // Proxy response status and data
-    // Copy relevant headers (avoid setting 'transfer-encoding' etc.)
     const responseHeaders = { ...resp.headers };
     delete responseHeaders['transfer-encoding'];
-    res.status(resp.status).set(responseHeaders).send(resp.data);
+
+    let responseData = resp.data;
+    if (typeof responseData === 'object' && responseData !== null && req.method !== 'GET') {
+      responseData = { ...responseData, cached: false };
+    }
+
+    res.status(resp.status).set(responseHeaders).send(responseData);
   } catch (err) {
-    // Provide a clear error for upstream connection/timeouts so frontend can display
     const status = err.response?.status || 503;
     const data = err.response?.data || {
       error: 'Upstream AI service unreachable',
@@ -97,3 +170,4 @@ router.use(async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports.forecastCache = forecastCache;

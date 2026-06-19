@@ -2,11 +2,8 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 
-// Load public key for verification
-const publicKey = fs.readFileSync(
-  process.env.JWT_PUBLIC_KEY_PATH || path.join(__dirname, '../../jwt_public_key.pem'),
-  'utf8'
-);
+// Load public key for verification from environment variables
+const publicKey = (process.env.JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n');
 
 const auth = (req, res, next) => {
   try {

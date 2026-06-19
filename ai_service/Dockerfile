@@ -24,5 +24,5 @@ EXPOSE 8000
 # Start FastAPI with uvicorn (reload for development)
 # Note: PYTHONPATH is set to /app so src.main:app works
 ENV PYTHONPATH=/app
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--log-level", "warning"]
 

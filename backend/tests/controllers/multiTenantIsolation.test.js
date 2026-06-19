@@ -7,10 +7,11 @@ function tokenFor(user) {
   const fs = require('fs');
   const path = require('path');
 
-  const privateKey = fs.readFileSync(
-    process.env.JWT_PRIVATE_KEY_PATH || path.join(__dirname, '../../jwt_private_key.pem'),
-    'utf8'
-  );
+  const privateKey = process.env.JWT_PRIVATE_KEY
+    ? process.env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n')
+    : (fs.existsSync(path.join(__dirname, '../../jwt_private_key.pem'))
+        ? fs.readFileSync(path.join(__dirname, '../../jwt_private_key.pem'), 'utf8')
+        : '');
 
   return 'Bearer ' + jwt.sign(
     user,
@@ -25,6 +26,12 @@ function tokenFor(user) {
 describe('Multi-tenant isolation', () => {
   const shopAToken = tokenFor({ id: 101, role: 'admin', shopId: 1 })
   const shopBToken = tokenFor({ id: 202, role: 'admin', shopId: 2 })
+
+  beforeAll(async () => {
+    const Shop = require('../../src/models/Shop');
+    await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'Shop A' } });
+    await Shop.findOrCreate({ where: { id: 2 }, defaults: { name: 'Shop B' } });
+  });
 
   test('Employees list is scoped by shopId', async () => {
     const resA = await request(app)

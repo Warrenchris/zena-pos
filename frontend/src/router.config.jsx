@@ -17,6 +17,7 @@ const MySales = lazy(() => import('./pages/MySales'));
 const TestDatePicker = lazy(() => import('./pages/TestDatePicker'));
 const PlaceholderPage = lazy(() => import('./components/PlaceholderPage'));
 const AiServices = lazy(() => import('./pages/AiServices'));
+const AIInsights = lazy(() => import('./pages/AIInsights'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Invoices = lazy(() => import('./pages/Invoices'));
@@ -256,7 +257,7 @@ export const routes = [
             path: 'ai/insights',
             element: (
               <PrivateRoute>
-                <AiServices />
+                <AIInsights />
               </PrivateRoute>
             )
           },

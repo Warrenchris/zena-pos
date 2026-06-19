@@ -8,6 +8,14 @@ jest.mock('../src/config/database', () => ({
     QueryTypes: { SELECT: 'SELECT' }
 }));
 
+jest.mock('../src/models', () => ({
+    Sale: {},
+    Customer: {},
+    ActivityLog: {},
+    SaleItem: {},
+    Product: {}
+}));
+
 jest.mock('../src/utils/analyticsCache', () => ({
     getCachedAnalytics: jest.fn(),
     setCachedAnalytics: jest.fn()

@@ -43,7 +43,12 @@ services:
       - DB_SYNC=true  # Enable auto-sync for Docker setup
       # Override AI_SERVICE_URL to use service name
       - AI_SERVICE_URL=http://ai_service:8000
+      # Prefer IPv4 for DNS lookups to avoid EAI_AGAIN (IPv6 lookup timeout) in Docker bridge networks
+      - NODE_OPTIONS=--dns-result-order=ipv4first
     restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - zana-network
 
