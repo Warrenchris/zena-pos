@@ -18,6 +18,8 @@ const TestDatePicker = lazy(() => import('./pages/TestDatePicker'));
 const PlaceholderPage = lazy(() => import('./components/PlaceholderPage'));
 const AiServices = lazy(() => import('./pages/AiServices'));
 const AIInsights = lazy(() => import('./pages/AIInsights'));
+const SalesForecasting = lazy(() => import('./pages/SalesForecasting'));
+const FinancialAnalysis = lazy(() => import('./pages/FinancialAnalysis'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Invoices = lazy(() => import('./pages/Invoices'));
@@ -249,7 +251,7 @@ export const routes = [
             path: 'ai/forecasting',
             element: (
               <PrivateRoute>
-                <AiServices />
+                <SalesForecasting />
               </PrivateRoute>
             )
           },
@@ -265,7 +267,7 @@ export const routes = [
             path: 'ai/finance',
             element: (
               <PrivateRoute>
-                <AiServices />
+                <FinancialAnalysis />
               </PrivateRoute>
             )
           },

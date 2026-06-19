@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import AiServices from '../pages/AiServices';
 import { ToastProvider } from '../components/Toast';
 import aiService from '../services/ai.service';
@@ -24,14 +25,18 @@ describe('AiServices page', () => {
 
   afterEach(() => jest.resetAllMocks());
 
-  test('renders and shows AI Service Health', async () => {
+  test('renders hub and shows AI Service Health', async () => {
     render(
-      <ToastProvider>
-        <AiServices />
-      </ToastProvider>
+      <MemoryRouter>
+        <ToastProvider>
+          <AiServices />
+        </ToastProvider>
+      </MemoryRouter>
     );
     await waitFor(() => expect(aiService.status).toHaveBeenCalled());
-    const healthText = await screen.findByText(/AI Service Health/i);
-    expect(healthText).toBeInTheDocument();
+    expect(await screen.findByText(/AI Service Health/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sales Forecasting/i)).toBeInTheDocument();
+    expect(screen.getByText(/Market Insights/i)).toBeInTheDocument();
+    expect(screen.getByText(/Financial Analysis/i)).toBeInTheDocument();
   });
 });

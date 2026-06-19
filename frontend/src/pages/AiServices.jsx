@@ -1,301 +1,72 @@
-import React, { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import aiService from '../services/ai.service';
-import api from '../services/api';
-import { formatCurrency } from '../utils/formatters';
-import { downloadCSV } from '../utils/csv';
-import { useToast } from '../components/Toast';
+import { PageHeader, AiHealthCard } from '../components/ai/shared';
+
+const AI_PAGES = [
+  {
+    to: '/ai/forecasting',
+    title: 'Sales Forecasting',
+    description: 'Prophet and Random Forest revenue projections from your monthly sales history.',
+    icon: '📈',
+  },
+  {
+    to: '/ai/insights',
+    title: 'Market Insights',
+    description: 'Customer segments, sales anomalies, and stock depletion alerts.',
+    icon: '💡',
+  },
+  {
+    to: '/ai/finance',
+    title: 'Financial Analysis',
+    description: 'Profitability ratios, liquidity metrics, and AI recommendations.',
+    icon: '💰',
+  },
+];
 
 export default function AiServices() {
-  const [loading, setLoading] = useState(false);
-  const [forecast, setForecast] = useState(null);
-  const [insights, setInsights] = useState([]);
-  const [financialMetrics, setFinancialMetrics] = useState(null);
-  const [error, setError] = useState(null);
-  const [isUsingDemoData, setIsUsingDemoData] = useState(false);
-  const [aiError, setAiError] = useState(null);
   const [health, setHealth] = useState({ ok: null, details: null });
-  const [periods, setPeriods] = useState(14);
-  const [selectedRange, setSelectedRange] = useState('30');
-  const [expanded, setExpanded] = useState(false);
-  const toast = useToast();
+  const [loading, setLoading] = useState(false);
 
-  const fetchHealth = async () => {
+  const fetchHealth = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await aiService.status();
       setHealth({ ok: true, details: res.data });
     } catch (err) {
       setHealth({ ok: false, details: err.response?.data || err.message });
+    } finally {
+      setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    const loadDemo = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        await fetchHealth();
-        // Demo forecast (30 days of dummy history)
-        // Prefer real data from backend dashboard if available
-        const revenueResp = await api.get('/api/dashboard/revenue').then(r => r.data).catch(() => null);
-        let dates = [];
-        let values = [];
-        if (revenueResp && Array.isArray(revenueResp.data) && revenueResp.data.length > 0) {
-          // Expecting array of { date, value }
-          dates = revenueResp.data.map(d => new Date(d.date).toISOString());
-          values = revenueResp.data.map(d => d.value);
-        } else {
-          console.warn('AI service unavailable, showing demo data: no revenue history from dashboard');
-          setIsUsingDemoData(true);
-          setAiError('No revenue history available from dashboard');
-          const today = new Date();
-          for (let i = 30; i > 0; i--) {
-            const d = new Date(today);
-            d.setDate(today.getDate() - i);
-            dates.push(d.toISOString());
-            values.push(100 + Math.round(Math.random() * 50));
-          }
-        }
-
-        const fc = await aiService.createForecast(dates, values, 14).then(r => r.data).catch((err) => {
-          console.warn('AI service unavailable, showing demo data:', err.message);
-          setIsUsingDemoData(true);
-          setAiError(err.message);
-          return null;
-        });
-        setForecast(fc);
-
-        // Insights: try to use recent aggregated data
-        const statsResp = await api.get('/api/dashboard/stats').then(r => r.data).catch(() => null);
-        let insightPayload = {
-          revenue: [1000, 1100, 1050],
-          costs: [700, 750, 720],
-          customer_count: [50, 55, 53],
-          transaction_count: [60, 63, 62],
-          average_transaction_value: [16.7, 17.4, 16.9]
-        };
-        if (statsResp && statsResp.revenueHistory) {
-          insightPayload.revenue = statsResp.revenueHistory.map(x => x.value);
-          insightPayload.costs = statsResp.costHistory ? statsResp.costHistory.map(x => x.value) : insightPayload.costs;
-        }
-
-        const insightsResp = await aiService.analyzeBusiness(insightPayload).then(r => r.data).catch((err) => {
-          console.warn('AI insights unavailable:', err.message);
-          setIsUsingDemoData(true);
-          setAiError(err.message);
-          return null;
-        });
-        setInsights(insightsResp ?? []);
-
-        // Financial metrics: if shop/company data exists, use it
-        const shopResp = await api.get('/api/shop/me').then(r => r.data).catch(() => null);
-        const fmPayload = shopResp && shopResp.financials ? shopResp.financials : {
-          revenue: 100000,
-          costs: 60000,
-          expenses: 15000,
-          assets: 120000,
-          liabilities: 30000,
-          date: new Date().toISOString()
-        };
-        const fm = await aiService.analyzeFinancial(fmPayload).then(r => r.data).catch((err) => {
-          console.warn('AI financial analysis unavailable:', err.message);
-          setIsUsingDemoData(true);
-          setAiError(err.message);
-          return null;
-        });
-        setFinancialMetrics(fm);
-      } catch (e) {
-        console.warn('AI service unavailable, showing demo data:', e?.message);
-        setIsUsingDemoData(true);
-        setAiError(e?.message || 'Failed to load AI data');
-        setError(e?.message || 'Failed to load AI data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadDemo();
   }, []);
 
+  useEffect(() => {
+    fetchHealth();
+  }, [fetchHealth]);
+
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded shadow">
-        <h2 className="text-xl font-semibold">AI Services Center</h2>
-        <p className="text-sm text-gray-500">Overview of forecasts, financial helper results, and business insights generated by the AI service.</p>
+    <div className="space-y-6 py-4">
+      <PageHeader
+        title="AI Services Center"
+        description="Choose an analytics area below. Each section has its own dedicated workspace."
+      />
+
+      <AiHealthCard health={health} onRefresh={fetchHealth} loading={loading} />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {AI_PAGES.map((page) => (
+          <Link
+            key={page.to}
+            to={page.to}
+            className="bg-white rounded-lg shadow p-6 hover:shadow-md hover:ring-2 hover:ring-indigo-200 transition block"
+          >
+            <span className="text-2xl" aria-hidden>{page.icon}</span>
+            <h2 className="text-lg font-semibold text-gray-900 mt-3">{page.title}</h2>
+            <p className="text-sm text-gray-500 mt-2">{page.description}</p>
+            <span className="inline-block mt-4 text-sm font-medium text-indigo-600">Open →</span>
+          </Link>
+        ))}
       </div>
-
-      {isUsingDemoData && (
-        <div style={{
-          background: '#fef3c7',
-          border: '1px solid #f59e0b',
-          borderRadius: '8px',
-          padding: '10px 16px',
-          marginBottom: '16px',
-          fontSize: '13px',
-          color: '#92400e'
-        }}>
-          ⚠️ AI service is currently unavailable. The charts below show sample demo data,
-          not your actual business data. Please try again later.
-          {aiError && <span> ({aiError})</span>}
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 p-4 rounded">
-          <p className="text-red-700">{error}</p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-4 rounded shadow">
-          <h3 className="font-medium">Forecast (preview)</h3>
-          <div className="flex items-center justify-between">
-            {loading && <p className="text-sm text-gray-500">Loading forecast...</p>}
-            <div className="space-x-2">
-              <button onClick={() => { setLoading(true); fetchHealth(); }} className="px-2 py-1 text-xs bg-gray-100 rounded">Check AI Health</button>
-              <button onClick={() => { setLoading(true); window.location.reload(); }} className="px-2 py-1 text-xs bg-gray-100 rounded">Retry</button>
-            </div>
-          </div>
-          {!loading && !forecast && <p className="text-sm text-gray-400">No forecast available — check server or dependencies.</p>}
-          {forecast && forecast?.dates && (
-            <div className="mt-3">
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-sm">Periods:</label>
-                <input type="number" value={periods} onChange={(e) => setPeriods(Number(e.target.value))} className="w-20 p-1 border rounded" />
-                <label className="text-sm">Range:</label>
-                <select value={selectedRange} onChange={(e) => setSelectedRange(e.target.value)} className="p-1 border rounded">
-                  <option value="14">14 days</option>
-                  <option value="30">30 days</option>
-                  <option value="90">90 days</option>
-                </select>
-                <button onClick={async () => {
-                  setLoading(true);
-                  try {
-                    const len = Number(selectedRange);
-                    const forecastDates = forecast?.dates ?? [];
-                    const forecastPredictions = forecast?.predictions ?? [];
-                    const dates = forecastDates.slice(Math.max(0, forecastDates.length - len));
-                    const values = forecastPredictions.slice(Math.max(0, forecastPredictions.length - len));
-                    const fc = await aiService.createForecast(dates, values, periods).then(r => r.data).catch((err) => {
-                      console.warn('AI forecast failed:', err.message);
-                      setIsUsingDemoData(true);
-                      setAiError(err.message);
-                      return null;
-                    });
-                    if (fc) setForecast(fc);
-                  } finally { setLoading(false); }
-                }} className="ml-auto px-2 py-1 bg-gray-100 rounded">Run Forecast</button>
-                <button onClick={() => {
-                  if (!forecast?.dates) return;
-                  const rows = (forecast.dates ?? []).map((d, i) => ({
-                    date: new Date(d).toISOString(),
-                    prediction: forecast?.predictions?.[i] ?? '',
-                    lower: forecast?.lower_bounds?.[i] ?? '',
-                    upper: forecast?.upper_bounds?.[i] ?? ''
-                  }));
-                  downloadCSV('forecast.csv', rows);
-                  try { toast.push('Forecast exported to CSV', { type: 'info' }); } catch (e) {}
-                }} className="ml-2 px-2 py-1 bg-gray-100 rounded">Export CSV</button>
-                <button onClick={() => { setExpanded(true); try { toast.push('Chart expanded', { type: 'info' }); } catch (e) {} }} className="ml-2 px-2 py-1 bg-gray-100 rounded">Expand Chart</button>
-              </div>
-              <div className="h-44">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={(forecast?.dates ?? []).map((d, i) => ({
-                    date: new Date(d).toLocaleDateString(),
-                    pred: forecast?.predictions?.[i] ?? 0,
-                    lower: forecast?.lower_bounds?.[i] ?? 0,
-                    upper: forecast?.upper_bounds?.[i] ?? 0
-                  }))}>
-                    <CartesianGrid stroke="#f0f0f0" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    {/* Confidence band */}
-                    <Area type="monotone" dataKey="upper" stroke="rgba(79,70,229,0.2)" fill="rgba(79,70,229,0.08)" />
-                    <Area type="monotone" dataKey="lower" stroke="rgba(79,70,229,0.05)" fill="rgba(79,70,229,0.02)" />
-                    <Line type="monotone" dataKey="pred" stroke="#4F46E5" strokeWidth={2} dot={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white p-4 rounded shadow">
-          <h3 className="font-medium">Financial Helper (sample)</h3>
-          {!financialMetrics && <p className="text-sm text-gray-400">No metrics — server may be unavailable.</p>}
-          {financialMetrics && (
-            <div className="mt-3 text-sm text-gray-700">
-              <table className="w-full text-sm">
-                <tbody>
-                  <tr><td className="font-medium">Gross Profit Margin</td><td className="text-right">{((financialMetrics?.gross_profit_margin ?? 0) * 100).toFixed(1)}%</td></tr>
-                  <tr><td className="font-medium">Net Profit Margin</td><td className="text-right">{((financialMetrics?.net_profit_margin ?? 0) * 100).toFixed(1)}%</td></tr>
-                  <tr><td className="font-medium">Current Ratio</td><td className="text-right">{(financialMetrics?.current_ratio ?? 0).toFixed(2)}</td></tr>
-                  <tr><td className="font-medium">Inventory Turnover</td><td className="text-right">{(financialMetrics?.inventory_turnover ?? 0).toFixed(2)}</td></tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white p-4 rounded shadow">
-          <h3 className="font-medium">Business Insights</h3>
-          {!insights && <p className="text-sm text-gray-400">No insights — server may be unavailable.</p>}
-          {insights && Array.isArray(insights) && insights.length === 0 && (
-            <p className="text-sm text-gray-400">No insights returned.</p>
-          )}
-          {insights && Array.isArray(insights) && insights.map((ins, idx) => (
-            <div key={idx} className="mt-3 border-t pt-3">
-              <p className="font-medium">{ins?.insight_type || ins?.type || 'Insight'}</p>
-              <p className="text-sm text-gray-600">{ins?.description || ins?.message || ''}</p>
-              {ins?.recommendations && (
-                <ul className="text-xs text-gray-500 mt-2 list-disc list-inside">
-                  {(ins.recommendations ?? []).map((r, i) => <li key={i}>{r}</li>)}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-      {/* Health Card */}
-      <div className="mt-4">
-        <div className="bg-white p-4 rounded shadow inline-block">
-          <h4 className="font-medium">AI Service Health</h4>
-          {health.ok === null && <p className="text-sm text-gray-500">Unknown</p>}
-          {health.ok === true && <p className="text-sm text-green-600">OK — {health.details?.upstream}</p>}
-          {health.ok === false && <p className="text-sm text-red-600">Down — {JSON.stringify(health.details)}</p>}
-        </div>
-      </div>
-      {/* Expanded chart modal */}
-      {expanded && forecast && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
-          <div className="bg-white w-11/12 lg:w-3/4 p-6 rounded shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">Forecast (expanded)</h3>
-              <div className="space-x-2">
-                <button onClick={() => { setExpanded(false); try { toast.push('Chart closed', { type: 'info' }); } catch (e) {} }} className="px-3 py-1 bg-gray-100 rounded">Close</button>
-              </div>
-            </div>
-            <div style={{ height: 420 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={(forecast?.dates ?? []).map((d, i) => ({
-                  date: new Date(d).toLocaleDateString(),
-                  pred: forecast?.predictions?.[i] ?? 0,
-                  lower: forecast?.lower_bounds?.[i] ?? 0,
-                  upper: forecast?.upper_bounds?.[i] ?? 0
-                }))}>
-                  <CartesianGrid stroke="#f0f0f0" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="upper" stroke="rgba(79,70,229,0.2)" fill="rgba(79,70,229,0.08)" />
-                  <Area type="monotone" dataKey="lower" stroke="rgba(79,70,229,0.05)" fill="rgba(79,70,229,0.02)" />
-                  <Line type="monotone" dataKey="pred" stroke="#4F46E5" strokeWidth={2} dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
