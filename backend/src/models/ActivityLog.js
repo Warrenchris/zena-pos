@@ -1,20 +1,30 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 const User = require('./User');
+const Employee = require('./Employee');
 
 const ActivityLog = sequelize.define('ActivityLog', {
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
   userId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     references: {
       model: 'Users',
+      key: 'id'
+    }
+  },
+  performedByEmployee: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'Employees',
       key: 'id'
     }
   },
   action: { type: DataTypes.STRING, allowNull: false },
   entity: { type: DataTypes.STRING, allowNull: true },
   entityId: { type: DataTypes.STRING, allowNull: true },
+  details: { type: DataTypes.TEXT, allowNull: true },
   metadata: { type: DataTypes.JSON, allowNull: true },
   shopId: {
     type: DataTypes.INTEGER,
@@ -28,7 +38,7 @@ const ActivityLog = sequelize.define('ActivityLog', {
 
 ActivityLog.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(ActivityLog, { foreignKey: 'userId' });
+ActivityLog.belongsTo(Employee, { foreignKey: 'performedByEmployee', as: 'Employee' });
+Employee.hasMany(ActivityLog, { foreignKey: 'performedByEmployee' });
 
 module.exports = ActivityLog;
-
-

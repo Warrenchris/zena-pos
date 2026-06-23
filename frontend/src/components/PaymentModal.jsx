@@ -209,6 +209,12 @@ export default function PaymentModal({
           </div>
         )}
 
+        {paymentError && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400 text-center font-medium animate-fadeIn">
+            ⚠️ {paymentError}
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex space-x-3">
           <button

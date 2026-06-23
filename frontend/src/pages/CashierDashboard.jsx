@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { fetchProducts } from '../store/slices/productsSlice';
@@ -60,7 +60,6 @@ export default function CashierDashboard() {
   const dispatch = useDispatch();
 
   const { user, token } = useSelector((state) => state.auth);
-  const { products, loading: productsLoading } = useSelector((state) => state.products);
   const { showToast } = useToast();
 
   // Effect to validate authentication
@@ -142,28 +141,69 @@ export default function CashierDashboard() {
   }, [user?.id]);
 
   useEffect(() => {
-    dispatch(fetchProducts());
     fetchCashierStats();
-  }, [dispatch, fetchCashierStats]);
+  }, [fetchCashierStats]);
 
-  // Get unique categories from products
-  const categories = useMemo(() => {
-    const cats = ['all', ...new Set(products.map(p => p.category).filter(Boolean))];
-    return cats;
-  }, [products]);
+  const [categoryObjects, setCategoryObjects] = useState([]);
+  const [categories, setCategories] = useState(['all']);
+  const [displayedProducts, setDisplayedProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [showBarcodeField, setShowBarcodeField] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [barcodeError, setBarcodeError] = useState('');
+  const searchInputRef = useRef(null);
 
-  // Filter products based on search query and category
-  const filteredProducts = useMemo(() => {
-    return products.filter(product => {
-      const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.barcode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.sku?.toLowerCase().includes(searchQuery.toLowerCase());
+  // Fetch categories on mount
+  useEffect(() => {
+    const fetchCats = async () => {
+      try {
+        const response = await api.get('/api/categories');
+        setCategoryObjects(response.data);
+        const catNames = response.data.map(c => c.name).filter(Boolean);
+        setCategories(['all', ...catNames]);
+      } catch (err) {
+        console.error('Error fetching categories:', err);
+      }
+    };
+    fetchCats();
+  }, []);
 
-      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+  // Fetch products when search query or category selection changes (debounced)
+  useEffect(() => {
+    const delayDebounce = setTimeout(async () => {
+      setProductsLoading(true);
+      try {
+        const params = {
+          search: searchQuery,
+          page: 1,
+          pageSize: 20
+        };
+        if (selectedCategory !== 'all') {
+          const matchedCat = categoryObjects.find(c => c.name === selectedCategory);
+          if (matchedCat) {
+            params.categoryId = matchedCat.id;
+          }
+        }
+        const response = await api.get('/api/products', { params });
+        setDisplayedProducts(response.data.products || response.data || []);
+      } catch (err) {
+        console.error('Error fetching products:', err);
+      } finally {
+        setProductsLoading(false);
+      }
+    }, 300);
 
-      return matchesSearch && matchesCategory;
-    });
-  }, [products, searchQuery, selectedCategory]);
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery, selectedCategory, categoryObjects]);
+
+  // Autofocus search input when POS mounts (product-selection mode)
+  useEffect(() => {
+    if (salesMode === 'product-selection') {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  }, [salesMode]);
 
   // Sales workflow functions
   const startNewSale = () => {
@@ -344,14 +384,37 @@ export default function CashierDashboard() {
   };
 
   const handleBarcodeScan = () => {
-    const barcode = prompt('Scan barcode (simulated):');
-    if (barcode) {
-      const product = products.find(p => p.barcode === barcode || p.sku === barcode);
-      if (product) {
-        addToCart(product);
+    setShowBarcodeField(prev => !prev);
+    setBarcodeInput('');
+    setBarcodeError('');
+  };
+
+  const handleBarcodeSubmit = async (e) => {
+    e.preventDefault();
+    if (!barcodeInput.trim()) return;
+
+    setBarcodeError('');
+    try {
+      const response = await api.get('/api/products', {
+        params: {
+          search: barcodeInput.trim(),
+          page: 1,
+          pageSize: 20
+        }
+      });
+      const returnedProducts = response.data.products || response.data || [];
+      const matchedProduct = returnedProducts.find(
+        p => p.barcode === barcodeInput.trim() || p.sku === barcodeInput.trim()
+      );
+      if (matchedProduct) {
+        addToCart(matchedProduct);
+        setBarcodeInput('');
       } else {
-        showToast('Product not found', 'error');
+        setBarcodeError('Product not found');
       }
+    } catch (err) {
+      console.error('Barcode lookup failed:', err);
+      setBarcodeError('Product not found');
     }
   };
 
@@ -562,6 +625,7 @@ export default function CashierDashboard() {
                         <div className="absolute inset-0 bg-gradient-to-r from-brand-yellow/20 to-transparent rounded-xl blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-300"></div>
                         <MagnifyingGlassIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-brand-yellow/60 group-focus-within:text-brand-yellow transition-colors" />
                         <input
+                          ref={searchInputRef}
                           type="text"
                           placeholder="Search products, barcode, or SKU..."
                           value={searchQuery}
@@ -578,6 +642,25 @@ export default function CashierDashboard() {
                         <span className="hidden sm:inline">Scan</span>
                       </button>
                     </div>
+                    {showBarcodeField && (
+                      <form onSubmit={handleBarcodeSubmit} className="flex gap-2 items-center mt-2 animate-fadeIn">
+                        <input
+                          type="text"
+                          placeholder="Scan or type barcode..."
+                          value={barcodeInput}
+                          onChange={(e) => {
+                            setBarcodeInput(e.target.value);
+                            setBarcodeError('');
+                          }}
+                          className="flex-1 px-4 py-2 bg-[#0b0b0c]/60 border border-brand-yellow/30 text-white rounded-xl focus:ring-1 focus:ring-brand-yellow"
+                          autoFocus
+                        />
+                        <button type="submit" className="px-4 py-2 bg-brand-yellow text-brand-black font-bold rounded-xl hover:bg-brand-yellowDark">
+                          Add
+                        </button>
+                        {barcodeError && <span className="text-red-500 text-sm ml-2 font-medium">⚠️ {barcodeError}</span>}
+                      </form>
+                    )}
 
                     {/* Category Filter - Horizontal Scroll */}
                     <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -611,7 +694,7 @@ export default function CashierDashboard() {
                             </div>
                           </div>
                         ))
-                      ) : filteredProducts.length === 0 ? (
+                      ) : displayedProducts.length === 0 ? (
                         <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
                           <div className="w-20 h-20 bg-brand-yellow/10 rounded-3xl flex items-center justify-center mx-auto mb-6">
                             <MagnifyingGlassIcon className="h-10 w-10 text-brand-yellow" />
@@ -620,7 +703,7 @@ export default function CashierDashboard() {
                           <p className="text-gray-400 max-w-xs">Try adjusting your search or category filter to find what you need</p>
                         </div>
                       ) : (
-                        filteredProducts.map((product, idx) => (
+                        displayedProducts.map((product, idx) => (
                           <button
                             type="button"
                             key={product.id}

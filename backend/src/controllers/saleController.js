@@ -85,12 +85,13 @@ exports.updateSale = async (req, res) => {
 
     // Log the activity
     await logActivity({
-      userId: req.user.id,
+      shopId: req.user.shopId || req.shopId,
+      performedBy: req.user.id,
+      performedByType: req.user.isEmployee ? 'employee' : 'user',
       action: 'UPDATE_SALE',
-      details: `Updated sale ${sale.invoiceNumber} status to ${status}`,
+      entity: 'Sale',
       entityId: sale.id,
-      entityType: 'sale',
-      shopId: req.user.shopId
+      details: `Updated sale ${sale.invoiceNumber} status to ${status}`
     });
 
     res.json(updatedSale);
@@ -135,13 +136,14 @@ exports.deleteSale = async (req, res) => {
 
     // Log the activity
     await logActivity({
-      userId: req.user.id,
+      shopId: req.user.shopId || req.shopId,
+      performedBy: req.user.id,
+      performedByType: req.user.isEmployee ? 'employee' : 'user',
       action: 'DELETE_SALE',
-      details: `Deleted sale ${sale.invoiceNumber}`,
+      entity: 'Sale',
       entityId: sale.id,
-      entityType: 'sale',
-      shopId: req.user.shopId
-    }, { transaction: t });
+      details: `Deleted sale ${sale.invoiceNumber}`
+    }, t);
 
     await t.commit();
     res.json({ message: 'Sale deleted successfully' });
@@ -238,7 +240,7 @@ exports.createSale = async (req, res) => {
           throw err;
         }
 
-        const itemPrice = item.price || product.price;
+        const itemPrice = product.price;
         const itemSubtotal = itemPrice * item.quantity;
         subtotal += itemSubtotal;
 
@@ -254,8 +256,22 @@ exports.createSale = async (req, res) => {
         });
       }
 
-      const total = frontendTotal && frontendTotal > 0 ? parseFloat(frontendTotal) : (subtotal + tax - discount);
-      const change = frontendChange !== undefined ? parseFloat(frontendChange) : (paymentAmount ? parseFloat(paymentAmount) - total : 0);
+      const serverTotal = subtotal + parseFloat(tax || 0) - parseFloat(discount || 0);
+
+      if (frontendTotal !== undefined && Math.abs(serverTotal - parseFloat(frontendTotal)) > 0.01) {
+        const err = new Error('Price mismatch. Please refresh and retry.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (paymentAmount !== undefined && parseFloat(paymentAmount) < serverTotal) {
+        const err = new Error('Insufficient payment amount.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const total = serverTotal;
+      const change = paymentAmount ? parseFloat(paymentAmount) - total : 0;
 
       const date = new Date();
       const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
@@ -379,12 +395,13 @@ exports.createSale = async (req, res) => {
 
     try {
       await logActivity({
-        userId: req.user.id,
+        shopId: req.shopId || req.user?.shopId,
+        performedBy: req.user?.id,
+        performedByType: req.user?.isEmployee ? 'employee' : 'user',
         action: 'SALE_CREATED',
-        details: `Created sale ${invoiceNumber} with total ${total}`,
+        entity: 'Sale',
         entityId: sale.id,
-        entityType: 'sale',
-        shopId: req.shopId || req.user.shopId
+        details: `Created sale ${invoiceNumber} with total ${total}`
       });
     } catch (error) {
       console.warn('Failed to log sale activity:', error);
