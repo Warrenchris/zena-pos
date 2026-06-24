@@ -12,11 +12,38 @@ import {
 } from '@heroicons/react/24/outline';
 import useCurrency from '../hooks/useCurrency';
 import { format } from 'date-fns';
+import { usePermissions } from '../hooks/usePermissions';
+import api from '../services/api';
 
 const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => {
   const { format: formatCurrency } = useCurrency();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const { hasPermission } = usePermissions();
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [previousRefunds, setPreviousRefunds] = useState([]);
+  const [refundQuantities, setRefundQuantities] = useState({});
+  const [refundReasons, setRefundReasons] = useState({});
+  const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
+
+  const fetchRefunds = async () => {
+    if (!sale || !sale.id) return;
+    try {
+      const response = await api.get(`/api/sales/${sale.id}/refunds`);
+      setPreviousRefunds(response.data);
+    } catch (err) {
+      console.error('Failed to fetch refunds:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && sale && sale.id) {
+      fetchRefunds();
+    } else {
+      setPreviousRefunds([]);
+    }
+  }, [isOpen, sale]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -108,6 +135,52 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
     total: sale.total,
     subtotal: subtotal
   });
+
+  const calculateTotalRefund = () => {
+    return saleItems.reduce((sum, item) => {
+      const productId = item.productId || item.id || (item.Product && item.Product.id);
+      const qty = refundQuantities[productId] || 0;
+      const unitPrice = parseFloat(item.price || item.unitPrice || item.priceAtSale || 0);
+      return sum + (qty * unitPrice);
+    }, 0);
+  };
+
+  const handleConfirmRefund = async () => {
+    const refundItems = Object.keys(refundQuantities)
+      .map(productId => ({
+        productId,
+        quantity: refundQuantities[productId],
+        reason: refundReasons[productId] || 'Customer Return'
+      }))
+      .filter(item => item.quantity > 0);
+
+    if (refundItems.length === 0) return;
+
+    setIsSubmittingRefund(true);
+    try {
+      const response = await api.post(`/api/sales/${sale.id}/refund`, {
+        items: refundItems
+      });
+      
+      // Update sale status locally
+      sale.status = response.data.saleStatus.toUpperCase();
+      
+      alert('Refund processed successfully!');
+      setShowRefundModal(false);
+      
+      setRefundQuantities({});
+      setRefundReasons({});
+      
+      fetchRefunds();
+      if (onClose) onClose();
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to submit refund:', err);
+      alert(err.response?.data?.error || 'Failed to submit refund. Please try again.');
+    } finally {
+      setIsSubmittingRefund(false);
+    }
+  };
 
   return (
     <div
@@ -397,13 +470,24 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
 
           {/* Footer */}
           <div className="px-6 py-4 bg-gray-50 dark:bg-brand-black border-t flex justify-end space-x-3">
+            {hasPermission('process_refunds') && (sale.status || '').toUpperCase() !== 'REFUNDED' && (
+              <button
+                type="button"
+                onClick={() => setShowRefundModal(true)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium flex items-center"
+              >
+                ↩️ Refund Items
+              </button>
+            )}
             <button
+              type="button"
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
             >
               Close
             </button>
             <button
+              type="button"
               onClick={handlePrint}
               className="px-4 py-2 bg-brand-yellow text-gray-900 rounded-lg hover:bg-yellow-500 transition-colors font-medium flex items-center"
             >
@@ -413,6 +497,162 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
           </div>
         </div>
       </div>
+
+      {/* Refund Items Modal */}
+      {showRefundModal && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowRefundModal(false)}></div>
+          <div className="relative bg-white dark:bg-brand-gray rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp">
+            {/* Header */}
+            <div className="bg-red-600 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold">↩️ Process Itemized Refund</h3>
+                <p className="text-xs text-red-100 font-medium">Select items and quantities to refund</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRefundModal(false)}
+                className="text-white hover:text-red-200 text-xl font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Previous refunds list */}
+              {previousRefunds.length > 0 && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-2">
+                  <h4 className="text-sm font-bold text-red-500">Previously Refunded Items:</h4>
+                  <div className="divide-y divide-red-500/10">
+                    {previousRefunds.map(r => (
+                      <div key={r.id} className="py-2 flex justify-between text-xs text-gray-300">
+                        <span>{r.product?.name || 'Unknown Product'} (qty: {r.quantity})</span>
+                        <span className="font-semibold text-red-400">-{formatCurrency(r.refundAmount || r.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Items selector */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white">Refund Quantities & Reasons</h4>
+                <div className="space-y-3">
+                  {saleItems.map(item => {
+                    const productId = item.productId || item.id || (item.Product && item.Product.id);
+                    const prodName = item.Product?.name || item.name || 'Product';
+                    const unitPrice = parseFloat(item.price || item.unitPrice || item.priceAtSale || 0);
+                    
+                    // calculate previously refunded qty for this product
+                    const previouslyRefundedQty = previousRefunds
+                      .filter(r => r.productId === productId)
+                      .reduce((sum, r) => sum + r.quantity, 0);
+                      
+                    const maxRefundable = item.quantity - previouslyRefundedQty;
+                    const isFullyRefunded = maxRefundable <= 0;
+                    
+                    const refundQty = refundQuantities[productId] || 0;
+                    const refundReason = refundReasons[productId] || 'Customer Return';
+
+                    return (
+                      <div
+                        key={productId}
+                        className={`p-4 border rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                          isFullyRefunded 
+                            ? 'bg-gray-800/40 border-gray-700 opacity-60' 
+                            : 'bg-brand-black/35 border-brand-yellow/10 hover:border-brand-yellow/30'
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <h5 className="font-bold text-gray-900 dark:text-white text-sm">{prodName}</h5>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Sold: {item.quantity} • Unit Price: {formatCurrency(unitPrice)}
+                          </p>
+                          {previouslyRefundedQty > 0 && (
+                            <p className="text-xs text-red-500 font-medium mt-0.5">
+                              Already refunded: {previouslyRefundedQty} unit(s)
+                            </p>
+                          )}
+                        </div>
+
+                        {!isFullyRefunded ? (
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                            {/* Qty Selector */}
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-gray-400">Qty:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max={maxRefundable}
+                                value={refundQty}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  setRefundQuantities(prev => ({
+                                    ...prev,
+                                    [productId]: Math.min(val, maxRefundable)
+                                  }));
+                                }}
+                                className="w-16 px-2 py-1 bg-[#0b0b0c] text-white border border-brand-yellow/20 rounded-lg text-center font-bold text-sm focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Reason Select */}
+                            <select
+                              value={refundReason}
+                              onChange={(e) => {
+                                setRefundReasons(prev => ({
+                                  ...prev,
+                                  [productId]: e.target.value
+                                }));
+                              }}
+                              className="px-2 py-1 bg-[#0b0b0c] text-white border border-brand-yellow/20 rounded-lg text-xs focus:outline-none"
+                            >
+                              <option value="Customer Return">Customer Return</option>
+                              <option value="Damaged Item">Damaged Item</option>
+                              <option value="Incorrect Item">Incorrect Item</option>
+                              <option value="Price Adjustment">Price Adjustment</option>
+                            </select>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold text-red-500 uppercase px-3 py-1 bg-red-500/10 rounded-lg">Fully Refunded</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-brand-black border-t flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-400 font-bold">TOTAL REFUND AMOUNT</p>
+                <p className="text-xl font-bold text-red-600">
+                  {formatCurrency(calculateTotalRefund())}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRefundModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmRefund}
+                  disabled={calculateTotalRefund() <= 0 || isSubmittingRefund}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-sm font-bold transition-all shadow-lg"
+                >
+                  {isSubmittingRefund ? 'Processing...' : 'Confirm Refund'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

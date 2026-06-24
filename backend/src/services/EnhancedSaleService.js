@@ -184,6 +184,264 @@ class EnhancedSaleService {
     }
     return value;
   }
+
+  async createSplitPaymentSale(body, req) {
+    const t = await sequelize.transaction();
+    try {
+      const { items, payments, discount = 0, tax = 0, total: frontendTotal, customerId, customer } = body;
+      const shopId = req.shopId || req.user.shopId;
+      const user = req.user;
+
+      if (!Array.isArray(items) || items.length === 0) {
+        const err = new Error('Sale must include at least one item');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (!Array.isArray(payments) || payments.length < 2) {
+        const err = new Error('Split sale must include at least two payment legs');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Calculate serverTotal and verify stock
+      let subtotal = 0;
+      const lockedProducts = [];
+      const saleItems = [];
+
+      for (const item of items) {
+        const product = await Product.findOne({
+          where: { id: item.productId, active: true, shopId },
+          lock: t.LOCK.UPDATE,
+          transaction: t
+        });
+
+        if (!product) {
+          const err = new Error(`Product ${item.productId} not found`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (product.stockQuantity < item.quantity) {
+          const err = new Error(`Insufficient stock for product: ${product.name}`);
+          err.statusCode = 409;
+          throw err;
+        }
+
+        const itemPrice = product.price;
+        const itemSubtotal = itemPrice * item.quantity;
+        subtotal += itemSubtotal;
+
+        lockedProducts.push({ product, item, itemPrice, itemSubtotal });
+
+        saleItems.push({
+          productId: product.id,
+          quantity: item.quantity,
+          unitPrice: product.price,
+          price: itemPrice,
+          subtotal: itemSubtotal,
+          discount: item.discount || 0
+        });
+      }
+
+      const serverTotal = subtotal + parseFloat(tax || 0) - parseFloat(discount || 0);
+
+      // Validate pricing
+      if (frontendTotal !== undefined && Math.abs(serverTotal - parseFloat(frontendTotal)) > 0.01) {
+        const err = new Error('Price mismatch. Please refresh and retry.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Validate payment methods and sum
+      let sumPayments = 0;
+      const allowedMethods = ['cash', 'mpesa', 'card', 'credit'];
+      for (const pay of payments) {
+        if (!allowedMethods.includes(pay.paymentMethod)) {
+          const err = new Error(`Invalid payment method: ${pay.paymentMethod}`);
+          err.statusCode = 400;
+          throw err;
+        }
+        if (pay.paymentMethod === 'mpesa' && !pay.gatewayRef) {
+          const err = new Error('Unconfirmed M-Pesa leg in split payment');
+          err.statusCode = 400;
+          throw err;
+        }
+        if (pay.paymentMethod === 'card' && !pay.gatewayRef) {
+          const err = new Error('Unconfirmed card leg in split payment');
+          err.statusCode = 400;
+          throw err;
+        }
+        sumPayments += parseFloat(pay.amount || 0);
+      }
+
+      if (sumPayments < serverTotal - 0.01) {
+        const err = new Error('Insufficient payment amount.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Generate invoiceNumber
+      const date = new Date();
+      const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+
+      const [lastSale] = await Sale.findAll({
+        where: {
+          invoiceNumber: { [Op.like]: `${dateStr}-%` },
+          shopId
+        },
+        order: [['invoiceNumber', 'DESC']],
+        limit: 1,
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+
+      let sequence = '0001';
+      if (lastSale) {
+        const lastSequence = parseInt(lastSale.invoiceNumber.split('-')[1], 10);
+        sequence = String(lastSequence + 1).padStart(4, '0');
+      }
+      const invoiceNumber = `${dateStr}-${sequence}`;
+
+      // Resolve userId
+      const jwtId = user?.id;
+      const resolvedUserId = (typeof jwtId === 'number')
+        ? jwtId
+        : (typeof jwtId === 'string' && /^\d+$/.test(jwtId))
+          ? parseInt(jwtId, 10)
+          : null;
+
+      // Insert Sales row
+      const newSale = await Sale.create({
+        invoiceNumber,
+        subtotal,
+        tax,
+        discount,
+        total: serverTotal,
+        paymentMethod: 'split',
+        paymentAmount: sumPayments,
+        change: sumPayments > serverTotal ? sumPayments - serverTotal : 0,
+        paymentStatus: 'completed',
+        customerName: customer?.name || 'Walk-in Customer',
+        customerLocation: customer?.location || null,
+        customerPhone: customer?.phone || null,
+        customerEmail: customer?.email || null,
+        customerId,
+        userId: !user?.isEmployee ? resolvedUserId : null,
+        employeeId: user?.isEmployee ? user.id : null,
+        notes: body.notes,
+        shopId,
+      }, { transaction: t });
+
+      // Insert SaleItems rows
+      await Promise.all(saleItems.map(item =>
+        SaleItem.create({
+          ...item,
+          saleId: newSale.id,
+          shopId
+        }, { transaction: t })
+      ));
+
+      // Decrement stock
+      await Promise.all(lockedProducts.map(({ product, item }) =>
+        product.decrement('stockQuantity', { by: item.quantity, transaction: t })
+      ));
+
+      // Insert SalePayments rows
+      await Promise.all(payments.map(pay =>
+        SalePayment.create({
+          saleId: newSale.id,
+          shopId,
+          paymentMethod: pay.paymentMethod,
+          amount: pay.amount,
+          gatewayRef: pay.gatewayRef || null,
+          paidAt: new Date(),
+          processedBy: user?.isEmployee ? user.id : null,
+        }, { transaction: t })
+      ));
+
+      // Update customer purchases/loyalty points if applicable
+      let finalCustomerId = customerId;
+      if (customer && customer.name && customer.name !== 'Walk-in Customer') {
+        let customerRecord = await Customer.findOne({
+          where: {
+            shopId,
+            [Op.or]: [
+              ...(customer.email ? [{ email: customer.email }] : []),
+              ...(customer.phone ? [{ phone: customer.phone }] : []),
+              { name: customer.name }
+            ]
+          },
+          transaction: t
+        });
+
+        if (!customerRecord) {
+          customerRecord = await Customer.create({
+            name: customer.name,
+            email: customer.email || null,
+            phone: customer.phone || null,
+            location: customer.location || null,
+            totalPurchases: serverTotal,
+            lastVisit: new Date(),
+            shopId
+          }, { transaction: t });
+        } else {
+          const loyaltyPoints = Math.floor(serverTotal);
+          await customerRecord.update({
+            totalPurchases: parseFloat(customerRecord.totalPurchases) + serverTotal,
+            loyaltyPoints: customerRecord.loyaltyPoints + loyaltyPoints,
+            lastVisit: new Date(),
+            ...(customer.email && { email: customer.email }),
+            ...(customer.phone && { phone: customer.phone }),
+            ...(customer.location && { location: customer.location })
+          }, { transaction: t });
+        }
+
+        finalCustomerId = customerRecord.id;
+        await newSale.update({ customerId: finalCustomerId }, { transaction: t });
+      } else if (customerId) {
+        const existingCustomer = await Customer.findOne({
+          where: { id: customerId, shopId },
+          transaction: t
+        });
+        if (existingCustomer) {
+          const loyaltyPoints = Math.floor(serverTotal);
+          await existingCustomer.update({
+            totalPurchases: existingCustomer.totalPurchases + serverTotal,
+            loyaltyPoints: existingCustomer.loyaltyPoints + loyaltyPoints,
+            lastVisit: new Date()
+          }, { transaction: t });
+        }
+      }
+
+      await t.commit();
+
+      const { logActivity } = require('../middleware/logger');
+      try {
+        await logActivity({
+          shopId: shopId,
+          performedBy: user?.id,
+          performedByType: user?.isEmployee ? 'employee' : 'user',
+          action: 'SALE_CREATED',
+          entity: 'Sale',
+          entityId: newSale.id,
+          details: `Created split payment sale ${invoiceNumber} with total ${serverTotal}`
+        });
+      } catch (logErr) {
+        console.warn('Logging activity failed for split sale:', logErr);
+      }
+
+      // Fetch the full sale with includes and return it
+      const saleWithPayments = await Sale.findByPk(newSale.id, {
+        include: this.defaultIncludes
+      });
+      return saleWithPayments;
+
+    } catch (error) {
+      await t.rollback();
+      throw error;
+    }
+  }
 }
 
 module.exports = new EnhancedSaleService();

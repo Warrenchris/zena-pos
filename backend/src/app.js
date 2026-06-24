@@ -24,6 +24,7 @@ const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
 const saleRoutes = require('./routes/sales');
+const splitSaleRoutes = require('./routes/splitSales');
 const customerRoutes = require('./routes/customers');
 const expenseRoutes = require('./routes/expenses');
 const userRoutes = require('./routes/users');
@@ -41,6 +42,9 @@ const systemHealthRoutes = require('./routes/systemHealth');
 const storeRoutes = require('./routes/storeRoutes');
 const settingsRoutes = require('./routes/settings');
 const invoiceRoutes = require('./routes/invoiceRoutes');
+const mpesaRoutes = require('./routes/mpesaRoutes');
+const cardRoutes = require('./routes/cardRoutes');
+const heldCartRoutes = require('./routes/heldCartRoutes');
 
 const app = express();
 
@@ -82,6 +86,7 @@ app.use(requestLogger);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/sales/split', splitSaleRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/expenses', expenseRoutes);
@@ -100,6 +105,9 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/mpesa', mpesaRoutes);
+app.use('/api/card', cardRoutes);
+app.use('/api/held-carts', heldCartRoutes);
 
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);

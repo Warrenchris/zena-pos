@@ -22,7 +22,8 @@ export const ROLE_PERMISSIONS = {
       'view_reports',
       'manage_sales',
       'manage_expenses',
-      'view_customers'
+      'view_customers',
+      'process_refunds'
     ]
   },
   [SYSTEM_ROLES.CASHIER]: {

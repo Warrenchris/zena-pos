@@ -20,8 +20,16 @@ const SalePayment = sequelize.define('SalePayment', {
     allowNull: false
   },
   paymentMethod: {
-    type: DataTypes.ENUM('cash', 'card', 'mobile', 'mobile_money', 'check', 'store_credit'),
+    type: DataTypes.ENUM('cash', 'mpesa', 'card', 'credit'),
     allowNull: false
+  },
+  gatewayRef: {
+    type: DataTypes.STRING(200),
+    allowNull: true
+  },
+  paidAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   },
   paymentReference: {
     type: DataTypes.STRING,
@@ -37,7 +45,7 @@ const SalePayment = sequelize.define('SalePayment', {
   },
   processedBy: {
     type: DataTypes.UUID,
-    allowNull: false,
+    allowNull: true,
     references: {
       model: 'Employees',
       key: 'id'
@@ -49,7 +57,11 @@ const SalePayment = sequelize.define('SalePayment', {
   },
   shopId: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: false,
+    references: {
+      model: 'Shops',
+      key: 'id'
+    }
   }
 }, {
   timestamps: true,

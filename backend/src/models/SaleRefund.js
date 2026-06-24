@@ -15,9 +15,26 @@ const SaleRefund = sequelize.define('SaleRefund', {
       key: 'id'
     }
   },
+  productId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'Products',
+      key: 'id'
+    }
+  },
+  quantity: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0
+  },
   amount: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
+  },
+  refundAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true
   },
   reason: {
     type: DataTypes.TEXT,
@@ -25,19 +42,24 @@ const SaleRefund = sequelize.define('SaleRefund', {
   },
   refundMethod: {
     type: DataTypes.ENUM('cash', 'card', 'mobile_money', 'store_credit'),
-    allowNull: false
+    allowNull: false,
+    defaultValue: 'cash'
   },
   processedBy: {
     type: DataTypes.UUID,
-    allowNull: false,
+    allowNull: true,
     references: {
       model: 'Employees',
       key: 'id'
     }
   },
+  refundedBy: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   status: {
     type: DataTypes.ENUM('pending', 'processed', 'failed'),
-    defaultValue: 'pending'
+    defaultValue: 'processed'
   },
   metadata: {
     type: DataTypes.JSON,
@@ -46,6 +68,10 @@ const SaleRefund = sequelize.define('SaleRefund', {
   shopId: {
     type: DataTypes.INTEGER,
     allowNull: false
+  },
+  refundedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   timestamps: true,
@@ -67,10 +93,9 @@ SaleRefund.associate = (models) => {
     foreignKey: 'saleId',
     as: 'sale'
   });
-  
-  SaleRefund.belongsTo(models.Employee, {
-    foreignKey: 'processedBy',
-    as: 'processor'
+  SaleRefund.belongsTo(models.Product, {
+    foreignKey: 'productId',
+    as: 'product'
   });
 };
 

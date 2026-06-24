@@ -158,7 +158,7 @@ export default function Reports() {
         const topEmployees = (Array.isArray(res.data?.topEmployees) && res.data.topEmployees.length > 0)
           ? res.data.topEmployees
           : (Array.isArray(employees?.data)
-              ? employees.data.map(e => ({ name: e.user?.name || e.user?.email || 'Employee', revenue: Number(e.revenue||0) }))
+              ? employees.data.map(e => ({ name: e.performerName || e.user?.name || e.user?.email || 'Employee', revenue: Number(e.totalRevenue || e.revenue || 0) }))
               : [])
 
         const productPerformance = (Array.isArray(res.data?.productPerformance) && res.data.productPerformance.length > 0)

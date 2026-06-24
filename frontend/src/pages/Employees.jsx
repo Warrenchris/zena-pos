@@ -199,6 +199,9 @@ export default function Employees() {
   )
 
   const getStatEmployeeName = (row) => {
+    if (row.performerName) {
+      return row.performerName;
+    }
     // Try various shapes coming from the API
     const byUserId = employees.find(e => e.userId === row.userId || e.userId === row.user?.id)
     if (byUserId) {
@@ -343,11 +346,22 @@ export default function Employees() {
               <tbody className="text-sm">
                 {(employeeStats||[]).map((r,i)=>(
                   <tr key={i} className={`${i % 2 === 0 ? 'bg-black/30' : 'bg-black/20'} text-gray-100`}>
-                    <td className="px-4 py-3">{getStatEmployeeName(r)}</td>
-                    <td className="px-4 py-3">{r.saleCount ?? r.sales ?? r.count ?? 0}</td>
-                    <td className="px-4 py-3">{formatCurrency(Number(r.revenue ?? r.total ?? r.amount ?? 0))}</td>
-              </tr>
-            ))}
+                    <td className="px-4 py-3 flex items-center space-x-2">
+                      <span>{getStatEmployeeName(r)}</span>
+                      {r.role && (
+                        <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
+                          r.role === 'Cashier' 
+                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' 
+                            : 'bg-green-500/20 text-green-300 border border-green-500/30'
+                        }`}>
+                          {r.role}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">{r.totalSales ?? r.saleCount ?? r.sales ?? r.count ?? 0}</td>
+                    <td className="px-4 py-3">{formatCurrency(Number(r.totalRevenue ?? r.revenue ?? r.total ?? r.amount ?? 0))}</td>
+                  </tr>
+                ))}
           </tbody>
         </table>
           </div>

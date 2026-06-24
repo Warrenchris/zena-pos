@@ -4,14 +4,17 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     try {
-      // Add price column to SaleItems table
-      await queryInterface.addColumn('SaleItems', 'price', {
-        type: Sequelize.DECIMAL(10, 2),
-        allowNull: true,
-        defaultValue: null
-      });
-
-      console.log('Successfully added price column to SaleItems table');
+      const tableInfo = await queryInterface.describeTable('SaleItems');
+      if (!tableInfo.price) {
+        await queryInterface.addColumn('SaleItems', 'price', {
+          type: Sequelize.DECIMAL(10, 2),
+          allowNull: true,
+          defaultValue: null
+        });
+        console.log('Successfully added price column to SaleItems table');
+      } else {
+        console.log('Price column already exists in SaleItems table, skipping.');
+      }
     } catch (error) {
       console.error('Migration failed:', error);
       throw error;

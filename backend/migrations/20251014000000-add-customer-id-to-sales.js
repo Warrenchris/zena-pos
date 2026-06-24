@@ -3,19 +3,25 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('Sales', 'customerId', {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'Customers',
-        key: 'id'
-      },
-      onUpdate: 'CASCADE',
-      onDelete: 'SET NULL'
-    });
+    const tableInfo = await queryInterface.describeTable('Sales');
+    if (!tableInfo.customerId) {
+      await queryInterface.addColumn('Sales', 'customerId', {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'Customers',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+      });
+    }
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn('Sales', 'customerId');
+    const tableInfo = await queryInterface.describeTable('Sales');
+    if (tableInfo.customerId) {
+      await queryInterface.removeColumn('Sales', 'customerId');
+    }
   }
 };

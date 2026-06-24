@@ -3,6 +3,7 @@ const sequelize = require('../config/database');
 const Sale = require('../models/Sale');
 const Expense = require('../models/Expense');
 const User = require('../models/User');
+const Employee = require('../models/Employee');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
 
@@ -368,23 +369,79 @@ exports.getEmployeeSales = async (req, res) => {
     const rows = await Sale.findAll({
       where,
       attributes: [
-        'UserId',
-        [sequelize.fn('COUNT', sequelize.col('Sale.id')), 'saleCount'],
-        [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+        [sequelize.literal('COALESCE(CAST(userId AS CHAR), employeeId)'), 'performerId'],
+        [sequelize.fn('COUNT', sequelize.col('Sale.id')), 'totalSales'],
+        [sequelize.fn('SUM', sequelize.col('total')), 'totalRevenue'],
+        [sequelize.fn('AVG', sequelize.col('total')), 'averageSaleValue']
       ],
-      include: [{ model: User, attributes: ['id', 'name', 'email'] }],
-      group: ['UserId'],
-      order: [[sequelize.literal('revenue'), 'DESC']],
+      group: [sequelize.literal('COALESCE(CAST(userId AS CHAR), employeeId)')],
+      order: [[sequelize.literal('totalRevenue'), 'DESC']],
       limit: Number(limit),
+      raw: true
     });
 
-    const result = rows.map(r => ({
-      user: r.User ? { id: r.User.id, name: r.User.name, email: r.User.email } : { id: r.UserId },
-      saleCount: Number(r.getDataValue('saleCount') || 0),
-      revenue: Number(r.getDataValue('revenue') || 0),
-    }));
+    const userIds = [];
+    const employeeIds = [];
+    rows.forEach(r => {
+      const pid = r.performerId;
+      if (pid) {
+        if (/^[0-9]+$/.test(pid)) {
+          userIds.push(parseInt(pid, 10));
+        } else {
+          employeeIds.push(pid);
+        }
+      }
+    });
+
+    const [users, employees] = await Promise.all([
+      User.findAll({
+        where: { id: userIds, shopId: req.user.shopId },
+        attributes: ['id', 'name', 'email']
+      }),
+      Employee.findAll({
+        where: { id: employeeIds, shopId: req.user.shopId },
+        attributes: ['id', 'firstName', 'lastName', 'email', 'position']
+      })
+    ]);
+
+    const userMap = new Map(users.map(u => [String(u.id), u]));
+    const employeeMap = new Map(employees.map(e => [String(e.id), e]));
+
+    const result = [];
+    for (const r of rows) {
+      const pid = r.performerId;
+      if (!pid) continue;
+
+      let performerName = 'Unknown Performer';
+      let performerType = 'user';
+      let role = '';
+
+      if (userMap.has(pid)) {
+        const u = userMap.get(pid);
+        performerName = u.name;
+        performerType = 'user';
+        role = 'Manager';
+      } else if (employeeMap.has(pid)) {
+        const e = employeeMap.get(pid);
+        performerName = `${e.firstName} ${e.lastName}`.trim();
+        performerType = 'employee';
+        role = e.position === 'cashier' ? 'Cashier' : e.position === 'manager' ? 'Manager' : e.position;
+      }
+
+      result.push({
+        performerId: pid,
+        performerName,
+        performerType,
+        role,
+        totalSales: Number(r.totalSales || 0),
+        totalRevenue: Number(r.totalRevenue || 0),
+        averageSaleValue: Number(r.averageSaleValue || 0)
+      });
+    }
+
     res.json(result);
   } catch (e) {
+    console.error('Failed to compute employee sales:', e);
     res.status(500).json({ error: 'Failed to compute employee sales' });
   }
 };

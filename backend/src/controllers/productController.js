@@ -15,6 +15,7 @@ exports.getAllProducts = async (req, res) => {
       maxPrice,
       page = 1,
       pageSize = 12,
+      fuzzy
     } = req.query;
 
     const numericPage = Math.max(parseInt(page, 10) || 1, 1);
@@ -62,7 +63,7 @@ exports.getAllProducts = async (req, res) => {
 
     const offset = (numericPage - 1) * numericPageSize;
 
-    const { rows, count } = await Product.findAndCountAll({
+    let { rows, count } = await Product.findAndCountAll({
       where,
       include,
       limit: numericPageSize,
@@ -71,10 +72,108 @@ exports.getAllProducts = async (req, res) => {
       distinct: true,
     });
 
+    let searchType = 'exact';
+
+    if (count === 0 && (fuzzy === 'true' || fuzzy === true) && search && String(search).trim()) {
+      const cleanSearch = String(search).trim();
+      const dialect = Product.sequelize.options.dialect || '';
+
+      if (dialect.includes('mysql') || dialect.includes('mariadb')) {
+        const fuzzyWhere = {
+          active: true,
+          shopId: req.user.shopId,
+        };
+
+        if (categoryId) fuzzyWhere.CategoryId = parseInt(categoryId, 10);
+        if (minPrice || maxPrice) {
+          fuzzyWhere.price = {};
+          if (minPrice) fuzzyWhere.price[Op.gte] = parseFloat(minPrice);
+          if (maxPrice) fuzzyWhere.price[Op.lte] = parseFloat(maxPrice);
+        }
+        if (availability === 'in_stock') {
+          fuzzyWhere.stockQuantity = { [Op.gt]: 0 };
+        } else if (availability === 'low_stock') {
+          fuzzyWhere[Op.and] = [
+            { stockQuantity: { [Op.gt]: 0 } },
+            { stockQuantity: { [Op.lte]: { [Op.col]: 'reorderPoint' } } },
+          ];
+        } else if (availability === 'out_of_stock') {
+          fuzzyWhere.stockQuantity = 0;
+        }
+
+        const { Sequelize } = require('sequelize');
+        fuzzyWhere[Op.or] = [
+          Sequelize.literal("SOUNDEX(`Product`.`name`) = SOUNDEX(" + Product.sequelize.escape(cleanSearch) + ")"),
+          { name: { [Op.like]: `%${cleanSearch}%` } }
+        ];
+
+        const fuzzyResult = await Product.findAndCountAll({
+          where: fuzzyWhere,
+          include,
+          limit: numericPageSize,
+          offset,
+          order: [['createdAt', 'DESC']],
+          distinct: true,
+        });
+
+        if (fuzzyResult.count > 0) {
+          rows = fuzzyResult.rows;
+          count = fuzzyResult.count;
+          const cleanSearchLower = cleanSearch.toLowerCase();
+          const likeMatched = rows.some(row => row.name && row.name.toLowerCase().includes(cleanSearchLower));
+          searchType = likeMatched ? 'exact' : 'fuzzy';
+        }
+      } else if (dialect.includes('postgres')) {
+        const fuzzyWhere = {
+          active: true,
+          shopId: req.user.shopId,
+        };
+
+        if (categoryId) fuzzyWhere.CategoryId = parseInt(categoryId, 10);
+        if (minPrice || maxPrice) {
+          fuzzyWhere.price = {};
+          if (minPrice) fuzzyWhere.price[Op.gte] = parseFloat(minPrice);
+          if (maxPrice) fuzzyWhere.price[Op.lte] = parseFloat(maxPrice);
+        }
+        if (availability === 'in_stock') {
+          fuzzyWhere.stockQuantity = { [Op.gt]: 0 };
+        } else if (availability === 'low_stock') {
+          fuzzyWhere[Op.and] = [
+            { stockQuantity: { [Op.gt]: 0 } },
+            { stockQuantity: { [Op.lte]: { [Op.col]: 'reorderPoint' } } },
+          ];
+        } else if (availability === 'out_of_stock') {
+          fuzzyWhere.stockQuantity = 0;
+        }
+
+        const { Sequelize } = require('sequelize');
+        fuzzyWhere[Op.or] = [
+          Sequelize.literal('similarity("Product"."name", ' + Product.sequelize.escape(cleanSearch) + ') > 0.2'),
+          { name: { [Op.iLike]: `%${cleanSearch}%` } }
+        ];
+
+        const fuzzyResult = await Product.findAndCountAll({
+          where: fuzzyWhere,
+          include,
+          limit: numericPageSize,
+          offset,
+          order: [['createdAt', 'DESC']],
+          distinct: true,
+        });
+
+        if (fuzzyResult.count > 0) {
+          rows = fuzzyResult.rows;
+          count = fuzzyResult.count;
+          searchType = 'fuzzy';
+        }
+      }
+    }
+
     const totalPages = Math.ceil(count / numericPageSize) || 1;
 
     res.json({
       products: rows,
+      searchType,
       pagination: {
         currentPage: numericPage,
         totalPages,
@@ -82,7 +181,8 @@ exports.getAllProducts = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch products' });
+    console.error('Error in getAllProducts:', error);
+    res.status(500).json({ error: 'Failed to fetch products', details: error.message });
   }
 };
 

@@ -14,7 +14,7 @@ module.exports = {
 
     // 2. Add performedByEmployee UUID column
     await queryInterface.addColumn('ActivityLogs', 'performedByEmployee', {
-      type: Sequelize.UUID,
+      type: Sequelize.STRING(36),
       allowNull: true,
       references: {
         model: 'Employees',

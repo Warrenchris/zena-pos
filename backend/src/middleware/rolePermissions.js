@@ -13,7 +13,8 @@ const ROLE_PERMISSIONS = {
     'manage_sales',
     'manage_expenses',
     'view_customers',
-    'manage_settings'
+    'manage_settings',
+    'process_refunds'
   ],
   cashier: [
     'access_pos',

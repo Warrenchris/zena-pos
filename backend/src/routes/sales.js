@@ -263,6 +263,11 @@ router.get('/my-sales',
   saleController.getMySales
 );
 
+// Get payments for a specific sale
+router.get('/:saleId/payments',
+  saleController.getSalePayments
+);
+
 // Get specific sale - Permission check is handled in controller
 router.get('/:id',
   async (req, res, next) => {
@@ -316,6 +321,17 @@ router.patch('/:id/payment-status',
   checkRole(['admin', 'manager']),
   validatePaymentStatus,
   saleController.updatePaymentStatus
+);
+
+// POST /api/sales/:saleId/refund - Process itemized refund
+router.post('/:saleId/refund',
+  checkPermission('process_refunds'),
+  saleController.processRefund
+);
+
+// GET /api/sales/:saleId/refunds - Get all refunds for a sale
+router.get('/:saleId/refunds',
+  saleController.getSaleRefunds
 );
 
 module.exports = router;

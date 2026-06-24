@@ -105,7 +105,8 @@ const Sale = sequelize.define('Sale', {
       'completed', 
       'cancelled', 
       'refunded', 
-      'partially_refunded'
+      'partially_refunded',
+      'partial_refund'
     ),
     defaultValue: 'completed'
   },
