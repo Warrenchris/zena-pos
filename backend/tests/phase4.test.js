@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, SaleRefund, HeldCart } = require('../src/models');
+const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, SaleRefund, HeldCart, ActivityLog } = require('../src/models');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -32,6 +32,7 @@ describe('Phase 4 UX Remediation Tests', () => {
   const adminToken = tokenFor({ id: 101, role: 'admin', shopId: 1 });
 
   const cleanDb = async () => {
+    await ActivityLog.destroy({ where: {} });
     await HeldCart.destroy({ where: {} });
     await SaleRefund.destroy({ where: {} });
     await SaleItem.destroy({ where: {} });
@@ -54,7 +55,6 @@ describe('Phase 4 UX Remediation Tests', () => {
 
     // Setup products
     product1 = await Product.create({
-      id: '990e8400-e29b-41d4-a716-446655440001',
       name: 'Whole Milk 1L',
       sku: 'SKU-MILK-1L',
       barcode: 'BARCODE-MILK',
@@ -62,13 +62,12 @@ describe('Phase 4 UX Remediation Tests', () => {
       cost: 7.00,
       stockQuantity: 100,
       reorderPoint: 5,
-      CategoryId: category.id,
+      categoryId: category.id,
       shopId: 1,
       active: true
     });
 
     product2 = await Product.create({
-      id: '990e8400-e29b-41d4-a716-446655440002',
       name: 'Milk Chocolate',
       sku: 'SKU-CHOCO-MILK',
       barcode: 'BARCODE-CHOCO',
@@ -76,13 +75,12 @@ describe('Phase 4 UX Remediation Tests', () => {
       cost: 12.00,
       stockQuantity: 50,
       reorderPoint: 5,
-      CategoryId: category.id,
+      categoryId: category.id,
       shopId: 1,
       active: true
     });
 
     product3 = await Product.create({
-      id: '990e8400-e29b-41d4-a716-446655440003',
       name: 'Skimmed Milk',
       sku: 'SKU-SKIMMED-MILK',
       barcode: 'BARCODE-SKIMMED',
@@ -90,7 +88,7 @@ describe('Phase 4 UX Remediation Tests', () => {
       cost: 6.00,
       stockQuantity: 40,
       reorderPoint: 5,
-      CategoryId: category.id,
+      categoryId: category.id,
       shopId: 1,
       active: true
     });

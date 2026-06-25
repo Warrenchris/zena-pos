@@ -3,7 +3,7 @@
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     const tableInfo = await queryInterface.describeTable('SalePayments');
-    
+
     // Add gatewayRef if missing
     if (!tableInfo.gatewayRef) {
       await queryInterface.addColumn('SalePayments', 'gatewayRef', {
@@ -20,29 +20,30 @@ module.exports = {
       });
     }
 
-    // Modify paymentMethod to accept the new options
-    const dialect = queryInterface.sequelize.getDialect();
-    if (dialect === 'mysql' || dialect === 'mariadb') {
-      await queryInterface.sequelize.query(`
-        ALTER TABLE SalePayments MODIFY COLUMN paymentMethod VARCHAR(50) NOT NULL;
-      `);
-    } else {
-      await queryInterface.changeColumn('SalePayments', 'paymentMethod', {
-        type: Sequelize.STRING(50),
-        allowNull: false
-      });
+    // Modify paymentMethod to VARCHAR(50) — wrap in try/catch since it may already be VARCHAR
+    try {
+      const dialect = queryInterface.sequelize.getDialect();
+      if (dialect === 'mysql' || dialect === 'mariadb') {
+        await queryInterface.sequelize.query(
+          'ALTER TABLE SalePayments MODIFY COLUMN paymentMethod VARCHAR(50) NOT NULL;'
+        );
+      } else {
+        await queryInterface.changeColumn('SalePayments', 'paymentMethod', {
+          type: Sequelize.STRING(50),
+          allowNull: false
+        });
+      }
+    } catch (err) {
+      console.log('Modify SalePayments.paymentMethod skipped:', err.message);
     }
 
-    // Add foreign key constraint to Shops if not present
+    // Add FK constraint to Shops if not present
     try {
       await queryInterface.addConstraint('SalePayments', {
         fields: ['shopId'],
         type: 'foreign key',
         name: 'fk_salepayments_shopId',
-        references: {
-          table: 'Shops',
-          field: 'id'
-        },
+        references: { table: 'Shops', field: 'id' },
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE'
       });
@@ -50,18 +51,16 @@ module.exports = {
       // Ignore if constraint already exists
     }
 
-    // Make processedBy nullable to avoid crash on user checkout
+    // Make processedBy nullable — no FK reference to avoid CHAR(36) BINARY vs UUID mismatch
     if (tableInfo.processedBy) {
-      await queryInterface.changeColumn('SalePayments', 'processedBy', {
-        type: Sequelize.UUID,
-        allowNull: true,
-        references: {
-          model: 'Employees',
-          key: 'id'
-        },
-        onDelete: 'SET NULL',
-        onUpdate: 'CASCADE'
-      });
+      try {
+        await queryInterface.changeColumn('SalePayments', 'processedBy', {
+          type: Sequelize.STRING(36),
+          allowNull: true
+        });
+      } catch (err) {
+        console.log('changeColumn SalePayments.processedBy skipped:', err.message);
+      }
     }
   },
 
@@ -75,8 +74,6 @@ module.exports = {
     }
     try {
       await queryInterface.removeConstraint('SalePayments', 'fk_salepayments_shopId');
-    } catch (err) {
-      // Ignore if constraint doesn't exist
-    }
+    } catch (err) { /* Ignore */ }
   }
 };

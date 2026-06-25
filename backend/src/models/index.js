@@ -18,10 +18,11 @@ const InvoiceItem = require('./InvoiceItem');
 const PendingPayment = require('./PendingPayment');
 const SaleRefund = require('./SaleRefund');
 const HeldCart = require('./HeldCart');
+const SalePayment = require('./SalePayment');
 
 // Define model associations
-Product.belongsTo(Category);
-Category.hasMany(Product);
+Product.belongsTo(Category, { foreignKey: 'categoryId' });
+Category.hasMany(Product, { foreignKey: 'categoryId' });
 
 Sale.belongsTo(User, { foreignKey: 'userId' });
 Sale.belongsTo(Customer, { foreignKey: 'customerId' });
@@ -75,6 +76,18 @@ Shop.hasMany(SaleRefund, { foreignKey: 'shopId' });
 HeldCart.belongsTo(Shop, { foreignKey: 'shopId' });
 Shop.hasMany(HeldCart, { foreignKey: 'shopId' });
 
+// ActivityLog employee associations
+ActivityLog.belongsTo(Employee, { foreignKey: 'performedByEmployee', as: 'employee' });
+Employee.hasMany(ActivityLog, { foreignKey: 'performedByEmployee', as: 'activityLogs' });
+
+// SalePayment associations
+SalePayment.belongsTo(Sale, { foreignKey: 'saleId', as: 'sale' });
+SalePayment.belongsTo(Shop, { foreignKey: 'shopId' });
+SalePayment.belongsTo(Employee, { foreignKey: 'processedBy', as: 'employee' });
+Sale.hasMany(SalePayment, { foreignKey: 'saleId', as: 'payments' });
+Shop.hasMany(SalePayment, { foreignKey: 'shopId' });
+Employee.hasMany(SalePayment, { foreignKey: 'processedBy', as: 'payments' });
+
 // Invoice associations
 Invoice.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 Invoice.belongsTo(Shop, { foreignKey: 'shopId', as: 'shop' });
@@ -103,5 +116,6 @@ module.exports = {
   InvoiceItem,
   PendingPayment,
   SaleRefund,
-  HeldCart
+  HeldCart,
+  SalePayment
 };

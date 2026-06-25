@@ -18,6 +18,7 @@ const seedDatabase = async () => {
     });
 
     // Create users and associate to the default shop
+    // Note: individualHooks: true is omitted here because passwords are pre-hashed manually using bcrypt
     const users = await User.bulkCreate([
       {
         name: 'Admin User',
@@ -60,7 +61,7 @@ const seedDatabase = async () => {
         price: 599.99,
         cost: 400.00,
         stockQuantity: 50,
-        CategoryId: categories[0].id,
+        categoryId: categories[0].id,
         shopId: defaultShop.id
       },
       {
@@ -71,7 +72,7 @@ const seedDatabase = async () => {
         price: 999.99,
         cost: 700.00,
         stockQuantity: 30,
-        CategoryId: categories[0].id,
+        categoryId: categories[0].id,
         shopId: defaultShop.id
       },
       {
@@ -82,7 +83,7 @@ const seedDatabase = async () => {
         price: 19.99,
         cost: 5.00,
         stockQuantity: 100,
-        CategoryId: categories[1].id,
+        categoryId: categories[1].id,
         shopId: defaultShop.id
       },
       {
@@ -93,7 +94,7 @@ const seedDatabase = async () => {
         price: 15.99,
         cost: 10.00,
         stockQuantity: 200,
-        CategoryId: categories[2].id,
+        categoryId: categories[2].id,
         shopId: defaultShop.id
       },
       {
@@ -104,7 +105,7 @@ const seedDatabase = async () => {
         price: 4.99,
         cost: 1.50,
         stockQuantity: 300,
-        CategoryId: categories[3].id,
+        categoryId: categories[3].id,
         shopId: defaultShop.id
       }
     ]);
@@ -178,7 +179,8 @@ const seedDatabase = async () => {
         quantity: 1,
         unitPrice: 599.99,
         subtotal: 599.99,
-        discount: 0
+        discount: 0,
+        shopId: defaultShop.id
       },
       {
         saleId: sales[0].id,
@@ -186,7 +188,8 @@ const seedDatabase = async () => {
         quantity: 4,
         unitPrice: 4.99,
         subtotal: 19.96,
-        discount: 0
+        discount: 0,
+        shopId: defaultShop.id
       },
       {
         saleId: sales[1].id,
@@ -194,7 +197,8 @@ const seedDatabase = async () => {
         quantity: 1,
         unitPrice: 19.99,
         subtotal: 19.99,
-        discount: 0
+        discount: 0,
+        shopId: defaultShop.id
       },
       {
         saleId: sales[1].id,
@@ -202,7 +206,8 @@ const seedDatabase = async () => {
         quantity: 3,
         unitPrice: 4.99,
         subtotal: 14.97,
-        discount: 0
+        discount: 0,
+        shopId: defaultShop.id
       }
     ]);
 

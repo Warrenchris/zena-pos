@@ -2,50 +2,49 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // 1. Allow userId to be NULL
-    await queryInterface.changeColumn('ActivityLogs', 'userId', {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'Users',
-        key: 'id'
-      }
-    });
+    // 1. Make userId nullable on ActivityLogs
+    try {
+      await queryInterface.changeColumn('ActivityLogs', 'userId', {
+        type: Sequelize.INTEGER, allowNull: true,
+        references: { model: 'Users', key: 'id' }
+      });
+    } catch (err) {
+      console.log('changeColumn ActivityLogs.userId skipped:', err.message);
+    }
 
-    // 2. Add performedByEmployee UUID column
-    await queryInterface.addColumn('ActivityLogs', 'performedByEmployee', {
-      type: Sequelize.STRING(36),
-      allowNull: true,
-      references: {
-        model: 'Employees',
-        key: 'id'
-      },
-      onUpdate: 'CASCADE',
-      onDelete: 'SET NULL'
-    });
+    const tableInfo = await queryInterface.describeTable('ActivityLogs');
 
-    // 3. Add details text column
-    await queryInterface.addColumn('ActivityLogs', 'details', {
-      type: Sequelize.TEXT,
-      allowNull: true
-    });
+    // 2. Add performedByEmployee VARCHAR(36) column — no FK to avoid type mismatch with CHAR(36) BINARY
+    if (!tableInfo.performedByEmployee) {
+      await queryInterface.addColumn('ActivityLogs', 'performedByEmployee', {
+        type: Sequelize.STRING(36),
+        allowNull: true
+      });
+    }
+
+    // 3. Add details TEXT column
+    if (!tableInfo.details) {
+      await queryInterface.addColumn('ActivityLogs', 'details', {
+        type: Sequelize.TEXT, allowNull: true
+      });
+    }
   },
 
   async down(queryInterface, Sequelize) {
-    // 1. Remove details column
-    await queryInterface.removeColumn('ActivityLogs', 'details');
-
-    // 2. Remove performedByEmployee column
-    await queryInterface.removeColumn('ActivityLogs', 'performedByEmployee');
-
-    // 3. Make userId NOT NULL (revert change)
-    await queryInterface.changeColumn('ActivityLogs', 'userId', {
-      type: Sequelize.INTEGER,
-      allowNull: false,
-      references: {
-        model: 'Users',
-        key: 'id'
-      }
-    });
+    const tableInfo = await queryInterface.describeTable('ActivityLogs');
+    if (tableInfo.details) {
+      await queryInterface.removeColumn('ActivityLogs', 'details');
+    }
+    if (tableInfo.performedByEmployee) {
+      await queryInterface.removeColumn('ActivityLogs', 'performedByEmployee');
+    }
+    try {
+      await queryInterface.changeColumn('ActivityLogs', 'userId', {
+        type: Sequelize.INTEGER, allowNull: false,
+        references: { model: 'Users', key: 'id' }
+      });
+    } catch (err) {
+      console.log('changeColumn ActivityLogs.userId down skipped:', err.message);
+    }
   }
 };

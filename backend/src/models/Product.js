@@ -1,11 +1,10 @@
 const { DataTypes, Op } = require('sequelize');
 const sequelize = require('../config/database');
-const Category = require('./Category');
 
 const Product = sequelize.define('Product', {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
     primaryKey: true
   },
   name: {

@@ -16,12 +16,8 @@ const SaleRefund = sequelize.define('SaleRefund', {
     }
   },
   productId: {
-    type: DataTypes.UUID,
-    allowNull: true,
-    references: {
-      model: 'Products',
-      key: 'id'
-    }
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   quantity: {
     type: DataTypes.INTEGER,
@@ -46,12 +42,8 @@ const SaleRefund = sequelize.define('SaleRefund', {
     defaultValue: 'cash'
   },
   processedBy: {
-    type: DataTypes.UUID,
-    allowNull: true,
-    references: {
-      model: 'Employees',
-      key: 'id'
-    }
+    type: DataTypes.STRING(36),
+    allowNull: true
   },
   refundedBy: {
     type: DataTypes.STRING,

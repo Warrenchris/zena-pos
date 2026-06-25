@@ -102,23 +102,23 @@ async function seedKenyanData() {
     // 4. Create Kenyan oriented products (Prices in KES)
     const productsData = [
       // Unga & Cereals
-      { name: 'Jogoo Maize Meal 2kg', sku: 'UNG001', barcode: '600110011001', price: 180.00, cost: 140.00, stockQuantity: 150, CategoryId: categories[0].id },
-      { name: 'Kabras Sugar 2kg', sku: 'UNG002', barcode: '600110011002', price: 410.00, cost: 320.00, stockQuantity: 80, CategoryId: categories[0].id },
-      { name: 'Auntie Pinky Basmati Rice 5kg', sku: 'UNG003', barcode: '600110011003', price: 1250.00, cost: 950.00, stockQuantity: 40, CategoryId: categories[0].id },
+      { name: 'Jogoo Maize Meal 2kg', sku: 'UNG001', barcode: '600110011001', price: 180.00, cost: 140.00, stockQuantity: 150, categoryId: categories[0].id },
+      { name: 'Kabras Sugar 2kg', sku: 'UNG002', barcode: '600110011002', price: 410.00, cost: 320.00, stockQuantity: 80, categoryId: categories[0].id },
+      { name: 'Auntie Pinky Basmati Rice 5kg', sku: 'UNG003', barcode: '600110011003', price: 1250.00, cost: 950.00, stockQuantity: 40, categoryId: categories[0].id },
       // Beverages
-      { name: 'Ketepa Pride Tea Leaves 250g', sku: 'BEV001', barcode: '600110012001', price: 160.00, cost: 120.00, stockQuantity: 120, CategoryId: categories[1].id },
-      { name: 'Tusker Lager Can 500ml', sku: 'BEV002', barcode: '600110012002', price: 230.00, cost: 180.00, stockQuantity: 240, CategoryId: categories[1].id },
-      { name: 'Safari Lager Beer 500ml', sku: 'BEV003', barcode: '600110012003', price: 220.00, cost: 170.00, stockQuantity: 180, CategoryId: categories[1].id },
-      { name: 'Coca-Cola Soda 1.25L', sku: 'BEV004', barcode: '600110012004', price: 110.00, cost: 85.00, stockQuantity: 100, CategoryId: categories[1].id },
+      { name: 'Ketepa Pride Tea Leaves 250g', sku: 'BEV001', barcode: '600110012001', price: 160.00, cost: 120.00, stockQuantity: 120, categoryId: categories[1].id },
+      { name: 'Tusker Lager Can 500ml', sku: 'BEV002', barcode: '600110012002', price: 230.00, cost: 180.00, stockQuantity: 240, categoryId: categories[1].id },
+      { name: 'Safari Lager Beer 500ml', sku: 'BEV003', barcode: '600110012003', price: 220.00, cost: 170.00, stockQuantity: 180, categoryId: categories[1].id },
+      { name: 'Coca-Cola Soda 1.25L', sku: 'BEV004', barcode: '600110012004', price: 110.00, cost: 85.00, stockQuantity: 100, categoryId: categories[1].id },
       // Household
-      { name: 'Omo Extra Fresh Powder 1kg', sku: 'HOU001', barcode: '600110013001', price: 380.00, cost: 290.00, stockQuantity: 60, CategoryId: categories[2].id },
-      { name: 'Sunshine Dishwashing Paste 400g', sku: 'HOU002', barcode: '600110013002', price: 140.00, cost: 105.00, stockQuantity: 90, CategoryId: categories[2].id },
+      { name: 'Omo Extra Fresh Powder 1kg', sku: 'HOU001', barcode: '600110013001', price: 380.00, cost: 290.00, stockQuantity: 60, categoryId: categories[2].id },
+      { name: 'Sunshine Dishwashing Paste 400g', sku: 'HOU002', barcode: '600110013002', price: 140.00, cost: 105.00, stockQuantity: 90, categoryId: categories[2].id },
       // Health & Beauty
-      { name: 'Geisha Aloe Vera Soap 200g', sku: 'HLT001', barcode: '600110014001', price: 115.00, cost: 85.00, stockQuantity: 130, CategoryId: categories[3].id },
-      { name: 'Dettol Soap Original 175g', sku: 'HLT002', barcode: '600110014002', price: 145.00, cost: 110.00, stockQuantity: 100, CategoryId: categories[3].id },
+      { name: 'Geisha Aloe Vera Soap 200g', sku: 'HLT001', barcode: '600110014001', price: 115.00, cost: 85.00, stockQuantity: 130, categoryId: categories[3].id },
+      { name: 'Dettol Soap Original 175g', sku: 'HLT002', barcode: '600110014002', price: 145.00, cost: 110.00, stockQuantity: 100, categoryId: categories[3].id },
       // Snacks & Bakery
-      { name: 'Brookside Dairy Fresh Milk 500ml', sku: 'BAK001', barcode: '600110015001', price: 65.00, cost: 48.00, stockQuantity: 200, CategoryId: categories[4].id },
-      { name: 'Broadways Premium Bread 400g', sku: 'BAK002', barcode: '600110015002', price: 60.00, cost: 46.00, stockQuantity: 150, CategoryId: categories[4].id }
+      { name: 'Brookside Dairy Fresh Milk 500ml', sku: 'BAK001', barcode: '600110015001', price: 65.00, cost: 48.00, stockQuantity: 200, categoryId: categories[4].id },
+      { name: 'Broadways Premium Bread 400g', sku: 'BAK002', barcode: '600110015002', price: 60.00, cost: 46.00, stockQuantity: 150, categoryId: categories[4].id }
     ];
 
     const products = [];
@@ -133,7 +133,7 @@ async function seedKenyanData() {
           cost: prod.cost,
           stockQuantity: prod.stockQuantity,
           reorderPoint: 10,
-          CategoryId: prod.CategoryId
+          categoryId: prod.categoryId
         }
       });
       products.push(product);

@@ -59,11 +59,17 @@ module.exports = {
       });
     }
 
-    // Update paymentMethod enum to include 'mobile'
-    await queryInterface.changeColumn('Sales', 'paymentMethod', {
-      type: Sequelize.ENUM('cash', 'card', 'mobile', 'mobile_money', 'other'),
-      allowNull: false
-    });
+    // Update paymentMethod enum to include 'mobile' (only if column exists)
+    if (tableInfo.paymentMethod) {
+      try {
+        await queryInterface.changeColumn('Sales', 'paymentMethod', {
+          type: Sequelize.ENUM('cash', 'card', 'mobile', 'mobile_money', 'other'),
+          allowNull: true
+        });
+      } catch (err) {
+        console.log('changeColumn Sales.paymentMethod skipped:', err.message);
+      }
+    }
   },
 
   async down(queryInterface, Sequelize) {

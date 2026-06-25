@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, SaleRefund, HeldCart } = require('../src/models');
+const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, SaleRefund, HeldCart, SalePayment, ActivityLog } = require('../src/models');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -48,9 +48,11 @@ describe('Phase 3 Remediation Tests', () => {
   const cashierToken = tokenFor({ id: '550e8400-e29b-41d4-a716-446655440000', role: 'cashier', shopId: 1, isEmployee: true });
 
   const cleanDb = async () => {
+    await ActivityLog.destroy({ where: {} });
     await HeldCart.destroy({ where: {} });
     await SaleRefund.destroy({ where: {} });
     await SaleItem.destroy({ where: {} });
+    await SalePayment.destroy({ where: {} });
     await Sale.destroy({ where: {} });
     await Customer.destroy({ where: {} });
     await Product.destroy({ where: {} });
@@ -72,7 +74,6 @@ describe('Phase 3 Remediation Tests', () => {
 
     // Setup products
     product1 = await Product.create({
-      id: '990e8400-e29b-41d4-a716-446655440001',
       name: 'Product A',
       sku: 'SKU-A',
       barcode: 'BARCODE-A',
@@ -80,13 +81,12 @@ describe('Phase 3 Remediation Tests', () => {
       cost: 7.00,
       stockQuantity: 100,
       reorderPoint: 5,
-      CategoryId: category.id,
+      categoryId: category.id,
       shopId: 1,
       active: true
     });
 
     product2 = await Product.create({
-      id: '990e8400-e29b-41d4-a716-446655440002',
       name: 'Product B',
       sku: 'SKU-B',
       barcode: 'BARCODE-B',
@@ -94,7 +94,7 @@ describe('Phase 3 Remediation Tests', () => {
       cost: 12.00,
       stockQuantity: 50,
       reorderPoint: 5,
-      CategoryId: category.id,
+      categoryId: category.id,
       shopId: 1,
       active: true
     });

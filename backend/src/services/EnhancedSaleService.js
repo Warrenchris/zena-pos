@@ -21,7 +21,7 @@ class EnhancedSaleService {
       },
       {
         model: Employee,
-        as: 'employee',
+        as: 'Employee',
         attributes: ['firstName', 'lastName', 'id']
       },
       {
@@ -438,7 +438,11 @@ class EnhancedSaleService {
       return saleWithPayments;
 
     } catch (error) {
-      await t.rollback();
+      try {
+        await t.rollback();
+      } catch (rollbackErr) {
+        // Ignore rollback failure to let the original error propagate
+      }
       throw error;
     }
   }

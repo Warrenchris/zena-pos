@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, PendingPayment } = require('../src/models');
+const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, PendingPayment, SalePayment, ActivityLog } = require('../src/models');
 const axios = require('axios');
 
 jest.mock('axios');
@@ -36,8 +36,10 @@ describe('Phase 2 Remediation Tests', () => {
   const cashierToken = tokenFor({ id: '550e8400-e29b-41d4-a716-446655440000', role: 'cashier', shopId: 1, isEmployee: true });
 
   const cleanDb = async () => {
+    await ActivityLog.destroy({ where: {} });
     await PendingPayment.destroy({ where: {} });
     await SaleItem.destroy({ where: {} });
+    await SalePayment.destroy({ where: {} });
     await Sale.destroy({ where: {} });
     await Customer.destroy({ where: {} });
     await Product.destroy({ where: {} });
@@ -68,7 +70,6 @@ describe('Phase 2 Remediation Tests', () => {
 
     // Setup products
     product = await Product.create({
-      id: '990e8400-e29b-41d4-a716-446655440000',
       name: 'Test Product',
       sku: `SKU-TEST-${Date.now()}`,
       barcode: 'BARCODE-TEST',
@@ -76,7 +77,7 @@ describe('Phase 2 Remediation Tests', () => {
       cost: 5.00,
       stockQuantity: 100,
       reorderPoint: 5,
-      CategoryId: category.id,
+      categoryId: category.id,
       shopId: 1,
       active: true
     });
@@ -160,6 +161,7 @@ describe('Phase 2 Remediation Tests', () => {
         items: [{ productId: product.id, quantity: 2, price: 10.00 }],
         total: 20.00,
         paymentAmount: 20.00,
+        paymentMethod: 'mobile',
         customer: { name: 'M-Pesa Callback User' }
       }
     });
@@ -213,6 +215,7 @@ describe('Phase 2 Remediation Tests', () => {
         items: [{ productId: product.id, quantity: 1, price: 10.00 }],
         total: 10.00,
         paymentAmount: 10.00,
+        paymentMethod: 'mobile',
         customer: { name: 'Fail User' }
       }
     });
@@ -270,6 +273,7 @@ describe('Phase 2 Remediation Tests', () => {
         items: [{ productId: product.id, quantity: 1, price: 10.00 }],
         total: 10.00,
         paymentAmount: 10.00,
+        paymentMethod: 'card',
         customer: { name: 'Card Customer' }
       }
     });
@@ -320,6 +324,7 @@ describe('Phase 2 Remediation Tests', () => {
         items: [{ productId: product.id, quantity: 1, price: 10.00 }],
         total: 10.00,
         paymentAmount: 10.00,
+        paymentMethod: 'card',
         customer: { name: 'Failed Card User' }
       }
     });
@@ -454,6 +459,7 @@ describe('Phase 2 Remediation Tests', () => {
   test('TEST 2.9 — Employee sales report includes UUID cashier sales', async () => {
     // Clear sales first
     await SaleItem.destroy({ where: {} });
+    await SalePayment.destroy({ where: {} });
     await Sale.destroy({ where: {} });
 
     // Seed 3 sales for employee
@@ -516,6 +522,7 @@ describe('Phase 2 Remediation Tests', () => {
   test('TEST 2.11 — Date range filter works on employee sales report', async () => {
     // Clear sales
     await SaleItem.destroy({ where: {} });
+    await SalePayment.destroy({ where: {} });
     await Sale.destroy({ where: {} });
 
     // Seed 3 sales on different dates

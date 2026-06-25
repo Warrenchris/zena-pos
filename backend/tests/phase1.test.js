@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, ActivityLog, Employee, User } = require('../src/models');
+const { Shop, Category, Product, Sale, SaleItem, ActivityLog, Employee, User, SalePayment } = require('../src/models');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -36,6 +36,7 @@ describe('Phase 1 Remediation Integration Tests', () => {
     // Delete in reverse order of foreign key dependencies
     await ActivityLog.destroy({ where: { shopId: 1 } });
     await SaleItem.destroy({ where: { shopId: 1 } });
+    await SalePayment.destroy({ where: { shopId: 1 } });
     await Sale.destroy({ where: { shopId: 1 } });
     await Product.destroy({ where: { shopId: 1 } });
     await User.destroy({ where: { [Op.or]: [{ id: 101 }, { email: 'admin@example.com' }] } });
@@ -93,7 +94,7 @@ describe('Phase 1 Remediation Integration Tests', () => {
         cost: 5.00 * i,
         stockQuantity: 100,
         reorderPoint: 5,
-        CategoryId: category.id,
+        categoryId: category.id,
         shopId: 1,
         active: true
       });

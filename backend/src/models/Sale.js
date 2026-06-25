@@ -47,9 +47,8 @@ const Sale = sequelize.define('Sale', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
   },
-  // Payment tracking
   paymentMethod: {
-    type: DataTypes.ENUM('cash', 'card', 'mobile', 'mobile_money', 'check', 'store_credit'),
+    type: DataTypes.STRING(50),
     allowNull: false,
     defaultValue: 'cash'
   },
@@ -151,7 +150,7 @@ const Sale = sequelize.define('Sale', {
     allowNull: true
   },
   lastModifiedBy: {
-    type: DataTypes.UUID,
+    type: DataTypes.STRING(36),
     allowNull: true
   },
   // Customer information (denormalized for quick access)
@@ -189,7 +188,7 @@ const Sale = sequelize.define('Sale', {
     }
   },
   employeeId: {
-    type: DataTypes.UUID,
+    type: DataTypes.STRING(36),
     allowNull: true,
     references: {
       model: 'Employees',

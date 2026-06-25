@@ -3,6 +3,9 @@ const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
+const redisClient = require('../config/redis');
+const { invalidateShopProductCache } = require('../services/productCache');
+const logger = require('../utils/logger');
 
 // Get all products with filters and pagination
 exports.getAllProducts = async (req, res) => {
@@ -20,6 +23,66 @@ exports.getAllProducts = async (req, res) => {
 
     const numericPage = Math.max(parseInt(page, 10) || 1, 1);
     const numericPageSize = Math.min(Math.max(parseInt(pageSize, 10) || 12, 1), 100);
+    const offset = (numericPage - 1) * numericPageSize;
+
+    const isDefaultQuery = !search && !categoryId && !availability && !minPrice && !maxPrice;
+    const cacheKey = `products:shop:${req.user.shopId}`;
+
+    if (isDefaultQuery) {
+      try {
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+          const cachedResult = JSON.parse(cachedData);
+          const totalPages = Math.ceil(cachedResult.count / numericPageSize) || 1;
+          const paginatedProducts = cachedResult.rows.slice(offset, offset + numericPageSize);
+          logger.debug(`Product catalogue cache HIT for shop: ${req.user.shopId}`);
+          return res.json({
+            products: paginatedProducts,
+            searchType: 'exact',
+            pagination: {
+              currentPage: numericPage,
+              totalPages,
+              total: cachedResult.count,
+            },
+          });
+        }
+      } catch (err) {
+        logger.warn(`Redis error fetching product cache for shop ${req.user.shopId}:`, err);
+      }
+
+      logger.debug(`Product catalogue cache MISS for shop: ${req.user.shopId}, querying database`);
+      try {
+        const allProducts = await Product.findAndCountAll({
+          where: { active: true, shopId: req.user.shopId },
+          include: [
+            { model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } }
+          ],
+          order: [['createdAt', 'DESC']],
+          distinct: true,
+        });
+
+        try {
+          await redisClient.setex(cacheKey, 600, JSON.stringify({ count: allProducts.count, rows: allProducts.rows }));
+        } catch (err) {
+          logger.warn(`Redis error caching products for shop ${req.user.shopId}:`, err);
+        }
+
+        const totalPages = Math.ceil(allProducts.count / numericPageSize) || 1;
+        const paginatedProducts = allProducts.rows.slice(offset, offset + numericPageSize);
+        return res.json({
+          products: paginatedProducts,
+          searchType: 'exact',
+          pagination: {
+            currentPage: numericPage,
+            totalPages,
+            total: allProducts.count,
+          },
+        });
+      } catch (error) {
+        console.error('Error fetching all products on cache miss:', error);
+        // Fall through to regular DB paginated execution in case of unexpected DB error
+      }
+    }
 
     const where = {
       active: true,
@@ -60,8 +123,6 @@ exports.getAllProducts = async (req, res) => {
     const include = [
       { model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } },
     ];
-
-    const offset = (numericPage - 1) * numericPageSize;
 
     let { rows, count } = await Product.findAndCountAll({
       where,
@@ -246,6 +307,8 @@ exports.createProduct = async (req, res) => {
       include: [{ model: Category, attributes: ['id', 'name'] }]
     });
 
+    await invalidateShopProductCache(req.user.shopId);
+
     res.status(201).json(productWithCategory);
     try {
       await logActivity({
@@ -310,6 +373,8 @@ exports.updateProduct = async (req, res) => {
       weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : product.weightGrams)
     });
 
+    await invalidateShopProductCache(req.user.shopId);
+
     const updatedProduct = await Product.findOne({
       where: { id: product.id },
       include: [{ model: Category, attributes: ['id', 'name'] }]
@@ -346,6 +411,7 @@ exports.deleteProduct = async (req, res) => {
     }
 
     await product.update({ active: false });
+    await invalidateShopProductCache(req.user.shopId);
     res.json({ message: 'Product deleted successfully' });
     try {
       await logActivity({
@@ -385,6 +451,7 @@ exports.updateStock = async (req, res) => {
     }
 
     await product.update({ stockQuantity: newQuantity });
+    await invalidateShopProductCache(req.user.shopId);
     res.json(product);
     try {
       await logActivity({

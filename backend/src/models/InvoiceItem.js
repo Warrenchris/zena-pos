@@ -12,10 +12,10 @@ const InvoiceItem = sequelize.define('InvoiceItem', {
   invoiceId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'invoices', key: 'id' },
+    references: { model: 'Invoices', key: 'id' },
   },
   productId: {
-    type: DataTypes.UUID,
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: { model: 'Products', key: 'id' },
   },
@@ -33,7 +33,7 @@ const InvoiceItem = sequelize.define('InvoiceItem', {
   },
 }, {
   timestamps: true,
-  tableName: 'invoice_items',
+  tableName: 'InvoiceItems',
 });
 
 // Associations

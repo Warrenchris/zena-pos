@@ -18,7 +18,7 @@ const SaleItem = sequelize.define('SaleItem', {
     }
   },
   productId: {
-    type: DataTypes.UUID,
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: {
       model: 'Products',

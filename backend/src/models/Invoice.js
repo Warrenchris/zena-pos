@@ -17,26 +17,14 @@ Invoice.init({
   saleId: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    references: {
-      model: 'Sales',
-      key: 'id',
-    },
   },
   userId: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    references: {
-      model: 'Users',
-      key: 'id',
-    },
   },
   shopId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: 'Shops',
-      key: 'id',
-    },
   },
   subtotal: {
     type: DataTypes.DECIMAL(10, 2),
@@ -82,7 +70,7 @@ Invoice.init({
 }, {
   sequelize,
   modelName: 'Invoice',
-  tableName: 'invoices',
+  tableName: 'Invoices',
   timestamps: true,
 });
 

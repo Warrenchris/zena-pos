@@ -1331,7 +1331,7 @@ export default function CashierDashboard() {
                           });
                           return elements;
                         })()
-                      )
+                      )}
                     </div>
                   </div>
                 </div>

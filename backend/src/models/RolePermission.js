@@ -22,26 +22,25 @@ const RolePermission = sequelize.define('RolePermission', {
     }
   }
 }, {
-  // Prevent Sequelize from pluralizing table name
-  freezeTableName: true,
+  tableName: 'RolePermissions',
   hooks: {
     afterCreate: async (rolePermission) => {
       // Invalidate role cache when a new permission is assigned
-      permissionCache.invalidateRoleCache(rolePermission.role);
+      await permissionCache.invalidateRoleCache(rolePermission.role);
       permissionCache.invalidateAllUserCaches(); // Users with this role need cache refresh
     },
     afterUpdate: async (rolePermission) => {
       // Invalidate role cache when permission assignment is updated
-      permissionCache.invalidateRoleCache(rolePermission.role);
+      await permissionCache.invalidateRoleCache(rolePermission.role);
       // Also invalidate old role if role was changed
       if (rolePermission.previous('role')) {
-        permissionCache.invalidateRoleCache(rolePermission.previous('role'));
+        await permissionCache.invalidateRoleCache(rolePermission.previous('role'));
       }
       permissionCache.invalidateAllUserCaches(); // Users with this role need cache refresh
     },
     afterDestroy: async (rolePermission) => {
       // Invalidate role cache when a permission is removed
-      permissionCache.invalidateRoleCache(rolePermission.role);
+      await permissionCache.invalidateRoleCache(rolePermission.role);
       permissionCache.invalidateAllUserCaches(); // Users with this role need cache refresh
     }
   }

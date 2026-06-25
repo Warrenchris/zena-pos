@@ -20,7 +20,7 @@ const SalePayment = sequelize.define('SalePayment', {
     allowNull: false
   },
   paymentMethod: {
-    type: DataTypes.ENUM('cash', 'mpesa', 'card', 'credit'),
+    type: DataTypes.STRING(50),
     allowNull: false
   },
   gatewayRef: {
@@ -44,7 +44,7 @@ const SalePayment = sequelize.define('SalePayment', {
     defaultValue: 'completed'
   },
   processedBy: {
-    type: DataTypes.UUID,
+    type: DataTypes.CHAR(36),
     allowNull: true,
     references: {
       model: 'Employees',

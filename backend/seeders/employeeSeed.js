@@ -11,6 +11,7 @@ const seedDatabase = async () => {
     });
 
     // Create sample employees
+    // Note: individualHooks: true is omitted here because passwords are pre-hashed manually using bcrypt
     await Employee.bulkCreate([
       {
         firstName: 'John',

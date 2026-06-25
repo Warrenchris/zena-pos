@@ -38,7 +38,7 @@ Store.init({
 }, {
   sequelize,
   modelName: 'Store',
-  tableName: 'stores',
+  tableName: 'Stores',
   timestamps: true,
 });
 
