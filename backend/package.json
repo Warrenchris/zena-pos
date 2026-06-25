@@ -7,7 +7,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "check-deps": "node scripts/check-dependencies.js",
-    "test": "jest --runInBand --forceExit --detectOpenHandles",
+    "test": "NODE_ENV=test jest --runInBand --forceExit --detectOpenHandles",
     "lint": "eslint src/",
     "db:create": "mysql -u root -p < database/init.sql"
   },
