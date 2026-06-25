@@ -30,14 +30,8 @@ async function testConnection() {
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
 
-    // In production, we'll use migrations instead of auto-sync
-    if (process.env.NODE_ENV !== 'production') {
-      // Only sync in development, and only if explicitly enabled
-      if (process.env.DB_SYNC === 'true') {
-        await sequelize.sync();
-        console.log('Database synchronized successfully.');
-      }
-    }
+    // Database synchronization (sequelize.sync) is disabled.
+    // Schema alterations must be done via migrations only.
   } catch (error) {
     console.error('Unable to connect to the database:', error);
     throw error;
