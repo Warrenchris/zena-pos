@@ -164,6 +164,9 @@ export default function CashierDashboard() {
   const removalTimeoutsRef = useRef({});
   const undoButtonRef = useRef(null);
 
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
   const isModalOpen = showPaymentModal || showCustomerModal || showHeldCartsDrawer || showHoldPrompt;
 
   const onScanBarcode = async (scannedBarcode) => {
@@ -376,8 +379,6 @@ export default function CashierDashboard() {
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [cashierStats, setCashierStats] = useState({
     today: { totalSales: 0, orderCount: 0 },
     week: { totalSales: 0, orderCount: 0 },
