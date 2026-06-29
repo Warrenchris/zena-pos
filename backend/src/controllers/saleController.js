@@ -820,7 +820,7 @@ exports.getAllSalesForAdmin = async (req, res) => {
         id: sales.rows[0].id,
         saleItemsCount: sales.rows[0].SaleItems?.length || 0,
         customer: sales.rows[0].Customer?.name || 'No customer',
-        employee: sales.rows[0].Employee?.firstName || 'No employee'
+        employee: sales.rows[0].Employee?.firstName || sales.rows[0].User?.name || 'No employee/user'
       } : null
     });
 
