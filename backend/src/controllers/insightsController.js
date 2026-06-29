@@ -6,6 +6,7 @@ const { Op, Sequelize } = require('sequelize');
 const sequelize = require('../config/database');
 const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
+const aiClient = require('../utils/aiClient');
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
@@ -154,7 +155,7 @@ const generateRuleBasedAlerts = async (shopId) => {
 /**
  * AI-powered sales anomaly detection using Isolation Forest
  */
-const generateSmartAlerts = async (shopId) => {
+const generateSmartAlerts = async (shopId, userId) => {
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
@@ -180,10 +181,10 @@ const generateSmartAlerts = async (shopId) => {
   }
 
   try {
-    const aiResponse = await axios.post(
-      `${AI_SERVICE_URL}/api/insights/anomalies`,
+    const aiResponse = await aiClient.post(
+      `/api/insights/anomalies`,
       { daily_data: dailySales, contamination: 0.05 },
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS }
+      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId }
     );
 
     return aiResponse.data.anomalies.slice(0, 3).map((anomaly) => ({
@@ -204,7 +205,7 @@ const generateSmartAlerts = async (shopId) => {
 /**
  * Prophet-based stock depletion forecast via AI service
  */
-const getStockDepletionForecast = async (shopId) => {
+const getStockDepletionForecast = async (shopId, userId) => {
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
@@ -244,10 +245,10 @@ const getStockDepletionForecast = async (shopId) => {
   };
 
   try {
-    const aiResponse = await axios.post(
-      `${AI_SERVICE_URL}/api/forecasting/stock-depletion`,
+    const aiResponse = await aiClient.post(
+      `/api/forecasting/stock-depletion`,
       payload,
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS }
+      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId }
     );
 
     return (aiResponse.data.alerts || []).map((item) => ({
@@ -294,7 +295,7 @@ const getStockDepletionForecast = async (shopId) => {
 /**
  * Generate business alerts based on critical metrics
  */
-const generateAlerts = async (shopId) => {
+const generateAlerts = async (shopId, userId) => {
   const alerts = [];
 
   const criticalStock = await Product.findAll({
@@ -319,7 +320,7 @@ const generateAlerts = async (shopId) => {
     });
   }
 
-  const salesAlerts = await generateSmartAlerts(shopId);
+  const salesAlerts = await generateSmartAlerts(shopId, userId);
   alerts.push(...salesAlerts);
 
   return alerts;
@@ -338,7 +339,7 @@ const getInsights = async (req, res) => {
     const [trends, recommendations, alerts] = await Promise.all([
       calculateTrends(shopId),
       generateRecommendations(shopId),
-      generateAlerts(shopId)
+      generateAlerts(shopId, req.user?.id)
     ]);
 
     // Smart dashboard insights (heuristics)
@@ -393,7 +394,7 @@ const getInsights = async (req, res) => {
     }
 
     // 3) Stock depletion forecast (Prophet via AI service)
-    const soonOut = await getStockDepletionForecast(shopId);
+    const soonOut = await getStockDepletionForecast(shopId, req.user?.id);
     if (soonOut.length) {
       smartRecommendations.push({
         type: 'FORECAST',
@@ -586,15 +587,18 @@ const getCustomerSegments = async (req, res) => {
       });
     }
 
-    const aiResponse = await axios.post(
-      `${AI_SERVICE_URL}/api/insights/customer-segments`,
+    const aiResponse = await aiClient.post(
+      `/api/insights/customer-segments`,
       { customers: customerMetrics },
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS }
+      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId: req.user?.id }
     );
 
     res.json(aiResponse.data);
   } catch (error) {
     console.error('[getCustomerSegments] Error:', error.message);
+    if (error.status === 503) {
+      return res.status(503).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Failed to generate customer segments' });
   }
 };
@@ -691,8 +695,8 @@ const getStockDepletion = async (req, res) => {
       salesByProduct[pid].push({ date: row.date, quantity: parseFloat(row.quantity || 0) });
     }
 
-    const aiResponse = await axios.post(
-      `${AI_SERVICE_URL}/api/forecasting/stock-depletion`,
+    const aiResponse = await aiClient.post(
+      `/api/forecasting/stock-depletion`,
       {
         products: products.map((p) => ({
           product_id: String(p.id),
@@ -702,12 +706,15 @@ const getStockDepletion = async (req, res) => {
         })),
         alert_threshold_days: insightsConfig.STOCK_DEPLETION_DAYS
       },
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS }
+      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId: req.user?.id }
     );
 
     res.json(aiResponse.data);
   } catch (error) {
     console.error('[getStockDepletion] Error:', error.message);
+    if (error.status === 503) {
+      return res.status(503).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Failed to generate stock depletion forecast' });
   }
 };

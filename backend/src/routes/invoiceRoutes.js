@@ -5,14 +5,16 @@ const { auth, checkRole } = require('../middleware/auth');
 const invoiceController = require('../controllers/invoiceController');
 const { invoiceValidation } = require('../middleware/validations/invoiceValidation');
 
+const { validateDateRange } = require('../middleware/validators');
+
 // Apply authentication middleware to all routes
 router.use(auth);
 
 // Get all invoices (with filters and pagination)
-router.get('/', invoiceController.getInvoices);
+router.get('/', validateDateRange, invoiceController.getInvoices);
 
 // Get invoice statistics
-router.get('/statistics', invoiceController.getStatistics);
+router.get('/statistics', validateDateRange, invoiceController.getStatistics);
 
 // Get single invoice
 router.get('/:id', invoiceController.getInvoiceById);

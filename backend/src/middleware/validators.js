@@ -1,44 +1,48 @@
 const { query, validationResult } = require('express-validator');
 
-// Validate query parameters for date range
+const { parseDate } = require('../utils/dateUtils');
+
 const validateDateRange = [
-  query('startDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid start date format'),
-  query('endDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid end date format'),
   (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    let { startDate, endDate } = req.query;
 
-    // If endDate is provided but startDate isn't, default startDate to 30 days before endDate
-    if (req.query.endDate && !req.query.startDate) {
-      const endDate = new Date(req.query.endDate);
-      const startDate = new Date(endDate);
-      startDate.setDate(startDate.getDate() - 30);
-      req.query.startDate = startDate.toISOString().split('T')[0];
-    }
+    try {
+      if (startDate === 'undefined' || startDate === 'null' || startDate === '') startDate = undefined;
+      if (endDate === 'undefined' || endDate === 'null' || endDate === '') endDate = undefined;
 
-    // If startDate is provided but endDate isn't, default endDate to today
-    if (req.query.startDate && !req.query.endDate) {
-      req.query.endDate = new Date().toISOString().split('T')[0];
-    }
+      let parsedStart = null;
+      let parsedEnd = null;
 
-    // If neither is provided, default to last 30 days
-    if (!req.query.startDate && !req.query.endDate) {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30);
-      req.query.startDate = startDate.toISOString().split('T')[0];
-      req.query.endDate = endDate.toISOString().split('T')[0];
-    }
+      if (startDate) {
+        parsedStart = parseDate(startDate);
+      }
+      if (endDate) {
+        parsedEnd = parseDate(endDate);
+      }
 
-    next();
+      if (parsedEnd && !parsedStart) {
+        parsedStart = new Date(parsedEnd);
+        parsedStart.setDate(parsedStart.getDate() - 30);
+      } else if (parsedStart && !parsedEnd) {
+        parsedEnd = new Date();
+      } else if (!parsedStart && !parsedEnd) {
+        parsedEnd = new Date();
+        parsedStart = new Date();
+        parsedStart.setDate(parsedStart.getDate() - 30);
+      }
+
+      req.startDate = parsedStart;
+      req.endDate = parsedEnd;
+      req.query.startDate = parsedStart;
+      req.query.endDate = parsedEnd;
+
+      next();
+    } catch (error) {
+      return res.status(400).json({
+        error: 'Invalid date parameter provided',
+        details: error.message
+      });
+    }
   }
 ];
 

@@ -1,6 +1,7 @@
 const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const Customer = require('../models/Customer');
+const { parseDate } = require('../utils/dateUtils');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
@@ -253,7 +254,7 @@ exports.getCustomerStatistics = async (req, res) => {
     const { startDate, endDate } = req.query;
     const whereClause = startDate && endDate ? {
       createdAt: {
-        [Op.between]: [new Date(startDate), new Date(endDate)]
+        [Op.between]: [parseDate(startDate), parseDate(endDate)]
       }
     } : {};
 

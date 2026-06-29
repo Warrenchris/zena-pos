@@ -10,6 +10,7 @@ const Employee = require('../models/Employee');
 const UuidHelper = require('../utils/uuidHelper');
 const User = require('../models/User');
 const SaleRefund = require('../models/SaleRefund');
+const { parseDate } = require('../utils/dateUtils');
 
 // Get all sales with pagination
 exports.getAllSales = async (req, res) => {
@@ -549,12 +550,8 @@ exports.getCashierStats = async (req, res) => {
 
     // Default the dates if not provided (use UTC day boundaries to avoid TZ drift)
     const now = new Date();
-    const start = startDate
-      ? new Date(startDate)
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-    const end = endDate
-      ? new Date(endDate)
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    const start = parseDate(startDate, new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)));
+    const end = parseDate(endDate, new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999)));
 
     // Build where clause
     const whereClause = {
@@ -704,8 +701,8 @@ exports.getSalesStatistics = async (req, res) => {
       shopId: req.user.shopId,
       createdAt: {
         [Op.between]: [
-          startDate || new Date(new Date().setHours(0, 0, 0, 0)),
-          endDate || new Date(new Date().setHours(23, 59, 59, 999))
+          parseDate(startDate, new Date(new Date().setHours(0, 0, 0, 0))),
+          parseDate(endDate, new Date(new Date().setHours(23, 59, 59, 999)))
         ]
       }
     };
@@ -755,8 +752,8 @@ exports.getAllSalesForAdmin = async (req, res) => {
     if (startDate || endDate) {
       whereClause.createdAt = {
         [Op.between]: [
-          startDate || new Date(new Date().setHours(0, 0, 0, 0)),
-          endDate || new Date(new Date().setHours(23, 59, 59, 999))
+          parseDate(startDate, new Date(new Date().setHours(0, 0, 0, 0))),
+          parseDate(endDate, new Date(new Date().setHours(23, 59, 59, 999)))
         ]
       };
     }
@@ -858,8 +855,8 @@ exports.getMySales = async (req, res) => {
     if (startDate || endDate) {
       whereClause.createdAt = {
         [Op.between]: [
-          startDate || new Date(new Date().setHours(0, 0, 0, 0)),
-          endDate || new Date(new Date().setHours(23, 59, 59, 999))
+          parseDate(startDate, new Date(new Date().setHours(0, 0, 0, 0))),
+          parseDate(endDate, new Date(new Date().setHours(23, 59, 59, 999)))
         ]
       };
     }

@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const Expense = require('../models/Expense');
 const User = require('../models/User');
 const sequelize = require('../config/database');
+const { parseDate } = require('../utils/dateUtils');
 
 // Get all expenses with pagination and filtering
 exports.getAllExpenses = async (req, res) => {
@@ -17,7 +18,7 @@ exports.getAllExpenses = async (req, res) => {
     const whereClause = { shopId: req.user.shopId };
     if (startDate && endDate) {
       whereClause.date = {
-        [Op.between]: [new Date(startDate), new Date(endDate)]
+        [Op.between]: [parseDate(startDate), parseDate(endDate)]
       };
     }
     if (category) {
@@ -189,7 +190,7 @@ exports.getExpenseStatistics = async (req, res) => {
       shopId: req.user.shopId,
       ...(startDate && endDate ? {
         date: {
-          [Op.between]: [new Date(startDate), new Date(endDate)]
+          [Op.between]: [parseDate(startDate), parseDate(endDate)]
         }
       } : {}),
       ...(category ? { category } : {})

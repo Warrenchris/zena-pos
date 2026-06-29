@@ -5,27 +5,19 @@ const Customer = require('../models/Customer');
 const Product = require('../models/Product');
 const SaleItem = require('../models/SaleItem');
 const User = require('../models/User');
+const { parseDate } = require('../utils/dateUtils');
 
-// Helper function to get date range for period
-const getDateRange = (period) => {
-  const now = new Date();
-  const start = new Date();
+// Helper function to resolve start and end dates from req
+const getValidatedDates = (req) => {
+  let start = req.startDate instanceof Date ? req.startDate : parseDate(req.query.startDate || req.startDate);
+  let end = req.endDate instanceof Date ? req.endDate : parseDate(req.query.endDate || req.endDate);
 
-  switch (period) {
-    case 'weekly':
-      start.setDate(now.getDate() - 7);
-      break;
-    case 'monthly':
-      start.setMonth(now.getMonth() - 1);
-      break;
-    case 'yearly':
-      start.setFullYear(now.getFullYear() - 1);
-      break;
-    default:
-      start.setDate(now.getDate() - 7);
+  if (!start || !end) {
+    end = new Date();
+    start = new Date();
+    start.setDate(start.getDate() - 30);
   }
-
-  return { start, end: now };
+  return { start, end };
 };
 
 // Helper function to calculate growth and handle division by zero
@@ -38,8 +30,7 @@ const dashboardController = {
   // Get overall statistics
   async getStats(req, res) {
     try {
-      const { period = 'month' } = req.query;
-      const { start, end } = getDateRange(period);
+      const { start, end } = getValidatedDates(req);
       const shopId = req.user.shopId;
 
       const [salesStats, customerStats] = await Promise.all([
@@ -66,7 +57,7 @@ const dashboardController = {
 
       // Calculate previous period metrics for comparison
       const prevStart = new Date(start);
-      prevStart.setDate(prevStart.getDate() - (end - start));
+      prevStart.setDate(prevStart.getDate() - (end - start) / (1000 * 60 * 60 * 24));
 
       const prevSales = await Sale.findAll({
         where: {
@@ -104,6 +95,9 @@ const dashboardController = {
       });
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
+      if (error.message && (error.message.includes('date bound') || error.message.includes('Invalid Date') || error.message.includes('date parameter'))) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: 'Error fetching dashboard statistics' });
     }
   },
@@ -111,8 +105,8 @@ const dashboardController = {
   // Get revenue data
   async getRevenueData(req, res) {
     try {
+      const { start, end } = getValidatedDates(req);
       const { period = 'weekly' } = req.query;
-      const { start, end } = getDateRange(period);
       const shopId = req.user.shopId;
 
       const sales = await Sale.findAll({
@@ -129,14 +123,19 @@ const dashboardController = {
 
         switch (period) {
           case 'weekly':
+          case 'week':
             key = date.toLocaleDateString('en-US', { weekday: 'short' });
             break;
           case 'monthly':
+          case 'month':
             key = date.getDate().toString();
             break;
           case 'yearly':
+          case 'year':
             key = date.toLocaleDateString('en-US', { month: 'short' });
             break;
+          default:
+            key = date.toLocaleDateString('en-US', { weekday: 'short' });
         }
 
         if (!acc[key]) {
@@ -151,6 +150,9 @@ const dashboardController = {
       });
     } catch (error) {
       console.error('Error fetching revenue data:', error);
+      if (error.message && (error.message.includes('date bound') || error.message.includes('Invalid Date') || error.message.includes('date parameter'))) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: 'Error fetching revenue data' });
     }
   },
@@ -189,10 +191,8 @@ const dashboardController = {
   // Get visitor statistics
   async getVisitorStats(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { start, end } = getValidatedDates(req);
       const shopId = req.user.shopId;
-      const now = new Date();
-      const { start, end } = getDateRange(period);
       const prevStart = new Date(start);
       prevStart.setDate(prevStart.getDate() - (end - start) / (1000 * 60 * 60 * 24));
 
@@ -232,6 +232,9 @@ const dashboardController = {
       });
     } catch (error) {
       console.error('Error fetching visitor stats:', error);
+      if (error.message && (error.message.includes('date bound') || error.message.includes('Invalid Date') || error.message.includes('date parameter'))) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: 'Error fetching visitor statistics' });
     }
   },
@@ -239,10 +242,8 @@ const dashboardController = {
   // Get order statistics
   async getOrderStats(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { start, end } = getValidatedDates(req);
       const shopId = req.user.shopId;
-      const now = new Date();
-      const { start, end } = getDateRange(period);
       const prevStart = new Date(start);
       prevStart.setDate(prevStart.getDate() - (end - start) / (1000 * 60 * 60 * 24));
 
@@ -292,6 +293,9 @@ const dashboardController = {
       });
     } catch (error) {
       console.error('Error fetching order stats:', error);
+      if (error.message && (error.message.includes('date bound') || error.message.includes('Invalid Date') || error.message.includes('date parameter'))) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: 'Error fetching order statistics' });
     }
   },
@@ -299,9 +303,8 @@ const dashboardController = {
   // Get platform distribution statistics
   async getPlatformStats(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { start, end } = getValidatedDates(req);
       const shopId = req.user.shopId;
-      const { start, end } = getDateRange(period);
 
       const platforms = await Sale.findAll({
         where: {
@@ -332,6 +335,9 @@ const dashboardController = {
       });
     } catch (error) {
       console.error('Error fetching platform stats:', error);
+      if (error.message && (error.message.includes('date bound') || error.message.includes('Invalid Date') || error.message.includes('date parameter'))) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: 'Error fetching platform statistics' });
     }
   },
@@ -339,9 +345,8 @@ const dashboardController = {
   // Get location-based statistics
   async getLocationStats(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { start, end } = getValidatedDates(req);
       const shopId = req.user.shopId;
-      const { start, end } = getDateRange(period);
 
       // Get customer locations
       const locations = await Customer.findAll({
@@ -371,6 +376,9 @@ const dashboardController = {
       });
     } catch (error) {
       console.error('Error fetching location stats:', error);
+      if (error.message && (error.message.includes('date bound') || error.message.includes('Invalid Date') || error.message.includes('date parameter'))) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: 'Error fetching location statistics' });
     }
   }

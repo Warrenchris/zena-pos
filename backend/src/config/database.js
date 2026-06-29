@@ -38,6 +38,47 @@ async function testConnection() {
   }
 }
 
+// Query-level safeguard hook to assert both bounds of Op.between dates are valid
+const validateWhereDates = (where) => {
+  if (!where || typeof where !== 'object') return;
+  const { Op } = require('sequelize');
+  const keys = [
+    ...Object.keys(where),
+    ...Object.getOwnPropertySymbols(where)
+  ];
+
+  for (const key of keys) {
+    const value = where[key];
+    if (key === Op.between && Array.isArray(value)) {
+      const { assertValidBounds } = require('../utils/dateUtils');
+      assertValidBounds(value);
+    } else if (value && typeof value === 'object') {
+      validateWhereDates(value);
+    }
+  }
+};
+
+sequelize.addHook('beforeFind', (options) => {
+  if (options && options.where) {
+    validateWhereDates(options.where);
+  }
+});
+sequelize.addHook('beforeCount', (options) => {
+  if (options && options.where) {
+    validateWhereDates(options.where);
+  }
+});
+sequelize.addHook('beforeBulkDestroy', (options) => {
+  if (options && options.where) {
+    validateWhereDates(options.where);
+  }
+});
+sequelize.addHook('beforeBulkUpdate', (options) => {
+  if (options && options.where) {
+    validateWhereDates(options.where);
+  }
+});
+
 // Export the sequelize instance, and also attach helper for compatibility
 module.exports = sequelize;
 module.exports.testConnection = testConnection;

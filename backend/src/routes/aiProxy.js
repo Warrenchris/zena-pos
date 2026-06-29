@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const aiClient = require('../utils/aiClient');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = rateLimit;
@@ -42,7 +43,7 @@ const HEALTH_TTL = 5000;
 
 async function probeHealth() {
   try {
-    const resp = await axios.get(`${AI_SERVICE_URL}/openapi.json`, { timeout: 3000 });
+    const resp = await aiClient.get('/openapi.json', { timeout: 3000, isPublic: true });
     lastHealth = { ok: true, timestamp: Date.now(), details: { upstream: AI_SERVICE_URL } };
   } catch (err) {
     lastHealth = { ok: false, timestamp: Date.now(), details: { error: err.message, upstream: AI_SERVICE_URL } };
@@ -89,19 +90,19 @@ router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
       return res.json({ ...cached, cached: true, cache_hit: true });
     }
 
-    const url = `${AI_SERVICE_URL}/api/forecasting/forecast?periods=${periods}`;
-
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders['host'];
     delete forwardHeaders['content-length'];
 
-    const resp = await axios({
+    const resp = await aiClient.request({
       method: 'POST',
-      url,
+      url: `/api/forecasting/forecast?periods=${periods}`,
       data: req.body,
       headers: forwardHeaders,
       timeout: 30000,
       validateStatus: () => true,
+      shopId,
+      userId: req.user?.id
     });
 
     if (resp.status >= 200 && resp.status < 300) {
@@ -130,8 +131,6 @@ router.use(async (req, res, next) => {
     const m = orig.match(/\/forward\/?(.*)$/);
     if (!m) return next();
     const path = m[1] || '';
-    const url = `${AI_SERVICE_URL}/${path}`;
-
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders['host'];
     delete forwardHeaders['content-length'];
@@ -142,11 +141,13 @@ router.use(async (req, res, next) => {
       validateStatus: () => true,
     };
 
+    const shopId = req.shopId || req.user?.shopId;
+    const userId = req.user?.id;
     let resp;
     if (req.method === 'GET' || req.method === 'DELETE') {
-      resp = await axios({ method: req.method, url, params: req.query, ...axiosConfig });
+      resp = await aiClient.request({ method: req.method, url: path, params: req.query, shopId, userId, ...axiosConfig });
     } else {
-      resp = await axios({ method: req.method, url, data: req.body, params: req.query, ...axiosConfig });
+      resp = await aiClient.request({ method: req.method, url: path, data: req.body, params: req.query, shopId, userId, ...axiosConfig });
     }
 
     const responseHeaders = { ...resp.headers };

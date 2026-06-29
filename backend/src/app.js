@@ -12,6 +12,17 @@ if (!process.env.JWT_PRIVATE_KEY || !process.env.JWT_PUBLIC_KEY) {
   throw new Error('FATAL ERROR: JWT_PRIVATE_KEY and JWT_PUBLIC_KEY environment variables must be defined.');
 }
 
+// Ensure AI_SERVICE_BASE_URL is defined and is a valid URL
+const aiServiceBaseUrl = process.env.AI_SERVICE_BASE_URL;
+if (!aiServiceBaseUrl) {
+  throw new Error('FATAL ERROR: AI_SERVICE_BASE_URL environment variable must be defined and non-empty.');
+}
+try {
+  new URL(aiServiceBaseUrl);
+} catch (err) {
+  throw new Error(`FATAL ERROR: AI_SERVICE_BASE_URL "${aiServiceBaseUrl}" is not a valid URL: ${err.message}`);
+}
+
 // Create logs directory if it doesn't exist
 const fs = require('fs');
 const logsDir = path.join(__dirname, '../logs');

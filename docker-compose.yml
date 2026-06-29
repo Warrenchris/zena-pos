@@ -86,6 +86,7 @@ services:
       - DB_SYNC=false  # Disable auto-sync for Docker setup
       # Override AI_SERVICE_URL to use service name
       - AI_SERVICE_URL=http://ai_service:8000
+      - AI_SERVICE_BASE_URL=http://ai_service:8000
       # Prefer IPv4 for DNS lookups to avoid EAI_AGAIN (IPv6 lookup timeout) in Docker bridge networks
       - NODE_OPTIONS=--dns-result-order=ipv4first
       - REDIS_HOST=redis

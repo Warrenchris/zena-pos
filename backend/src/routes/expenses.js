@@ -39,15 +39,9 @@ const validateExpense = [
     .withMessage('Notes must be less than 500 characters')
 ];
 
-const validateDateRange = [
-  query('startDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid start date format'),
-  query('endDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid end date format'),
+const { validateDateRange } = require('../middleware/validators');
+
+const validateCategoryQuery = [
   query('category')
     .optional()
     .isIn(['inventory', 'salary', 'rent', 'utilities', 'maintenance', 'marketing', 'other'])
@@ -59,6 +53,7 @@ router.get('/',
   auth, 
   checkRole(['admin', 'manager']), 
   validateDateRange,
+  validateCategoryQuery,
   expenseController.getAllExpenses
 );
 

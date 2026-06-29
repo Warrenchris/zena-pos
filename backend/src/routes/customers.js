@@ -47,16 +47,7 @@ const validateLoyaltyPoints = [
     .withMessage('Reason must be less than 200 characters')
 ];
 
-const validateDateRange = [
-  query('startDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid start date format'),
-  query('endDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid end date format')
-];
+const { validateDateRange } = require('../middleware/validators');
 
 // Routes
 router.get('/', 
