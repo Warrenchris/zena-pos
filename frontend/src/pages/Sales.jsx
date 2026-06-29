@@ -67,7 +67,15 @@ export default function Sales() {
   const fetchEmployees = async () => {
     try {
       const response = await employeesAPI.getAll()
-      setEmployees(response.data)
+      if (response.data && Array.isArray(response.data)) {
+        setEmployees(response.data)
+      } else if (response.data && Array.isArray(response.data.employees)) {
+        setEmployees(response.data.employees)
+      } else if (response.data && Array.isArray(response.data.rows)) {
+        setEmployees(response.data.rows)
+      } else {
+        setEmployees([])
+      }
     } catch (error) {
       console.error('Error fetching employees:', error)
     }
@@ -117,10 +125,10 @@ export default function Sales() {
   }
 
   const getCashierName = (sale) => {
-    if (sale.Employee) {
+    if (sale?.Employee) {
       return `${sale.Employee.firstName} ${sale.Employee.lastName}`
     }
-    if (sale.User) {
+    if (sale?.User) {
       return sale.User.name || sale.User.email || 'Unknown User'
     }
     return 'Unknown Cashier'
@@ -281,14 +289,14 @@ export default function Sales() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zana-borderTint">
-                {(urlCustomerId ? sales.filter(s => (s.Customer?.id === urlCustomerId) || (s.customerId === urlCustomerId)) : sales).map((sale) => (
-                  <tr key={sale.id} className="odd:bg-black/30 even:bg-black/20 hover:bg-zana-yellow/5">
+                {(Array.isArray(sales) ? (urlCustomerId ? sales.filter(s => (s?.Customer?.id === urlCustomerId) || (s?.customerId === urlCustomerId)) : sales) : []).map((sale) => (
+                  <tr key={sale?.id} className="odd:bg-black/30 even:bg-black/20 hover:bg-zana-yellow/5">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-white">{sale.invoiceNumber}</div>
+                      <div className="text-sm font-medium text-white">{sale?.invoiceNumber}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-white">
-                        {sale.Customer?.name || sale.customerName || 'Walk-in Customer'}
+                        {sale?.Customer?.name || sale?.customerName || 'Walk-in Customer'}
                       </div>
                     </td>
                     {isAdmin && (
@@ -300,33 +308,33 @@ export default function Sales() {
                     )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-white">
-                        {sale.SaleItems 
+                        {sale?.SaleItems 
                           ? `${sale.SaleItems.length} item(s)` 
-                          : sale.products 
+                          : sale?.products 
                             ? `${sale.products.length} item(s)` 
                             : '0 item(s)'}
                       </div>
                       <div className="text-sm text-white/60">
-                        {sale.SaleItems 
-                          ? (sale.SaleItems.map(item => item.Product?.name).filter(Boolean).join(', ') || 'No items') 
-                          : sale.products 
-                            ? (sale.products.map(item => item.name).filter(Boolean).join(', ') || 'No items') 
+                        {sale?.SaleItems 
+                          ? (sale.SaleItems.map(item => item?.Product?.name).filter(Boolean).join(', ') || 'No items') 
+                          : sale?.products 
+                            ? (sale.products.map(item => item?.name).filter(Boolean).join(', ') || 'No items') 
                             : 'No items'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      {formatCurrency(sale.total)}
+                      {formatCurrency(sale?.total)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPaymentStatusColor(sale.paymentStatus)}`}>
-                        {sale.paymentStatus}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPaymentStatusColor(sale?.paymentStatus)}`}>
+                        {sale?.paymentStatus}
                       </span>
                       <div className="text-xs text-white/60 mt-1">
-                        {sale.paymentMethod}
+                        {sale?.paymentMethod}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      {formatDate(sale.createdAt)}
+                      {formatDate(sale?.createdAt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-2">

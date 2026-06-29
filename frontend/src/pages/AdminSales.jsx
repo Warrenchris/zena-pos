@@ -48,7 +48,15 @@ export default function AdminSales() {
   const fetchEmployees = async () => {
     try {
       const response = await employeesAPI.getAll()
-      setEmployees(response.data)
+      if (response.data && Array.isArray(response.data)) {
+        setEmployees(response.data)
+      } else if (response.data && Array.isArray(response.data.employees)) {
+        setEmployees(response.data.employees)
+      } else if (response.data && Array.isArray(response.data.rows)) {
+        setEmployees(response.data.rows)
+      } else {
+        setEmployees([])
+      }
     } catch (error) {
       console.error('Error fetching employees:', error)
     }
@@ -104,10 +112,10 @@ export default function AdminSales() {
   }
 
   const getCashierName = (sale) => {
-    if (sale.Employee) {
+    if (sale?.Employee) {
       return `${sale.Employee.firstName} ${sale.Employee.lastName}`
     }
-    if (sale.User) {
+    if (sale?.User) {
       return sale.User.name || sale.User.email || 'Unknown User'
     }
     return 'Unknown Cashier'
@@ -260,14 +268,14 @@ export default function AdminSales() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {sales.map((sale) => (
-                  <tr key={sale.id} className="hover:bg-gray-50">
+                {(Array.isArray(sales) ? sales : []).map((sale) => (
+                  <tr key={sale?.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{sale.invoiceNumber}</div>
+                      <div className="text-sm font-medium text-gray-900">{sale?.invoiceNumber}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {sale.Customer?.name || sale.customerName || 'Walk-in Customer'}
+                        {sale?.Customer?.name || sale?.customerName || 'Walk-in Customer'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -277,33 +285,33 @@ export default function AdminSales() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {sale.SaleItems 
+                        {sale?.SaleItems 
                           ? `${sale.SaleItems.length} item(s)` 
-                          : sale.products 
+                          : sale?.products 
                             ? `${sale.products.length} item(s)` 
                             : '0 item(s)'}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {sale.SaleItems 
-                          ? (sale.SaleItems.map(item => item.Product?.name).filter(Boolean).join(', ') || 'No items') 
-                          : sale.products 
-                            ? (sale.products.map(item => item.name).filter(Boolean).join(', ') || 'No items') 
+                        {sale?.SaleItems 
+                          ? (sale.SaleItems.map(item => item?.Product?.name).filter(Boolean).join(', ') || 'No items') 
+                          : sale?.products 
+                            ? (sale.products.map(item => item?.name).filter(Boolean).join(', ') || 'No items') 
                             : 'No items'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatCurrency(sale.total)}
+                      {formatCurrency(sale?.total)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(sale.paymentStatus)}`}>
-                        {sale.paymentStatus}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(sale?.paymentStatus)}`}>
+                        {sale?.paymentStatus}
                       </span>
                       <div className="text-xs text-gray-500 mt-1">
-                        {sale.paymentMethod}
+                        {sale?.paymentMethod}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(sale.createdAt)}
+                      {formatDate(sale?.createdAt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-2">

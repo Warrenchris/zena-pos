@@ -94,11 +94,30 @@ const salesSlice = createSlice({
       })
       .addCase(fetchSales.fulfilled, (state, action) => {
         state.loading = false
-        state.sales = action.payload.sales || action.payload
-        state.pagination = action.payload.pagination || {
-          currentPage: 1,
-          totalPages: 1,
-          total: action.payload.length
+        if (action.payload && Array.isArray(action.payload)) {
+          state.sales = action.payload
+        } else if (action.payload && Array.isArray(action.payload.sales)) {
+          state.sales = action.payload.sales
+        } else if (action.payload && Array.isArray(action.payload.rows)) {
+          state.sales = action.payload.rows
+        } else {
+          state.sales = []
+        }
+
+        if (action.payload && action.payload.pagination) {
+          state.pagination = action.payload.pagination
+        } else if (action.payload && typeof action.payload.totalPages !== 'undefined') {
+          state.pagination = {
+            currentPage: action.payload.currentPage || 1,
+            totalPages: action.payload.totalPages || 1,
+            total: action.payload.total || 0
+          }
+        } else {
+          state.pagination = {
+            currentPage: 1,
+            totalPages: 1,
+            total: state.sales.length
+          }
         }
       })
       .addCase(fetchSales.rejected, (state, action) => {
@@ -112,11 +131,30 @@ const salesSlice = createSlice({
       })
       .addCase(fetchAdminSales.fulfilled, (state, action) => {
         state.loading = false
-        state.sales = action.payload.sales || action.payload
-        state.pagination = action.payload.pagination || {
-          currentPage: 1,
-          totalPages: 1,
-          total: action.payload.length
+        if (action.payload && Array.isArray(action.payload)) {
+          state.sales = action.payload
+        } else if (action.payload && Array.isArray(action.payload.sales)) {
+          state.sales = action.payload.sales
+        } else if (action.payload && Array.isArray(action.payload.rows)) {
+          state.sales = action.payload.rows
+        } else {
+          state.sales = []
+        }
+
+        if (action.payload && action.payload.pagination) {
+          state.pagination = action.payload.pagination
+        } else if (action.payload && typeof action.payload.totalPages !== 'undefined') {
+          state.pagination = {
+            currentPage: action.payload.currentPage || 1,
+            totalPages: action.payload.totalPages || 1,
+            total: action.payload.total || 0
+          }
+        } else {
+          state.pagination = {
+            currentPage: 1,
+            totalPages: 1,
+            total: state.sales.length
+          }
         }
       })
       .addCase(fetchAdminSales.rejected, (state, action) => {
@@ -130,11 +168,30 @@ const salesSlice = createSlice({
       })
       .addCase(fetchMySales.fulfilled, (state, action) => {
         state.loading = false
-        state.sales = action.payload.sales || action.payload
-        state.pagination = action.payload.pagination || {
-          currentPage: 1,
-          totalPages: 1,
-          total: action.payload.length
+        if (action.payload && Array.isArray(action.payload)) {
+          state.sales = action.payload
+        } else if (action.payload && Array.isArray(action.payload.sales)) {
+          state.sales = action.payload.sales
+        } else if (action.payload && Array.isArray(action.payload.rows)) {
+          state.sales = action.payload.rows
+        } else {
+          state.sales = []
+        }
+
+        if (action.payload && action.payload.pagination) {
+          state.pagination = action.payload.pagination
+        } else if (action.payload && typeof action.payload.totalPages !== 'undefined') {
+          state.pagination = {
+            currentPage: action.payload.currentPage || 1,
+            totalPages: action.payload.totalPages || 1,
+            total: action.payload.total || 0
+          }
+        } else {
+          state.pagination = {
+            currentPage: 1,
+            totalPages: 1,
+            total: state.sales.length
+          }
         }
       })
       .addCase(fetchMySales.rejected, (state, action) => {

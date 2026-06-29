@@ -5,7 +5,7 @@
 
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
-const { User, Category, Product, Customer, Sale, SaleItem, Expense, Shop } = require('../src/models');
+const { User, Category, Product, Customer, Sale, SaleItem, Expense, Shop, Employee } = require('../src/models');
 
 // Helper to generate M-Pesa Transaction Codes (e.g. QRE5TY46W9)
 function generateMpesaCode() {
@@ -40,12 +40,6 @@ async function seedKenyanData() {
     console.log(`Using Shop: ${shop.name} (ID: ${shop.id})`);
 
     // 2. Create Kenyan staff users (if they don't already exist)
-    // Clean old staff users first to ensure their passwords are not double-hashed by Sequelize hooks
-    await User.destroy({
-      where: {
-        email: ['wanjiku@sokosafi.co.ke', 'mwangi@sokosafi.co.ke', 'achieng@sokosafi.co.ke']
-      }
-    });
 
     const [adminUser] = await User.findOrCreate({
       where: { email: 'wanjiku@sokosafi.co.ke' },
@@ -77,6 +71,48 @@ async function seedKenyanData() {
       }
     });
     console.log('Staff Users verified/created.');
+
+    // 2b. Create Kenyan Employees for HR listing
+    await Employee.destroy({ where: { shopId: shop.id } });
+    await Employee.bulkCreate([
+      {
+        firstName: 'Otieno',
+        lastName: 'Omondi',
+        email: 'otieno.omondi@sokosafi.co.ke',
+        phone: '+254711998877',
+        position: 'Supervisor',
+        status: 'active',
+        hireDate: new Date(),
+        salary: 45000.00,
+        password: 'otieno123',
+        shopId: shop.id
+      },
+      {
+        firstName: 'Grace',
+        lastName: 'Mwari',
+        email: 'grace.mwari@sokosafi.co.ke',
+        phone: '+254722887766',
+        position: 'Cashier Manager',
+        status: 'active',
+        hireDate: new Date(),
+        salary: 38000.00,
+        password: 'grace123',
+        shopId: shop.id
+      },
+      {
+        firstName: 'Mutua',
+        lastName: 'Kioko',
+        email: 'mutua.kioko@sokosafi.co.ke',
+        phone: '+254733776655',
+        position: 'Packer & Clerk',
+        status: 'active',
+        hireDate: new Date(),
+        salary: 28000.00,
+        password: 'mutua123',
+        shopId: shop.id
+      }
+    ]);
+    console.log('Employees seeded.');
 
     // 3. Create Kenyan categories
     const categoriesData = [
@@ -165,6 +201,7 @@ async function seedKenyanData() {
 
     // 6. Generate Historical Sales (distributed over the last 30 days)
     console.log('Cleaning up old sales and expenses for this shop to prevent duplicate key errors...');
+    await User.sequelize.query('SET FOREIGN_KEY_CHECKS = 0;');
     const oldSales = await Sale.findAll({ where: { shopId: shop.id } });
     const oldSaleIds = oldSales.map(s => s.id);
     if (oldSaleIds.length > 0) {
@@ -348,6 +385,8 @@ async function seedKenyanData() {
       });
     }
     console.log('Expenses seeded successfully.');
+
+    await User.sequelize.query('SET FOREIGN_KEY_CHECKS = 1;');
 
     console.log('\n=============================================');
     console.log('🎉 SEEDING COMPLETED SUCCESSFULLY!');

@@ -1,5 +1,4 @@
-const bcrypt = require('bcryptjs');
-const { User, Category, Product, Customer, Sale, SaleItem, Expense, Shop } = require('../models');
+const { User, Category, Product, Customer, Sale, SaleItem, Expense, Shop, Employee } = require('../models');
 
 const seedDatabase = async () => {
   try {
@@ -134,6 +133,46 @@ const seedDatabase = async () => {
         phone: '+254700000003',
         address: 'Kisumu, Kenya',
         loyaltyPoints: 75,
+        shopId: defaultShop.id
+      }
+    ]);
+
+    // Create sample employees
+    await Employee.bulkCreate([
+      {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john.doe@example.com',
+        phone: '+254711000001',
+        position: 'Store Manager',
+        status: 'active',
+        hireDate: new Date(),
+        salary: 50000.00,
+        password: 'password123',
+        shopId: defaultShop.id
+      },
+      {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        email: 'jane.smith@example.com',
+        phone: '+254711000002',
+        position: 'Sales Associate',
+        status: 'active',
+        hireDate: new Date(),
+        salary: 35000.00,
+        password: 'password123',
+        shopId: defaultShop.id
+      },
+      {
+        firstName: 'Bob',
+        lastName: 'Johnson',
+        email: 'bob.johnson@example.com',
+        phone: '+254711000003',
+        position: 'Cashier',
+        status: 'active',
+        hireDate: new Date(),
+        salary: 30000.00,
+        password: 'password123',
         shopId: defaultShop.id
       }
     ]);
