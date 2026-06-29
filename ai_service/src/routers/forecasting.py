@@ -66,8 +66,12 @@ async def create_forecast(
         import numpy as np
         from prophet import Prophet
 
+        ds_col = pd.to_datetime(data.dates)
+        if ds_col.tz is not None:
+            ds_col = ds_col.tz_localize(None)
+
         df = pd.DataFrame({
-            'ds': pd.to_datetime(data.dates),
+            'ds': ds_col,
             'y': data.values
         }).sort_values('ds').reset_index(drop=True)
 
