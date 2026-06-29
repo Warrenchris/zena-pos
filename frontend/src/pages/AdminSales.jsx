@@ -107,6 +107,9 @@ export default function AdminSales() {
     if (sale.Employee) {
       return `${sale.Employee.firstName} ${sale.Employee.lastName}`
     }
+    if (sale.User) {
+      return sale.User.name || sale.User.email || 'Unknown User'
+    }
     return 'Unknown Cashier'
   }
 
@@ -274,10 +277,18 @@ export default function AdminSales() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {sale.SaleItems?.length || 0} item(s)
+                        {sale.SaleItems 
+                          ? `${sale.SaleItems.length} item(s)` 
+                          : sale.products 
+                            ? `${sale.products.length} item(s)` 
+                            : '0 item(s)'}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {sale.SaleItems?.map(item => item.Product?.name).join(', ') || 'No items'}
+                        {sale.SaleItems 
+                          ? (sale.SaleItems.map(item => item.Product?.name).filter(Boolean).join(', ') || 'No items') 
+                          : sale.products 
+                            ? (sale.products.map(item => item.name).filter(Boolean).join(', ') || 'No items') 
+                            : 'No items'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

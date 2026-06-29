@@ -40,6 +40,16 @@ exports.getAllSales = async (req, res) => {
           model: Customer,
           required: false, // Make this a LEFT JOIN
           attributes: ['id', 'name', 'email', 'phone']
+        },
+        {
+          model: Employee,
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: false
+        },
+        {
+          model: User,
+          attributes: ['id', 'name', 'email'],
+          required: false
         }
       ],
       distinct: true, // This ensures correct count with eager loading
@@ -167,18 +177,29 @@ exports.getSaleById = async (req, res) => {
       include: [
         {
           model: SaleItem,
+          required: false,
           include: [{
             model: Product,
             attributes: ['id', 'name', 'sku', 'price'],
-            where: { shopId: req.user.shopId }
+            required: false
           }]
         },
         {
           model: Customer,
           attributes: ['id', 'name', 'email', 'phone', 'loyaltyPoints'],
-          where: { shopId: req.user.shopId }
+          required: false
+        },
+        {
+          model: Employee,
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: false
+        },
+        {
+          model: User,
+          attributes: ['id', 'name', 'email'],
+          required: false
         }
-      ]
+      ],
     });
 
     if (!sale) {
@@ -777,6 +798,11 @@ exports.getAllSalesForAdmin = async (req, res) => {
           model: Employee,
           attributes: ['id', 'firstName', 'lastName', 'email'],
           as: 'Employee',
+          required: false
+        },
+        {
+          model: User,
+          attributes: ['id', 'name', 'email'],
           required: false
         }
       ],

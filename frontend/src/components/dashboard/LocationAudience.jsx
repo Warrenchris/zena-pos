@@ -32,6 +32,72 @@ const LocationAudience = () => {
     dispatch(fetchCustomerLocations(selectedPeriod));
   }, [dispatch, selectedPeriod]);
 
+  const parseAddress = (addressStr) => {
+    if (!addressStr || addressStr === 'Unknown') {
+      return {
+        city: 'Unknown',
+        state: 'Unknown',
+        country: 'Kenya',
+      };
+    }
+
+    const parts = addressStr.split(',').map(p => p.trim());
+    const lastPart = parts[parts.length - 1];
+    const isCountry = Object.keys(COUNTRY_CODES).includes(lastPart);
+    
+    let country = 'Kenya';
+    let city = 'Unknown';
+    let state = '';
+
+    if (isCountry) {
+      country = lastPart;
+      if (parts.length > 1) {
+        city = parts[parts.length - 2];
+      }
+      if (parts.length > 2) {
+        state = parts[0];
+      }
+    } else {
+      const knownCities = {
+        'Nairobi': { country: 'Kenya', state: 'Nairobi County' },
+        'Eldoret': { country: 'Kenya', state: 'Uasin Gishu' },
+        'Machakos': { country: 'Kenya', state: 'Machakos County' },
+        'Kisumu': { country: 'Kenya', state: 'Kisumu County' },
+        'Mombasa': { country: 'Kenya', state: 'Mombasa County' },
+        'Lagos': { country: 'Nigeria', state: 'Lagos State' },
+        'Abuja': { country: 'Nigeria', state: 'FCT' },
+        'Kano': { country: 'Nigeria', state: 'Kano State' },
+        'Ibadan': { country: 'Nigeria', state: 'Oyo State' },
+        'Accra': { country: 'Ghana', state: 'Greater Accra' },
+        'Kumasi': { country: 'Ghana', state: 'Ashanti' },
+        'Kampala': { country: 'Uganda', state: 'Central' },
+        'Dar es Salaam': { country: 'Tanzania', state: 'Dar es Salaam' },
+        'Kigali': { country: 'Rwanda', state: 'Kigali Province' },
+        'Johannesburg': { country: 'South Africa', state: 'Gauteng' },
+        'Cape Town': { country: 'South Africa', state: 'Western Cape' },
+      };
+
+      const cityFound = Object.keys(knownCities).find(c => 
+        parts.some(p => p.toLowerCase().includes(c.toLowerCase()))
+      );
+
+      if (cityFound) {
+        city = cityFound;
+        country = knownCities[cityFound].country;
+        state = knownCities[cityFound].state;
+      } else {
+        if (parts.length === 1) {
+          city = parts[0];
+        } else {
+          state = parts[0];
+          city = parts[1];
+        }
+      }
+    }
+
+    return { city, state: state || city, country };
+  };
+
   const getLocationDetails = (location) => {
     if (!location || !location.country) {
       return {
@@ -66,6 +132,16 @@ const LocationAudience = () => {
     );
   }
 
+  const parsedLocations = Array.isArray(locations) ? locations.map(loc => {
+    const parsed = parseAddress(loc.address);
+    return {
+      ...loc,
+      city: loc.city || parsed.city,
+      state: loc.state || parsed.state || parsed.city,
+      country: loc.country || parsed.country
+    };
+  }) : [];
+
   return (
     <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -92,7 +168,7 @@ const LocationAudience = () => {
       </div>
 
       <div className="space-y-4">
-        {locations.map((location) => {
+        {parsedLocations.map((location) => {
           const locationDetails = getLocationDetails(location);
           const Flag = Flags[locationDetails.code];
           const change = location.percentageChange ?? location.trend ?? 0;
@@ -100,7 +176,7 @@ const LocationAudience = () => {
 
           return (
             <div
-              key={`${location.country}-${location.city}`}
+              key={location.address || `${location.country}-${location.city}`}
               className="flex items-center justify-between rounded-[16px] border border-yellow-400/15 bg-black/30 px-4 py-3 transition hover:border-yellow-400/40 hover:bg-yellow-500/5"
             >
               <div className="flex items-center space-x-3">

@@ -97,6 +97,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
 
   const customer = sale.Customer || sale.customer || null;
   const employee = sale.Employee || sale.employee || null;
+  const user = sale.User || sale.user || null;
 
   // Try to get items from multiple possible sources and ensure it's an array
   let saleItems = Array.isArray(sale.SaleItems) ? sale.SaleItems :
@@ -274,7 +275,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                 )}
 
                 {/* Cashier */}
-                {(employee || sale.employeeId) && (
+                {(employee || user || sale.employeeId || sale.userId) && (
                   <div className="p-4 bg-gray-50 rounded-lg">
                     <div className="flex items-center space-x-2">
                       <UserIcon className="h-5 w-5 text-gray-500" />
@@ -283,7 +284,9 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                         <p className="font-medium text-gray-900">
                           {employee
                             ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim()
-                            : sale.employeeId || 'Unknown'
+                            : user
+                              ? user.name || user.email || 'Unknown User'
+                              : 'Unknown'
                           }
                         </p>
                       </div>
