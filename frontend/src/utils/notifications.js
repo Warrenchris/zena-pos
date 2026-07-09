@@ -21,7 +21,8 @@ export const notify = ({
   showToast = true,
   showSnackbar = false,
   showInPanel = true,
-  action = null
+  action = null,
+  id
 }) => {
   const toastTypeMap = {
     'sale': 'success',
@@ -44,7 +45,8 @@ export const notify = ({
       type: toastTypeMap[type] || 'info',
       title,
       message,
-      duration
+      duration,
+      id
     });
   }
 
@@ -116,7 +118,8 @@ export const notifyLowStock = (productName, currentStock, reorderPoint) => {
     type: 'low_stock',
     title: 'Low Stock Alert',
     message: `${productName} is running low. Current stock: ${currentStock} (Reorder at: ${reorderPoint})`,
-    duration: 6000
+    duration: 6000,
+    id: `low-stock-${productName}`
   });
 };
 

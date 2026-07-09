@@ -17,16 +17,27 @@ export function ToastProvider({ children }) {
   useEffect(() => {
     // Make toast function globally accessible
     if (typeof window !== 'undefined') {
-      window.showToast = ({ type = 'info', title, message, duration = 4000 }) => {
-        const id = Math.random().toString(36).substr(2, 9);
-        const newToast = { id, type, title, message };
+      window.showToast = ({ type = 'info', title, message, duration = 4000, id }) => {
+        const toastId = id || Math.random().toString(36).substr(2, 9);
         
-        setToasts(current => [...current, newToast]);
+        setToasts(current => {
+          // If a toast with the same id already exists, ignore the duplicate
+          if (current.some(toast => toast.id === toastId)) {
+            return current;
+          }
 
-        // Auto-dismiss after duration
-        setTimeout(() => {
-          setToasts(current => current.filter(toast => toast.id !== id));
-        }, duration);
+          // Auto-dismiss after duration
+          setTimeout(() => {
+            setToasts(curr => curr.filter(toast => toast.id !== toastId));
+          }, duration);
+
+          const nextToasts = [...current, { id: toastId, type, title, message }];
+          // Keep only the last 3 toasts to prevent screen crowding
+          if (nextToasts.length > 3) {
+            return nextToasts.slice(nextToasts.length - 3);
+          }
+          return nextToasts;
+        });
       };
     }
 
@@ -42,9 +53,9 @@ export function ToastProvider({ children }) {
     setToasts(current => current.filter(toast => toast.id !== id));
   };
 
-  const showToast = ({ type = 'info', title, message, duration = 4000 }) => {
+  const showToast = ({ type = 'info', title, message, duration = 4000, id }) => {
     if (window.showToast) {
-      window.showToast({ type, title, message, duration });
+      window.showToast({ type, title, message, duration, id });
     }
   };
 

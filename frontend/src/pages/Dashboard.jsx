@@ -64,6 +64,7 @@ export default function Dashboard() {
 
   const statisticsRef = React.useRef(statistics);
   statisticsRef.current = statistics;
+  const notifiedProductsRef = React.useRef(new Set());
 
   const fetchInsights = useCallback(async () => {
     try {
@@ -175,11 +176,14 @@ export default function Dashboard() {
 
       if (lowStockProducts.length > 0 && userRole === 'admin') {
         lowStockProducts.forEach(product => {
-          notifyLowStock(
-            product.name,
-            product.stockQuantity,
-            product.reorderPoint
-          );
+          if (!notifiedProductsRef.current.has(product.id)) {
+            notifyLowStock(
+              product.name,
+              product.stockQuantity,
+              product.reorderPoint
+            );
+            notifiedProductsRef.current.add(product.id);
+          }
         });
       }
     }
