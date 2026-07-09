@@ -23,6 +23,102 @@ const api = axios.create({
 api.interceptors.request.use(loggerInterceptor.request);
 api.interceptors.response.use(loggerInterceptor.response, loggerInterceptor.error);
 
+// ponytail: global GET cache and request de-duplication to prevent duplicate concurrent queries
+const getCache = new Map();
+const originalGet = api.get;
+
+api.get = function (url, config = {}) {
+  // De-duplicate and cache GET requests for 3 seconds
+  const cacheKey = JSON.stringify({ url, params: config?.params });
+  
+  if (getCache.has(cacheKey)) {
+    logger.info(`🎯 Returning cached/deduplicated promise for GET: ${url}`);
+    return getCache.get(cacheKey);
+  }
+  
+  const promise = originalGet.call(this, url, config);
+  getCache.set(cacheKey, promise);
+  
+  // Clean up cache entry after 3 seconds
+  setTimeout(() => {
+    getCache.delete(cacheKey);
+  }, 3000);
+  
+  // If the promise fails, delete immediately so subsequent attempts aren't blocked
+  promise.catch(() => {
+    getCache.delete(cacheKey);
+  });
+  
+  return promise;
+};
+
+// ponytail: helper to debounce promise-based functions (e.g. forecast endpoint)
+function debouncePromise(fn, delay) {
+  let timeoutId = null;
+  let resolvers = [];
+  let rejecters = [];
+  let lastArgs = null;
+
+  return function (...args) {
+    lastArgs = args;
+    
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
+    const promise = new Promise((resolve, reject) => {
+      resolvers.push(resolve);
+      rejecters.push(reject);
+    });
+
+    timeoutId = setTimeout(async () => {
+      timeoutId = null;
+      const currentResolvers = resolvers;
+      const currentRejecters = rejecters;
+      resolvers = [];
+      rejecters = [];
+
+      try {
+        const result = await fn(...lastArgs);
+        currentResolvers.forEach(resolve => resolve(result));
+      } catch (error) {
+        currentRejecters.forEach(reject => reject(error));
+      }
+    }, delay);
+
+    return promise;
+  };
+}
+
+const originalPost = api.post;
+const debouncedForecast = debouncePromise((url, data, config) => {
+  return originalPost.call(api, url, data, config);
+}, 500);
+
+api.post = function (url, data, config = {}) {
+  // ponytail: debounce forecast requests to prevent rate limiting
+  if (url && (url.includes('/forecasting/forecast') || url.includes('/forecasting/rf-forecast'))) {
+    return debouncedForecast(url, data, config);
+  }
+  return originalPost.call(this, url, data, config);
+};
+
+// ponytail: retry-with-backoff for 429 Too Many Requests response status
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+    if (error.response?.status === 429 && config && (config._retryCount ?? 0) < 3) {
+      config._retryCount = (config._retryCount ?? 0) + 1;
+      const delay = Math.pow(2, config._retryCount) * 1000;
+      logger.warn(`⚠️ Received 429. Retrying request to ${config.url} in ${delay}ms... (Attempt ${config._retryCount}/3)`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return api(config);
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Add request interceptor to include auth token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');

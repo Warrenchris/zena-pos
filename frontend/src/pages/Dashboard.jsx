@@ -1,19 +1,12 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import forecastingService from '../services/forecasting.service';
 import {
   ShoppingBagIcon,
-  CurrencyDollarIcon,
   UsersIcon,
   TagIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
   ChartBarIcon,
-  BanknotesIcon,
-  ShoppingCartIcon,
-  UserGroupIcon,
-  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
 import { lazy, Suspense } from 'react';
 import BusinessInsights from '../components/financial/BusinessInsights';
@@ -39,9 +32,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useSelector((state) => state.auth);
   const { sales, statistics, loading: salesLoading, error: salesError } = useSelector((state) => state.sales);
-  const { customers, loading: customersLoading, error: customersError } = useSelector((state) => state.customers);
+  const { loading: customersLoading, error: customersError } = useSelector((state) => state.customers);
   const { products, loading: productsLoading, error: productsError } = useSelector((state) => state.products);
-  const { shop } = useSelector((state) => state.shop || {});
+
+  const userId = user?.id;
+  const userRole = user?.role;
+  const userShopId = user?.shopId || user?.shop?.id;
 
   const [insights, setInsights] = useState([]);
   const [insightsLoading, setInsightsLoading] = useState(true);
@@ -66,15 +62,17 @@ export default function Dashboard() {
     // TODO: Implement print functionality
   };
 
-  const fetchForecast = useCallback(async () => {
+  const fetchForecast = useCallback(async (currentStats) => {
     if (forecastLoading) return; // Prevent multiple simultaneous calls
+
+    const statsToUse = currentStats || statistics;
 
     try {
       setForecastLoading(true);
       setForecastError(null);
 
       // Only attempt forecast if we have statistics
-      if (!statistics?.totalRevenue) {
+      if (!statsToUse?.totalRevenue) {
         setForecast({ next: 0 });
         setForecastLoading(false); // Clear loading state before early return
         return;
@@ -89,7 +87,7 @@ export default function Dashboard() {
         const d = new Date(end);
         d.setDate(end.getDate() - i);
         dates.push(d.toISOString());
-        const dayValue = i === 0 ? statistics.totalRevenue : 0;
+        const dayValue = i === 0 ? statsToUse.totalRevenue : 0;
         values.push(dayValue);
       }
 
@@ -113,7 +111,7 @@ export default function Dashboard() {
     } finally {
       setForecastLoading(false);
     }
-  }, []);
+  }, [statistics, forecastLoading]);
 
   const fetchInsights = useCallback(async () => {
     if (insightsLoading) return; // Prevent multiple simultaneous calls
@@ -149,7 +147,7 @@ export default function Dashboard() {
     } finally {
       setInsightsLoading(false);
     }
-  }, []);
+  }, [insightsLoading]);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -160,21 +158,20 @@ export default function Dashboard() {
       }
 
       // Check if user is authenticated
-      if (!user) {
+      if (!userId) {
         console.log('User not authenticated, skipping data fetch');
         return;
       }
 
       // Additional check: ensure user has shopId
-      const userShopId = user.shopId || user.shop?.id;
       if (!userShopId) {
         console.error('User has no shopId, cannot fetch data');
         return;
       }
 
       try {
-        await Promise.all([
-          dispatch(fetchSalesStatistics()),
+        const [statsResult] = await Promise.all([
+          dispatch(fetchSalesStatistics()).unwrap(),
           dispatch(fetchSales({ limit: 5 })),
           dispatch(fetchCustomers({ limit: 5 })),
           dispatch(fetchProducts({ limit: 5 }))
@@ -182,14 +179,14 @@ export default function Dashboard() {
 
         // Only fetch insights and forecast after main data is loaded
         await fetchInsights();
-        await fetchForecast();
+        await fetchForecast(statsResult);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       }
     };
 
     loadDashboardData();
-  }, [dispatch, user]); // Re-run when user changes
+  }, [dispatch, userId, userShopId, fetchForecast, fetchInsights]);
 
   // Check for low stock products
   useEffect(() => {
@@ -198,7 +195,7 @@ export default function Dashboard() {
         product.stockQuantity <= product.reorderPoint && product.active
       );
 
-      if (lowStockProducts.length > 0 && user?.role === 'admin') {
+      if (lowStockProducts.length > 0 && userRole === 'admin') {
         lowStockProducts.forEach(product => {
           notifyLowStock(
             product.name,
@@ -208,46 +205,8 @@ export default function Dashboard() {
         });
       }
     }
-  }, [products, user]);
+  }, [products, userRole]);
 
-  const stats = useMemo(() => [
-    {
-      name: 'Total Revenue',
-      value: formatCurrency(statistics?.totalRevenue || 0),
-      icon: BanknotesIcon,
-      color: 'bg-blue-500',
-      change: statistics?.revenueChange ? `${statistics.revenueChange > 0 ? '+' : ''}${statistics.revenueChange}%` : '0%',
-      changeType: statistics?.revenueChange >= 0 ? 'positive' : 'negative',
-      subtitle: `vs. ${formatCurrency(statistics?.lastMonthRevenue || 0)} last month`
-    },
-    {
-      name: 'Total Orders',
-      value: statistics?.totalOrders || 0,
-      icon: ShoppingCartIcon,
-      color: 'bg-purple-500',
-      change: statistics?.ordersChange ? `${statistics.ordersChange > 0 ? '+' : ''}${statistics.ordersChange}%` : '0%',
-      changeType: statistics?.ordersChange >= 0 ? 'positive' : 'negative',
-      subtitle: `vs. ${statistics?.lastMonthOrders || 0} last month`
-    },
-    {
-      name: 'Total Customers',
-      value: statistics?.totalCustomers || customers.length || 0,
-      icon: UsersIcon,
-      color: 'bg-green-500',
-      change: statistics?.customersChange ? `${statistics.customersChange > 0 ? '+' : ''}${statistics.customersChange}%` : '0%',
-      changeType: statistics?.customersChange >= 0 ? 'positive' : 'negative',
-      subtitle: `vs. ${statistics?.lastMonthCustomers || 0} last month`
-    },
-    {
-      name: 'Average Order Value',
-      value: formatCurrency(statistics?.averageOrderValue || 0),
-      icon: CalendarDaysIcon,
-      color: 'bg-orange-500',
-      change: statistics?.aovChange ? `${statistics.aovChange > 0 ? '+' : ''}${statistics.aovChange}%` : '0%',
-      changeType: statistics?.aovChange >= 0 ? 'positive' : 'negative',
-      subtitle: `vs. ${formatCurrency(statistics?.lastMonthAOV || 0)} last month`
-    }
-  ], [statistics, customers.length]);
 
   // Combined UI flags
   const isLoading = salesLoading || customersLoading || productsLoading;
@@ -298,7 +257,6 @@ export default function Dashboard() {
   }
 
   // If user doesn't have shopId, show error
-  const userShopId = user.shopId || user.shop?.id;
   if (!userShopId) {
     return (
       <div className="space-y-6">
