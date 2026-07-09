@@ -39,7 +39,7 @@ export default function Dashboard() {
   const userRole = user?.role;
   const userShopId = user?.shopId || user?.shop?.id;
 
-  const [insights, setInsights] = useState([]);
+  const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(true);
   const [forecast, setForecast] = useState(null);
   const [forecastError, setForecastError] = useState(null);
@@ -69,31 +69,10 @@ export default function Dashboard() {
     try {
       setInsightsLoading(true);
       const response = await api.get('/api/insights');
-      const data = response?.data || {};
-
-      // Transform and validate insights data
-      const validInsights = (data.insights || [])
-        .filter(insight => insight?.message && insight?.type) // Only include valid insights
-        .map(insight => ({
-          ...insight,
-          message: insight.message,
-          type: insight.type || 'info',
-          timestamp: insight.timestamp || new Date().toISOString(),
-          priority: insight.priority || 'medium'
-        }))
-        .sort((a, b) => {
-          // Sort by priority and timestamp
-          const priorityOrder = { high: 3, medium: 2, low: 1 };
-          const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
-          if (priorityDiff !== 0) return priorityDiff;
-          return new Date(b.timestamp) - new Date(a.timestamp);
-        });
-
-      setInsights(validInsights);
+      setInsights(response?.data || null);
     } catch (error) {
       console.error('Error fetching insights:', error);
-      // Set empty insights array on error
-      setInsights([]);
+      setInsights(null);
     } finally {
       setInsightsLoading(false);
     }
