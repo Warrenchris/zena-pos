@@ -62,10 +62,45 @@ export default function Dashboard() {
     // TODO: Implement print functionality
   };
 
-  const fetchForecast = useCallback(async (currentStats) => {
-    if (forecastLoading) return; // Prevent multiple simultaneous calls
+  const statisticsRef = React.useRef(statistics);
+  statisticsRef.current = statistics;
 
-    const statsToUse = currentStats || statistics;
+  const fetchInsights = useCallback(async () => {
+    try {
+      setInsightsLoading(true);
+      const response = await api.get('/api/insights');
+      const data = response?.data || {};
+
+      // Transform and validate insights data
+      const validInsights = (data.insights || [])
+        .filter(insight => insight?.message && insight?.type) // Only include valid insights
+        .map(insight => ({
+          ...insight,
+          message: insight.message,
+          type: insight.type || 'info',
+          timestamp: insight.timestamp || new Date().toISOString(),
+          priority: insight.priority || 'medium'
+        }))
+        .sort((a, b) => {
+          // Sort by priority and timestamp
+          const priorityOrder = { high: 3, medium: 2, low: 1 };
+          const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+          if (priorityDiff !== 0) return priorityDiff;
+          return new Date(b.timestamp) - new Date(a.timestamp);
+        });
+
+      setInsights(validInsights);
+    } catch (error) {
+      console.error('Error fetching insights:', error);
+      // Set empty insights array on error
+      setInsights([]);
+    } finally {
+      setInsightsLoading(false);
+    }
+  }, []);
+
+  const fetchForecast = useCallback(async (currentStats) => {
+    const statsToUse = currentStats || statisticsRef.current;
 
     try {
       setForecastLoading(true);
@@ -111,43 +146,7 @@ export default function Dashboard() {
     } finally {
       setForecastLoading(false);
     }
-  }, [statistics, forecastLoading]);
-
-  const fetchInsights = useCallback(async () => {
-    if (insightsLoading) return; // Prevent multiple simultaneous calls
-
-    try {
-      setInsightsLoading(true);
-      const response = await api.get('/api/insights');
-      const data = response?.data || {};
-
-      // Transform and validate insights data
-      const validInsights = (data.insights || [])
-        .filter(insight => insight?.message && insight?.type) // Only include valid insights
-        .map(insight => ({
-          ...insight,
-          message: insight.message,
-          type: insight.type || 'info',
-          timestamp: insight.timestamp || new Date().toISOString(),
-          priority: insight.priority || 'medium'
-        }))
-        .sort((a, b) => {
-          // Sort by priority and timestamp
-          const priorityOrder = { high: 3, medium: 2, low: 1 };
-          const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
-          if (priorityDiff !== 0) return priorityDiff;
-          return new Date(b.timestamp) - new Date(a.timestamp);
-        });
-
-      setInsights(validInsights);
-    } catch (error) {
-      console.error('Error fetching insights:', error);
-      // Set empty insights array on error
-      setInsights([]);
-    } finally {
-      setInsightsLoading(false);
-    }
-  }, [insightsLoading]);
+  }, []);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -186,7 +185,7 @@ export default function Dashboard() {
     };
 
     loadDashboardData();
-  }, [dispatch, userId, userShopId, fetchForecast, fetchInsights]);
+  }, [dispatch, userId, userShopId, fetchInsights, fetchForecast]);
 
   // Check for low stock products
   useEffect(() => {

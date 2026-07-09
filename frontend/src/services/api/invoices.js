@@ -1,4 +1,4 @@
-import { api } from '../../utils/api';
+import api from '../api';
 
 export const invoicesAPI = {
   // Get all invoices with optional filters

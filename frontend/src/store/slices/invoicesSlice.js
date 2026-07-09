@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { api } from '../../utils/api';
+import api from '../../services/api';
 
 // Thunk for fetching all invoices
 export const fetchInvoices = createAsyncThunk(

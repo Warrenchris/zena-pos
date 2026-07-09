@@ -15,7 +15,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { useCurrency } from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
 import axios from 'axios';
-import api from '../utils/api';
+import { invoicesAPI } from '../services/api/invoices';
 
 const InvoiceStatusBadge = ({ status }) => {
   const getStatusColor = () => {
@@ -38,216 +38,18 @@ const InvoiceStatusBadge = ({ status }) => {
   );
 };
 
-const InvoiceDetailDrawer = ({ invoice, isOpen, onClose }) => {
+const InvoiceDetailDrawer = ({ invoice, isOpen, onClose, onDownload, onPrint }) => {
   const { format: formatCurrency } = useCurrency();
-  const { showToast } = useToast();
 
-  // Helper: fetch an image and convert to dataURL for jsPDF
-  const getImageDataUrl = async (url) => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Failed to fetch image');
-      const blob = await res.blob();
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (err) {
-      return null;
+  const handleDownload = () => {
+    if (invoice && onDownload) {
+      onDownload(invoice, { stopPropagation: () => {} });
     }
   };
 
-  // Generate PDF with header/footer, billing block, signature, and multi-page support
-  const generatePdfDoc = async (invParam) => {
-    const inv = invParam || invoice;
-    if (!inv) return null;
-
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 40;
-
-    const COMPANY = {
-      name: 'Zana POS',
-      address: '123 Market St, Nairobi, Kenya',
-      phone: '+254 700 000000',
-      email: 'info@zana.example',
-      reg: 'PIN: P12345678',
-      paymentTerms: 'Payment due within 30 days. Late fees apply after due date.'
-    };
-
-    const logoDataUrl = await getImageDataUrl('/logo.png');
-
-    // Header drawing function (called on every page)
-    const drawHeader = () => {
-      const y = margin - 10;
-      if (logoDataUrl) {
-        try { doc.addImage(logoDataUrl, 'PNG', margin, y, 60, 60); } catch (e) { /* ignore */ }
-      }
-      doc.setFontSize(14);
-      doc.setFont(undefined, 'bold');
-      const titleX = logoDataUrl ? margin + 76 : margin;
-      doc.text(COMPANY.name, titleX, y + 18);
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'normal');
-      doc.text(COMPANY.address, titleX, y + 34);
-      doc.text(`${COMPANY.phone} • ${COMPANY.email}`, titleX, y + 48);
-
-      // Invoice meta box on the right
-      const metaX = pageWidth - margin - 200;
-      doc.setFillColor(245, 245, 245);
-      doc.rect(metaX, y + 6, 200, 52, 'F');
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(10);
-      doc.text(`Invoice: ${inv.invoiceNumber}`, metaX + 10, y + 22);
-      doc.text(`Date: ${format(new Date(inv.dateIssued), 'PPP')}`, metaX + 10, y + 36);
-      doc.text(`Status: ${inv.status}`, metaX + 10, y + 50);
-    };
-
-    // Billing / Recipient block
-    const drawBillingBlock = () => {
-      const startY = 110;
-      doc.setFontSize(10);
-      doc.text('Bill To:', margin, startY);
-      doc.setFontSize(11);
-      doc.setFont(undefined, 'bold');
-      doc.text(inv.customerName || '-', margin, startY + 16);
-      doc.setFont(undefined, 'normal');
-      if (inv.customerAddress) doc.text(inv.customerAddress, margin, startY + 32);
-      if (inv.customerPhone) doc.text(inv.customerPhone, margin, startY + 48);
-
-      // Issuer / from block
-      const fromX = pageWidth / 2;
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      doc.text('From:', fromX, startY);
-      doc.setFontSize(11);
-      doc.setFont(undefined, 'bold');
-      doc.text(COMPANY.name, fromX, startY + 16);
-      doc.setFont(undefined, 'normal');
-      doc.text(COMPANY.address, fromX, startY + 32);
-    };
-
-    // Hook: draw header on first page before table
-    drawHeader();
-    drawBillingBlock();
-
-    // Build table body
-    const body = (inv.items || []).map(i => [i.name, String(i.quantity), formatCurrency(i.price), formatCurrency(i.quantity * i.price)]);
-
-    // Draw items table with autoTable and ensure header on each page
-    doc.autoTable({
-      startY: 160,
-      head: [['Item', 'Qty', 'Unit', 'Total']],
-      body,
-      theme: 'grid',
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [230, 230, 230] },
-      didDrawPage: (data) => {
-        // header and footer on each page
-        if (doc.internal.getNumberOfPages() > 1) {
-          drawHeader();
-        }
-        const pageNum = doc.internal.getNumberOfPages();
-        doc.setFontSize(9);
-        doc.setTextColor(120);
-        doc.text(`${COMPANY.reg}`, margin, pageHeight - 30);
-        doc.text(`Page ${pageNum}`, pageWidth - margin - 40, pageHeight - 30);
-      }
-    });
-
-    // Ensure totals are on the last page and not split awkwardly
-    const totalsHeight = 120; // estimated block height
-    const lastTableY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 160;
-    if (lastTableY + totalsHeight > pageHeight - margin) {
-      doc.addPage();
-    }
-
-    const totalsY = (doc.lastAutoTable ? doc.lastAutoTable.finalY : 160) + 20;
-    // Draw totals box aligned to right
-    const totalsX = pageWidth - margin - 220;
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
-    doc.text('Subtotal:', totalsX, totalsY);
-    doc.text(formatCurrency(inv.subtotal || 0), totalsX + 140, totalsY, { align: 'right' });
-    doc.text('Tax:', totalsX, totalsY + 16);
-    doc.text(formatCurrency(inv.tax || 0), totalsX + 140, totalsY + 16, { align: 'right' });
-    if (inv.discount > 0) {
-      doc.text('Discount:', totalsX, totalsY + 32);
-      doc.text(`-${formatCurrency(inv.discount)}`, totalsX + 140, totalsY + 32, { align: 'right' });
-    }
-    doc.setFont(undefined, 'bold');
-    doc.setFontSize(12);
-    doc.text('Total:', totalsX, totalsY + 56);
-    doc.text(formatCurrency(inv.total || 0), totalsX + 140, totalsY + 56, { align: 'right' });
-
-    // Payment terms under totals
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(9);
-    doc.text('Payment Terms:', margin, totalsY);
-    doc.text(COMPANY.paymentTerms, margin, totalsY + 14, { maxWidth: pageWidth - margin * 2 });
-
-    // Signature area
-    const sigY = totalsY + 90;
-    doc.line(margin, sigY, margin + 200, sigY); // signature line
-    doc.setFontSize(10);
-    doc.text('Authorized signature', margin, sigY + 14);
-
-    // Footer: company reg info centered
-    const footerY = pageHeight - 18;
-    doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.text(`${COMPANY.name} • ${COMPANY.address} • ${COMPANY.phone} • ${COMPANY.reg}`, pageWidth / 2, footerY, { align: 'center' });
-
-    return doc;
-  };
-
-  const handleDownload = async () => {
-    if (!invoice) return;
-    try {
-      const doc = await generatePdfDoc();
-      doc.save(`${invoice.invoiceNumber || 'invoice'}.pdf`);
-    } catch (err) {
-      console.error('Failed to save PDF', err);
-      showToast('error', 'Failed to generate invoice PDF');
-    }
-  };
-
-  const handlePrint = async () => {
-    if (!invoice) return;
-    try {
-      const doc = await generatePdfDoc();
-      doc.output('dataurlnewwindow');
-    } catch (err) {
-      console.error('Failed to open PDF for printing', err);
-      showToast('error', 'Failed to open invoice for printing');
-    }
-  };
-
-  // Row-level actions
-  const handleRowDownload = async (inv, e) => {
-    e.stopPropagation();
-    if (!inv) return;
-    try {
-      const doc = await generatePdfDoc(inv);
-      doc.save(`${inv.invoiceNumber || 'invoice'}.pdf`);
-    } catch (err) {
-      console.error('Failed to save PDF', err);
-      showToast('error', 'Failed to generate invoice PDF');
-    }
-  };
-
-  const handleRowPrint = async (inv, e) => {
-    e.stopPropagation();
-    if (!inv) return;
-    try {
-      const doc = await generatePdfDoc(inv);
-      doc.output('dataurlnewwindow');
-    } catch (err) {
-      console.error('Failed to open PDF for printing', err);
-      showToast('error', 'Failed to open invoice for printing');
+  const handlePrint = () => {
+    if (invoice && onPrint) {
+      onPrint(invoice, { stopPropagation: () => {} });
     }
   };
 
@@ -394,7 +196,7 @@ function InvoiceCreateModal({ open, onClose, onCreated }) {
     setLoading(true);
     setError('');
     try {
-  await api.createInvoice({ saleId: selectedSale });
+      await invoicesAPI.create({ saleId: selectedSale });
       onCreated();
       onClose();
     } catch (err) {
@@ -466,13 +268,217 @@ const Invoices = () => {
   
   const itemsPerPage = 10;
 
+  // Helper: fetch an image and convert to dataURL for jsPDF
+  const getImageDataUrl = async (url) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to fetch image');
+      const blob = await res.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const generatePdfDoc = async (inv) => {
+    if (!inv) return null;
+
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 40;
+
+    const COMPANY = {
+      name: 'Zana POS',
+      address: '123 Market St, Nairobi, Kenya',
+      phone: '+254 700 000000',
+      email: 'info@zana.example',
+      reg: 'PIN: P12345678',
+      paymentTerms: 'Payment due within 30 days. Late fees apply after due date.'
+    };
+
+    const logoDataUrl = await getImageDataUrl('/logo.png');
+
+    // Header drawing function (called on every page)
+    const drawHeader = () => {
+      const y = margin - 10;
+      if (logoDataUrl) {
+        try { doc.addImage(logoDataUrl, 'PNG', margin, y, 60, 60); } catch (e) { /* ignore */ }
+      }
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      const titleX = logoDataUrl ? margin + 76 : margin;
+      doc.text(COMPANY.name, titleX, y + 18);
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.text(COMPANY.address, titleX, y + 34);
+      doc.text(`${COMPANY.phone} • ${COMPANY.email}`, titleX, y + 48);
+
+      // Invoice meta box on the right
+      const metaX = pageWidth - margin - 200;
+      doc.setFillColor(245, 245, 245);
+      doc.rect(metaX, y, 200, 50, 'F');
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(11);
+      doc.text(`INVOICE: ${inv.invoiceNumber || ''}`, metaX + 10, y + 18);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(8);
+      doc.text(`Date: ${format(new Date(inv.dateIssued), 'dd MMM yyyy')}`, metaX + 10, y + 32);
+      doc.text(`Due: ${format(new Date(inv.dueDate), 'dd MMM yyyy')}`, metaX + 10, y + 42);
+
+      // Divider line
+      doc.setStrokeColor(250, 204, 21); // Zana Yellow
+      doc.setLineWidth(1.5);
+      doc.line(margin, y + 65, pageWidth - margin, y + 65);
+    };
+
+    // Footer drawing function
+    const drawFooter = (pageNum, totalPages) => {
+      const y = pageHeight - margin + 10;
+      doc.setStrokeColor(220, 220, 220);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y - 5, pageWidth - margin, y - 5);
+
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(120, 120, 120);
+      doc.text(COMPANY.paymentTerms, margin, y + 8);
+      doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth - margin - 50, y + 8);
+    };
+
+    drawHeader();
+
+    // Client/Customer Info Box
+    const clientY = margin + 85;
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('BILL TO:', margin, clientY);
+    
+    doc.setFont(undefined, 'normal');
+    const customer = inv.customer || inv.client || {};
+    doc.text(customer.name || 'Walk-in Customer', margin, clientY + 14);
+    if (customer.email) doc.text(customer.email, margin, clientY + 26);
+    if (customer.phone) doc.text(customer.phone, margin, clientY + 38);
+
+    // Invoice Status (Paid/Pending/Overdue) on the right
+    const statusX = pageWidth - margin - 120;
+    doc.setFont(undefined, 'bold');
+    doc.text('STATUS:', statusX, clientY);
+    doc.setFont(undefined, 'normal');
+    doc.text((inv.status || 'Pending').toUpperCase(), statusX + 50, clientY);
+
+    // Render items table using jspdf-autotable
+    const items = inv.items || inv.line_items || inv.sale_items || inv.items_list || [];
+    const tableBody = items.map((item, index) => [
+      index + 1,
+      item.name || item.productName || 'Product',
+      item.quantity ?? 1,
+      formatCurrency(item.price ?? 0),
+      formatCurrency((item.price ?? 0) * (item.quantity ?? 1))
+    ]);
+
+    doc.autoTable({
+      startY: clientY + 60,
+      margin: { left: margin, right: margin },
+      head: [['#', 'Item', 'Qty', 'Unit Price', 'Total']],
+      body: tableBody,
+      headStyles: {
+        fillColor: [11, 15, 27], // Brand Black
+        textColor: [250, 204, 21], // Zana Yellow
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [50, 50, 50]
+      },
+      columnStyles: {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 40, halign: 'center' },
+        3: { cellWidth: 80, halign: 'right' },
+        4: { cellWidth: 80, halign: 'right' }
+      },
+      theme: 'striped',
+      didDrawPage: () => {
+        // Reserved for headers/footers if table spans multiple pages
+      }
+    });
+
+    // Summary calculations block (Subtotal, Tax, Discount, Total)
+    const finalY = doc.lastAutoTable.finalY + 25;
+    const summaryX = pageWidth - margin - 180;
+    doc.setFontSize(9);
+    
+    // Subtotal
+    doc.setFont(undefined, 'normal');
+    doc.text('Subtotal:', summaryX, finalY);
+    doc.text(formatCurrency(inv.subtotal || inv.total), pageWidth - margin, finalY, { align: 'right' });
+
+    // Tax
+    doc.text(`Tax (${inv.taxRate ?? 0}%):`, summaryX, finalY + 14);
+    doc.text(formatCurrency(inv.tax || 0), pageWidth - margin, finalY + 14, { align: 'right' });
+
+    // Discount
+    if (inv.discount > 0) {
+      doc.text('Discount:', summaryX, finalY + 28);
+      doc.text(`-${formatCurrency(inv.discount)}`, pageWidth - margin, finalY + 28, { align: 'right' });
+    }
+
+    // Grand Total
+    const totalY = finalY + (inv.discount > 0 ? 45 : 32);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(11);
+    doc.text('Total Amount Due:', summaryX, totalY);
+    doc.text(formatCurrency(inv.total), pageWidth - margin, totalY, { align: 'right' });
+
+    // Multi-page numbers stamp
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      drawFooter(i, totalPages);
+    }
+
+    return doc;
+  };
+
+  const handleRowDownload = async (inv, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!inv) return;
+    try {
+      const doc = await generatePdfDoc(inv);
+      doc.save(`${inv.invoiceNumber || 'invoice'}.pdf`);
+    } catch (err) {
+      console.error('Failed to save PDF', err);
+      showToast('error', 'Failed to generate invoice PDF');
+    }
+  };
+
+  const handleRowPrint = async (inv, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!inv) return;
+    try {
+      const doc = await generatePdfDoc(inv);
+      doc.output('dataurlnewwindow');
+    } catch (err) {
+      console.error('Failed to open PDF for printing', err);
+      showToast('error', 'Failed to open invoice for printing');
+    }
+  };
+
   // Mock data - Replace with actual API call
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
         setLoading(true);
         setError('');
-        const res = await api.getInvoices();
+        const res = await invoicesAPI.getAll();
         // Backend may return either an array or an object { invoices: [], total, ... }
         const raw = Array.isArray(res.data)
           ? res.data
@@ -552,13 +558,13 @@ const Invoices = () => {
     };
 
     fetchInvoices();
-  }, []);
+  }, [showToast]);
 
   const handleRefresh = async () => {
     setError('');
     setLoading(true);
     try {
-      const res = await api.getInvoices();
+      const res = await invoicesAPI.getAll();
       const raw = Array.isArray(res.data)
         ? res.data
         : (res.data?.invoices || res.data?.rows || []);
@@ -879,6 +885,8 @@ const Invoices = () => {
         invoice={selectedInvoice}
         isOpen={!!selectedInvoice}
         onClose={() => setSelectedInvoice(null)}
+        onDownload={handleRowDownload}
+        onPrint={handleRowPrint}
       />
       <InvoiceCreateModal
         open={showCreateModal}
