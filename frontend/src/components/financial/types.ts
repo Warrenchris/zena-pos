@@ -23,10 +23,13 @@ export interface AlertDetail {
 }
 
 export interface Alert {
-  type: 'SALES' | 'INVENTORY' | 'CUSTOMER';
-  severity: 'HIGH' | 'MEDIUM' | 'LOW';
-  message: string;
-  details: AlertDetail;
+  type: 'SALES' | 'INVENTORY' | 'CUSTOMER' | 'sales_anomaly' | string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  message?: string;
+  title?: string;
+  description?: string;
+  recommendation?: string;
+  details?: any;
 }
 
 export interface Insight {
