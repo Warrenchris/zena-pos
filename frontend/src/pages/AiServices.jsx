@@ -58,12 +58,12 @@ export default function AiServices() {
           <Link
             key={page.to}
             to={page.to}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-md hover:ring-2 hover:ring-indigo-200 transition block"
+            className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-6 hover:bg-zana-yellow/10 transition block"
           >
             <span className="text-2xl" aria-hidden>{page.icon}</span>
-            <h2 className="text-lg font-semibold text-gray-900 mt-3">{page.title}</h2>
-            <p className="text-sm text-gray-500 mt-2">{page.description}</p>
-            <span className="inline-block mt-4 text-sm font-medium text-indigo-600">Open →</span>
+            <h2 className="text-lg font-semibold text-brand-yellow mt-3">{page.title}</h2>
+            <p className="text-sm text-gray-300 mt-2">{page.description}</p>
+            <span className="inline-block mt-4 text-sm font-medium text-brand-yellow">Open →</span>
           </Link>
         ))}
       </div>

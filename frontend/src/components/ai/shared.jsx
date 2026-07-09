@@ -1,18 +1,16 @@
-import React from 'react';
-
 export const QUALITY_BADGES = {
-  excellent: { label: 'Excellent', className: 'bg-green-100 text-green-800 border-green-300' },
-  good: { label: 'Good', className: 'bg-blue-100 text-blue-800 border-blue-300' },
-  fair: { label: 'Fair', className: 'bg-amber-100 text-amber-800 border-amber-300' },
-  poor: { label: 'Poor', className: 'bg-red-100 text-red-800 border-red-300' },
+  excellent: { label: 'Excellent', className: 'bg-green-950/40 text-green-400 border-green-500/30 border' },
+  good: { label: 'Good', className: 'bg-blue-950/40 text-blue-400 border-blue-500/30 border' },
+  fair: { label: 'Fair', className: 'bg-amber-950/40 text-amber-400 border-amber-500/30 border' },
+  poor: { label: 'Poor', className: 'bg-red-950/40 text-red-400 border-red-500/30 border' },
 };
 
 export const SEGMENT_COLORS = {
-  Champions: 'border-green-500 bg-green-50',
-  'Loyal Customers': 'border-blue-500 bg-blue-50',
-  'At Risk': 'border-amber-500 bg-amber-50',
-  'One-Time Buyers': 'border-gray-400 bg-gray-50',
-  'Regular Customers': 'border-indigo-400 bg-indigo-50',
+  Champions: 'border-green-500 bg-green-950/20 text-green-400 border-l-4 rounded p-3',
+  'Loyal Customers': 'border-blue-500 bg-blue-950/20 text-blue-400 border-l-4 rounded p-3',
+  'At Risk': 'border-amber-500 bg-amber-950/20 text-amber-400 border-l-4 rounded p-3',
+  'One-Time Buyers': 'border-brand-yellow/40 bg-brand-gray text-gray-300 border-l-4 rounded p-3',
+  'Regular Customers': 'border-indigo-500 bg-indigo-950/20 text-indigo-400 border-l-4 rounded p-3',
 };
 
 export function formatPercent(value) {
@@ -24,9 +22,9 @@ export function formatPercent(value) {
 
 export function PageHeader({ title, description }) {
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
-      {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
+    <div className="bg-brand-gray border border-zana-borderTint p-6 rounded-lg shadow">
+      <h1 className="text-2xl font-semibold text-brand-yellow">{title}</h1>
+      {description && <p className="mt-1 text-sm text-gray-400">{description}</p>}
     </div>
   );
 }
@@ -34,18 +32,18 @@ export function PageHeader({ title, description }) {
 export function PanelSkeleton() {
   return (
     <div className="animate-pulse space-y-3">
-      <div className="h-4 bg-gray-200 rounded w-1/3" />
-      <div className="h-32 bg-gray-100 rounded" />
+      <div className="h-4 bg-gray-700 rounded w-1/3" />
+      <div className="h-32 bg-gray-800 rounded" />
     </div>
   );
 }
 
 export function PanelError({ message, onRetry }) {
   return (
-    <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3">
+    <div className="text-sm text-red-400 bg-red-950/20 border border-red-500/30 rounded p-3">
       <p>{message || 'Failed to load data'}</p>
       {onRetry && (
-        <button type="button" onClick={onRetry} className="mt-2 text-xs underline text-red-700">
+        <button type="button" onClick={onRetry} className="mt-2 text-xs underline text-red-300 hover:text-red-200">
           Retry
         </button>
       )}
@@ -56,37 +54,37 @@ export function PanelError({ message, onRetry }) {
 export function DemoDataBanner({ message, error }) {
   if (!message) return null;
   return (
-    <div className="bg-amber-50 border border-amber-400 rounded-lg px-4 py-3 text-sm text-amber-900">
+    <div className="bg-brand-gray border border-brand-yellow/30 rounded-lg px-4 py-3 text-sm text-brand-yellow">
       {message}
-      {error && <span className="block mt-1 text-xs text-amber-800">({error})</span>}
+      {error && <span className="block mt-1 text-xs text-brand-yellow/80">({error})</span>}
     </div>
   );
 }
 
 export function AiHealthCard({ health, onRefresh, loading }) {
   return (
-    <div className="bg-white p-4 rounded-lg shadow">
+    <div className="bg-brand-gray border border-zana-borderTint p-4 rounded-lg shadow">
       <div className="flex items-center justify-between gap-3">
-        <h4 className="font-medium text-gray-900">AI Service Health</h4>
+        <h4 className="font-medium text-brand-yellow">AI Service Health</h4>
         {onRefresh && (
           <button
             type="button"
             onClick={onRefresh}
             disabled={loading}
-            className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+            className="px-2 py-1 text-xs bg-brand-black border border-zana-borderTint text-gray-300 rounded hover:bg-zana-yellow/10 disabled:opacity-50 transition"
           >
             Check
           </button>
         )}
       </div>
-      {health.ok === null && <p className="text-sm text-gray-500 mt-2">Unknown</p>}
+      {health.ok === null && <p className="text-sm text-gray-400 mt-2">Unknown</p>}
       {health.ok === true && (
-        <p className="text-sm text-green-600 mt-2">
+        <p className="text-sm text-green-400 mt-2">
           OK — {health.details?.upstream || health.details?.status || 'connected'}
         </p>
       )}
       {health.ok === false && (
-        <p className="text-sm text-red-600 mt-2">
+        <p className="text-sm text-red-400 mt-2">
           Down — {typeof health.details === 'string' ? health.details : JSON.stringify(health.details)}
         </p>
       )}

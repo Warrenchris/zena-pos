@@ -106,18 +106,23 @@ export default function SalesForecasting() {
   const renderChart = (height) => (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-        <YAxis tick={{ fontSize: 11 }} />
-        <Tooltip formatter={(v) => formatCurrency(v)} />
-        <Area type="monotone" dataKey="upper" stroke="none" fill="rgba(99,102,241,0.08)" connectNulls={false} />
-        <Area type="monotone" dataKey="lower" stroke="none" fill="#fff" connectNulls={false} />
-        <Line type="monotone" dataKey="actual" stroke="#4F46E5" strokeWidth={2} dot={false} connectNulls={false} />
-        <Line type="monotone" dataKey="predicted" stroke="#4F46E5" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#2a2e39" />
+        <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} tickFormatter={(v) => formatCurrency(v)} />
+        <Tooltip
+          contentStyle={{ backgroundColor: '#0b0b0c', borderColor: 'rgba(255, 214, 0, 0.2)', borderRadius: '8px', color: '#e5e7eb' }}
+          itemStyle={{ color: '#e5e7eb' }}
+          labelStyle={{ color: '#FFD600', fontWeight: 'bold' }}
+          formatter={(v) => formatCurrency(v)}
+        />
+        <Area type="monotone" dataKey="upper" stroke="none" fill="rgba(255, 214, 0, 0.08)" connectNulls={false} />
+        <Area type="monotone" dataKey="lower" stroke="none" fill="#121214" connectNulls={false} />
+        <Line type="monotone" dataKey="actual" stroke="#FFD600" strokeWidth={2} dot={false} connectNulls={false} />
+        <Line type="monotone" dataKey="predicted" stroke="#FFD600" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} />
         {historical.dates.length > 0 && (
           <ReferenceLine
             x={new Date(historical.dates[historical.dates.length - 1]).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
-            stroke="#9CA3AF"
+            stroke="#FFD600"
             strokeDasharray="3 3"
           />
         )}
@@ -137,14 +142,14 @@ export default function SalesForecasting() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-lg shadow p-5">
+        <div className="lg:col-span-2 bg-brand-gray border border-zana-borderTint rounded-lg shadow p-5 text-gray-200">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg font-semibold">Revenue Forecast</h2>
+            <h2 className="text-lg font-semibold text-brand-yellow">Revenue Forecast</h2>
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="text-sm border rounded px-2 py-1"
+                className="text-sm bg-brand-black border border-zana-borderTint text-gray-300 rounded px-2 py-1 focus:outline-none"
               >
                 <option value="prophet">Prophet</option>
                 <option value="rf">Random Forest</option>
@@ -155,23 +160,23 @@ export default function SalesForecasting() {
                 max={90}
                 value={periods}
                 onChange={(e) => setPeriods(Number(e.target.value))}
-                className="w-16 text-sm border rounded px-2 py-1"
+                className="w-16 text-sm bg-brand-black border border-zana-borderTint text-gray-300 rounded px-2 py-1 focus:outline-none"
                 title="Forecast periods"
               />
               <button
                 type="button"
                 onClick={generateForecast}
                 disabled={loading}
-                className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm bg-brand-yellow hover:bg-brand-yellowDark text-brand-black rounded font-semibold disabled:opacity-50 transition"
               >
                 {loading ? 'Generating…' : 'Generate Forecast'}
               </button>
               {forecast && (
                 <>
-                  <button type="button" onClick={exportForecast} className="px-2 py-1 text-xs bg-gray-100 rounded">
+                  <button type="button" onClick={exportForecast} className="px-2 py-1 text-xs bg-brand-black border border-zana-borderTint text-gray-300 rounded hover:bg-zana-yellow/10 transition">
                     Export CSV
                   </button>
-                  <button type="button" onClick={() => setExpanded(true)} className="px-2 py-1 text-xs bg-gray-100 rounded">
+                  <button type="button" onClick={() => setExpanded(true)} className="px-2 py-1 text-xs bg-brand-black border border-zana-borderTint text-gray-300 rounded hover:bg-zana-yellow/10 transition">
                     Expand
                   </button>
                 </>
@@ -180,7 +185,7 @@ export default function SalesForecasting() {
           </div>
 
           {forecast?.cached && (
-            <div className="mb-3 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-3 py-1.5">
+            <div className="mb-3 text-xs bg-blue-950/20 text-blue-400 border border-blue-500/30 rounded px-3 py-1.5">
               Served from cache — data may be up to 1 hour old.
             </div>
           )}
@@ -213,14 +218,14 @@ export default function SalesForecasting() {
 
         <div className="space-y-4">
           <AiHealthCard health={health} onRefresh={fetchHealth} loading={loading} />
-          <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-600 space-y-2">
-            <p className="font-medium text-gray-900">Related analytics</p>
+          <div className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-4 text-sm text-gray-300 space-y-2">
+            <p className="font-semibold text-brand-yellow">Related analytics</p>
             <p>
-              <Link to="/ai/insights" className="text-indigo-600 hover:underline">Market Insights</Link>
+              <Link to="/ai/insights" className="text-brand-yellow hover:underline">Market Insights</Link>
               {' — '}customer segments, anomalies, stock alerts
             </p>
             <p>
-              <Link to="/ai/finance" className="text-indigo-600 hover:underline">Financial Analysis</Link>
+              <Link to="/ai/finance" className="text-brand-yellow hover:underline">Financial Analysis</Link>
               {' — '}margins, ratios, and trends
             </p>
           </div>
@@ -229,10 +234,10 @@ export default function SalesForecasting() {
 
       {expanded && forecast && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white w-11/12 lg:w-3/4 p-6 rounded-lg shadow-lg">
+          <div className="bg-brand-gray border border-brand-yellow/20 w-11/12 lg:w-3/4 p-6 rounded-lg shadow-lg text-gray-200">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">Sales Forecast (expanded)</h3>
-              <button type="button" onClick={() => setExpanded(false)} className="px-3 py-1 bg-gray-100 rounded">
+              <h3 className="text-lg font-semibold text-brand-yellow">Sales Forecast (expanded)</h3>
+              <button type="button" onClick={() => setExpanded(false)} className="px-3 py-1 bg-brand-black border border-zana-borderTint text-gray-300 rounded hover:bg-zana-yellow/10 transition">
                 Close
               </button>
             </div>
