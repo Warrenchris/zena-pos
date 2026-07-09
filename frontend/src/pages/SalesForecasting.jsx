@@ -65,7 +65,7 @@ export default function SalesForecasting() {
   const chartData = useMemo(() => {
     if (!forecast) return [];
     const histPoints = (historical.dates ?? []).map((d, i) => ({
-      date: new Date(d).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      date: new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
       actual: historical.values[i],
       predicted: null,
       lower: null,
@@ -78,7 +78,7 @@ export default function SalesForecasting() {
     const upper = forecast?.upper_bounds ?? [];
 
     const predPoints = forecastDates.map((d, i) => ({
-      date: new Date(d).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      date: new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
       actual: null,
       predicted: predictions[i],
       lower: lower[i],
@@ -105,10 +105,10 @@ export default function SalesForecasting() {
 
   const renderChart = (height) => (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={chartData}>
+      <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#2a2e39" />
         <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} />
-        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} tickFormatter={(v) => formatCurrency(v)} />
+        <YAxis width={100} tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} tickFormatter={(v) => formatCurrency(v)} />
         <Tooltip
           contentStyle={{ backgroundColor: '#0b0b0c', borderColor: 'rgba(255, 214, 0, 0.2)', borderRadius: '8px', color: '#e5e7eb' }}
           itemStyle={{ color: '#e5e7eb' }}
@@ -121,7 +121,7 @@ export default function SalesForecasting() {
         <Line type="monotone" dataKey="predicted" stroke="#FFD600" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} />
         {historical.dates.length > 0 && (
           <ReferenceLine
-            x={new Date(historical.dates[historical.dates.length - 1]).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+            x={new Date(historical.dates[historical.dates.length - 1]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
             stroke="#FFD600"
             strokeDasharray="3 3"
           />

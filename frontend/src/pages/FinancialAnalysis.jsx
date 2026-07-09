@@ -44,35 +44,60 @@ export default function FinancialAnalysis() {
     try {
       await fetchHealth();
 
-      const [statsResp, shopResp, revenueResp] = await Promise.all([
+      const [statsResp, shopResp, revenueResp, expenseStatsResp] = await Promise.all([
         api.get('/api/dashboard/stats').then((r) => r.data).catch(() => null),
         api.get('/api/shop/me').then((r) => r.data).catch(() => null),
         api.get('/api/insights/monthly-revenue').then((r) => r.data).catch(() => null),
+        api.get('/api/expenses/statistics').then((r) => r.data).catch(() => null),
       ]);
 
-      const revenueHistory = statsResp?.revenueHistory ?? [];
-      const costHistory = statsResp?.costHistory ?? [];
-      const totalRevenue = revenueHistory.reduce((sum, x) => sum + (x.value || 0), 0);
-      const totalCosts = costHistory.reduce((sum, x) => sum + (x.value || 0), 0);
+      const revenueHistory = revenueResp?.dates ? revenueResp.dates.map((date, idx) => ({
+        date,
+        value: parseFloat(revenueResp.values[idx] || 0)
+      })) : [];
+
+      const costHistory = expenseStatsResp?.monthlyTrend ? expenseStatsResp.monthlyTrend.map((item) => ({
+        date: item.month,
+        value: parseFloat(item.total || 0)
+      })) : [];
+
+      let totalRevenue = revenueHistory.reduce((sum, x) => sum + (x.value || 0), 0);
+      let totalCosts = costHistory.reduce((sum, x) => sum + (x.value || 0), 0);
+
+      // Fallback to stats totalIncome if monthly revenue history sum is 0 but sales exist
+      if (totalRevenue === 0 && statsResp?.totalIncome > 0) {
+        totalRevenue = statsResp.totalIncome;
+      }
 
       setShopSummary({
         shopName: shopResp?.name || 'Your shop',
         totalRevenue,
         totalCosts,
-        monthsTracked: revenueResp?.dates?.length ?? revenueHistory.length,
+        monthsTracked: revenueResp?.dates?.length ?? 1,
       });
 
-      const fmPayload = shopResp?.financials || {
-        revenue: totalRevenue || 100000,
-        costs: totalCosts || 60000,
-        expenses: statsResp?.totalExpenses || 15000,
-        assets: shopResp?.assets || 120000,
-        liabilities: shopResp?.liabilities || 30000,
-        date: new Date().toISOString(),
-      };
+      const hasRealData = totalRevenue > 0;
+      let fmPayload;
 
-      const usedFallback = !shopResp?.financials && totalRevenue === 0;
-      if (usedFallback) {
+      if (hasRealData) {
+        fmPayload = {
+          revenue: totalRevenue,
+          costs: totalCosts,
+          expenses: expenseStatsResp?.totalExpenses || statsResp?.totalExpenses || 0,
+          assets: shopResp?.assets || 0,
+          liabilities: shopResp?.liabilities || 0,
+          date: new Date().toISOString(),
+        };
+        setIsUsingDemoData(false);
+      } else {
+        fmPayload = shopResp?.financials || {
+          revenue: 100000,
+          costs: 60000,
+          expenses: 15000,
+          assets: shopResp?.assets || 120000,
+          liabilities: shopResp?.liabilities || 30000,
+          date: new Date().toISOString(),
+        };
         setIsUsingDemoData(true);
         setAiError('Using estimated figures — connect shop financials for accurate analysis');
       }
@@ -84,16 +109,39 @@ export default function FinancialAnalysis() {
       });
       setMetrics(fm);
 
-      const insightPayload = {
-        revenue: revenueHistory.length ? revenueHistory.map((x) => x.value) : [1000, 1100, 1050],
-        costs: costHistory.length ? costHistory.map((x) => x.value) : [700, 750, 720],
-        customer_count: [50, 55, 53],
-        transaction_count: [60, 63, 62],
-        average_transaction_value: [16.7, 17.4, 16.9],
-      };
-
-      const insightsResp = await aiService.analyzeBusiness(insightPayload).then((r) => r.data).catch(() => null);
-      setInsights(Array.isArray(insightsResp) ? insightsResp : []);
+      const insightsData = await api.get('/api/insights').then((r) => r.data).catch(() => null);
+      const rawInsights = insightsData?.recommendations || [];
+      const formattedInsights = rawInsights.map(ins => {
+        let recs = [];
+        if (Array.isArray(ins.details)) {
+          recs = ins.details.map(detail => {
+            if (typeof detail === 'string') return detail;
+            if (detail && typeof detail === 'object') {
+              if (detail.daysToDeplete !== undefined) {
+                return `${detail.name || 'Product'}: Depleting in ${detail.daysToDeplete} days`;
+              }
+              if (detail.currentStock !== undefined) {
+                return `${detail.name || 'Product'}: ${detail.currentStock} units left (Reorder point: ${detail.reorderPoint ?? 'N/A'})`;
+              }
+              if (detail.profit !== undefined) {
+                return `Profit: ${formatCurrency(detail.profit)}`;
+              }
+              if (detail.category !== undefined && detail.amount !== undefined) {
+                return `${detail.category}: ${formatCurrency(detail.amount)}`;
+              }
+              if (detail.name) return detail.name;
+              return JSON.stringify(detail);
+            }
+            return String(detail);
+          });
+        }
+        return {
+          type: ins.insight_type || ins.type || 'Insight',
+          message: ins.description || ins.message || '',
+          recommendations: recs
+        };
+      });
+      setInsights(formattedInsights);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally {
@@ -145,8 +193,16 @@ export default function FinancialAnalysis() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <MetricCard label="Gross Profit Margin" value={formatPercent(metrics.gross_profit_margin)} />
                   <MetricCard label="Net Profit Margin" value={formatPercent(metrics.net_profit_margin)} />
-                  <MetricCard label="Current Ratio" value={(metrics.current_ratio ?? 0).toFixed(2)} hint="Liquidity" />
-                  <MetricCard label="Inventory Turnover" value={(metrics.inventory_turnover ?? 0).toFixed(2)} />
+                  <MetricCard
+                    label="Current Ratio"
+                    value={metrics.current_ratio != null ? metrics.current_ratio.toFixed(2) : "N/A"}
+                    hint={metrics.current_ratio != null ? "Liquidity" : "No liabilities or assets details"}
+                  />
+                  <MetricCard
+                    label="Inventory Turnover"
+                    value={metrics.inventory_turnover != null ? metrics.inventory_turnover.toFixed(2) : "N/A"}
+                    hint={metrics.inventory_turnover_note || "Requires direct inventory value"}
+                  />
                 </div>
               )}
             </div>
