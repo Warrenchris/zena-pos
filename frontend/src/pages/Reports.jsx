@@ -19,7 +19,7 @@ export default function Reports() {
   const { categories = [] } = useSelector((state) => state.categories || { categories: [] })
   const [tab, setTab] = useState('sales')
   const [range, setRange] = useState('monthly')
-  const [quick, setQuick] = useState('month') // today | week | month | custom
+  const [quick, setQuick] = useState('month') // today | week | month | year | custom
   const [isWithin24Hours, setIsWithin24Hours] = useState(false)
   // Set default start date to first day of current month
   const [startDate, setStartDate] = useState(() => {
@@ -38,7 +38,7 @@ export default function Reports() {
   const [loading, setLoading] = useState(true) // Start with loading true
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
-  const [kpis, setKpis] = useState({ revenue: 0, sales: 0, activeCustomers: 0, topProduct: '-' })
+  const [kpis, setKpis] = useState({ revenue: 0, sales: 0, activeCustomers: 0, topProduct: '-', grossProfit: 0, taxPayable: 0 })
   const [charts, setCharts] = useState({
     salesTrend: [],
     paymentBreakdown: [],
@@ -81,6 +81,13 @@ export default function Reports() {
       // Use daily granularity within the month so trend has enough points
       setRange('daily')
       setIsWithin24Hours(false)
+    } else if (quick === 'year') {
+      const firstDay = new Date(now.getFullYear(), 0, 1)
+      const lastDay = new Date(now.getFullYear(), 11, 31)
+      setStartDate(toISO(firstDay))
+      setEndDate(toISO(lastDay))
+      setRange('monthly')
+      setIsWithin24Hours(false)
     }
   }, [quick])
 
@@ -111,11 +118,13 @@ export default function Reports() {
         setData(cached.data)
         if (tab === 'sales') {
           const k = cached.data?.kpis || {}
-          setKpis({
+          setKpis({ 
             revenue: Number(k.totalRevenue || 0),
             sales: Number(k.totalSales || 0),
             activeCustomers: Number(k.activeCustomers || 0),
-            topProduct: k.topProduct || '-'
+            topProduct: k.topProduct || '-',
+            grossProfit: Number(k.grossProfit || 0),
+            taxPayable: Number(k.taxPayable || 0)
           })
           setCharts({
             salesTrend: cached.data?.salesTrend || [],
@@ -139,7 +148,9 @@ export default function Reports() {
           revenue: Number(k.totalRevenue || 0),
           sales: Number(k.totalSales || 0),
           activeCustomers: Number(k.activeCustomers || 0),
-          topProduct: k.topProduct || '-'
+          topProduct: k.topProduct || '-',
+          grossProfit: 0,
+          taxPayable: 0
         })
         // Pull additional analytics where backend leaves TODOs empty
         const [channels, topProducts, employees, pl] = await Promise.all([
@@ -179,13 +190,20 @@ export default function Reports() {
 
         // Enhance KPIs with top product, gross profit, and tax payable if available
         const topProductName = productPerformance?.[0]?.product || k.topProduct || '-'
-        const grossProfit = pl?.data ? Number(pl.data.netRevenue || 0) - Number(pl.data.totalExpenses || 0) : undefined
+        const grossProfit = pl?.data ? (pl.data.grossProfit !== undefined ? Number(pl.data.grossProfit) : Number(pl.data.netRevenue || 0) - Number(pl.data.totalExpenses || 0)) : undefined
         const taxPayable = pl?.data ? Number(pl.data.totalTax || 0) : undefined
+        
+        // Mutate res.data.kpis so that cache hits will also contain grossProfit and taxPayable
+        if (!res.data.kpis) res.data.kpis = {};
+        res.data.kpis.topProduct = topProductName;
+        if (grossProfit !== undefined) res.data.kpis.grossProfit = grossProfit;
+        if (taxPayable !== undefined) res.data.kpis.taxPayable = taxPayable;
+
         setKpis(prev => ({
           ...prev,
           topProduct: topProductName,
-          ...(Number.isFinite(grossProfit) ? { grossProfit } : {}),
-          ...(Number.isFinite(taxPayable) ? { taxPayable } : {}),
+          ...(Number.isFinite(grossProfit) ? { grossProfit: grossProfit } : {}),
+          ...(Number.isFinite(taxPayable) ? { taxPayable: taxPayable } : {}),
         }))
         // Revenue vs Expenses comparison, fallback from P&L if provided
         const rve = Array.isArray(res.data?.revVsExp) ? res.data?.revVsExp :
@@ -430,6 +448,7 @@ export default function Reports() {
             <QuickFilter label="Today" value="today" current={quick} setCurrent={setQuick} />
             <QuickFilter label="This Week" value="week" current={quick} setCurrent={setQuick} />
             <QuickFilter label="Month" value="month" current={quick} setCurrent={setQuick} />
+            <QuickFilter label="Year" value="year" current={quick} setCurrent={setQuick} />
             <QuickFilter label="Custom" value="custom" current={quick} setCurrent={setQuick} />
           </div>
           <div className="flex items-center gap-2">
@@ -478,8 +497,8 @@ export default function Reports() {
               <MiniSpark dataKey="sales" data={(charts.salesTrend||[]).slice(-16)} color="#f59e0b" />
             </KpiCard>
             <KpiCard icon="product" label="Top Product" value={kpis.topProduct} color="#FFD600" />
-            <KpiCard icon="gross" label="Gross Profit" value={formatCurrency((data?.kpis?.grossProfit)||0)} color="#0ea5e9" />
-            <KpiCard icon="tax" label="Tax Payable" value={formatCurrency((data?.kpis?.taxPayable)||0)} color="#ef4444" />
+            <KpiCard icon="gross" label="Gross Profit" value={formatCurrency(kpis.grossProfit || 0)} color="#0ea5e9" />
+            <KpiCard icon="tax" label="Tax Payable" value={formatCurrency(kpis.taxPayable || 0)} color="#ef4444" />
           </div>
         )}
 
