@@ -6,15 +6,18 @@ import useCurrency from '../../hooks/useCurrency';
 const StatCard = ({ title, displayValue, percentage, trend, data, color }) => {
   const hasPercentage = typeof percentage === 'number' && !Number.isNaN(percentage);
   return (
-    <div className="rounded-[20px] border border-yellow-400/20 bg-black/40 p-6 shadow-[0_0_18px_rgba(250,204,21,0.08)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_24px_rgba(250,204,21,0.15)] animate-fadeUp">
-      <div className="mb-5 flex items-start justify-between">
-        <div>
+    // ponytail: overflow-hidden added to prevent overlapping/overflowing outside the card
+    <div className="rounded-[20px] border border-yellow-400/20 bg-black/40 p-6 overflow-hidden shadow-[0_0_18px_rgba(250,204,21,0.08)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_24px_rgba(250,204,21,0.15)] animate-fadeUp">
+      {/* ponytail: gap-4 added to prevent badge overlapping with card title */}
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="min-w-0">
           <h3 className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">{title}</h3>
           <p className="mt-2 text-2xl font-semibold text-white">{displayValue}</p>
         </div>
         {hasPercentage && (
+          /* ponytail: whitespace-nowrap shrink-0 added to prevent badge from wrapping oddly */
           <div
-            className={`flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${
+            className={`flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap shrink-0 ${
               percentage >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'
             }`}
           >
