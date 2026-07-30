@@ -77,7 +77,7 @@ module.exports = {
 
         /* Legacy Brand Aliases mapped to semantic variables for zero breakage */
         brand: {
-          black:      'var(--text-primary)',
+          black:      'var(--bg-surface)',
           darkGray:   'var(--bg-surface-2)',
           gray:       'var(--bg-surface-2)',
           text:       'var(--text-primary)',

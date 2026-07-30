@@ -218,16 +218,16 @@ const MySales = () => {
   };
 
   return (
-    <div className="p-4 space-y-6 bg-brand-black min-h-screen text-white">
+    <div className="p-4 space-y-6 bg-surface min-h-screen text-text-primary">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-zana-yellow tracking-tight">
+        <h1 className="text-2xl font-bold text-primary tracking-tight">
           {isAdmin ? 'All Sales' : 'My Sales History'}
         </h1>
         <div className="flex items-center gap-3">
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="inline-flex items-center px-4 py-2 border border-zana-borderTint rounded-lg shadow-sm bg-brand-black text-sm font-medium text-white hover:bg-zana-yellow/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-yellow disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            className="inline-flex items-center px-4 py-2 border border-border-default rounded-lg shadow-sm bg-surface text-sm font-medium text-text-primary hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
             <ArrowPathIcon className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh
@@ -236,14 +236,14 @@ const MySales = () => {
             <button
               onClick={() => handlePageChange(currentPage - 1)}
               disabled={currentPage === 1}
-              className="inline-flex items-center px-3 py-2 rounded-l-lg border border-zana-borderTint bg-brand-black text-sm font-medium text-white/70 hover:bg-zana-yellow/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center px-3 py-2 rounded-l-lg border border-border-default bg-surface text-sm font-medium text-text-secondary hover:bg-surface-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeftIcon className="h-4 w-4" />
             </button>
             <button
               onClick={() => handlePageChange(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="inline-flex items-center px-3 py-2 rounded-r-lg border border-l-0 border-zana-borderTint bg-brand-black text-sm font-medium text-white/70 hover:bg-zana-yellow/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center px-3 py-2 rounded-r-lg border border-l-0 border-border-default bg-surface text-sm font-medium text-text-secondary hover:bg-surface-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRightIcon className="h-4 w-4" />
             </button>
@@ -251,37 +251,37 @@ const MySales = () => {
         </div>
       </div>
 
-      <div className="bg-brand-black rounded-xl border border-zana-borderTint shadow-zana overflow-hidden">
+      <div className="bg-surface rounded-xl border border-border-default shadow-floating overflow-hidden">
         <div className="overflow-x-auto">
           {!loading && sales.length === 0 ? (
-            <div className="p-12 text-center text-white/60">
-              <div className="mx-auto h-12 w-12 text-white/40 mb-4">
+            <div className="p-12 text-center text-text-muted">
+              <div className="mx-auto h-12 w-12 text-text-muted mb-4">
                 <ArrowDownTrayIcon className="h-12 w-12" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-1">No sales found</h3>
+              <h3 className="text-lg font-medium text-text-primary mb-1">No sales found</h3>
               <p className="text-sm">{isAdmin ? 'Sales from all cashiers will appear here.' : 'Your completed sales will appear here.'}</p>
             </div>
           ) : (
-            <table className="min-w-full divide-y divide-zana-borderTint">
-              <thead className="bg-black/40 backdrop-blur-sm sticky top-0 z-10">
+            <table className="min-w-full divide-y divide-border-default">
+              <thead className="bg-surface-2/80 backdrop-blur-sm sticky top-0 z-10">
                 <tr>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">Date</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">Invoice #</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">Customer</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">Items</th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-white/70 uppercase tracking-wider">Total</th>
-                  {isAdmin && <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">Cashier</th>}
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">Payment</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Date</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Invoice #</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Customer</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Items</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-text-secondary uppercase tracking-wider">Total</th>
+                  {isAdmin && <th className="px-4 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Cashier</th>}
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Payment</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zana-borderTint bg-transparent">
+              <tbody className="divide-y divide-border-default bg-transparent">
                 {loading ? (
                   [...Array(5)].map((_, i) => (
                     <tr key={i}>
                       {[...Array(isAdmin ? 8 : 7)].map((_, j) => (
                         <td key={j} className="px-4 py-4 whitespace-nowrap">
-                          <div className="h-4 bg-white/10 rounded animate-pulse"></div>
+                          <div className="h-4 bg-surface-2 rounded animate-pulse"></div>
                         </td>
                       ))}
                     </tr>
@@ -291,43 +291,43 @@ const MySales = () => {
                     <tr
                       key={sale.id}
                       onClick={() => handleSaleClick(sale)}
-                      className="cursor-pointer hover:bg-zana-yellow/10 transition-colors duration-150 group"
+                      className="cursor-pointer hover:bg-surface-2/60 transition-colors duration-150 group"
                     >
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/70">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-text-secondary">
                         {format(new Date(sale.createdAt), 'MMM dd, yyyy HH:mm')}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-white group-hover:text-zana-yellow transition-colors">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-text-primary group-hover:text-primary transition-colors">
                         {sale.invoiceNumber}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/70">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-text-secondary">
                         {sale.customer?.name || 'Walk-in Customer'}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/60">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/10 text-white/80">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-text-muted">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-2 text-text-secondary border border-border-default">
                           {(Array.isArray(sale.products) ? sale.products.length : 0)} items
                         </span>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-white text-right">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-text-primary text-right">
                         {formatCurrency(Number(sale.totalAmount) || 0)}
                       </td>
                       {isAdmin && (
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-white/70">
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-text-secondary">
                           {sale.employee || 'Unknown'}
                         </td>
                       )}
                       <td className="px-4 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${(sale.paymentMethod || '').toUpperCase() === 'CASH'
-                          ? 'bg-green-900/20 text-green-400 ring-green-500/20'
-                          : 'bg-blue-900/20 text-blue-400 ring-blue-500/20'
+                          ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20'
+                          : 'bg-blue-500/10 text-blue-400 ring-blue-500/20'
                           }`}>
                           {(sale.paymentMethod || 'CASH')}
                         </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${(sale.status || '').toUpperCase() === 'COMPLETED'
-                          ? 'bg-green-900/20 text-green-400 ring-green-500/20'
+                          ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20'
                           : (sale.status || '').toUpperCase() === 'PENDING'
-                            ? 'bg-yellow-900/20 text-yellow-500 ring-yellow-500/20'
+                            ? 'bg-amber-500/10 text-amber-500 ring-amber-500/20'
                             : 'bg-red-900/20 text-red-400 ring-red-500/20'
                           }`}>
                           {(sale.status || 'COMPLETED')}
