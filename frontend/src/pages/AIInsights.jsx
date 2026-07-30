@@ -28,26 +28,26 @@ function CustomerSegmentsPanel() {
   React.useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-5 text-gray-200">
-      <h3 className="text-lg font-semibold text-brand-yellow mb-4">Customer Segments</h3>
+    <div className="bg-surface border border-border-default rounded-2xl shadow-floating p-6 text-text-primary">
+      <h3 className="text-lg font-bold text-primary mb-4">Customer Segments</h3>
       {loading && <PanelSkeleton />}
       {!loading && error && <PanelError message={error} onRetry={load} />}
       {!loading && !error && data?.message && !data?.segments?.length && (
-        <p className="text-sm text-gray-400">{data.message}</p>
+        <p className="text-sm text-text-muted">{data.message}</p>
       )}
       {!loading && !error && data?.segments?.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {data.segments.map((seg) => (
             <div
               key={seg.segment_id}
-              className={SEGMENT_COLORS[seg.label] || 'border-l-4 border-gray-600 bg-brand-black p-3 rounded text-gray-300'}
+              className={SEGMENT_COLORS[seg.label] || 'border-l-4 border-border-default bg-surface-2 p-4 rounded-xl text-text-primary'}
             >
-              <p className="font-semibold">{seg.label}</p>
-              <p className="text-xs text-gray-400 mt-1">{seg.customer_count} customers ({seg.percentage_of_customers}%)</p>
-              <div className="mt-2 text-xs space-y-0.5 text-gray-300">
-                <p>Avg spend: {formatCurrency(seg.avg_total_spend)}</p>
-                <p>Avg frequency: {seg.avg_purchase_frequency} purchases</p>
-                <p>Last purchase: {seg.avg_days_since_last_purchase} days ago</p>
+              <p className="font-semibold text-text-primary">{seg.label}</p>
+              <p className="text-xs text-text-secondary font-medium mt-1">{seg.customer_count} customers ({seg.percentage_of_customers}%)</p>
+              <div className="mt-2 text-xs space-y-0.5 text-text-secondary">
+                <p>Avg spend: <span className="font-semibold text-text-primary">{formatCurrency(seg.avg_total_spend)}</span></p>
+                <p>Avg frequency: <span className="font-semibold text-text-primary">{seg.avg_purchase_frequency} purchases</span></p>
+                <p>Last purchase: <span className="font-semibold text-text-primary">{seg.avg_days_since_last_purchase} days ago</span></p>
               </div>
             </div>
           ))}
@@ -85,33 +85,33 @@ function AnomalyPanel() {
   React.useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-5 text-gray-200">
-      <h3 className="text-lg font-semibold text-brand-yellow mb-4">Anomaly Detection</h3>
+    <div className="bg-surface border border-border-default rounded-2xl shadow-floating p-6 text-text-primary">
+      <h3 className="text-lg font-bold text-primary mb-4">Anomaly Detection</h3>
       {loading && <PanelSkeleton />}
       {!loading && error && <PanelError message={error} onRetry={load} />}
       {!loading && !error && anomalies.length === 0 && (
-        <p className="text-sm text-green-400 bg-green-950/20 border border-green-500/30 rounded p-3">
+        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
           No unusual patterns detected in the last 90 days
         </p>
       )}
       {!loading && !error && anomalies.length > 0 && (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-400 border-b border-zana-borderTint">
-              <th className="pb-2">Date</th>
-              <th className="pb-2">Revenue</th>
-              <th className="pb-2">Transactions</th>
-              <th className="pb-2">Severity</th>
+            <tr className="text-left text-text-secondary border-b border-border-default">
+              <th className="pb-3 font-semibold">Date</th>
+              <th className="pb-3 font-semibold">Revenue</th>
+              <th className="pb-3 font-semibold">Transactions</th>
+              <th className="pb-3 font-semibold">Severity</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border-default">
             {anomalies.map((a) => (
-              <tr key={a.date} className="border-b border-zana-borderTint/40">
-                <td className="py-2 text-gray-300">{a.date}</td>
-                <td className="py-2 text-gray-300">{formatCurrency(a.revenue)}</td>
-                <td className="py-2 text-gray-300">{a.transaction_count}</td>
-                <td className="py-2">
-                  <span className={`text-xs px-2 py-0.5 rounded font-semibold ${a.severity === 'high' ? 'bg-red-950/40 text-red-400 border border-red-500/30' : 'bg-amber-950/40 text-amber-400 border border-amber-500/30'}`}>
+              <tr key={a.date} className="hover:bg-surface-2/60 transition-colors">
+                <td className="py-3 text-text-primary font-medium">{a.date}</td>
+                <td className="py-3 text-text-primary font-semibold">{formatCurrency(a.revenue)}</td>
+                <td className="py-3 text-text-secondary">{a.transaction_count}</td>
+                <td className="py-3">
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${a.severity === 'high' ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'}`}>
                     {a.severity}
                   </span>
                 </td>
@@ -145,43 +145,43 @@ function StockDepletionPanel() {
   React.useEffect(() => { load(); }, [load]);
 
   const daysColor = (days) => {
-    if (days == null) return 'text-gray-400';
-    if (days <= 3) return 'text-red-400 font-semibold';
-    if (days <= 7) return 'text-amber-400 font-medium';
-    return 'text-green-400';
+    if (days == null) return 'text-text-muted';
+    if (days <= 3) return 'text-rose-600 dark:text-rose-400 font-semibold';
+    if (days <= 7) return 'text-amber-600 dark:text-amber-400 font-medium';
+    return 'text-emerald-600 dark:text-emerald-400';
   };
 
   return (
-    <div className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-5 text-gray-200">
-      <h3 className="text-lg font-semibold text-brand-yellow mb-4">Stock Depletion Alerts</h3>
+    <div className="bg-surface border border-border-default rounded-2xl shadow-floating p-6 text-text-primary">
+      <h3 className="text-lg font-bold text-primary mb-4">Stock Depletion Alerts</h3>
       {loading && <PanelSkeleton />}
       {!loading && error && <PanelError message={error} onRetry={load} />}
       {!loading && !error && alerts.length === 0 && (
-        <p className="text-sm text-green-400 bg-green-950/20 border border-green-500/30 rounded p-3">
+        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
           No products at risk of stockout within the alert window
         </p>
       )}
       {!loading && !error && alerts.length > 0 && (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-400 border-b border-zana-borderTint">
-              <th className="pb-2">Product</th>
-              <th className="pb-2">Current Stock</th>
-              <th className="pb-2">Days Until Depletion</th>
-              <th className="pb-2">Algorithm</th>
-              <th className="pb-2">Confidence</th>
+            <tr className="text-left text-text-secondary border-b border-border-default">
+              <th className="pb-3 font-semibold">Product</th>
+              <th className="pb-3 font-semibold">Current Stock</th>
+              <th className="pb-3 font-semibold">Days Until Depletion</th>
+              <th className="pb-3 font-semibold">Algorithm</th>
+              <th className="pb-3 font-semibold">Confidence</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border-default">
             {alerts.map((item) => (
-              <tr key={item.product_id} className="border-b border-zana-borderTint/40">
-                <td className="py-2 font-medium text-gray-300">{item.product_name}</td>
-                <td className="py-2 text-gray-300">{item.current_stock}</td>
-                <td className={`py-2 ${daysColor(item.days_until_depletion)}`}>
+              <tr key={item.product_id} className="hover:bg-surface-2/60 transition-colors">
+                <td className="py-3 font-medium text-text-primary">{item.product_name}</td>
+                <td className="py-3 text-text-secondary">{item.current_stock}</td>
+                <td className={`py-3 ${daysColor(item.days_until_depletion)}`}>
                   {item.days_until_depletion != null ? `${item.days_until_depletion} days` : '—'}
                 </td>
-                <td className="py-2 capitalize text-gray-300">{item.algorithm}</td>
-                <td className="py-2 capitalize text-gray-300">{item.confidence || '—'}</td>
+                <td className="py-3 capitalize text-text-secondary">{item.algorithm}</td>
+                <td className="py-3 capitalize text-text-secondary">{item.confidence || '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -204,15 +204,15 @@ export default function AIInsights() {
         description="Customer segmentation, sales anomaly detection, and stock depletion alerts powered by ML."
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {RELATED_LINKS.map((link) => (
           <Link
             key={link.to}
             to={link.to}
-            className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-4 hover:bg-zana-yellow/10 transition block"
+            className="bg-surface border border-border-default rounded-2xl shadow-floating p-5 hover:bg-surface-2 transition-all duration-200 block group"
           >
-            <p className="font-semibold text-brand-yellow">{link.title}</p>
-            <p className="text-sm text-gray-300 mt-1">{link.desc}</p>
+            <p className="font-bold text-primary group-hover:text-primary-hover">{link.title}</p>
+            <p className="text-sm text-text-secondary mt-1">{link.desc}</p>
           </Link>
         ))}
       </div>

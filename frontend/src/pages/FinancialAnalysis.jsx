@@ -9,10 +9,10 @@ import {
 
 function MetricCard({ label, value, hint }) {
   return (
-    <div className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-4 text-gray-200">
-      <p className="text-xs uppercase tracking-wide text-brand-yellow font-semibold">{label}</p>
-      <p className="text-2xl font-bold text-white mt-1">{value}</p>
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+    <div className="bg-surface border border-border-default rounded-2xl shadow-floating p-5 text-text-primary">
+      <p className="text-xs uppercase tracking-wider text-text-secondary font-semibold">{label}</p>
+      <p className="text-2xl font-bold text-text-primary mt-1">{value}</p>
+      {hint && <p className="text-xs text-text-muted mt-1">{hint}</p>}
     </div>
   );
 }
@@ -184,10 +184,10 @@ export default function FinancialAnalysis() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-brand-gray border border-zana-borderTint rounded-lg shadow p-5 text-gray-200">
-              <h2 className="text-lg font-semibold text-brand-yellow mb-4">Key Financial Ratios</h2>
+            <div className="lg:col-span-2 bg-surface border border-border-default rounded-2xl shadow-floating p-6 text-text-primary">
+              <h2 className="text-lg font-bold text-primary mb-4">Key Financial Ratios</h2>
               {!metrics && (
-                <p className="text-sm text-gray-400">Financial metrics unavailable — check AI service health.</p>
+                <p className="text-sm text-text-muted">Financial metrics unavailable — check AI service health.</p>
               )}
               {metrics && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -209,33 +209,33 @@ export default function FinancialAnalysis() {
 
             <div className="space-y-4">
               <AiHealthCard health={health} onRefresh={fetchHealth} loading={loading} />
-              <div className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-4 text-sm text-gray-300 space-y-2">
-                <p className="font-semibold text-brand-yellow">Related analytics</p>
+              <div className="bg-surface border border-border-default rounded-2xl shadow-floating p-5 text-sm text-text-secondary space-y-3">
+                <p className="font-bold text-primary">Related analytics</p>
                 <p>
-                  <Link to="/ai/forecasting" className="text-brand-yellow hover:underline">Sales Forecasting</Link>
+                  <Link to="/ai/forecasting" className="text-primary font-medium hover:underline">Sales Forecasting</Link>
                   {' — '}revenue projections
                 </p>
                 <p>
-                  <Link to="/ai/insights" className="text-brand-yellow hover:underline">Market Insights</Link>
+                  <Link to="/ai/insights" className="text-primary font-medium hover:underline">Market Insights</Link>
                   {' — '}segments and anomalies
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-brand-gray border border-zana-borderTint rounded-lg shadow p-5 text-gray-200">
-            <h2 className="text-lg font-semibold text-brand-yellow mb-4">Business Recommendations</h2>
+          <div className="bg-surface border border-border-default rounded-2xl shadow-floating p-6 text-text-primary">
+            <h2 className="text-lg font-bold text-primary mb-4">Business Recommendations</h2>
             {insights.length === 0 && (
-              <p className="text-sm text-gray-400">No recommendations returned yet.</p>
+              <p className="text-sm text-text-muted">No recommendations returned yet.</p>
             )}
             {insights.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {insights.map((ins, idx) => (
-                  <div key={idx} className="bg-brand-black border border-zana-borderTint rounded-lg p-4 text-gray-200">
-                    <p className="font-semibold text-brand-yellow">{ins?.insight_type || ins?.type || 'Insight'}</p>
-                    <p className="text-sm text-gray-300 mt-1">{ins?.description || ins?.message || ''}</p>
+                  <div key={idx} className="bg-surface-2 border border-border-default rounded-xl p-4 text-text-primary">
+                    <p className="font-semibold text-primary">{ins?.insight_type || ins?.type || 'Insight'}</p>
+                    <p className="text-sm text-text-secondary mt-1">{ins?.description || ins?.message || ''}</p>
                     {ins?.recommendations?.length > 0 && (
-                      <ul className="text-xs text-gray-400 mt-2 list-disc list-inside space-y-1">
+                      <ul className="text-xs text-text-secondary mt-2 list-disc list-inside space-y-1">
                         {ins.recommendations.map((r, i) => <li key={i}>{r}</li>)}
                       </ul>
                     )}
