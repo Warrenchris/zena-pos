@@ -2,35 +2,26 @@ import React from 'react';
 import Spinner from './Spinner';
 
 /**
- * Button — Universal accessible button primitive
- *
- * @param {'primary'|'secondary'|'ghost'|'outline'|'danger'|'success'} variant
- * @param {'sm'|'md'|'lg'} size
- * @param {boolean} loading
- * @param {boolean} disabled
- * @param {React.ReactNode} leftIcon
- * @param {React.ReactNode} rightIcon
- * @param {boolean} fullWidth
- * @param {React.ElementType} as
- * @param {string} className
+ * Button — Refined enterprise SaaS button primitive (Linear / Stripe style)
  */
 const variantStyles = {
   primary: `
-    bg-primary text-surface-0 font-semibold
+    bg-primary text-white font-medium
     hover:bg-primary-hover active:bg-primary-active
-    shadow-sm hover:shadow-glow
+    shadow-sm border border-primary/20
   `,
   secondary: `
-    bg-surface-2 text-text-primary border border-border-default font-medium
-    hover:bg-surface-3 hover:border-border-hover active:bg-surface-1
+    bg-white text-text-primary border border-border-default font-medium
+    hover:bg-surface-2 hover:border-border-hover active:bg-surface-3
+    shadow-sm
   `,
   outline: `
     bg-transparent text-text-primary border border-border-default font-medium
-    hover:bg-surface-2 hover:border-border-hover active:bg-surface-1
+    hover:bg-surface-2 hover:border-border-hover active:bg-surface-3
   `,
   ghost: `
     bg-transparent text-text-secondary font-medium
-    hover:bg-surface-2 hover:text-text-primary active:bg-surface-3
+    hover:bg-surface-3 hover:text-text-primary active:bg-surface-2
   `,
   danger: `
     bg-danger text-white font-medium
@@ -38,16 +29,16 @@ const variantStyles = {
     shadow-sm
   `,
   success: `
-    bg-success text-surface-0 font-semibold
+    bg-success text-white font-medium
     hover:bg-emerald-600 active:bg-emerald-700
     shadow-sm
   `,
 };
 
 const sizeStyles = {
-  sm: 'px-3 py-1.5 text-small rounded-md gap-1.5 min-h-[36px]',
-  md: 'px-4 py-2 text-body rounded-md gap-2 min-h-[44px]',
-  lg: 'px-6 py-3 text-h4 rounded-lg gap-2.5 min-h-[48px]',
+  sm: 'px-3 py-1.5 text-small rounded-md gap-1.5 min-h-[34px]',
+  md: 'px-4 py-2 text-body rounded-md gap-2 min-h-[40px]',
+  lg: 'px-5 py-2.5 text-h4 rounded-lg gap-2.5 min-h-[44px]',
 };
 
 export default function Button({
@@ -77,8 +68,6 @@ export default function Button({
     }
   };
 
-  const spinnerColor = variant === 'primary' || variant === 'success' ? 'surface-0' : 'current';
-
   return (
     <Component
       type={Component === 'button' ? type : undefined}
@@ -88,9 +77,9 @@ export default function Button({
       onClick={handleClick}
       className={`
         inline-flex items-center justify-center font-sans transition-all duration-150 ease-out
-        select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0
+        select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-app
         ${fullWidth ? 'w-full' : ''}
-        ${isDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'cursor-pointer active:scale-[0.98]'}
+        ${isDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'cursor-pointer active:scale-[0.99]'}
         ${variantStyles[variant] || variantStyles.primary}
         ${sizeStyles[size] || sizeStyles.md}
         ${className}
@@ -99,7 +88,7 @@ export default function Button({
     >
       {loading ? (
         <>
-          <Spinner size={size === 'lg' ? 'md' : 'sm'} color="current" />
+          <Spinner size={size === 'lg' ? 'md' : 'sm'} color="white" />
           <span>{children}</span>
         </>
       ) : (

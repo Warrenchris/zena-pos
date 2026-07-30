@@ -1,29 +1,22 @@
 import React from 'react';
 
 /**
- * Badge — Semantic status indicator
- *
- * @param {'success'|'warning'|'danger'|'info'|'neutral'} variant
- * @param {'sm'|'md'} size
- * @param {boolean} dot - Show leading dot indicator
- * @param {React.ReactNode} icon - Optional leading icon
- * @param {React.ReactNode} children - Badge text content
- * @param {string} className - Additional classes
+ * Badge — Refined enterprise badge component
  */
 const variantStyles = {
-  success: 'bg-success-muted text-success   border-success/30',
-  warning: 'bg-warning-muted text-warning   border-warning/30',
-  danger:  'bg-danger-muted  text-danger    border-danger/30',
-  info:    'bg-info-muted    text-info      border-info/30',
-  neutral: 'bg-surface-3    text-text-secondary border-border-default',
+  success: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  warning: 'bg-amber-50 text-amber-700 border-amber-200',
+  danger:  'bg-red-50 text-red-700 border-red-200',
+  info:    'bg-sky-50 text-sky-700 border-sky-200',
+  neutral: 'bg-gray-100 text-gray-700 border-gray-200',
 };
 
 const dotColors = {
-  success: 'bg-success',
-  warning: 'bg-warning',
-  danger:  'bg-danger',
-  info:    'bg-info',
-  neutral: 'bg-text-muted',
+  success: 'bg-emerald-500',
+  warning: 'bg-amber-500',
+  danger:  'bg-red-500',
+  info:    'bg-sky-500',
+  neutral: 'bg-gray-400',
 };
 
 const sizeStyles = {

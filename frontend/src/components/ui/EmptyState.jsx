@@ -2,7 +2,7 @@ import React from 'react';
 import { InboxIcon } from '@heroicons/react/24/outline';
 
 /**
- * EmptyState — Accessible empty state primitive with illustration/icon, title, description, and call to action
+ * EmptyState — Clean light mode empty state component
  */
 export default function EmptyState({
   icon: Icon = InboxIcon,
@@ -14,19 +14,19 @@ export default function EmptyState({
 }) {
   return (
     <div className={`flex flex-col items-center justify-center p-8 text-center min-h-[220px] ${className}`}>
-      <div className="w-14 h-14 rounded-2xl bg-surface-2 border border-border-default flex items-center justify-center text-primary mb-4 shadow-sm">
+      <div className="w-12 h-12 rounded-xl bg-surface-2 border border-border-default flex items-center justify-center text-primary mb-3 shadow-sm">
         {typeof Icon === 'function' || typeof Icon === 'object' ? (
-          <Icon className="h-7 w-7" aria-hidden="true" />
+          <Icon className="h-6 w-6" aria-hidden="true" />
         ) : (
           Icon
         )}
       </div>
 
-      <h4 className="text-h4 font-semibold text-text-primary mb-1">
+      <h4 className="text-h4 font-semibold text-text-primary mb-1 tracking-tight">
         {title}
       </h4>
 
-      <p className="text-body text-text-muted max-w-md mb-6 leading-relaxed">
+      <p className="text-body text-text-secondary max-w-md mb-6 leading-relaxed">
         {description}
       </p>
 

@@ -1,10 +1,9 @@
 import React, { Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import Button from './Button';
 
 /**
- * Modal — Accessible dialog primitive with focus trap, ESC handling, backdrop blur & animations
+ * Modal — Floating white modal dialog with backdrop blur & smooth transition
  */
 const sizeStyles = {
   sm: 'max-w-md',        // 448px
@@ -37,31 +36,31 @@ export default function Modal({
         {/* Backdrop */}
         <Transition.Child
           as={Fragment}
-          enter="ease-out duration-250"
+          enter="ease-out duration-200"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="ease-in duration-200"
+          leave="ease-in duration-150"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity" />
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" />
         </Transition.Child>
 
-        {/* Scrollable Container */}
+        {/* Container */}
         <div className="fixed inset-0 z-10 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-6">
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-250"
-              enterFrom="opacity-0 scale-95 translateY-4"
+              enter="ease-out duration-200"
+              enterFrom="opacity-0 scale-98 translateY-2"
               enterTo="opacity-100 scale-100 translateY-0"
-              leave="ease-in duration-200"
+              leave="ease-in duration-150"
               leaveFrom="opacity-100 scale-100 translateY-0"
-              leaveTo="opacity-0 scale-95 translateY-4"
+              leaveTo="opacity-0 scale-98 translateY-2"
             >
               <Dialog.Panel
                 className={`
-                  w-full transform overflow-hidden rounded-2xl bg-surface-1 border border-border-default
+                  w-full transform overflow-hidden rounded-2xl bg-white border border-border-default
                   p-6 text-left align-middle shadow-modal transition-all responsive-modal
                   ${sizeStyles[size] || sizeStyles.md}
                   ${className}
@@ -72,12 +71,12 @@ export default function Modal({
                   <div className="flex items-start justify-between gap-4 pb-4 border-b border-border-default mb-4">
                     <div>
                       {title && (
-                        <Dialog.Title as="h3" className="text-h3 font-semibold text-text-primary">
+                        <Dialog.Title as="h3" className="text-h3 font-semibold text-text-primary tracking-tight">
                           {title}
                         </Dialog.Title>
                       )}
                       {description && (
-                        <Dialog.Description className="text-small text-text-muted mt-1">
+                        <Dialog.Description className="text-small text-text-secondary mt-1">
                           {description}
                         </Dialog.Description>
                       )}
@@ -86,7 +85,7 @@ export default function Modal({
                       <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
                         aria-label="Close modal"
                       >
                         <XMarkIcon className="h-5 w-5" aria-hidden="true" />

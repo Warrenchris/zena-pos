@@ -1,11 +1,11 @@
 import React from 'react';
 
 /**
- * Card — Flexible surface component with Header, Body, Footer compound structure
+ * Card — Floating SaaS widget card component (Linear / Stripe style)
  */
 const variantStyles = {
-  default:  'bg-surface-1 border-border-default',
-  elevated: 'bg-surface-2 border-border-default shadow-md',
+  default:  'bg-white border-border-default shadow-sm',
+  elevated: 'bg-white border-border-default shadow-md',
   outlined: 'bg-transparent border-border-default',
 };
 
@@ -21,13 +21,13 @@ export default function Card({
     return (
       <div
         className={`
-          rounded-xl border p-6 bg-surface-1 border-border-default
-          animate-skeleton ${className}
+          rounded-xl border p-6 bg-white border-border-default
+          animate-pulse ${className}
         `}
       >
-        <div className="h-6 w-1/3 bg-surface-2 rounded-md mb-4" />
-        <div className="h-4 w-2/3 bg-surface-2 rounded-md mb-2" />
-        <div className="h-4 w-1/2 bg-surface-2 rounded-md" />
+        <div className="h-5 w-1/3 bg-surface-3 rounded-md mb-4" />
+        <div className="h-4 w-2/3 bg-surface-3 rounded-md mb-2" />
+        <div className="h-4 w-1/2 bg-surface-3 rounded-md" />
       </div>
     );
   }
@@ -35,9 +35,9 @@ export default function Card({
   return (
     <div
       className={`
-        rounded-xl border transition-all duration-200 overflow-hidden
+        rounded-xl border transition-shadow duration-200 overflow-hidden
         ${variantStyles[variant] || variantStyles.default}
-        ${hoverable ? 'hover:-translate-y-0.5 hover:shadow-lg hover:border-border-hover' : ''}
+        ${hoverable ? 'hover:shadow-md hover:border-border-hover' : ''}
         ${className}
       `}
       {...props}
@@ -49,12 +49,12 @@ export default function Card({
 
 Card.Header = function CardHeader({ title, subtitle, action, className = '', children }) {
   return (
-    <div className={`px-6 py-4 border-b border-border-default flex items-center justify-between gap-4 ${className}`}>
+    <div className={`px-6 py-5 border-b border-border-default flex items-center justify-between gap-4 ${className}`}>
       {children ? children : (
         <>
           <div>
-            {title && <h3 className="text-h4 font-semibold text-text-primary">{title}</h3>}
-            {subtitle && <p className="text-small text-text-muted mt-0.5">{subtitle}</p>}
+            {title && <h3 className="text-h4 font-semibold text-text-primary tracking-tight">{title}</h3>}
+            {subtitle && <p className="text-small text-text-secondary mt-0.5">{subtitle}</p>}
           </div>
           {action && <div>{action}</div>}
         </>
@@ -73,7 +73,7 @@ Card.Body = function CardBody({ className = '', children, ...props }) {
 
 Card.Footer = function CardFooter({ className = '', children, ...props }) {
   return (
-    <div className={`px-6 py-4 border-t border-border-default bg-surface-0/30 flex items-center justify-between gap-4 ${className}`} {...props}>
+    <div className={`px-6 py-4 border-t border-border-default bg-surface-0/50 flex items-center justify-between gap-4 ${className}`} {...props}>
       {children}
     </div>
   );

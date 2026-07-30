@@ -5,14 +5,14 @@ import Button from './Button';
 import { ChevronUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
 /**
- * Table — Enterprise-grade responsive table primitive
+ * Table — Notion-style clean enterprise table primitive
  */
 export default function Table({
   columns = [],
   data = [],
   loading = false,
-  emptyTitle = 'No data available',
-  emptyDescription = 'There are no records matching your request.',
+  emptyTitle = 'No records found',
+  emptyDescription = 'There are no records to display.',
   sortColumn,
   sortDirection = 'asc',
   onSort,
@@ -26,10 +26,10 @@ export default function Table({
 
   return (
     <div className={`w-full flex flex-col gap-4 ${className}`}>
-      <div className="w-full overflow-x-auto rounded-xl border border-border-default bg-surface-1 shadow-sm">
+      <div className="w-full overflow-x-auto rounded-xl border border-border-default bg-white shadow-sm">
         <table className="responsive-table w-full text-left text-body border-collapse">
           {/* Header */}
-          <thead className="bg-surface-2 text-text-muted text-caption uppercase tracking-wider border-b border-border-default sticky top-0 z-10">
+          <thead className="bg-surface-2 text-text-secondary text-caption font-medium uppercase tracking-wider border-b border-border-default sticky top-0 z-10">
             <tr>
               {onSelectAll && (
                 <th scope="col" className="p-4 w-12 text-center">
@@ -38,7 +38,7 @@ export default function Table({
                     checked={isAllSelected}
                     onChange={onSelectAll}
                     aria-label="Select all rows"
-                    className="rounded border-border-default bg-surface-1 text-primary focus:ring-primary/50"
+                    className="rounded border-border-default text-primary focus:ring-primary/40"
                   />
                 </th>
               )}
@@ -53,7 +53,7 @@ export default function Table({
                     aria-sort={ariaSort}
                     onClick={() => col.sortable && onSort && onSort(col.key)}
                     className={`
-                      p-4 font-semibold select-none
+                      p-4 font-medium select-none
                       ${col.sortable ? 'cursor-pointer hover:text-text-primary transition-colors' : ''}
                       ${col.headerClassName || ''}
                     `}
@@ -62,9 +62,9 @@ export default function Table({
                       <span>{col.label}</span>
                       {col.sortable && isSorted && (
                         sortDirection === 'asc' ? (
-                          <ChevronUpIcon className="h-4 w-4 text-primary" aria-hidden="true" />
+                          <ChevronUpIcon className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
                         ) : (
-                          <ChevronDownIcon className="h-4 w-4 text-primary" aria-hidden="true" />
+                          <ChevronDownIcon className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
                         )
                       )}
                     </div>
@@ -79,10 +79,10 @@ export default function Table({
             {loading ? (
               Array.from({ length: 5 }).map((_, rIdx) => (
                 <tr key={rIdx} className="animate-pulse">
-                  {onSelectAll && <td className="p-4"><div className="h-4 w-4 bg-surface-2 rounded" /></td>}
+                  {onSelectAll && <td className="p-4"><div className="h-4 w-4 bg-surface-3 rounded" /></td>}
                   {columns.map((col, cIdx) => (
                     <td key={cIdx} className="p-4">
-                      <div className="h-4 bg-surface-2 rounded w-3/4" />
+                      <div className="h-4 bg-surface-3 rounded w-3/4" />
                     </td>
                   ))}
                 </tr>
@@ -101,8 +101,8 @@ export default function Table({
                   <tr
                     key={row.id || rIdx}
                     className={`
-                      hover:bg-surface-2/60 transition-colors
-                      ${isSelected ? 'bg-primary/5' : ''}
+                      group hover:bg-slate-50/80 transition-colors
+                      ${isSelected ? 'bg-amber-50/60' : ''}
                     `}
                   >
                     {onSelectRow && (
@@ -112,7 +112,7 @@ export default function Table({
                           checked={isSelected}
                           onChange={() => onSelectRow(row.id || rIdx)}
                           aria-label={`Select row ${rIdx + 1}`}
-                          className="rounded border-border-default bg-surface-1 text-primary focus:ring-primary/50"
+                          className="rounded border-border-default text-primary focus:ring-primary/40"
                         />
                       </td>
                     )}
@@ -135,7 +135,7 @@ export default function Table({
 
       {/* Pagination */}
       {pagination && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 text-small text-text-muted">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 text-small text-text-secondary">
           <div>
             Showing <span className="font-semibold text-text-primary">{((pagination.currentPage - 1) * pagination.pageSize) + 1}</span> to{' '}
             <span className="font-semibold text-text-primary">

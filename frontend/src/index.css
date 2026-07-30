@@ -1,8 +1,8 @@
 /* ══════════════════════════════════════════════════
-   ZANA POS — Design System Foundation (v2.0)
+   ZANA POS — Enterprise SaaS Design System (Light Mode v2.0)
+   Inspirations: Linear, Stripe Dashboard, Vercel, Notion, Raycast
    ══════════════════════════════════════════════════ */
 
-/* ─── Font: Inter ─── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
@@ -15,7 +15,7 @@
 @layer base {
   html {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    font-size: clamp(14px, 0.9vw + 0.25rem, 18px);
+    font-size: clamp(14px, 0.85vw + 0.25rem, 16px);
     line-height: 1.5;
     scroll-behavior: smooth;
     font-synthesis: none;
@@ -26,42 +26,29 @@
 
   body {
     min-height: 100vh;
-    background-color: #0B0B0C;  /* surface-0 */
-    color: #F9FAFB;             /* text-primary */
+    background-color: #F6F8FB;  /* soft neutral app background */
+    color: #111827;             /* text-primary */
   }
 
-  /* Fluid headings — override only for pages that don't
-     use the Tailwind text-h1…h4 classes directly */
-  h1 { font-size: clamp(1.75rem, 2.2vw + 1rem, 2.875rem); }
-  h2 { font-size: clamp(1.5rem, 1.8vw + 0.75rem, 2.25rem); }
-  h3 { font-size: clamp(1.25rem, 1.4vw + 0.5rem, 1.75rem); }
-  h4 { font-size: clamp(1.125rem, 1.2vw + 0.35rem, 1.5rem); }
-  h5 { font-size: clamp(1rem, 1vw + 0.25rem, 1.25rem); }
-  h6 { font-size: clamp(0.875rem, 0.9vw + 0.2rem, 1.125rem); }
+  h1, h2, h3, h4, h5, h6 {
+    color: #111827;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
 }
 
 /* ══════════════════════════════════════════════════
-   LAYOUT TOKENS (CSS custom properties)
-   Only values that can't be expressed in Tailwind
+   LAYOUT TOKENS & SHELL
    ══════════════════════════════════════════════════ */
 :root {
-  --container-max-width:      min(1180px, 92vw);
-  --container-max-width-wide: min(1400px, 92vw);
+  --container-max-width:      min(1240px, 94vw);
+  --container-max-width-wide: min(1440px, 94vw);
   --layout-padding-inline:      clamp(1rem, 2vw, 2.5rem);
-  --layout-padding-inline-wide: clamp(1.5rem, 4vw, 3.5rem);
-  --space-2xs: clamp(0.25rem, 0.6vw, 0.5rem);
-  --space-xs:  clamp(0.5rem, 0.9vw, 0.75rem);
-  --space-sm:  clamp(0.75rem, 1.2vw, 1rem);
-  --space-md:  clamp(1rem, 1.8vw, 1.5rem);
-  --space-lg:  clamp(1.5rem, 2.6vw, 2.5rem);
-  --space-xl:  clamp(2rem, 3.5vw, 3.5rem);
+  --layout-padding-inline-wide: clamp(1.5rem, 3.5vw, 3.5rem);
 }
 
-/* ══════════════════════════════════════════════════
-   COMPONENT LAYER
-   ══════════════════════════════════════════════════ */
 @layer components {
-  /* Layout shells */
+  /* Floating App Shell */
   .app-shell {
     width: 100%;
     max-width: var(--container-max-width);
@@ -77,10 +64,10 @@
     padding-right: var(--layout-padding-inline-wide);
   }
 
-  /* Card grid */
+  /* Card Grid */
   .card-grid {
     display: grid;
-    gap: var(--space-md);
+    gap: 1.5rem;
   }
 
   @media (min-width: 768px) {
@@ -95,18 +82,14 @@
     }
   }
 
-  /* Touch targets (WCAG 2.5.8) */
-  .mobile-nav-trigger {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
+  /* Touch targets */
+  .mobile-nav-trigger,
   .touch-target {
     min-height: 44px;
     min-width: 44px;
   }
 
-  /* Responsive modal */
+  /* Responsive Modal Container */
   .responsive-modal {
     width: min(640px, 92vw);
   }
@@ -122,33 +105,37 @@
 }
 
 /* ══════════════════════════════════════════════════
-   UTILITY LAYER
+   NOTION-STYLE TABLE & UTILITIES
    ══════════════════════════════════════════════════ */
 @layer utilities {
-  /* Grid auto-fill / auto-fit */
-  .grid-auto-fill {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  }
-
-  .grid-auto-fit {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  }
-
-  /* Safe area (notched devices) */
-  .safe-area-padding {
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-  }
-
-  /* Responsive table — stacks to card layout on mobile */
   .responsive-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .responsive-table th {
+    background-color: #FAFAFB;
+    color: #6B7280;
+    font-weight: 500;
+    font-size: 0.8125rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #E5E7EB;
+  }
+
+  .responsive-table td {
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+    color: #111827;
+    border-bottom: 1px solid #E5E7EB;
   }
 
   .responsive-table tbody tr {
-    border-bottom: 1px solid rgba(255, 214, 0, 0.1);
+    transition: background-color 150ms ease;
+  }
+
+  .responsive-table tbody tr:hover {
+    background-color: #F9FAFB;
   }
 
   @media (max-width: 768px) {
@@ -173,63 +160,53 @@
     }
 
     .responsive-table tr {
-      background-color: #111214; /* surface-1 */
-      border-radius: 14px;       /* radius-lg */
-      margin-bottom: var(--space-sm);
-      padding: var(--space-sm);
+      background-color: #FFFFFF;
+      border: 1px solid #E5E7EB;
+      border-radius: 14px;
+      margin-bottom: 1rem;
+      padding: 0.875rem;
     }
 
     .responsive-table td {
       display: flex;
       justify-content: space-between;
-      gap: var(--space-xs);
-      padding: var(--space-xs) 0;
-      text-align: left;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #F3F4F6;
+    }
+
+    .responsive-table td:last-child {
+      border-bottom: none;
     }
 
     .responsive-table td::before {
       content: attr(data-label);
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
       font-size: 0.75rem;
-      color: #F2C800; /* primary-hover — high contrast */
+      color: #6B7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
   }
 
-  /* Custom scrollbar */
-  .scrollbar-thin {
-    scrollbar-width: thin;
-  }
-
+  /* Custom Scrollbar */
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
-    background: #111214; /* surface-1 */
-    border-radius: 10px;
+    background: transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #3a3a3f;
-    border-radius: 10px;
+    background: #E5E7EB;
+    border-radius: 999px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background: #D1D5DB;
   }
 
-  .scrollbar-thumb-gray-600::-webkit-scrollbar-thumb {
-    background-color: #4b5563;
-    border-radius: 10px;
-  }
-
-  .scrollbar-track-gray-800::-webkit-scrollbar-track {
-    background-color: #111214; /* surface-1 */
-  }
-
-  /* Hide scrollbar (keep functionality) */
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -241,255 +218,52 @@
 }
 
 /* ══════════════════════════════════════════════════
-   GLASSMORPHISM & PREMIUM EFFECTS
-   ══════════════════════════════════════════════════ */
-.glass-effect {
-  background: rgba(17, 18, 20, 0.6);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 214, 0, 0.12);
-}
-
-.glass-effect-strong {
-  background: rgba(17, 18, 20, 0.8);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 214, 0, 0.18);
-}
-
-/* Premium shadows (non-Tailwind usage) */
-.shadow-brand    { box-shadow: 0 8px 24px rgba(255, 214, 0, 0.12); }
-.shadow-brand-lg { box-shadow: 0 12px 32px rgba(255, 214, 0, 0.2); }
-.shadow-brand-xl { box-shadow: 0 20px 48px rgba(255, 214, 0, 0.25); }
-
-/* Smooth transitions */
-.transition-premium {
-  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.transition-premium-fast {
-  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* GPU acceleration for animated elements */
-.will-animate {
-  will-change: transform, opacity;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-}
-
-/* ══════════════════════════════════════════════════
-   MODAL ANIMATIONS
-   ══════════════════════════════════════════════════ */
-@keyframes modalBackdrop {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-@keyframes modalContent {
-  from { opacity: 0; transform: scale(0.95) translateY(-10px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-/* ══════════════════════════════════════════════════
-   POS-SPECIFIC ANIMATIONS
-   ══════════════════════════════════════════════════ */
-
-/* CTA glow pulse */
-@keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(255, 214, 0, 0.4); }
-  50%      { box-shadow: 0 0 40px rgba(255, 214, 0, 0.6); }
-}
-
-/* Card entrance */
-@keyframes cardSlideIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* Product grid item */
-@keyframes itemFade {
-  from { opacity: 0; transform: scale(0.95); }
-  to   { opacity: 1; transform: scale(1); }
-}
-
-/* Stock pulse */
-@keyframes softPulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.6; }
-}
-
-/* Skeleton loading */
-@keyframes skeletonLoading {
-  0%   { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
-}
-
-/* Button press */
-@keyframes buttonPress {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(0.96); }
-  100% { transform: scale(1); }
-}
-
-/* Toast slide-in */
-@keyframes toastSlideIn {
-  from { opacity: 0; transform: translateX(100px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-/* Gradient background shift */
-@keyframes gradientShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-/* Animation utility classes */
-.animate-card-enter   { animation: cardSlideIn 250ms ease-out; }
-.animate-item-fade    { animation: itemFade 200ms ease-out; }
-.animate-glow-pulse   { animation: glowPulse 2s ease-in-out infinite; }
-.animate-soft-pulse   { animation: softPulse 2s ease-in-out infinite; }
-.animate-button-press { animation: buttonPress 200ms ease; }
-.animate-toast-in     { animation: toastSlideIn 250ms ease-out; }
-.animate-fadeUp       { animation: cardSlideIn 250ms ease-out both; }
-
-.animate-skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 214, 0, 0.06) 25%,
-    rgba(255, 214, 0, 0.12) 50%,
-    rgba(255, 214, 0, 0.06) 75%
-  );
-  background-size: 1000px 100%;
-  animation: skeletonLoading 2s infinite;
-}
-
-/* ══════════════════════════════════════════════════
-   TOUCH TARGETS (coarse pointer devices)
-   ══════════════════════════════════════════════════ */
-@media (hover: none) and (pointer: coarse) {
-  button,
-  [role='button'],
-  a {
-    min-height: 44px;
-    min-width: 44px;
-  }
-}
-
-/* Mobile POS optimizations */
-@media (max-width: 640px) {
-  .pos-mobile-lg {
-    font-size: 1.25rem;
-    font-weight: 700;
-  }
-
-  .pos-button-mobile {
-    padding: 1rem;
-    font-size: 1rem;
-    min-height: 48px;
-  }
-}
-
-/* Tablet POS */
-@media (min-width: 768px) and (max-width: 1024px) {
-  .pos-tablet-spacious {
-    padding: 2rem;
-  }
-}
-
-/* Desktop POS */
-@media (min-width: 1024px) {
-  .pos-desktop-compact {
-    max-width: 1400px;
-  }
-}
-
-/* ══════════════════════════════════════════════════
-   DARK THEME — react-calendar overrides
+   REACT-CALENDAR OVERRIDES (Clean Light Theme)
    ══════════════════════════════════════════════════ */
 .zena-calendar {
-  background-color: #111214 !important;  /* surface-1 */
-  color: #F9FAFB !important;             /* text-primary */
-  border-radius: 10px !important;        /* radius-md */
-  padding: 0.5rem !important;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4) !important; /* shadow-floating */
-  border: 1px solid rgba(255, 214, 0, 0.12) !important;
+  background-color: #FFFFFF !important;
+  color: #111827 !important;
+  border-radius: 14px !important;
+  padding: 0.75rem !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid #E5E7EB !important;
   width: auto !important;
-}
-
-.zena-calendar * { box-sizing: border-box; }
-
-.zena-calendar .react-calendar__navigation {
-  display: flex !important;
-  gap: 0.5rem !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  margin-bottom: 0.25rem !important;
 }
 
 .zena-calendar .react-calendar__navigation button {
   background: transparent !important;
-  color: #F9FAFB !important;
-  border: 1px solid transparent !important;
+  color: #111827 !important;
+  border-radius: 8px !important;
   padding: 0.35rem 0.5rem !important;
-  border-radius: 6px !important;
+  font-weight: 600 !important;
 }
 
 .zena-calendar .react-calendar__navigation button:hover {
-  background: rgba(255, 214, 0, 0.08) !important;
-  border-color: rgba(255, 214, 0, 0.15) !important;
+  background: #F3F4F6 !important;
 }
 
 .zena-calendar .react-calendar__month-view__weekdays {
-  color: #9CA3AF !important;  /* text-muted */
+  color: #6B7280 !important;
   font-size: 0.75rem !important;
-  margin-bottom: 0.25rem !important;
+  font-weight: 500 !important;
 }
 
 .zena-calendar .react-calendar__tile {
   background: transparent !important;
-  color: #D1D5DB !important;  /* text-secondary */
-  border-radius: 6px !important;
-  padding: 0.35rem 0.4rem !important;
-  margin: 0 !important;
-  width: 2.25rem !important;
-  height: 2.25rem !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  color: #111827 !important;
+  border-radius: 8px !important;
+  padding: 0.4rem !important;
   font-size: 0.875rem !important;
 }
 
 .zena-calendar .react-calendar__tile:hover {
-  background: rgba(255, 214, 0, 0.08) !important;
-  color: #F9FAFB !important;
-}
-
-.zena-calendar .react-calendar__tile--now {
-  box-shadow: inset 0 0 0 1px rgba(255, 214, 0, 0.18) !important;
+  background: #F3F4F6 !important;
 }
 
 .zena-calendar .react-calendar__tile--active {
-  background: #FFD600 !important;
-  color: #0B0B0C !important;
-}
-
-.zena-calendar .react-calendar__tile--active:enabled:hover {
-  background: #F2C800 !important;
-}
-
-.zena-calendar .react-calendar__month-view__days__day--neighboring-month {
-  opacity: 0.4 !important;
-}
-
-.zena-calendar .react-calendar__tile:disabled {
-  opacity: 0.3 !important;
-  cursor: not-allowed !important;
-}
-
-@media (max-width: 640px) {
-  .zena-calendar {
-    transform: translateX(-0.25rem) !important;
-  }
+  background: #D4A017 !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
 }
 
 /* ══════════════════════════════════════════════════
@@ -497,28 +271,11 @@
    ══════════════════════════════════════════════════ */
 @media print {
   html, body {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
-  }
-  /* Dark backgrounds → white for printing */
-  .bg-surface-0, .bg-surface-1, .bg-surface-2, .bg-surface-3,
-  .bg-brand-black, .bg-brand-gray, .bg-black,
-  .bg-black\/40, .bg-black\/30, .bg-black\/60 {
-    background: #ffffff !important;
-  }
-  /* Brand text → black for printing */
-  .text-primary, .text-text-primary, .text-text-secondary,
-  .text-zana-yellow, .text-white, .text-white\/70, .text-white\/80 {
-    color: #000000 !important;
-  }
-  .border-zana-borderTint, .border-border-default {
-    border-color: #00000033 !important;
   }
   button, .no-print {
     display: none !important;
-  }
-  a {
-    color: #000000 !important;
   }
 }
 

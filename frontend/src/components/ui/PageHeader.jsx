@@ -2,7 +2,7 @@ import React from 'react';
 import Button from './Button';
 
 /**
- * PageHeader — Standardized page header component for all Zana POS screens
+ * PageHeader — Clean header component for enterprise SaaS screens
  */
 export default function PageHeader({
   title,
@@ -16,7 +16,7 @@ export default function PageHeader({
     <div className={`mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${className}`}>
       <div>
         {breadcrumbs && (
-          <nav aria-label="Breadcrumb" className="mb-2">
+          <nav aria-label="Breadcrumb" className="mb-1.5">
             <ol className="flex items-center gap-2 text-caption text-text-muted">
               {breadcrumbs.map((crumb, idx) => (
                 <li key={idx} className="flex items-center gap-2">
@@ -39,7 +39,7 @@ export default function PageHeader({
         </h1>
 
         {description && (
-          <p className="text-body text-text-secondary mt-1 max-w-3xl">
+          <p className="text-body text-text-secondary mt-0.5 max-w-3xl">
             {description}
           </p>
         )}

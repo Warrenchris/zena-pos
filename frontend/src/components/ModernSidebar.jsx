@@ -43,28 +43,53 @@ import {
 const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
   const location = useLocation();
   const [expandedSections, setExpandedSections] = useState({});
-  const [hoveredItem, setHoveredItem] = useState(null);
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : false
   );
   const sidebarLabelId = useId();
 
-  // Define menu structure
+  // Navigation Groups structure
   const menuSections = [
     {
-      title: 'Main',
+      title: 'Sales',
       items: [
         { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
         { name: 'POS', path: '/pos', icon: ShoppingCartIcon },
-        { name: 'Sales', path: '/sales', icon: BanknotesIcon },
-        { name: 'Products', path: '/products', icon: CubeIcon }
+        { name: 'Sales Orders', path: '/sales', icon: BanknotesIcon },
+        { name: 'Invoices', path: '/invoices', icon: DocumentTextIcon },
+        { name: 'Sales Return', path: '/sales/returns', icon: ArrowUturnLeftIcon },
+        { name: 'Quotations', path: '/quotations', icon: DocumentIcon },
       ]
     },
     {
-      title: 'People',
+      title: 'Inventory',
+      items: [
+        { name: 'Products', path: '/products', icon: CubeIcon },
+        { name: 'Create Product', path: '/products/create', icon: PlusIcon },
+        { name: 'Categories', path: '/categories', icon: TagIcon },
+        { name: 'Sub Categories', path: '/categories/sub', icon: FolderIcon },
+        { name: 'Brands', path: '/brands', icon: BuildingStorefrontIcon },
+        { name: 'Units', path: '/units', icon: ScaleIcon },
+        { name: 'Variants', path: '/variants', icon: SwatchIcon },
+        { name: 'Stock Management', path: '/stock/manage', icon: ArchiveBoxIcon },
+      ]
+    },
+    {
+      title: 'People & Customers',
       items: [
         { name: 'Customers', path: '/customers', icon: UserGroupIcon },
         { name: 'Employees', path: '/employees', icon: UserIcon },
+      ]
+    },
+    {
+      title: 'Promotions & Purchasing',
+      items: [
+        { name: 'Coupons', path: '/coupons', icon: GiftIcon },
+        { name: 'Gift Cards', path: '/gift-cards', icon: CreditCardIcon },
+        { name: 'Discounts', path: '/discounts', icon: PercentBadgeIcon },
+        { name: 'Purchases', path: '/purchases', icon: ShoppingBagIcon },
+        { name: 'Purchase Orders', path: '/purchase-orders', icon: ClipboardDocumentListIcon },
+        { name: 'Expenses', path: '/expenses', icon: CurrencyDollarIcon },
       ]
     },
     {
@@ -73,63 +98,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         { name: 'Sales Forecasting', path: '/ai/forecasting', icon: ChartBarIcon },
         { name: 'Market Insights', path: '/ai/insights', icon: LightBulbIcon },
         { name: 'Financial Analysis', path: '/ai/finance', icon: PresentationChartLineIcon },
-      ]
-    },
-    {
-      title: 'Inventory',
-      items: [
-        { name: 'Products', path: '/products', icon: CubeIcon },
-        { name: 'Create Product', path: '/products/create', icon: PlusIcon },
-        { name: 'Expired Products', path: '/products/expired', icon: ExclamationTriangleIcon },
-        { name: 'Low Stocks', path: '/products/low-stock', icon: ChartBarIcon },
-        { name: 'Category', path: '/categories', icon: TagIcon },
-        { name: 'Sub Category', path: '/categories/sub', icon: FolderIcon },
-        { name: 'Brands', path: '/brands', icon: BuildingStorefrontIcon },
-        { name: 'Units', path: '/units', icon: ScaleIcon },
-        { name: 'Variant Attributes', path: '/variants', icon: SwatchIcon },
-        { name: 'Warranties', path: '/warranties', icon: ShieldCheckIcon },
-        { name: 'Print Barcode', path: '/print/barcode', icon: QrCodeIcon },
-        { name: 'Print QR Code', path: '/print/qr', icon: QrCodeIcon }
-      ]
-    },
-    {
-      title: 'Stock',
-      items: [
-        { name: 'Manage Stock', path: '/stock/manage', icon: ArchiveBoxIcon },
-        { name: 'Stock Adjustment', path: '/stock/adjustment', icon: ArrowPathIcon },
-        { name: 'Stock Transfer', path: '/stock/transfer', icon: TruckIcon }
-      ]
-    },
-    {
-      title: 'Sales',
-      items: [
-        { name: 'Sales', path: '/sales', icon: BanknotesIcon },
-        { name: 'Invoices', path: '/invoices', icon: DocumentTextIcon },
-        { name: 'Sales Return', path: '/sales/returns', icon: ArrowUturnLeftIcon },
-        { name: 'Quotation', path: '/quotations', icon: DocumentIcon },
-        { name: 'POS', path: '/pos', icon: ShoppingCartIcon }
-      ]
-    },
-    {
-      title: 'Promo',
-      items: [
-        { name: 'Coupons', path: '/coupons', icon: GiftIcon },
-        { name: 'Gift Card', path: '/gift-cards', icon: CreditCardIcon },
-        { name: 'Discount', path: '/discounts', icon: PercentBadgeIcon }
-      ]
-    },
-    {
-      title: 'Purchases',
-      items: [
-        { name: 'Purchases', path: '/purchases', icon: ShoppingBagIcon },
-        { name: 'Purchase Order', path: '/purchase-orders', icon: ClipboardDocumentListIcon },
-        { name: 'Purchase Return', path: '/purchase-returns', icon: ArrowDownTrayIcon }
-      ]
-    },
-    {
-      title: 'Finance & Accounts',
-      items: [
-        { name: 'Expenses', path: '/expenses', icon: CurrencyDollarIcon }
+        { name: 'Reports', path: '/reports', icon: ChartBarIcon },
       ]
     },
     {
@@ -137,20 +106,18 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
       items: [
         { name: 'Settings', path: '/settings', icon: CogIcon },
         { name: 'Users', path: '/admin/users', icon: UserIcon },
-        { name: 'Company', path: '/admin/company', icon: BuildingOfficeIcon },
-        { name: 'Reports', path: '/reports', icon: ChartBarIcon }
+        { name: 'Company Profile', path: '/admin/company', icon: BuildingOfficeIcon },
       ]
     }
   ];
 
-  // Cashier-specific sections (simplified)
   const cashierSections = [
     {
       title: 'Main',
       items: [
-        { name: 'POS', path: '/dashboard', icon: ShoppingCartIcon },
+        { name: 'POS Terminal', path: '/dashboard', icon: ShoppingCartIcon },
         { name: 'My Sales', path: '/my-sales', icon: BanknotesIcon },
-        { name: 'Products', path: '/products', icon: CubeIcon }
+        { name: 'Products Catalog', path: '/products', icon: CubeIcon }
       ]
     },
     {
@@ -158,11 +125,11 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
       items: [
         { name: 'Customers', path: '/customers', icon: UserGroupIcon },
         { name: 'Invoices', path: '/invoices', icon: DocumentTextIcon },
-        { name: 'Sales Return', path: '/sales/returns', icon: ArrowUturnLeftIcon }
+        { name: 'Sales Returns', path: '/sales/returns', icon: ArrowUturnLeftIcon }
       ]
     },
     {
-      title: 'Admin',
+      title: 'Account',
       items: [
         { name: 'Settings', path: '/settings', icon: CogIcon }
       ]
@@ -171,12 +138,10 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
 
   const sidebarSections = variant === 'admin' ? menuSections : cashierSections;
 
-  // Check if a path is active
   const isActive = (path) => {
-    return location.pathname === path || location.pathname.startsWith(path + '/');
+    return location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path + '/'));
   };
 
-  // Toggle section expansion
   const toggleSection = (sectionTitle) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -184,7 +149,6 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
     }));
   };
 
-  // Auto-expand sections with active items
   useEffect(() => {
     const newExpandedSections = {};
     sidebarSections.forEach(section => {
@@ -193,6 +157,10 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         newExpandedSections[section.title] = true;
       }
     });
+    // Ensure first group default open if none matched
+    if (Object.keys(newExpandedSections).length === 0 && sidebarSections.length > 0) {
+      newExpandedSections[sidebarSections[0].title] = true;
+    }
     setExpandedSections(newExpandedSections);
   }, [location.pathname]);
 
@@ -220,32 +188,26 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
 
   const renderNavItem = (item) => {
     const active = isActive(item.path);
-    const isHovered = hoveredItem === item.path;
     
     return (
       <Link
         key={item.path}
         to={item.path}
         aria-current={active ? 'page' : undefined}
-        className={`group flex items-center px-4 py-3 text-small font-medium rounded-xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+        className={`group relative flex items-center px-3.5 py-2.5 text-small rounded-xl transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
           active
-            ? 'bg-primary text-surface-0 font-semibold shadow-md'
-            : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary'
+            ? 'bg-amber-50 text-amber-900 font-semibold border-l-4 border-primary pl-2.5 shadow-sm'
+            : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary font-medium'
         }`}
-        onMouseEnter={() => setHoveredItem(item.path)}
-        onMouseLeave={() => setHoveredItem(null)}
       >
         <item.icon
-          className={`mr-3 flex-shrink-0 h-5 w-5 transition-all duration-200 ${
+          className={`mr-3 flex-shrink-0 h-5 w-5 transition-colors duration-150 ${
             active
-              ? 'text-surface-0'
+              ? 'text-primary font-bold'
               : 'text-text-muted group-hover:text-text-primary'
           }`}
         />
-        <span className="truncate font-medium">{item.name}</span>
-        {active && (
-          <div className="ml-auto w-2 h-2 bg-surface-0 rounded-full opacity-80 animate-pulse"></div>
-        )}
+        <span className="truncate">{item.name}</span>
       </Link>
     );
   };
@@ -254,33 +216,32 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
     const isExpanded = expandedSections[section.title];
     
     return (
-      <div key={section.title} className="mb-4">
+      <div key={section.title} className="mb-3">
         <button
           onClick={() => toggleSection(section.title)}
-          className="flex items-center justify-between w-full px-4 py-2 text-caption font-semibold text-text-muted uppercase tracking-wider hover:text-text-primary transition-colors duration-200 group rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          className="flex items-center justify-between w-full px-3 py-2 text-caption font-semibold text-text-muted uppercase tracking-wider hover:text-text-primary transition-colors duration-150 group rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           aria-expanded={Boolean(isExpanded)}
           aria-controls={`sidebar-section-${section.title}`}
         >
           <span className="flex items-center">
-            <span className="w-1 h-4 bg-primary rounded-full mr-3 group-hover:bg-primary-hover transition-colors duration-200"></span>
             {section.title}
           </span>
           {isExpanded ? (
-            <ChevronDownIcon className="h-4 w-4 transition-transform duration-200" />
+            <ChevronDownIcon className="h-3.5 w-3.5 text-text-muted transition-transform duration-200" />
           ) : (
-            <ChevronRightIcon className="h-4 w-4 transition-transform duration-200" />
+            <ChevronRightIcon className="h-3.5 w-3.5 text-text-muted transition-transform duration-200" />
           )}
         </button>
         
         <div
           id={`sidebar-section-${section.title}`}
-          className={`overflow-hidden transition-all duration-300 ease-in-out ${
-            isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+          className={`overflow-hidden transition-all duration-200 ease-out ${
+            isExpanded ? 'max-h-[1000px] opacity-100 mt-1' : 'max-h-0 opacity-0'
           }`}
           role="group"
           aria-hidden={!isExpanded}
         >
-          <div className="space-y-1 pl-4 mt-2">
+          <div className="space-y-1 pl-1">
             {section.items.map(item => renderNavItem(item))}
           </div>
         </div>
@@ -290,74 +251,66 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
 
   return (
     <>
-      {/* Mobile overlay */}
+      {/* Mobile Backdrop */}
       <div 
-        className={`fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ease-in-out lg:hidden ${
+        className={`fixed inset-0 bg-slate-900/30 backdrop-blur-sm transition-opacity duration-200 ease-out lg:hidden ${
           isOpen ? 'opacity-100 z-40' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
         aria-hidden={!isOpen}
       />
 
-      {/* Sidebar */}
+      {/* Floating Card Sidebar Shell */}
       <div
-        className={`fixed inset-y-0 left-0 z-40 xs:w-72 md:w-80 2xl:w-96 bg-black/60 backdrop-blur-md border-r border-white/10 shadow-2xl transform transition-all duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        className={`fixed top-4 bottom-4 left-4 z-40 w-72 lg:w-72 2xl:w-80 bg-white border border-border-default shadow-floating rounded-2xl transform transition-all duration-200 ease-out flex flex-col overflow-hidden ${
+          isOpen ? 'translate-x-0' : '-translate-x-[calc(100%+16px)] lg:translate-x-0'
         }`}
         role="navigation"
         aria-labelledby={sidebarLabelId}
         aria-hidden={!isOpen && !isDesktop}
       >
-        <div className="flex h-full flex-col">
-          {/* Header with Logo */}
-          <div className="flex items-center justify-between h-20 px-6 border-b border-white/10 bg-white/5 backdrop-blur-md">
-            <div className="flex items-center justify-center w-full">
-              <div className="w-12 h-12 bg-gradient-to-tr from-brand-yellow to-yellow-400 rounded-xl flex items-center justify-center shadow-lg transform transition-transform duration-300 hover:scale-105">
-                <StoreIcon className="h-7 w-7 text-brand-black" />
-              </div>
-              <div className="ml-4">
-                <h1 id={sidebarLabelId} className="text-xl font-bold bg-gradient-to-r from-brand-yellow to-yellow-400 bg-clip-text text-transparent">
-                  {variant === 'admin' ? 'Admin Panel' : 'Cashier Panel'}
-                </h1>
-                <p className="text-xs text-gray-400 font-medium">
-                  {variant === 'admin' ? 'Business Management' : 'Point of Sale'}
-                </p>
+        {/* Sidebar Header with Brand */}
+        <div className="flex items-center justify-between h-16 px-6 border-b border-border-default bg-white">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center text-primary shrink-0 shadow-sm">
+              <StoreIcon className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 id={sidebarLabelId} className="text-body font-bold text-text-primary tracking-tight">
+                {variant === 'admin' ? 'Zana Admin' : 'Zana POS'}
+              </h1>
+              <p className="text-caption text-text-muted font-normal">
+                {variant === 'admin' ? 'Business Suite' : 'Cashier Terminal'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="lg:hidden p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            aria-label="Close navigation menu"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Navigation Groups Container */}
+        <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 space-y-4">
+          <nav aria-label="Primary navigation">
+            {sidebarSections.map(renderSection)}
+          </nav>
+        </div>
+
+        {/* Floating User / Profile Footer */}
+        <div className="p-4 border-t border-border-default bg-surface-2/60">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <div className="w-9 h-9 rounded-full bg-primary text-white font-semibold text-small flex items-center justify-center shadow-sm">
+                {user?.name?.[0]?.toUpperCase() || 'U'}
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="lg:hidden p-2 rounded-lg text-gray-200 hover:text-white hover:bg-gray-700 transition-colors duration-200 mobile-nav-trigger focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-black"
-              aria-label="Close navigation menu"
-            >
-              <XMarkIcon className="h-6 w-6" />
-            </button>
-          </div>
-
-          {/* Navigation Items */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800 mt-16">
-            <nav className="px-4 py-6 space-y-6" aria-label="Primary navigation">
-              {sidebarSections.map(renderSection)}
-            </nav>
-          </div>
-
-          {/* User Info */}
-          <div className="p-4 border-t border-white/10 bg-white/5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-yellow to-yellow-400 flex items-center justify-center shadow-lg">
-                  <span className="text-brand-black font-bold text-lg">
-                    {user?.name?.[0]?.toUpperCase() || 'U'}
-                  </span>
-                </div>
-              </div>
-              <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-200 truncate">{user?.name || 'User'}</p>
-                <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-                <div className="flex items-center mt-1">
-                  <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
-                  <span className="text-xs text-gray-400">Online</span>
-                </div>
-              </div>
+            <div className="ml-3 flex-1 min-w-0">
+              <p className="text-small font-semibold text-text-primary truncate">{user?.name || 'User'}</p>
+              <p className="text-caption text-text-muted truncate">{user?.email}</p>
             </div>
           </div>
         </div>

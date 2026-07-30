@@ -2,7 +2,7 @@ import React, { useId, useState } from 'react';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
 /**
- * Input — Accessible form control primitive (text, password, select, textarea, etc.)
+ * Input — Clean form field primitive with label, focus ring, helper & error texts
  */
 export default function Input({
   id: customId,
@@ -15,8 +15,8 @@ export default function Input({
   placeholder,
   leftIcon: LeftIcon = null,
   rightIcon: RightIcon = null,
-  options = [], // For type="select"
-  rows = 3,    // For type="textarea"
+  options = [],
+  rows = 3,
   maxLength,
   value,
   onChange,
@@ -41,11 +41,11 @@ export default function Input({
   ].filter(Boolean).join(' ') || undefined;
 
   const baseInputStyles = `
-    w-full bg-surface-1 text-text-primary placeholder-text-muted
-    border rounded-md text-body font-sans transition-colors duration-150
-    focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-border-focus
-    disabled:opacity-40 disabled:cursor-not-allowed
-    ${error ? 'border-danger focus:ring-danger/40 focus:border-danger' : 'border-border-default hover:border-border-hover'}
+    w-full bg-white text-text-primary placeholder-text-muted
+    border rounded-md text-body font-sans transition-all duration-150
+    focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
+    disabled:bg-surface-0 disabled:opacity-60 disabled:cursor-not-allowed
+    ${error ? 'border-danger focus:ring-danger/30 focus:border-danger' : 'border-border-default hover:border-border-hover'}
   `;
 
   return (
@@ -54,7 +54,7 @@ export default function Input({
         <div className="flex justify-between items-center">
           <label
             htmlFor={inputId}
-            className="text-small font-medium text-text-secondary select-none flex items-center gap-1"
+            className="text-small font-medium text-text-primary select-none flex items-center gap-1"
           >
             {label}
             {required && <span className="text-danger" aria-hidden="true">*</span>}
@@ -124,7 +124,7 @@ export default function Input({
               <option
                 key={typeof opt === 'object' ? opt.value : opt}
                 value={typeof opt === 'object' ? opt.value : opt}
-                className="bg-surface-2 text-text-primary"
+                className="bg-white text-text-primary"
               >
                 {typeof opt === 'object' ? opt.label : opt}
               </option>
@@ -144,7 +144,7 @@ export default function Input({
             aria-required={required ? 'true' : undefined}
             aria-describedby={ariaDescribedBy}
             className={`
-              ${baseInputStyles} px-3 py-2.5 min-h-[44px]
+              ${baseInputStyles} px-3 py-2.5 min-h-[40px]
               ${LeftIcon ? 'pl-10' : ''}
               ${(RightIcon || isPassword) ? 'pr-10' : ''}
               ${className}
