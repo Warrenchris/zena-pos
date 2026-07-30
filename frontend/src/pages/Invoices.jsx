@@ -662,26 +662,26 @@ const Invoices = () => {
   }
 
   return (
-    <div className="py-6 px-4 sm:px-6 lg:px-8 bg-brand-black text-white min-h-screen">
-      {/* Header */}
-      <div className="sm:flex sm:items-center">
-        <div className="sm:flex-auto">
-          <h1 className="text-2xl font-semibold text-zana-yellow flex items-center gap-3">
-            Invoices
-            <button
-              onClick={handleRefresh}
-              className="ml-3 inline-flex items-center rounded bg-zana-yellow hover:bg-yellow-400 text-black px-3 py-1 font-semibold text-sm shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-600"
-              title="Refresh invoices"
-            >
-              <ArrowPathIcon className="h-5 w-5 mr-1" />
-              Refresh
-            </button>
-          </h1>
-          <p className="mt-2 text-sm text-white/70">
-            View and manage all invoices in the system.
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Invoices"
+        description="View, print, and export all generated retail sales invoices."
+        primaryAction={{
+          label: 'Create Invoice',
+          icon: ArrowPathIcon,
+          onClick: () => setShowCreateModal(true)
+        }}
+        secondaryActions={
+          <Button
+            variant="outline"
+            size="md"
+            leftIcon={ArrowPathIcon}
+            onClick={handleRefresh}
+          >
+            Refresh
+          </Button>
+        }
+      />
       {error && (
         <div className="mt-4 bg-red-500/10 border border-red-700 text-red-400 px-4 py-3 rounded flex items-center gap-3">
           <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.054 0 1.918-.816 1.995-1.85l.007-.15V6a2 2 0 00-1.85-1.995L19 4H5a2 2 0 00-1.995 1.85L3 6v12c0 1.054.816 1.918 1.85 1.995l.15.005zm8-8v2h-4v-2h4z" /></svg>

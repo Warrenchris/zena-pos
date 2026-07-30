@@ -1,58 +1,64 @@
-import { useState, useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
+import { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { 
   PlusIcon, 
   EyeIcon,
   PrinterIcon,
   FunnelIcon,
-  CalendarIcon
-} from '@heroicons/react/24/outline'
-import { fetchAdminSales, fetchMySales } from '../store/slices/salesSlice'
-import { fetchProducts } from '../store/slices/productsSlice'
-import { fetchCustomers } from '../store/slices/customersSlice'
-import { employeesAPI } from '../services/api'
-import POSModal from '../components/POSModal'
-import { useCurrency } from '../hooks/useCurrency'
+  ShoppingBagIcon
+} from '@heroicons/react/24/outline';
+import { fetchAdminSales, fetchMySales } from '../store/slices/salesSlice';
+import { fetchProducts } from '../store/slices/productsSlice';
+import { fetchCustomers } from '../store/slices/customersSlice';
+import { employeesAPI } from '../services/api';
+import POSModal from '../components/POSModal';
+import { useCurrency } from '../hooks/useCurrency';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Table from '../components/ui/Table';
+import Badge from '../components/ui/Badge';
+import PageHeader from '../components/ui/PageHeader';
 
 export default function Sales() {
-  const dispatch = useDispatch()
-  const { sales, loading, pagination } = useSelector((state) => state.sales)
-  const { products } = useSelector((state) => state.products)
-  const { customers } = useSelector((state) => state.customers)
-  const { user } = useSelector((state) => state.auth)
-  const { format: formatCurrency } = useCurrency()
+  const dispatch = useDispatch();
+  const { sales, loading, pagination } = useSelector((state) => state.sales);
+  const { products } = useSelector((state) => state.products);
+  const { customers } = useSelector((state) => state.customers);
+  const { user } = useSelector((state) => state.auth);
+  const { format: formatCurrency } = useCurrency();
   
-  const [currentPage, setCurrentPage] = useState(1)
-  const [showPOSModal, setShowPOSModal] = useState(false)
-  const [showFilters, setShowFilters] = useState(false)
-  const [employees, setEmployees] = useState([])
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showPOSModal, setShowPOSModal] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [employees, setEmployees] = useState([]);
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
     cashierId: '',
     sortBy: 'createdAt',
     sortOrder: 'DESC'
-  })
+  });
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager'
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
   const urlCustomerId = (() => {
-    try { return new URLSearchParams(window.location.search).get('customerId') || '' } catch { return '' }
-  })()
+    try { return new URLSearchParams(window.location.search).get('customerId') || ''; } catch { return ''; }
+  })();
 
   useEffect(() => {
     if (isAdmin) {
-      fetchEmployees()
+      fetchEmployees();
     }
-    dispatch(fetchProducts())
-    dispatch(fetchCustomers())
-  }, [dispatch, isAdmin])
+    dispatch(fetchProducts());
+    dispatch(fetchCustomers());
+  }, [dispatch, isAdmin]);
 
   useEffect(() => {
     if (isAdmin) {
       dispatch(fetchAdminSales({ 
         page: currentPage, 
         ...filters 
-      }))
+      }));
     } else {
       dispatch(fetchMySales({ 
         page: currentPage, 
@@ -60,58 +66,60 @@ export default function Sales() {
         endDate: filters.endDate,
         sortBy: filters.sortBy,
         sortOrder: filters.sortOrder
-      }))
+      }));
     }
-  }, [dispatch, currentPage, filters, isAdmin])
+  }, [dispatch, currentPage, filters, isAdmin]);
 
   const fetchEmployees = async () => {
     try {
-      const response = await employeesAPI.getAll()
+      const response = await employeesAPI.getAll();
       if (response.data && Array.isArray(response.data)) {
-        setEmployees(response.data)
+        setEmployees(response.data);
       } else if (response.data && Array.isArray(response.data.employees)) {
-        setEmployees(response.data.employees)
+        setEmployees(response.data.employees);
       } else if (response.data && Array.isArray(response.data.rows)) {
-        setEmployees(response.data.rows)
+        setEmployees(response.data.rows);
       } else {
-        setEmployees([])
+        setEmployees([]);
       }
     } catch (error) {
-      console.error('Error fetching employees:', error)
+      console.error('Error fetching employees:', error);
     }
-  }
-
+  };
 
   const formatDate = (dateString) => {
+    if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    })
-  }
+    });
+  };
 
-  const getPaymentStatusColor = (status) => {
-    switch (status) {
+  const getPaymentBadgeVariant = (status) => {
+    switch (status?.toLowerCase()) {
       case 'completed':
-        return 'bg-green-100 text-green-800'
+      case 'paid':
+        return 'success';
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'warning';
       case 'failed':
-        return 'bg-red-100 text-red-800'
+      case 'cancelled':
+        return 'danger';
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'neutral';
     }
-  }
+  };
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({
       ...prev,
       [key]: value
-    }))
-    setCurrentPage(1) // Reset to first page when filters change
-  }
+    }));
+    setCurrentPage(1);
+  };
 
   const clearFilters = () => {
     setFilters({
@@ -120,292 +128,201 @@ export default function Sales() {
       cashierId: '',
       sortBy: 'createdAt',
       sortOrder: 'DESC'
-    })
-    setCurrentPage(1)
-  }
+    });
+    setCurrentPage(1);
+  };
 
   const getCashierName = (sale) => {
     if (sale?.Employee) {
-      return `${sale.Employee.firstName} ${sale.Employee.lastName}`
+      return `${sale.Employee.firstName} ${sale.Employee.lastName}`;
     }
     if (sale?.User) {
-      return sale.User.name || sale.User.email || 'Unknown User'
+      return sale.User.name || sale.User.email || 'Unknown User';
     }
-    return 'Unknown Cashier'
-  }
+    return 'Walk-in Cashier';
+  };
+
+  const filteredSalesList = (Array.isArray(sales) ? (urlCustomerId ? sales.filter(s => (s?.Customer?.id === urlCustomerId) || (s?.customerId === urlCustomerId)) : sales) : []);
+
+  const columns = [
+    {
+      key: 'invoiceNumber',
+      label: 'Invoice',
+      render: (val) => <span className="font-semibold text-text-primary">{val}</span>
+    },
+    {
+      key: 'Customer',
+      label: 'Customer',
+      render: (val, row) => (
+        <span className="text-text-primary font-medium">
+          {val?.name || row?.customerName || 'Walk-in Customer'}
+        </span>
+      )
+    },
+    ...(isAdmin ? [{
+      key: 'cashier',
+      label: 'Cashier',
+      render: (_, row) => <span className="text-text-secondary">{getCashierName(row)}</span>
+    }] : []),
+    {
+      key: 'items',
+      label: 'Items',
+      render: (_, row) => {
+        const count = row?.SaleItems ? row.SaleItems.length : row?.products ? row.products.length : 0;
+        return (
+          <div>
+            <span className="text-text-primary font-medium">{count} item(s)</span>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'total',
+      label: 'Total',
+      render: (val) => <span className="font-bold text-primary">{formatCurrency(val || 0)}</span>
+    },
+    {
+      key: 'paymentStatus',
+      label: 'Payment',
+      render: (val, row) => (
+        <div className="flex flex-col gap-1">
+          <Badge variant={getPaymentBadgeVariant(val)}>
+            {val || 'Completed'}
+          </Badge>
+          <span className="text-caption text-text-muted capitalize">{row?.paymentMethod || 'cash'}</span>
+        </div>
+      )
+    },
+    {
+      key: 'createdAt',
+      label: 'Date',
+      render: (val) => <span className="text-text-secondary text-small">{formatDate(val)}</span>
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (_, row) => (
+        <div className="flex items-center gap-2">
+          <button
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+            title="View Sale Details"
+          >
+            <EyeIcon className="h-4 w-4" />
+          </button>
+          <button
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+            title="Print Receipt"
+          >
+            <PrinterIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
 
   return (
-    <div className="space-y-6 bg-brand-black text-white min-h-screen p-6 rounded-lg">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-zana-yellow">
-            {isAdmin ? 'Sales Management' : 'My Sales'}
-          </h1>
-          <p className="text-white/70">
-            {isAdmin ? 'View and manage all sales transactions' : 'View your sales transactions'}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
+      <PageHeader
+        title={isAdmin ? 'Sales Management' : 'My Sales'}
+        description={isAdmin ? 'View, analyze, and manage all retail sales transactions' : 'View your completed sales transactions'}
+        primaryAction={{
+          label: 'New Sale',
+          icon: PlusIcon,
+          onClick: () => setShowPOSModal(true)
+        }}
+        secondaryActions={
+          <Button
+            variant="outline"
+            size="md"
+            leftIcon={FunnelIcon}
             onClick={() => setShowFilters(!showFilters)}
-            className="px-4 py-2 rounded-lg flex items-center gap-2 border border-zana-borderTint text-zana-yellow bg-transparent hover:bg-zana-yellow/10 focus:outline-none focus:ring-2 focus:ring-zana-yellow/40"
           >
-            <FunnelIcon className="h-5 w-5" />
-            Filters
-          </button>
-          <button
-            onClick={() => setShowPOSModal(true)}
-            className="px-4 py-2 rounded-lg flex items-center gap-2 bg-zana-yellow text-black shadow-zana hover:bg-zana-yellow/90 hover:shadow-zana-lg focus:outline-none focus:ring-2 focus:ring-zana-yellow/50"
-          >
-            <PlusIcon className="h-5 w-5" />
-            New Sale
-          </button>
-        </div>
-      </div>
+            {showFilters ? 'Hide Filters' : 'Filter Sales'}
+          </Button>
+        }
+      />
 
-      {/* Filters */}
+      {/* Filter Panel Card */}
       {showFilters && (
-        <div className="bg-brand-gray rounded-lg shadow-zana p-6 border border-zana-borderTint">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-zana-yellow mb-1">
-                Start Date
-              </label>
-              <input
+        <Card variant="default">
+          <Card.Body>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <Input
                 type="date"
+                label="Start Date"
                 value={filters.startDate}
                 onChange={(e) => handleFilterChange('startDate', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-black/40 text-white placeholder:text-zana-yellow/40 border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zana-yellow mb-1">
-                End Date
-              </label>
-              <input
+              <Input
                 type="date"
+                label="End Date"
                 value={filters.endDate}
                 onChange={(e) => handleFilterChange('endDate', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-black/40 text-white placeholder:text-zana-yellow/40 border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
               />
-            </div>
-            {isAdmin && (
+              {isAdmin && (
+                <div>
+                  <label className="block text-small font-semibold text-text-primary mb-1.5">Cashier</label>
+                  <select
+                    value={filters.cashierId}
+                    onChange={(e) => handleFilterChange('cashierId', e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="">All Cashiers</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
-                <label className="block text-sm font-medium text-zana-yellow mb-1">
-                  Cashier
-                </label>
+                <label className="block text-small font-semibold text-text-primary mb-1.5">Sort By</label>
                 <select
-                  value={filters.cashierId}
-                  onChange={(e) => handleFilterChange('cashierId', e.target.value)}
-                  className="w-full px-3 py-2 rounded-md bg-black/40 text-white border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
+                  value={filters.sortBy}
+                  onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
                 >
-                  <option value="">All Cashiers</option>
-                  {employees.map(employee => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.firstName} {employee.lastName}
-                    </option>
-                  ))}
+                  <option value="createdAt">Date</option>
+                  <option value="total">Total</option>
+                  <option value="invoiceNumber">Invoice</option>
                 </select>
               </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-zana-yellow mb-1">
-                Sort By
-              </label>
-              <select
-                value={filters.sortBy}
-                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-black/40 text-white border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
-              >
-                <option value="createdAt">Date</option>
-                <option value="total">Total</option>
-                <option value="invoiceNumber">Invoice</option>
-              </select>
+              <div>
+                <label className="block text-small font-semibold text-text-primary mb-1.5">Order</label>
+                <select
+                  value={filters.sortOrder}
+                  onChange={(e) => handleFilterChange('sortOrder', e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="DESC">Descending</option>
+                  <option value="ASC">Ascending</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-zana-yellow mb-1">
-                Order
-              </label>
-              <select
-                value={filters.sortOrder}
-                onChange={(e) => handleFilterChange('sortOrder', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-black/40 text-white border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
-              >
-                <option value="DESC">Descending</option>
-                <option value="ASC">Ascending</option>
-              </select>
+            <div className="mt-4 flex justify-end">
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear All Filters
+              </Button>
             </div>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={clearFilters}
-              className="px-4 py-2 text-sm text-zana-yellow hover:text-zana-yellow/80"
-            >
-              Clear Filters
-            </button>
-          </div>
-        </div>
+          </Card.Body>
+        </Card>
       )}
 
-      {/* Sales Table */}
-      <div className="bg-brand-black rounded-lg shadow-zana overflow-hidden border border-zana-borderTint">
-        {loading ? (
-          <div className="p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zana-yellow mx-auto"></div>
-            <p className="mt-2 text-white/70">Loading sales...</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-zana-borderTint">
-              <thead className="bg-black">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                    Invoice
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                    Customer
-                  </th>
-                  {isAdmin && (
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                      Cashier
-                    </th>
-                  )}
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                    Items
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                    Total
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                    Payment
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zana-borderTint">
-                {(Array.isArray(sales) ? (urlCustomerId ? sales.filter(s => (s?.Customer?.id === urlCustomerId) || (s?.customerId === urlCustomerId)) : sales) : []).map((sale) => (
-                  <tr key={sale?.id} className="odd:bg-black/30 even:bg-black/20 hover:bg-zana-yellow/5">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-white">{sale?.invoiceNumber}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-white">
-                        {sale?.Customer?.name || sale?.customerName || 'Walk-in Customer'}
-                      </div>
-                    </td>
-                    {isAdmin && (
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-white">
-                          {getCashierName(sale)}
-                        </div>
-                      </td>
-                    )}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-white">
-                        {sale?.SaleItems 
-                          ? `${sale.SaleItems.length} item(s)` 
-                          : sale?.products 
-                            ? `${sale.products.length} item(s)` 
-                            : '0 item(s)'}
-                      </div>
-                      <div className="text-sm text-white/60">
-                        {sale?.SaleItems 
-                          ? (sale.SaleItems.map(item => item?.Product?.name).filter(Boolean).join(', ') || 'No items') 
-                          : sale?.products 
-                            ? (sale.products.map(item => item?.name).filter(Boolean).join(', ') || 'No items') 
-                            : 'No items'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      {formatCurrency(sale?.total)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPaymentStatusColor(sale?.paymentStatus)}`}>
-                        {sale?.paymentStatus}
-                      </span>
-                      <div className="text-xs text-white/60 mt-1">
-                        {sale?.paymentMethod}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      {formatDate(sale?.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex gap-2">
-                        <button
-                          className="text-zana-yellow hover:text-zana-yellow/80 hover:drop-shadow-[0_0_6px_rgba(255,214,0,0.6)]"
-                          title="View Details"
-                        >
-                          <EyeIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          className="text-white/80 hover:text-white"
-                          title="Print Receipt"
-                        >
-                          <PrinterIcon className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="bg-black/30 px-4 py-3 flex items-center justify-between border-t border-zana-borderTint sm:px-6">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button
-                onClick={() => setCurrentPage(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md text-white border-zana-borderTint bg-black hover:bg-zana-yellow/10 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(currentPage + 1)}
-                disabled={currentPage === pagination.totalPages}
-                className="ml-3 relative inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md text-white border-zana-borderTint bg-black hover:bg-zana-yellow/10 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-white/80">
-                  Showing page <span className="font-medium">{currentPage}</span> of{' '}
-                  <span className="font-medium">{pagination.totalPages}</span>
-                </p>
-              </div>
-              <div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                        page === currentPage
-                          ? 'z-10 bg-zana-yellow text-black border-zana-yellow'
-                          : 'bg-black text-white/70 border-zana-borderTint hover:bg-zana-yellow/10'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Notion-Style Table Card */}
+      <Table
+        columns={columns}
+        data={filteredSalesList}
+        loading={loading}
+        emptyTitle="No Sales Records Found"
+        emptyDescription="Process transactions using the POS terminal to record sales."
+        pagination={{
+          currentPage,
+          totalPages: pagination?.totalPages || 1,
+          totalItems: pagination?.totalItems || filteredSalesList.length,
+          pageSize: 10,
+          onPageChange: (newPage) => setCurrentPage(newPage)
+        }}
+      />
 
       {/* POS Modal */}
       {showPOSModal && (
@@ -416,5 +333,5 @@ export default function Sales() {
         />
       )}
     </div>
-  )
+  );
 }
