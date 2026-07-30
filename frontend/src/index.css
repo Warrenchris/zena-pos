@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════
-   ZANA POS — Enterprise SaaS Design System (Light Mode v2.0)
-   Inspirations: Linear, Stripe Dashboard, Vercel, Notion, Raycast
+   ZANA POS — Enterprise SaaS Design System (Calm Slate Blue v2.0)
+   Inspirations: Linear, Stripe Dashboard, Vercel, Notion, Raycast, Ramp
    ══════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -9,13 +9,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ══════════════════════════════════════════════════
-   BASE LAYER
-   ══════════════════════════════════════════════════ */
 @layer base {
   html {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    font-size: clamp(14px, 0.85vw + 0.25rem, 16px);
+    font-size: 15px;
     line-height: 1.5;
     scroll-behavior: smooth;
     font-synthesis: none;
@@ -26,29 +23,25 @@
 
   body {
     min-height: 100vh;
-    background-color: #F6F8FB;  /* soft neutral app background */
-    color: #111827;             /* text-primary */
+    background-color: #F8FAFC;  /* Slate 50 neutral app bg */
+    color: #0F172A;             /* Slate 900 primary text */
   }
 
   h1, h2, h3, h4, h5, h6 {
-    color: #111827;
+    color: #0F172A;
     font-weight: 600;
     letter-spacing: -0.015em;
   }
 }
 
-/* ══════════════════════════════════════════════════
-   LAYOUT TOKENS & SHELL
-   ══════════════════════════════════════════════════ */
 :root {
-  --container-max-width:      min(1240px, 94vw);
+  --container-max-width:      min(1280px, 94vw);
   --container-max-width-wide: min(1440px, 94vw);
   --layout-padding-inline:      clamp(1rem, 2vw, 2.5rem);
   --layout-padding-inline-wide: clamp(1.5rem, 3.5vw, 3.5rem);
 }
 
 @layer components {
-  /* Floating App Shell */
   .app-shell {
     width: 100%;
     max-width: var(--container-max-width);
@@ -64,7 +57,6 @@
     padding-right: var(--layout-padding-inline-wide);
   }
 
-  /* Card Grid */
   .card-grid {
     display: grid;
     gap: 1.5rem;
@@ -82,14 +74,12 @@
     }
   }
 
-  /* Touch targets */
   .mobile-nav-trigger,
   .touch-target {
-    min-height: 44px;
-    min-width: 44px;
+    min-height: 40px;
+    min-width: 40px;
   }
 
-  /* Responsive Modal Container */
   .responsive-modal {
     width: min(640px, 92vw);
   }
@@ -104,9 +94,6 @@
   }
 }
 
-/* ══════════════════════════════════════════════════
-   NOTION-STYLE TABLE & UTILITIES
-   ══════════════════════════════════════════════════ */
 @layer utilities {
   .responsive-table {
     width: 100%;
@@ -115,19 +102,19 @@
   }
 
   .responsive-table th {
-    background-color: #FAFAFB;
-    color: #6B7280;
+    background-color: #F8FAFC;
+    color: #475569;
     font-weight: 500;
     font-size: 0.8125rem;
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid #E5E7EB;
+    border-bottom: 1px solid #E2E8F0;
   }
 
   .responsive-table td {
     padding: 0.875rem 1rem;
-    font-size: 0.875rem;
-    color: #111827;
-    border-bottom: 1px solid #E5E7EB;
+    font-size: 0.9375rem;
+    color: #0F172A;
+    border-bottom: 1px solid #E2E8F0;
   }
 
   .responsive-table tbody tr {
@@ -135,7 +122,7 @@
   }
 
   .responsive-table tbody tr:hover {
-    background-color: #F9FAFB;
+    background-color: #F1F5F9;
   }
 
   @media (max-width: 768px) {
@@ -161,8 +148,8 @@
 
     .responsive-table tr {
       background-color: #FFFFFF;
-      border: 1px solid #E5E7EB;
-      border-radius: 14px;
+      border: 1px solid #E2E8F0;
+      border-radius: 12px;
       margin-bottom: 1rem;
       padding: 0.875rem;
     }
@@ -171,7 +158,7 @@
       display: flex;
       justify-content: space-between;
       padding: 0.5rem 0;
-      border-bottom: 1px solid #F3F4F6;
+      border-bottom: 1px solid #F1F5F9;
     }
 
     .responsive-table td:last-child {
@@ -182,13 +169,12 @@
       content: attr(data-label);
       font-weight: 600;
       font-size: 0.75rem;
-      color: #6B7280;
+      color: #475569;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
   }
 
-  /* Custom Scrollbar */
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -199,12 +185,12 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #E5E7EB;
+    background: #E2E8F0;
     border-radius: 999px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #D1D5DB;
+    background: #CBD5E1;
   }
 
   .scrollbar-hide {
@@ -217,58 +203,52 @@
   }
 }
 
-/* ══════════════════════════════════════════════════
-   REACT-CALENDAR OVERRIDES (Clean Light Theme)
-   ══════════════════════════════════════════════════ */
 .zena-calendar {
   background-color: #FFFFFF !important;
-  color: #111827 !important;
-  border-radius: 14px !important;
+  color: #0F172A !important;
+  border-radius: 12px !important;
   padding: 0.75rem !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05) !important;
-  border: 1px solid #E5E7EB !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05) !important;
+  border: 1px solid #E2E8F0 !important;
   width: auto !important;
 }
 
 .zena-calendar .react-calendar__navigation button {
   background: transparent !important;
-  color: #111827 !important;
-  border-radius: 8px !important;
+  color: #0F172A !important;
+  border-radius: 6px !important;
   padding: 0.35rem 0.5rem !important;
   font-weight: 600 !important;
 }
 
 .zena-calendar .react-calendar__navigation button:hover {
-  background: #F3F4F6 !important;
+  background: #F1F5F9 !important;
 }
 
 .zena-calendar .react-calendar__month-view__weekdays {
-  color: #6B7280 !important;
+  color: #475569 !important;
   font-size: 0.75rem !important;
   font-weight: 500 !important;
 }
 
 .zena-calendar .react-calendar__tile {
   background: transparent !important;
-  color: #111827 !important;
-  border-radius: 8px !important;
+  color: #0F172A !important;
+  border-radius: 6px !important;
   padding: 0.4rem !important;
   font-size: 0.875rem !important;
 }
 
 .zena-calendar .react-calendar__tile:hover {
-  background: #F3F4F6 !important;
+  background: #F1F5F9 !important;
 }
 
 .zena-calendar .react-calendar__tile--active {
-  background: #D4A017 !important;
+  background: #2563EB !important;
   color: #FFFFFF !important;
   font-weight: 600 !important;
 }
 
-/* ══════════════════════════════════════════════════
-   PRINT STYLES
-   ══════════════════════════════════════════════════ */
 @media print {
   html, body {
     background: #FFFFFF !important;
@@ -279,9 +259,6 @@
   }
 }
 
-/* ══════════════════════════════════════════════════
-   ACCESSIBILITY — Reduced Motion
-   ══════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

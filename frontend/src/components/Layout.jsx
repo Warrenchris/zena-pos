@@ -51,7 +51,7 @@ export default function Layout() {
 	}
 
 	const Shell = ({ children }) => (
-		<div className="min-h-screen bg-app text-text-primary font-sans antialiased selection:bg-primary/20">
+		<div className="min-h-screen bg-app text-text-primary font-sans antialiased selection:bg-primary/10 selection:text-primary">
 			{/* Skip link for keyboard accessibility */}
 			<a
 				href="#main-content"
@@ -83,8 +83,8 @@ export default function Layout() {
 				variant={user?.role === 'admin' ? 'admin' : 'cashier'}
 			/>
 			
-			{/* Floating Content Area offset to accommodate floating card sidebar */}
-			<div className="lg:pl-[304px] 2xl:pl-[336px] flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out">
+			{/* Floating Content Area mathematically offset for 256px/288px floating card sidebar */}
+			<div className="lg:pl-[272px] 2xl:pl-[304px] flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out">
 				<TopNavBar
 					onMenuClick={() => setSidebarOpen(true)}
 					isSidebarOpen={sidebarOpen}
