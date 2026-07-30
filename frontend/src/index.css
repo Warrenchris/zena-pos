@@ -1,102 +1,67 @@
+/* ══════════════════════════════════════════════════
+   ZANA POS — Design System Foundation (v2.0)
+   ══════════════════════════════════════════════════ */
+
+/* ─── Font: Inter ─── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ══════════════════════════════════════════════════
+   BASE LAYER
+   ══════════════════════════════════════════════════ */
 @layer base {
   html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     font-size: clamp(14px, 0.9vw + 0.25rem, 18px);
     line-height: 1.5;
     scroll-behavior: smooth;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     min-height: 100vh;
+    background-color: #0B0B0C;  /* surface-0 */
+    color: #F9FAFB;             /* text-primary */
   }
 
-  h1 {
-    font-size: clamp(1.75rem, 2.2vw + 1rem, 2.875rem);
-  }
-
-  h2 {
-    font-size: clamp(1.5rem, 1.8vw + 0.75rem, 2.25rem);
-  }
-
-  h3 {
-    font-size: clamp(1.25rem, 1.4vw + 0.5rem, 1.75rem);
-  }
-
-  h4 {
-    font-size: clamp(1.125rem, 1.2vw + 0.35rem, 1.5rem);
-  }
-
-  h5 {
-    font-size: clamp(1rem, 1vw + 0.25rem, 1.25rem);
-  }
-
-  h6 {
-    font-size: clamp(0.875rem, 0.9vw + 0.2rem, 1.125rem);
-  }
+  /* Fluid headings — override only for pages that don't
+     use the Tailwind text-h1…h4 classes directly */
+  h1 { font-size: clamp(1.75rem, 2.2vw + 1rem, 2.875rem); }
+  h2 { font-size: clamp(1.5rem, 1.8vw + 0.75rem, 2.25rem); }
+  h3 { font-size: clamp(1.25rem, 1.4vw + 0.5rem, 1.75rem); }
+  h4 { font-size: clamp(1.125rem, 1.2vw + 0.35rem, 1.5rem); }
+  h5 { font-size: clamp(1rem, 1vw + 0.25rem, 1.25rem); }
+  h6 { font-size: clamp(0.875rem, 0.9vw + 0.2rem, 1.125rem); }
 }
 
-/* Custom scrollbar styles */
-@layer utilities {
-  .scrollbar-thin {
-    scrollbar-width: thin;
-  }
-  
-  .scrollbar-thumb-gray-600::-webkit-scrollbar-thumb {
-    background-color: #4b5563;
-    border-radius: 0.5rem;
-  }
-  
-  .scrollbar-track-gray-800::-webkit-scrollbar-track {
-    background-color: #1f2937;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: #1f2937;
-    border-radius: 0.5rem;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #4b5563;
-    border-radius: 0.5rem;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #6b7280;
-  }
-}
-
+/* ══════════════════════════════════════════════════
+   LAYOUT TOKENS (CSS custom properties)
+   Only values that can't be expressed in Tailwind
+   ══════════════════════════════════════════════════ */
 :root {
-  --color-gray-50: #f9fafb;
-  --color-gray-900: #111827;
-  --container-max-width: min(1180px, 92vw);
+  --container-max-width:      min(1180px, 92vw);
   --container-max-width-wide: min(1400px, 92vw);
-  --layout-padding-inline: clamp(1rem, 2vw, 2.5rem);
+  --layout-padding-inline:      clamp(1rem, 2vw, 2.5rem);
   --layout-padding-inline-wide: clamp(1.5rem, 4vw, 3.5rem);
   --space-2xs: clamp(0.25rem, 0.6vw, 0.5rem);
-  --space-xs: clamp(0.5rem, 0.9vw, 0.75rem);
-  --space-sm: clamp(0.75rem, 1.2vw, 1rem);
-  --space-md: clamp(1rem, 1.8vw, 1.5rem);
-  --space-lg: clamp(1.5rem, 2.6vw, 2.5rem);
-  --space-xl: clamp(2rem, 3.5vw, 3.5rem);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --space-xs:  clamp(0.5rem, 0.9vw, 0.75rem);
+  --space-sm:  clamp(0.75rem, 1.2vw, 1rem);
+  --space-md:  clamp(1rem, 1.8vw, 1.5rem);
+  --space-lg:  clamp(1.5rem, 2.6vw, 2.5rem);
+  --space-xl:  clamp(2rem, 3.5vw, 3.5rem);
 }
 
-body {
-  background-color: var(--color-gray-50);
-  color: var(--color-gray-900);
-}
-
+/* ══════════════════════════════════════════════════
+   COMPONENT LAYER
+   ══════════════════════════════════════════════════ */
 @layer components {
+  /* Layout shells */
   .app-shell {
     width: 100%;
     max-width: var(--container-max-width);
@@ -112,6 +77,7 @@ body {
     padding-right: var(--layout-padding-inline-wide);
   }
 
+  /* Card grid */
   .card-grid {
     display: grid;
     gap: var(--space-md);
@@ -129,6 +95,7 @@ body {
     }
   }
 
+  /* Touch targets (WCAG 2.5.8) */
   .mobile-nav-trigger {
     min-height: 44px;
     min-width: 44px;
@@ -139,6 +106,7 @@ body {
     min-width: 44px;
   }
 
+  /* Responsive modal */
   .responsive-modal {
     width: min(640px, 92vw);
   }
@@ -153,7 +121,11 @@ body {
   }
 }
 
+/* ══════════════════════════════════════════════════
+   UTILITY LAYER
+   ══════════════════════════════════════════════════ */
 @layer utilities {
+  /* Grid auto-fill / auto-fit */
   .grid-auto-fill {
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   }
@@ -162,19 +134,21 @@ body {
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   }
 
+  /* Safe area (notched devices) */
   .safe-area-padding {
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
 
+  /* Responsive table — stacks to card layout on mobile */
   .responsive-table {
     width: 100%;
     border-collapse: collapse;
   }
 
   .responsive-table tbody tr {
-    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    border-bottom: 1px solid rgba(255, 214, 0, 0.1);
   }
 
   @media (max-width: 768px) {
@@ -199,8 +173,8 @@ body {
     }
 
     .responsive-table tr {
-      background-color: rgba(17, 24, 39, 0.5);
-      border-radius: 1rem;
+      background-color: #111214; /* surface-1 */
+      border-radius: 14px;       /* radius-lg */
       margin-bottom: var(--space-sm);
       padding: var(--space-sm);
     }
@@ -218,386 +192,180 @@ body {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: rgba(250, 204, 21, 0.85);
+      font-size: 0.75rem;
+      color: #F2C800; /* primary-hover — high contrast */
     }
   }
-}
 
-/* Custom animations for dashboard */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+  /* Custom scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: #111214; /* surface-1 */
+    border-radius: 10px;
   }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #3a3a3f;
+    border-radius: 10px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+
+  .scrollbar-thumb-gray-600::-webkit-scrollbar-thumb {
+    background-color: #4b5563;
+    border-radius: 10px;
+  }
+
+  .scrollbar-track-gray-800::-webkit-scrollbar-track {
+    background-color: #111214; /* surface-1 */
+  }
+
+  /* Hide scrollbar (keep functionality) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.5s ease-out;
+/* ══════════════════════════════════════════════════
+   GLASSMORPHISM & PREMIUM EFFECTS
+   ══════════════════════════════════════════════════ */
+.glass-effect {
+  background: rgba(17, 18, 20, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 214, 0, 0.12);
 }
 
-.animate-fadeUp {
-  animation: fadeUp 0.6s ease-out both;
+.glass-effect-strong {
+  background: rgba(17, 18, 20, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 214, 0, 0.18);
 }
 
-.animate-slideIn {
-  animation: slideIn 0.3s ease-out;
+/* Premium shadows (non-Tailwind usage) */
+.shadow-brand    { box-shadow: 0 8px 24px rgba(255, 214, 0, 0.12); }
+.shadow-brand-lg { box-shadow: 0 12px 32px rgba(255, 214, 0, 0.2); }
+.shadow-brand-xl { box-shadow: 0 20px 48px rgba(255, 214, 0, 0.25); }
+
+/* Smooth transitions */
+.transition-premium {
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.animate-slideUp {
-  animation: slideUp 0.3s ease-out;
+.transition-premium-fast {
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Modal animations */
+/* GPU acceleration for animated elements */
+.will-animate {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* ══════════════════════════════════════════════════
+   MODAL ANIMATIONS
+   ══════════════════════════════════════════════════ */
 @keyframes modalBackdrop {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Print styles for clean reports */
-@media print {
-  html, body {
-    background: #ffffff !important;
-    color: #000000 !important;
-  }
-  .bg-brand-black, .bg-brand-gray, .bg-black, .bg-black\/40, .bg-black\/30 {
-    background: #ffffff !important;
-  }
-  .text-zana-yellow, .text-white, .text-white\/70, .text-white\/80 {
-    color: #000000 !important;
-  }
-  .border-zana-borderTint {
-    border-color: #00000033 !important;
-  }
-  button, .no-print {
-    display: none !important;
-  }
-  a {
-    color: #000000 !important;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes modalContent {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+  from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Dark theme overrides for react-calendar popover used in CreateProduct */
-.zena-calendar {
-  background-color: #0b0b0b !important; /* deep dark */
-  color: #e6e6e6 !important; /* light text */
-  border-radius: 0.5rem !important;
-  padding: 0.5rem !important;
-  box-shadow: 0 8px 24px rgba(2,6,23,0.6) !important;
-  border: 1px solid rgba(250,204,21,0.12) !important; /* subtle yellow tint */
-  width: auto !important;
-}
+/* ══════════════════════════════════════════════════
+   POS-SPECIFIC ANIMATIONS
+   ══════════════════════════════════════════════════ */
 
-.zena-calendar * {
-  box-sizing: border-box;
-}
-
-.zena-calendar .react-calendar__navigation {
-  display: flex !important;
-  gap: 0.5rem !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  margin-bottom: 0.25rem !important;
-}
-
-.zena-calendar .react-calendar__navigation button {
-  background: transparent !important;
-  color: #f3f4f6 !important;
-  border: 1px solid transparent !important;
-  padding: 0.35rem 0.5rem !important;
-  border-radius: 0.375rem !important;
-}
-
-.zena-calendar .react-calendar__navigation button:hover {
-  background: rgba(250,204,21,0.08) !important;
-  border-color: rgba(250,204,21,0.14) !important;
-}
-
-.zena-calendar .react-calendar__month-view__weekdays {
-  color: #9ca3af !important; /* muted weekdays */
-  font-size: 0.75rem !important;
-  margin-bottom: 0.25rem !important;
-}
-
-.zena-calendar .react-calendar__tile {
-  background: transparent !important;
-  color: #e6e6e6 !important;
-  border-radius: 0.375rem !important;
-  padding: 0.35rem 0.4rem !important;
-  margin: 0 !important;
-  width: 2.25rem !important;
-  height: 2.25rem !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  font-size: 0.875rem !important;
-}
-
-.zena-calendar .react-calendar__tile:hover {
-  background: rgba(250,204,21,0.08) !important;
-  color: #fff !important;
-}
-
-.zena-calendar .react-calendar__tile--now {
-  box-shadow: inset 0 0 0 1px rgba(250,204,21,0.18) !important;
-}
-
-.zena-calendar .react-calendar__tile--active {
-  background: #facc15 !important; /* brand yellow */
-  color: #0b0b0b !important; /* dark text on yellow */
-}
-
-.zena-calendar .react-calendar__tile--active:enabled:hover {
-  background: #facc15 !important;
-}
-
-.zena-calendar .react-calendar__month-view__days__day--neighboring-month {
-  opacity: 0.45 !important;
-}
-
-.zena-calendar .react-calendar__tile:disabled {
-  opacity: 0.35 !important;
-  cursor: not-allowed !important;
-}
-
-/* Small responsive adjustment for popover */
-@media (max-width: 640px) {
-  .zena-calendar {
-    transform: translateX(-0.25rem) !important;
-  }
-}
-
-/* ===========================
-   PREMIUM POS CASHIER DASHBOARD
-   ============================= */
-
-/* Hide scrollbar while keeping functionality */
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-
-/* Smooth gradient backgrounds for premium feel */
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* Premium glow effect for CTA buttons */
+/* CTA glow pulse */
 @keyframes glowPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 20px rgba(255, 214, 0, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(255, 214, 0, 0.6);
-  }
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 214, 0, 0.4); }
+  50%      { box-shadow: 0 0 40px rgba(255, 214, 0, 0.6); }
 }
 
-/* Smooth card entrance animation */
+/* Card entrance */
 @keyframes cardSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Product grid item entrance with stagger */
+/* Product grid item */
 @keyframes itemFade {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
-/* Soft pulse for stock indicators */
+/* Stock pulse */
 @keyframes softPulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
 }
 
-/* Loading skeleton animation */
+/* Skeleton loading */
 @keyframes skeletonLoading {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
+  0%   { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
 }
 
-/* Button press effect */
+/* Button press */
 @keyframes buttonPress {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(0.96);
-  }
-  100% {
-    transform: scale(1);
-  }
+  0%   { transform: scale(1); }
+  50%  { transform: scale(0.96); }
+  100% { transform: scale(1); }
 }
 
-/* Toast notification slide in */
+/* Toast slide-in */
 @keyframes toastSlideIn {
-  from {
-    opacity: 0;
-    transform: translateX(100px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(100px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
-/* Premium utility classes for animations */
-.animate-card-enter {
-  animation: cardSlideIn 0.5s ease-out;
+/* Gradient background shift */
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
-.animate-item-fade {
-  animation: itemFade 0.4s ease-out;
-}
-
-.animate-glow-pulse {
-  animation: glowPulse 2s ease-in-out infinite;
-}
-
-.animate-soft-pulse {
-  animation: softPulse 2s ease-in-out infinite;
-}
+/* Animation utility classes */
+.animate-card-enter   { animation: cardSlideIn 250ms ease-out; }
+.animate-item-fade    { animation: itemFade 200ms ease-out; }
+.animate-glow-pulse   { animation: glowPulse 2s ease-in-out infinite; }
+.animate-soft-pulse   { animation: softPulse 2s ease-in-out infinite; }
+.animate-button-press { animation: buttonPress 200ms ease; }
+.animate-toast-in     { animation: toastSlideIn 250ms ease-out; }
+.animate-fadeUp       { animation: cardSlideIn 250ms ease-out both; }
 
 .animate-skeleton {
   background: linear-gradient(
     90deg,
-    rgba(255, 214, 0, 0.1) 25%,
-    rgba(255, 214, 0, 0.2) 50%,
-    rgba(255, 214, 0, 0.1) 75%
+    rgba(255, 214, 0, 0.06) 25%,
+    rgba(255, 214, 0, 0.12) 50%,
+    rgba(255, 214, 0, 0.06) 75%
   );
   background-size: 1000px 100%;
   animation: skeletonLoading 2s infinite;
 }
 
-.animate-button-press {
-  animation: buttonPress 0.3s ease;
-}
-
-.animate-toast-in {
-  animation: toastSlideIn 0.3s ease-out;
-}
-
-/* Premium blur and glassmorphism effects */
-.glass-effect {
-  background: rgba(18, 18, 20, 0.6);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 214, 0, 0.15);
-}
-
-.glass-effect-strong {
-  background: rgba(18, 18, 20, 0.8);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 214, 0, 0.2);
-}
-
-/* Premium shadows */
-.shadow-brand {
-  box-shadow: 0 8px 24px rgba(255, 214, 0, 0.12);
-}
-
-.shadow-brand-lg {
-  box-shadow: 0 12px 32px rgba(255, 214, 0, 0.2);
-}
-
-.shadow-brand-xl {
-  box-shadow: 0 20px 48px rgba(255, 214, 0, 0.25);
-}
-
-/* Smooth transitions for interactive elements */
-.transition-premium {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.transition-premium-fast {
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* POS-optimized touch targets */
+/* ══════════════════════════════════════════════════
+   TOUCH TARGETS (coarse pointer devices)
+   ══════════════════════════════════════════════════ */
 @media (hover: none) and (pointer: coarse) {
   button,
   [role='button'],
@@ -607,7 +375,7 @@ body {
   }
 }
 
-/* Mobile-first responsive utilities for POS */
+/* Mobile POS optimizations */
 @media (max-width: 640px) {
   .pos-mobile-lg {
     font-size: 1.25rem;
@@ -621,33 +389,147 @@ body {
   }
 }
 
-/* Tablet POS terminal optimizations */
+/* Tablet POS */
 @media (min-width: 768px) and (max-width: 1024px) {
   .pos-tablet-spacious {
     padding: 2rem;
   }
 }
 
-/* Desktop POS terminal optimizations */
+/* Desktop POS */
 @media (min-width: 1024px) {
   .pos-desktop-compact {
     max-width: 1400px;
   }
 }
 
-/* Performance: GPU acceleration for transforms */
-.will-animate {
-  will-change: transform, opacity;
-  transform: translateZ(0);
-  backface-visibility: hidden;
+/* ══════════════════════════════════════════════════
+   DARK THEME — react-calendar overrides
+   ══════════════════════════════════════════════════ */
+.zena-calendar {
+  background-color: #111214 !important;  /* surface-1 */
+  color: #F9FAFB !important;             /* text-primary */
+  border-radius: 10px !important;        /* radius-md */
+  padding: 0.5rem !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4) !important; /* shadow-floating */
+  border: 1px solid rgba(255, 214, 0, 0.12) !important;
+  width: auto !important;
 }
 
-/* Reduce motion for accessibility */
+.zena-calendar * { box-sizing: border-box; }
+
+.zena-calendar .react-calendar__navigation {
+  display: flex !important;
+  gap: 0.5rem !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.zena-calendar .react-calendar__navigation button {
+  background: transparent !important;
+  color: #F9FAFB !important;
+  border: 1px solid transparent !important;
+  padding: 0.35rem 0.5rem !important;
+  border-radius: 6px !important;
+}
+
+.zena-calendar .react-calendar__navigation button:hover {
+  background: rgba(255, 214, 0, 0.08) !important;
+  border-color: rgba(255, 214, 0, 0.15) !important;
+}
+
+.zena-calendar .react-calendar__month-view__weekdays {
+  color: #9CA3AF !important;  /* text-muted */
+  font-size: 0.75rem !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.zena-calendar .react-calendar__tile {
+  background: transparent !important;
+  color: #D1D5DB !important;  /* text-secondary */
+  border-radius: 6px !important;
+  padding: 0.35rem 0.4rem !important;
+  margin: 0 !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.875rem !important;
+}
+
+.zena-calendar .react-calendar__tile:hover {
+  background: rgba(255, 214, 0, 0.08) !important;
+  color: #F9FAFB !important;
+}
+
+.zena-calendar .react-calendar__tile--now {
+  box-shadow: inset 0 0 0 1px rgba(255, 214, 0, 0.18) !important;
+}
+
+.zena-calendar .react-calendar__tile--active {
+  background: #FFD600 !important;
+  color: #0B0B0C !important;
+}
+
+.zena-calendar .react-calendar__tile--active:enabled:hover {
+  background: #F2C800 !important;
+}
+
+.zena-calendar .react-calendar__month-view__days__day--neighboring-month {
+  opacity: 0.4 !important;
+}
+
+.zena-calendar .react-calendar__tile:disabled {
+  opacity: 0.3 !important;
+  cursor: not-allowed !important;
+}
+
+@media (max-width: 640px) {
+  .zena-calendar {
+    transform: translateX(-0.25rem) !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   PRINT STYLES
+   ══════════════════════════════════════════════════ */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  /* Dark backgrounds → white for printing */
+  .bg-surface-0, .bg-surface-1, .bg-surface-2, .bg-surface-3,
+  .bg-brand-black, .bg-brand-gray, .bg-black,
+  .bg-black\/40, .bg-black\/30, .bg-black\/60 {
+    background: #ffffff !important;
+  }
+  /* Brand text → black for printing */
+  .text-primary, .text-text-primary, .text-text-secondary,
+  .text-zana-yellow, .text-white, .text-white\/70, .text-white\/80 {
+    color: #000000 !important;
+  }
+  .border-zana-borderTint, .border-border-default {
+    border-color: #00000033 !important;
+  }
+  button, .no-print {
+    display: none !important;
+  }
+  a {
+    color: #000000 !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   ACCESSIBILITY — Reduced Motion
+   ══════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
-
