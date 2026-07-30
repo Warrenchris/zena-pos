@@ -11,6 +11,9 @@ import { employeesAPI } from '../services/api'
 import aiAPI from '../services/ai.service'
 import analyticsService from '../services/analytics.service'
 import DateRangePicker from '../components/DateRangePicker'
+import PageHeader from '../components/ui/PageHeader'
+import Card from '../components/ui/Card'
+import Button from '../components/ui/Button'
 
 export default function Reports() {
   const { format: formatCurrency } = useCurrency();
@@ -416,42 +419,44 @@ export default function Reports() {
         doc.setFontSize(10)
         doc.text('Sales Trend (first 20 rows)', 40, y)
         y += 16
-        const rows = (charts.salesTrend||[]).slice(0,20)
+        const rows = (charts.salesTrend || []).slice(0, 20)
         rows.forEach(r => {
-          range: 'hourly',
+          doc.text(`${r.period || ''}: ${r.revenue || 0}`, 40, y)
           y += 14
         })
       }
       doc.save(`${tab}-report.pdf`)
-    } catch (e) {
+    } catch {
       window.print()
     }
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0b0c] p-6 text-gray-100">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight text-[#FFD600]">Reports</h1>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Reports & Analytics"
+        description="Comprehensive sales summaries, profit & loss statements, tax reports, and AI business insights."
+      />
 
-        {/* Sticky Filter Toolbar */}
-        <div className="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-black/40 bg-black/50 border border-yellow-500/20 rounded-xl shadow-[0_6px_20px_rgba(255,214,0,0.08)] p-4 flex flex-wrap gap-3 items-center">
-          <div className="flex items-center gap-2">
-            <TabButton active={tab==='sales'} onClick={()=>setTab('sales')}>Sales Summary</TabButton>
-            <TabButton active={tab==='pl'} onClick={()=>setTab('pl')}>Profit & Loss</TabButton>
-            <TabButton active={tab==='tax'} onClick={()=>setTab('tax')}>Tax Reports</TabButton>
-            <TabButton active={tab==='insights'} onClick={()=>setTab('insights')}>Trends & Insights</TabButton>
+      {/* Sticky Filter Toolbar */}
+      <Card variant="default" className="p-4 sticky top-0 z-40 backdrop-blur-md bg-surface/90">
+        <div className="flex flex-wrap gap-3 items-center justify-between">
+          <div className="flex items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default">
+            <TabButton active={tab === 'sales'} onClick={() => setTab('sales')}>Sales Summary</TabButton>
+            <TabButton active={tab === 'pl'} onClick={() => setTab('pl')}>Profit & Loss</TabButton>
+            <TabButton active={tab === 'tax'} onClick={() => setTab('tax')}>Tax Reports</TabButton>
+            <TabButton active={tab === 'insights'} onClick={() => setTab('insights')}>Trends & Insights</TabButton>
           </div>
-          <div className="flex-1" />
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default">
             <QuickFilter label="Today" value="today" current={quick} setCurrent={setQuick} />
             <QuickFilter label="This Week" value="week" current={quick} setCurrent={setQuick} />
             <QuickFilter label="Month" value="month" current={quick} setCurrent={setQuick} />
             <QuickFilter label="Year" value="year" current={quick} setCurrent={setQuick} />
             <QuickFilter label="Custom" value="custom" current={quick} setCurrent={setQuick} />
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex flex-wrap items-center gap-2">
             <DateRangePicker 
               startDate={new Date(startDate)} 
               endDate={new Date(endDate)} 
@@ -460,29 +465,37 @@ export default function Reports() {
                 setEndDate(end.toISOString().split('T')[0]);
                 setQuick('custom');
               }}
-              className="dark"
             />
-            <select value={cashierId} onChange={(e)=>setCashierId(e.target.value)} className="h-9 rounded-lg border border-yellow-500/30 px-3 bg-black/60 text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#FFD600]/50">
+            <select
+              value={cashierId}
+              onChange={(e) => setCashierId(e.target.value)}
+              className="h-10 rounded-xl border border-border-default px-3 bg-surface text-text-primary text-small focus:ring-2 focus:ring-primary/30"
+            >
               <option value="">All Employees</option>
               {cashiers.map(c => (
                 <option key={c.id} value={c.id}>{`${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email || c.id}</option>
               ))}
             </select>
-            <select value={categoryId} onChange={(e)=>setCategoryId(e.target.value)} className="h-9 rounded-lg border border-yellow-500/30 px-3 bg-black/60 text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#FFD600]/50">
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="h-10 rounded-xl border border-border-default px-3 bg-surface text-text-primary text-small focus:ring-2 focus:ring-primary/30"
+            >
               <option value="">All Categories</option>
               {categories.map(cat => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
-            <button onClick={load} className="h-9 inline-flex items-center gap-2 rounded-lg border border-yellow-500/30 px-3 text-[#FFD600] hover:bg-[#FFD600]/10 transition">Apply</button>
-            <button onClick={handleRefresh} className="h-9 inline-flex items-center gap-2 rounded-lg bg-[#FFD600] text-black px-3 hover:bg-[#ffdf33] transition shadow-[0_0_20px_rgba(255,214,0,0.2)]">Refresh</button>
-            <div className="w-px h-6 bg-yellow-500/20 mx-1" />
+            <Button variant="outline" size="sm" onClick={load}>Apply</Button>
+            <Button variant="primary" size="sm" onClick={handleRefresh}>Refresh</Button>
+            <div className="w-px h-6 bg-border-default mx-1" />
             <IconButton title="Export CSV" onClick={exportCsv} icon="csv" />
             <IconButton title="Export Excel" onClick={exportExcel} icon="excel" />
             <IconButton title="Export PDF" onClick={exportPdf} icon="pdf" />
             <IconButton title="Print" onClick={printReport} icon="print" />
           </div>
         </div>
+      </Card>
 
         {/* KPI Cards */}
         {tab==='sales' && (
@@ -759,20 +772,10 @@ export default function Reports() {
                     </div>
                   </ChartCard>
                 </div>
-                <div className="lg:col-span-1">
-                  <div className="rounded-2xl border border-yellow-500/20 bg-gradient-to-b from-[#0f0f11] to-[#141417] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#FFD600]/15 text-[#FFD600]">AI</span>
-                      <div className="font-medium text-[#FFD600]">Quick Insights</div>
-                    </div>
-                    <p className="text-gray-200 leading-relaxed whitespace-pre-wrap">{insights || 'Analyzing your latest data for insights...'}</p>
-                  </div>
-                </div>
               </div>
             )}
           </div>
         )}
-        </div>
       </div>
     </div>
   )
@@ -780,36 +783,38 @@ export default function Reports() {
 
 function Stat({ label, value, highlight, formatCurrency: fmt }){
   return (
-    <div className={`p-4 rounded-lg border ${highlight ? 'border-yellow-500/30 bg-[#FFD600]/10' : 'border-yellow-500/20 bg-white/5'}`}>
-      <div className="text-sm text-gray-300">{label}</div>
-      <div className="text-xl font-semibold text-[#FFD600]">{(fmt ? fmt(Number(value||0)) : Number(value||0).toLocaleString())}</div>
+    <div className={`p-4 rounded-xl border ${highlight ? 'border-primary/40 bg-primary/10' : 'border-border-default bg-surface-2/40'}`}>
+      <div className="text-caption font-semibold uppercase tracking-wider text-text-muted">{label}</div>
+      <div className="text-h3 font-bold text-primary mt-1">{(fmt ? fmt(Number(value || 0)) : Number(value || 0).toLocaleString())}</div>
     </div>
   )
 }
 
 function KpiCard({ label, value, icon, color, children }){
   return (
-    <div className="p-4 rounded-2xl border border-yellow-500/20 bg-white/5 shadow-[0_0_20px_rgba(255,214,0,0.06)] hover:shadow-[0_0_24px_rgba(255,214,0,0.12)] transition">
+    <Card variant="default" className="p-4">
       <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-300">{label}</div>
-        <KpiIcon type={icon} color={color || '#FFD600'} />
+        <div className="text-caption font-semibold uppercase tracking-wider text-text-muted">{label}</div>
+        <KpiIcon type={icon} color={color || 'var(--color-primary)'} />
       </div>
-      <div className="text-2xl font-semibold text-[#FFD600] mt-1">{value}</div>
+      <div className="text-h2 font-bold text-primary mt-1">{value}</div>
       {children ? (
         <div className="mt-2 h-12">
           {children}
         </div>
       ) : null}
-    </div>
+    </Card>
   )
 }
 
 function ChartCard({ title, children }){
   return (
-    <div className="rounded-2xl border border-yellow-500/20 bg-white/5 p-4 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
-      <div className="mb-3 text-[#FFD600] font-medium">{title}</div>
-      {children}
-    </div>
+    <Card variant="default">
+      <Card.Header title={title} />
+      <Card.Body>
+        {children}
+      </Card.Body>
+    </Card>
   )
 }
 
@@ -826,8 +831,8 @@ function MiniSpark({ data, dataKey, color }){
   )
 }
 
-function KpiIcon({ type, color = '#3b82f6' }){
-  const common = { width: 28, height: 28 }
+function KpiIcon({ type, color = 'var(--color-primary)' }){
+  const common = { width: 24, height: 24 }
   if (type === 'revenue') return (
     <svg {...common} viewBox="0 0 24 24" fill="none"><path d="M4 12l4 4 8-8" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
   )
@@ -851,7 +856,14 @@ function KpiIcon({ type, color = '#3b82f6' }){
 
 function TabButton({ active, onClick, children }){
   return (
-    <button onClick={onClick} className={`h-9 px-3 rounded-lg text-sm transition ${active ? 'bg-[#FFD600] text-black shadow-[0_0_18px_rgba(255,214,0,0.25)]' : 'bg-black/40 border border-yellow-500/30 text-gray-100 hover:bg-[#FFD600]/10'}`}>
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-small font-semibold transition-colors ${
+        active
+          ? 'bg-primary text-white shadow-2xs'
+          : 'text-text-secondary hover:text-text-primary hover:bg-surface-2'
+      }`}
+    >
       {children}
     </button>
   )
@@ -860,7 +872,14 @@ function TabButton({ active, onClick, children }){
 function QuickFilter({ label, value, current, setCurrent }){
   const isActive = current === value
   return (
-    <button onClick={()=>setCurrent(value)} className={`h-8 px-2 rounded-md text-xs font-medium transition ${isActive ? 'bg-[#FFD600] text-black shadow-[0_0_14px_rgba(255,214,0,0.25)]' : 'bg-black/40 border border-yellow-500/30 text-gray-100 hover:bg-[#FFD600]/10'}`}>
+    <button
+      onClick={() => setCurrent(value)}
+      className={`px-2.5 py-1 rounded-lg text-caption font-semibold transition-colors ${
+        isActive
+          ? 'bg-primary/20 text-primary border border-primary/30'
+          : 'text-text-muted hover:text-text-primary hover:bg-surface-2'
+      }`}
+    >
       {label}
     </button>
   )
@@ -869,20 +888,24 @@ function QuickFilter({ label, value, current, setCurrent }){
 function IconButton({ title, onClick, icon }){
   const icons = {
     csv: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 4h10l6 6v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="#FFD600" strokeWidth="1.5"/><path d="M14 4v6h6" stroke="#FFD600" strokeWidth="1.5"/><text x="8" y="17" fontSize="7" fill="#FFD600">CSV</text></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 4h10l6 6v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.5"/><path d="M14 4v6h6" stroke="currentColor" strokeWidth="1.5"/><text x="8" y="17" fontSize="7" fill="currentColor">CSV</text></svg>
     ),
     excel: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="#FFD600" strokeWidth="1.5"/><path d="M8 8l8 8M16 8l-8 8" stroke="#10b981" strokeWidth="1.5"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 8l8 8M16 8l-8 8" stroke="#10b981" strokeWidth="1.5"/></svg>
     ),
     pdf: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#FFD600" strokeWidth="1.5"/><text x="8" y="16" fontSize="7" fill="#ef4444">PDF</text></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/><text x="8" y="16" fontSize="7" fill="#ef4444">PDF</text></svg>
     ),
     print: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9V3h12v6M6 18v3h12v-3" stroke="#FFD600" strokeWidth="1.5"/><rect x="3" y="9" width="18" height="8" rx="2" stroke="#FFD600" strokeWidth="1.5"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9V3h12v6M6 18v3h12v-3" stroke="currentColor" strokeWidth="1.5"/><rect x="3" y="9" width="18" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/></svg>
     )
   }
   return (
-    <button title={title} onClick={onClick} className="h-9 inline-flex items-center justify-center rounded-lg border border-yellow-500/30 bg-black/40 px-2 text-gray-100 hover:bg-[#FFD600]/10 transition">
+    <button
+      title={title}
+      onClick={onClick}
+      className="p-2 rounded-xl border border-border-default bg-surface text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-colors"
+    >
       {icons[icon]}
     </button>
   )

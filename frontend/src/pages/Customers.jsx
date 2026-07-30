@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useToast } from '../components/Toast';
-import { LoadingOverlay, InlineLoading } from '../components/LoadingStates';
+import { LoadingOverlay } from '../components/LoadingStates';
 import { 
   PlusIcon, 
   MagnifyingGlassIcon,
@@ -13,6 +13,12 @@ import { fetchCustomers, deleteCustomer, createCustomer, updateCustomer } from '
 import useCurrency from '../hooks/useCurrency';
 import CustomerDetailsCard from '../components/CustomerDetailsCard';
 import CustomerModal from '../components/CustomerModal';
+import PageHeader from '../components/ui/PageHeader';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Table from '../components/ui/Table';
+import Badge from '../components/ui/Badge';
 
 export default function Customers() {
   const dispatch = useDispatch();
@@ -56,24 +62,11 @@ export default function Customers() {
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
     setCurrentPage(1);
-    
-    if (!e.target.value) {
-      showToast({
-        type: 'info',
-        title: 'Search Cleared',
-        message: 'Showing all customers'
-      });
-    }
   };
 
   const handleEdit = (customer) => {
     setEditingCustomer(customer);
     setShowModal(true);
-    showToast({
-      type: 'info',
-      title: 'Edit Mode',
-      message: `Editing customer: ${customer.name}`
-    });
   };
 
   const handleDelete = async (customerId) => {
@@ -95,190 +88,125 @@ export default function Customers() {
     }
   };
 
-  // currency now handled by useCurrency hook
+  const columns = [
+    {
+      key: 'name',
+      label: 'Customer',
+      render: (val, row) => (
+        <div>
+          <div className="font-semibold text-text-primary text-body">{val}</div>
+          {row.address && <div className="text-caption text-text-muted">{row.address}</div>}
+        </div>
+      )
+    },
+    {
+      key: 'email',
+      label: 'Contact Details',
+      render: (val, row) => (
+        <div>
+          <div className="text-small font-medium text-text-primary">{val || 'No email'}</div>
+          <div className="text-caption text-text-muted">{row.phone || 'No phone'}</div>
+        </div>
+      )
+    },
+    {
+      key: 'totalPurchases',
+      label: 'Total Spent',
+      render: (val) => <span className="font-bold text-primary">{formatCurrency(val || 0)}</span>
+    },
+    {
+      key: 'loyaltyPoints',
+      label: 'Loyalty Points',
+      render: (val) => (
+        <Badge variant="primary">
+          {val || 0} pts
+        </Badge>
+      )
+    },
+    {
+      key: 'lastVisit',
+      label: 'Last Visit',
+      render: (val) => (
+        <span className="text-small text-text-secondary">
+          {val ? new Date(val).toLocaleDateString() : 'Never'}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (_, row) => (
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setSelectedCustomer(row)}
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+            title="View Customer Profile"
+          >
+            <EyeIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleEdit(row)}
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+            title="Edit Customer"
+          >
+            <PencilIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleDelete(row.id)}
+            className="p-1.5 rounded-lg text-danger hover:bg-danger/10 transition-colors"
+            title="Delete Customer"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
 
   return (
-    <div className="min-h-screen p-6 bg-brand-black text-white">
+    <div className="space-y-6">
       <LoadingOverlay isLoading={loading} text="Loading customers...">
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-zana-yellow">Customers</h1>
-              <p className="text-white/70">
-                Manage your customer database
-                {loading && <span className="ml-2 text-sm text-zana-yellow">(Refreshing...)</span>}
-              </p>
-            </div>
-            <button
-              onClick={() => {
+          <PageHeader
+            title="Customers"
+            description="Manage customer accounts, purchase histories, and loyalty points."
+            primaryAction={{
+              label: 'Add Customer',
+              icon: PlusIcon,
+              onClick: () => {
                 setEditingCustomer(null);
                 setShowModal(true);
-                showToast({
-                  type: 'info',
-                  title: 'Add Customer',
-                  message: 'Fill in the customer details to add them to the system'
-                });
-              }}
-              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50 bg-zana-yellow text-black shadow-zana hover:bg-zana-yellow/90 hover:shadow-zana-lg focus:outline-none focus:ring-2 focus:ring-zana-yellow/50"
-              disabled={loading}
-            >
-              <PlusIcon className="h-5 w-5" />
-              Add Customer
-            </button>
-          </div>
+              }
+            }}
+          />
 
-          {/* Search */}
-          <div className="bg-brand-gray p-6 rounded-lg shadow-zana border border-zana-borderTint">
-            <div className="relative">
-              <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-zana-yellow/50" />
-              <input
-                type="text"
-                placeholder="Search customers..."
-                value={searchTerm}
-                onChange={handleSearch}
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-black/40 text-white placeholder:text-zana-yellow/40 border border-zana-borderTint focus:outline-none focus:ring-2 focus:ring-zana-yellow focus:border-zana-yellow"
-              />
-            </div>
-          </div>
+          {/* Search Card */}
+          <Card variant="default" className="p-4">
+            <Input
+              type="search"
+              placeholder="Search customers by name, phone, or email..."
+              value={searchTerm}
+              onChange={handleSearch}
+              leftIcon={MagnifyingGlassIcon}
+            />
+          </Card>
 
-          {/* Table */}
-          <div className="bg-brand-black rounded-lg shadow-zana overflow-hidden border border-zana-borderTint">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-zana-borderTint">
-                <thead className="bg-black">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                      Customer
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                      Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                      Total Spent
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                      Loyalty Points
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                      Last Visit
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-zana-yellow uppercase tracking-wider border-b border-zana-borderTint">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zana-borderTint">
-                  {customers.map((customer) => (
-                    <tr key={customer.id} className="odd:bg-black/30 even:bg-black/20 hover:bg-zana-yellow/5">
-                      <td className="px-6 py-4 whitespace-nowrap text-white">
-                        <div>
-                          <div className="text-sm font-medium">{customer.name}</div>
-                          {customer.address && (
-                            <div className="text-sm text-white/60">{customer.address}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-white">
-                        <div className="text-sm">{customer.email || 'No email'}</div>
-                        <div className="text-sm text-white/60">{customer.phone || 'No phone'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {formatCurrency(customer.totalPurchases)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-zana-yellow/10 text-zana-yellow border border-zana-borderTint">
-                          {customer.loyaltyPoints} pts
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {customer.lastVisit ? new Date(customer.lastVisit).toLocaleDateString() : 'Never'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex gap-2 items-center">
-                          <button
-                            onClick={() => setSelectedCustomer(customer)}
-                            className="text-zana-yellow hover:text-zana-yellow/80 hover:drop-shadow-[0_0_6px_rgba(255,214,0,0.6)]"
-                            title="View Details"
-                          >
-                            <EyeIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(customer)}
-                            className="text-white/80 hover:text-white"
-                            title="Edit"
-                          >
-                            <PencilIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(customer.id)}
-                            className="text-red-400 hover:text-red-300"
-                            title="Delete"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Empty State */}
-            {customers.length === 0 && !loading && (
-              <div className="p-8 text-center">
-                <p className="text-white/60">No customers found</p>
-              </div>
-            )}
-
-            {/* Pagination */}
-            {pagination.totalPages > 1 && (
-              <div className="bg-black/30 px-4 py-3 flex items-center justify-between border-t border-zana-borderTint sm:px-6">
-                <div className="flex-1 flex justify-between sm:hidden">
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md text-white border-zana-borderTint bg-black hover:bg-zana-yellow/10 disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === pagination.totalPages}
-                    className="ml-3 relative inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md text-white border-zana-borderTint bg-black hover:bg-zana-yellow/10 disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm text-white/80">
-                      Showing page <span className="font-medium">{currentPage}</span> of{' '}
-                      <span className="font-medium">{pagination.totalPages}</span>
-                    </p>
-                  </div>
-                  <div>
-                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                      {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                            page === currentPage
-                              ? 'z-10 bg-zana-yellow text-black border-zana-yellow'
-                              : 'bg-black text-white/70 border-zana-borderTint hover:bg-zana-yellow/10'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </nav>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Notion-Style Table */}
+          <Table
+            columns={columns}
+            data={customers}
+            loading={loading}
+            emptyTitle="No Customers Found"
+            emptyDescription="Add new customer accounts to track purchases and issue loyalty rewards."
+            pagination={{
+              currentPage,
+              totalPages: pagination?.totalPages || 1,
+              totalItems: pagination?.totalItems || customers.length,
+              pageSize: 10,
+              onPageChange: (p) => setCurrentPage(p)
+            }}
+          />
         </div>
 
         {/* Modals */}
@@ -288,11 +216,6 @@ export default function Customers() {
             onClose={() => {
               setShowModal(false);
               setEditingCustomer(null);
-              showToast({
-                type: 'info',
-                title: 'Cancelled',
-                message: 'Customer changes were cancelled'
-              });
             }}
             onSubmit={async (customerData) => {
               try {
@@ -301,14 +224,14 @@ export default function Customers() {
                   showToast({
                     type: 'success',
                     title: 'Customer Updated',
-                    message: `Successfully updated ${customerData.name}'s information`
+                    message: `Successfully updated ${customerData.name}`
                   });
                 } else {
                   await dispatch(createCustomer(customerData)).unwrap();
                   showToast({
                     type: 'success',
                     title: 'Customer Added',
-                    message: `Successfully added ${customerData.name} to customers`
+                    message: `Successfully added ${customerData.name}`
                   });
                 }
                 setShowModal(false);
