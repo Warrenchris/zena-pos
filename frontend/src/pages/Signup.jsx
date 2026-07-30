@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { setCredentials } from '../store/slices/authSlice'
 import { authAPI } from '../services/api'
+import Input from '../components/ui/Input'
+import Button from '../components/ui/Button'
+import Card from '../components/ui/Card'
 
 export default function Signup() {
   const navigate = useNavigate()
@@ -15,7 +18,6 @@ export default function Signup() {
     shopAddress: '',
     shopPhone: ''
   })
-  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -37,7 +39,6 @@ export default function Signup() {
           phone: form.shopPhone,
         },
       })
-      // Backend returns { user, token }. Persist and go to dashboard
       dispatch(setCredentials(res.data))
       navigate('/dashboard')
     } catch (err) {
@@ -48,52 +49,122 @@ export default function Signup() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl w-full bg-white shadow rounded-lg p-6">
-        <h2 className="text-2xl font-bold text-gray-900">Create your account</h2>
-        <p className="text-gray-600">You will be the admin of this shop/company.</p>
-        <form className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={onSubmit}>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700">Full name</label>
-            <input name="name" required value={form.name} onChange={onChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+    <div className="min-h-screen flex items-center justify-center bg-surface-0 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl w-full">
+        <Card variant="elevated" className="p-8">
+          <div className="text-center mb-8">
+            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-4 shadow-glow">
+              <img src="/react.svg" alt="Zana POS" className="w-8 h-8" />
+            </div>
+            <h2 className="text-h2 font-bold text-text-primary">Create your account</h2>
+            <p className="text-body text-text-secondary mt-1">Set up your account and register your business workspace</p>
           </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700">Email</label>
-            <input type="email" name="email" required value={form.email} onChange={onChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
-          </div>
-          <div className="md:col-span-2 relative">
-            <label className="block text-sm font-medium text-gray-700">Password</label>
-            <input type={showPassword ? 'text' : 'password'} name="password" required value={form.password} onChange={onChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 pr-16 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
-            <button type="button" onClick={() => setShowPassword((v)=>!v)} className="absolute right-2 bottom-2 text-sm text-gray-600">{showPassword ? 'Hide' : 'Show'}</button>
-          </div>
-          <div className="md:col-span-2">
-            <h3 className="text-lg font-semibold text-gray-900 mt-2">Shop / Company</h3>
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700">Name</label>
-            <input name="shopName" required value={form.shopName} onChange={onChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Phone</label>
-            <input name="shopPhone" value={form.shopPhone} onChange={onChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Address</label>
-            <input name="shopAddress" value={form.shopAddress} onChange={onChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
-          </div>
-          {error && (
-            <div className="md:col-span-2 text-sm text-red-600">{error}</div>
-          )}
-          <div className="md:col-span-2 flex justify-between items-center mt-2">
-            <button type="button" onClick={() => navigate('/login')} className="text-sm text-gray-600 hover:underline">Back to login</button>
-            <button type="submit" disabled={loading} className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-              {loading ? 'Creating account...' : 'Create account'}
-            </button>
-          </div>
-        </form>
+
+          <form className="space-y-6" onSubmit={onSubmit}>
+            {/* User Details */}
+            <div className="space-y-4">
+              <h3 className="text-h4 font-semibold text-text-primary border-b border-border-default pb-2">
+                Administrator Details
+              </h3>
+              
+              <Input
+                id="name"
+                name="name"
+                label="Full Name"
+                required
+                placeholder="John Doe"
+                value={form.name}
+                onChange={onChange}
+              />
+
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                label="Email Address"
+                required
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={onChange}
+              />
+
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                label="Password"
+                required
+                placeholder="Choose a strong password"
+                value={form.password}
+                onChange={onChange}
+              />
+            </div>
+
+            {/* Shop Details */}
+            <div className="space-y-4 pt-2">
+              <h3 className="text-h4 font-semibold text-text-primary border-b border-border-default pb-2">
+                Shop / Company Information
+              </h3>
+
+              <Input
+                id="shopName"
+                name="shopName"
+                label="Shop Name"
+                required
+                placeholder="Main Street Store"
+                value={form.shopName}
+                onChange={onChange}
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  id="shopPhone"
+                  name="shopPhone"
+                  type="tel"
+                  label="Phone Number"
+                  placeholder="+254 700 000 000"
+                  value={form.shopPhone}
+                  onChange={onChange}
+                />
+
+                <Input
+                  id="shopAddress"
+                  name="shopAddress"
+                  label="Business Address"
+                  placeholder="Nairobi, Kenya"
+                  value={form.shopAddress}
+                  onChange={onChange}
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div role="alert" className="rounded-lg bg-danger/10 border border-danger/30 p-4 text-danger text-small font-medium">
+                {error}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-4 border-t border-border-default">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => navigate('/login')}
+              >
+                Back to login
+              </Button>
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                loading={loading}
+              >
+                Create Account
+              </Button>
+            </div>
+          </form>
+        </Card>
       </div>
     </div>
   )
 }
-
-
