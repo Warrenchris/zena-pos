@@ -7,17 +7,21 @@ import { ToastProvider } from './components/Toast';
 import { SnackbarProvider } from './components/Snackbar';
 import { CurrencyProvider } from './components/CurrencyProvider';
 
+import { ThemeProvider } from './providers/ThemeProvider';
+
 function App() {
   return (
     <React.StrictMode>
       <Provider store={store}>
-        <CurrencyProvider>
-          <ToastProvider>
-            <SnackbarProvider>
-              <RouterProvider router={router} future={{ v7_startTransition: true }} />
-            </SnackbarProvider>
-          </ToastProvider>
-        </CurrencyProvider>
+        <ThemeProvider>
+          <CurrencyProvider>
+            <ToastProvider>
+              <SnackbarProvider>
+                <RouterProvider router={router} future={{ v7_startTransition: true }} />
+              </SnackbarProvider>
+            </ToastProvider>
+          </CurrencyProvider>
+        </ThemeProvider>
       </Provider>
     </React.StrictMode>
   );

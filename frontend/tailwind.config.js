@@ -16,84 +16,85 @@ module.exports = {
     },
     extend: {
       /* ──────────────────────────────────────────────
-         ENTERPRISE SAAS SLATE BLUE SYSTEM (Linear / Stripe / Vercel)
+         ZANA POS — ENTERPRISE WARM MOCHA / ESPRESSO SYSTEM
+         Floating Shell Architecture & Dual Theme System
          ────────────────────────────────────────────── */
       colors: {
-        app: '#F8FAFC', // Slate 50
+        app: 'var(--bg-app)',
 
         surface: {
-          DEFAULT: '#FFFFFF',
-          0: '#F8FAFC',
-          1: '#FFFFFF',
-          2: '#F1F5F9', // Slate 100
-          3: '#E2E8F0', // Slate 200
+          DEFAULT: 'var(--bg-surface)',
+          0: 'var(--bg-app)',
+          1: 'var(--bg-surface)',
+          2: 'var(--bg-surface-2)',
+          3: 'var(--bg-surface-3)',
         },
 
-        // Calm Enterprise Slate / Indigo Accent
+        // Warm Mocha / Amber Primary System
         primary: {
-          DEFAULT: '#2563EB', // Blue 600
-          hover:   '#1D4ED8', // Blue 700
-          active:  '#1E40AF', // Blue 800
-          light:   '#DBEAFE', // Blue 100
-          tint:    '#EFF6FF', // Blue 50
+          DEFAULT: 'var(--color-primary)',
+          hover:   'var(--color-primary-hover)',
+          active:  'var(--color-primary-active)',
+          light:   'var(--color-primary-light)',
+          tint:    'var(--color-primary-tint)',
         },
 
         success: {
           DEFAULT: '#10B981',
-          muted:   '#ECFDF5',
-          border:  '#A7F3D0',
-          text:    '#047857',
+          muted:   'var(--color-success-muted)',
+          border:  'var(--color-success-border)',
+          text:    'var(--color-success-text)',
         },
         warning: {
           DEFAULT: '#F59E0B',
-          muted:   '#FFFBEB',
-          border:  '#FDE68A',
-          text:    '#B45309',
+          muted:   'var(--color-warning-muted)',
+          border:  'var(--color-warning-border)',
+          text:    'var(--color-warning-text)',
         },
         danger: {
           DEFAULT: '#EF4444',
-          muted:   '#FEF2F2',
-          border:  '#FECACA',
-          text:    '#B91C1C',
+          muted:   'var(--color-danger-muted)',
+          border:  'var(--color-danger-border)',
+          text:    'var(--color-danger-text)',
         },
         info: {
           DEFAULT: '#0EA5E9',
-          muted:   '#F0F9FF',
-          border:  '#BAE6FD',
-          text:    '#0369A1',
+          muted:   'var(--color-info-muted)',
+          border:  'var(--color-info-border)',
+          text:    'var(--color-info-text)',
         },
 
-        // Typography Hierarchy (Slate)
-        'text-primary':   '#0F172A', // Slate 900
-        'text-secondary': '#475569', // Slate 600
-        'text-muted':     '#94A3B8', // Slate 400
-        'text-disabled':  '#CBD5E1', // Slate 300
+        // Typography Hierarchy Tokens
+        'text-primary':   'var(--text-primary)',
+        'text-secondary': 'var(--text-secondary)',
+        'text-muted':     'var(--text-muted)',
+        'text-disabled':  'var(--text-disabled)',
 
         // Borders
-        'border-default': '#E2E8F0', // Slate 200
-        'border-hover':   '#CBD5E1', // Slate 300
-        'border-focus':   '#2563EB',
+        'border-default': 'var(--border-default)',
+        'border-hover':   'var(--border-hover)',
+        'border-focus':   'var(--color-primary)',
 
-        /* Legacy Aliases */
+        /* Legacy Brand Aliases mapped to semantic variables for zero breakage */
         brand: {
-          black:      '#0F172A',
-          darkGray:   '#1E293B',
-          gray:       '#F1F5F9',
-          text:       '#0F172A',
-          yellow:     '#2563EB',
-          yellowDark: '#1D4ED8',
-          accent:     '#DBEAFE',
-          blue:       '#2563EB',
+          black:      'var(--text-primary)',
+          darkGray:   'var(--bg-surface-2)',
+          gray:       'var(--bg-surface-2)',
+          text:       'var(--text-primary)',
+          yellow:     'var(--color-primary)',
+          yellowDark: 'var(--color-primary-hover)',
+          accent:     'var(--color-primary-light)',
+          blue:       'var(--color-primary)',
           green:      '#10B981',
           amber:      '#F59E0B',
           cyan:       '#0EA5E9',
           red:        '#EF4444',
         },
         zana: {
-          yellow:     '#2563EB',
-          yellowDark: '#1D4ED8',
-          borderTint: '#E2E8F0',
-          blue:       '#2563EB',
+          yellow:     'var(--color-primary)',
+          yellowDark: 'var(--color-primary-hover)',
+          borderTint: 'var(--border-default)',
+          blue:       'var(--color-primary)',
           green:      '#10B981',
           amber:      '#F59E0B',
           cyan:       '#0EA5E9',
@@ -103,6 +104,7 @@ module.exports = {
 
       /* ──────────────────────────────────────────────
          EXACT MATHEMATICAL TYPOGRAPHY SCALE (Spec)
+         Display: 44px, H1: 32px, H2: 24px, Card Title: 18px, Body: 15px, Caption: 13px
          ────────────────────────────────────────────── */
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -114,6 +116,7 @@ module.exports = {
         'h3':      ['1.125rem', { lineHeight: '1.4',  letterSpacing: '-0.005em', fontWeight: '600' }], // 18px
         'body':    ['0.9375rem',{ lineHeight: '1.5',  fontWeight: '400' }],                           // 15px
         'caption': ['0.8125rem',{ lineHeight: '1.5',  fontWeight: '400' }],                           // 13px
+        'small':   ['0.875rem', { lineHeight: '1.4',  fontWeight: '500' }],
       },
 
       /* ──────────────────────────────────────────────
@@ -129,11 +132,12 @@ module.exports = {
       },
 
       boxShadow: {
-        'sm':       '0 1px 2px 0 rgba(15, 23, 42, 0.03)',
-        'md':       '0 4px 12px -2px rgba(15, 23, 42, 0.04), 0 2px 4px -2px rgba(15, 23, 42, 0.02)',
-        'lg':       '0 10px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.02)',
-        'floating': '0 12px 32px -4px rgba(15, 23, 42, 0.06), 0 4px 12px -2px rgba(15, 23, 42, 0.03)',
-        'modal':    '0 20px 48px -8px rgba(15, 23, 42, 0.12), 0 8px 16px -4px rgba(15, 23, 42, 0.04)',
+        '2xs':      '0 1px 2px 0 rgba(0, 0, 0, 0.04)',
+        'sm':       'var(--shadow-sm)',
+        'md':       'var(--shadow-md)',
+        'lg':       'var(--shadow-lg)',
+        'floating': 'var(--shadow-floating)',
+        'modal':    'var(--shadow-modal)',
       },
 
       transitionDuration: {

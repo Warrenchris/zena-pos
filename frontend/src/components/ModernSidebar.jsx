@@ -17,7 +17,6 @@ import {
   ShoppingCartIcon,
   GiftIcon,
   CreditCardIcon,
-  PercentBadgeIcon,
   ShoppingBagIcon,
   ClipboardDocumentListIcon,
   CurrencyDollarIcon,
@@ -31,18 +30,28 @@ import {
   DocumentTextIcon,
   ArrowUturnLeftIcon,
   DocumentIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon as CollapseRightIcon
 } from '@heroicons/react/24/outline';
 
-const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
+const ModernSidebar = ({
+  isOpen,
+  onClose,
+  user,
+  variant = 'admin',
+  isCollapsed = false,
+  onToggleCollapse
+}) => {
   const location = useLocation();
   const [expandedSections, setExpandedSections] = useState({});
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : false
   );
+  const [hoveredTooltip, setHoveredTooltip] = useState(null);
   const sidebarLabelId = useId();
 
-  // Mathematical 8pt spacing hierarchy navigation groups
+  // Navigation Groups Structure
   const menuSections = [
     {
       title: 'Sales & Orders',
@@ -179,15 +188,42 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
 
   const renderNavItem = (item) => {
     const active = isActive(item.path);
-    
+
+    if (isCollapsed && isDesktop) {
+      return (
+        <div key={item.path} className="relative group/tooltip flex justify-center my-1">
+          <Link
+            to={item.path}
+            aria-current={active ? 'page' : undefined}
+            onMouseEnter={() => setHoveredTooltip(item.name)}
+            onMouseLeave={() => setHoveredTooltip(null)}
+            className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              active
+                ? 'bg-primary text-white shadow-md'
+                : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary'
+            }`}
+          >
+            <item.icon className="h-5 w-5 shrink-0" />
+          </Link>
+
+          {/* Floating Hover Tooltip for Collapsed Mode */}
+          <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 pointer-events-none opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-150">
+            <div className="bg-text-primary text-surface text-caption font-semibold px-3 py-1.5 rounded-lg shadow-floating whitespace-nowrap flex items-center gap-1.5">
+              <span>{item.name}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <Link
         key={item.path}
         to={item.path}
         aria-current={active ? 'page' : undefined}
-        className={`group relative flex items-center px-3 py-2 text-small rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        className={`group relative flex items-center px-3 py-2 text-small rounded-xl transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
           active
-            ? 'bg-blue-50 text-blue-700 font-semibold border-l-2 border-primary pl-2.5 shadow-2xs'
+            ? 'bg-primary/10 text-primary font-semibold border-l-2 border-primary pl-2.5 shadow-2xs'
             : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary font-normal'
         }`}
       >
@@ -205,12 +241,22 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
 
   const renderSection = (section) => {
     const isExpanded = expandedSections[section.title];
-    
+
+    if (isCollapsed && isDesktop) {
+      return (
+        <div key={section.title} className="py-2 border-b border-border-default/50 last:border-b-0">
+          <div className="space-y-1">
+            {section.items.map(item => renderNavItem(item))}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div key={section.title} className="mb-2.5">
         <button
           onClick={() => toggleSection(section.title)}
-          className="flex items-center justify-between w-full px-3 py-1.5 text-caption font-semibold text-text-muted uppercase tracking-wider hover:text-text-secondary transition-colors duration-150 group rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="flex items-center justify-between w-full px-3 py-1.5 text-caption font-semibold text-text-muted uppercase tracking-wider hover:text-text-secondary transition-colors duration-150 group rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           aria-expanded={Boolean(isExpanded)}
           aria-controls={`sidebar-section-${section.title}`}
         >
@@ -240,11 +286,13 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
     );
   };
 
+  const sidebarWidthClass = isCollapsed && isDesktop ? 'w-20' : 'w-64 lg:w-64 2xl:w-72';
+
   return (
     <>
-      {/* Mobile Backdrop */}
+      {/* Mobile Backdrop Overlay */}
       <div 
-        className={`fixed inset-0 bg-slate-900/20 backdrop-blur-xs transition-opacity duration-200 ease-out lg:hidden ${
+        className={`fixed inset-0 bg-stone-950/40 backdrop-blur-xs transition-opacity duration-200 ease-out lg:hidden ${
           isOpen ? 'opacity-100 z-40' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
@@ -253,31 +301,50 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
 
       {/* Floating Card Sidebar Shell */}
       <div
-        className={`fixed top-4 bottom-4 left-4 z-40 w-64 lg:w-64 2xl:w-72 bg-white border border-border-default shadow-floating rounded-2xl transform transition-all duration-200 ease-out flex flex-col overflow-hidden ${
+        className={`fixed top-4 bottom-4 left-4 z-40 ${sidebarWidthClass} bg-surface border border-border-default shadow-floating rounded-2xl transform transition-all duration-200 ease-out flex flex-col overflow-hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-[calc(100%+16px)] lg:translate-x-0'
         }`}
         role="navigation"
         aria-labelledby={sidebarLabelId}
         aria-hidden={!isOpen && !isDesktop}
       >
-        {/* Sidebar Header with Brand */}
-        <div className="flex items-center justify-between h-14 px-5 border-b border-border-default bg-white">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-center text-primary shrink-0 shadow-2xs">
+        {/* Sidebar Header with Brand & Desktop Collapse Toggle */}
+        <div className={`flex items-center justify-between h-14 border-b border-border-default bg-surface ${isCollapsed && isDesktop ? 'px-3 justify-center' : 'px-4'}`}>
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="w-8 h-8 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center text-primary shrink-0 shadow-2xs">
               <StoreIcon className="h-5 w-5" />
             </div>
-            <div>
-              <h1 id={sidebarLabelId} className="text-body font-semibold text-text-primary tracking-tight">
-                {variant === 'admin' ? 'Zana Suite' : 'Zana POS'}
-              </h1>
-              <p className="text-caption text-text-muted font-normal">
-                {variant === 'admin' ? 'Enterprise' : 'Terminal'}
-              </p>
-            </div>
+            {(!isCollapsed || !isDesktop) && (
+              <div className="truncate">
+                <h1 id={sidebarLabelId} className="text-body font-bold text-text-primary tracking-tight truncate">
+                  {variant === 'admin' ? 'Zana Suite' : 'Zana POS'}
+                </h1>
+                <p className="text-caption text-text-muted font-medium truncate">
+                  {variant === 'admin' ? 'Enterprise' : 'Terminal'}
+                </p>
+              </div>
+            )}
           </div>
+
+          {/* Desktop Collapse Toggle */}
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="hidden lg:flex p-1.5 rounded-xl text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label="Toggle sidebar collapse"
+          >
+            {isCollapsed ? (
+              <CollapseRightIcon className="h-4 w-4" />
+            ) : (
+              <ChevronLeftIcon className="h-4 w-4" />
+            )}
+          </button>
+
+          {/* Mobile Close Button */}
           <button
             onClick={onClose}
-            className="lg:hidden p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            className="lg:hidden p-1.5 rounded-xl text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary/40"
             aria-label="Close navigation menu"
           >
             <XMarkIcon className="h-5 w-5" />
@@ -285,24 +352,26 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         </div>
 
         {/* Navigation Groups Container */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-3 py-3 space-y-2">
+        <div className={`flex-1 overflow-y-auto scrollbar-thin space-y-2 ${isCollapsed && isDesktop ? 'px-2 py-3' : 'px-3 py-3'}`}>
           <nav aria-label="Primary navigation">
             {sidebarSections.map(renderSection)}
           </nav>
         </div>
 
-        {/* Floating User / Profile Footer */}
-        <div className="p-3.5 border-t border-border-default bg-surface-2/40">
-          <div className="flex items-center">
+        {/* Floating User Profile / Utility Footer */}
+        <div className={`border-t border-border-default bg-surface-2/40 ${isCollapsed && isDesktop ? 'p-2.5 flex justify-center' : 'p-3.5'}`}>
+          <div className="flex items-center gap-2.5">
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-primary text-white font-semibold text-caption flex items-center justify-center shadow-2xs">
+              <div className="w-8 h-8 rounded-xl bg-primary text-white font-bold text-caption flex items-center justify-center shadow-2xs">
                 {user?.name?.[0]?.toUpperCase() || 'U'}
               </div>
             </div>
-            <div className="ml-2.5 flex-1 min-w-0">
-              <p className="text-small font-medium text-text-primary truncate">{user?.name || 'User'}</p>
-              <p className="text-caption text-text-muted truncate">{user?.email}</p>
-            </div>
+            {(!isCollapsed || !isDesktop) && (
+              <div className="flex-1 min-w-0">
+                <p className="text-small font-semibold text-text-primary truncate">{user?.name || 'User'}</p>
+                <p className="text-caption text-text-muted truncate">{user?.email}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

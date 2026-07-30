@@ -83,7 +83,7 @@ export default function Login() {
   const activeError = loginError || error
 
   return (
-    <div className="min-h-screen bg-surface-0 flex">
+    <div className="min-h-screen bg-app flex">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/10 via-surface-1 to-surface-0 border-r border-border-default p-12 flex-col justify-between relative overflow-hidden">
         <div className="relative z-10">

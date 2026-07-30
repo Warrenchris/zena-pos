@@ -3,13 +3,13 @@ import React from 'react';
 /**
  * Card — Floating Enterprise SaaS Widget Primitive
  * Inspired by Linear, Stripe Dashboard, Vercel & Notion.
- * Structure: Card (24px radius, 24px padding) -> Header -> Body -> Footer -> Actions
+ * Architecture: Floating shell (24px radius, 24px padding) -> Header -> Body -> Footer -> Actions
  */
 const variantStyles = {
-  default:  'bg-white border-border-default shadow-floating',
-  elevated: 'bg-white border-border-default shadow-lg',
-  outlined: 'bg-white/60 backdrop-blur-sm border-border-default',
-  flat:     'bg-surface-0 border border-border-default',
+  default:  'bg-surface border-border-default shadow-floating',
+  elevated: 'bg-surface border-border-default shadow-lg',
+  outlined: 'bg-surface/80 backdrop-blur-sm border-border-default',
+  flat:     'bg-surface-2/60 border border-border-default',
 };
 
 export default function Card({
@@ -24,13 +24,13 @@ export default function Card({
     return (
       <div
         className={`
-          rounded-2xl border p-6 bg-white border-border-default shadow-floating
+          rounded-2xl border p-6 bg-surface border-border-default shadow-floating
           animate-pulse ${className}
         `}
       >
-        <div className="h-5 w-1/3 bg-surface-2 rounded-md mb-4" />
-        <div className="h-4 w-2/3 bg-surface-2 rounded-md mb-2" />
-        <div className="h-4 w-1/2 bg-surface-2 rounded-md" />
+        <div className="h-5 w-1/3 bg-surface-2 rounded-lg mb-4" />
+        <div className="h-4 w-2/3 bg-surface-2 rounded-lg mb-2" />
+        <div className="h-4 w-1/2 bg-surface-2 rounded-lg" />
       </div>
     );
   }
@@ -40,7 +40,7 @@ export default function Card({
       className={`
         rounded-2xl border transition-all duration-200 ease-out overflow-hidden
         ${variantStyles[variant] || variantStyles.default}
-        ${hoverable ? 'hover:shadow-lg hover:border-border-hover' : ''}
+        ${hoverable ? 'hover:shadow-lg hover:border-border-hover hover:-translate-y-0.5' : ''}
         ${className}
       `}
       {...props}
@@ -76,9 +76,8 @@ Card.Body = function CardBody({ className = '', children, ...props }) {
 
 Card.Footer = function CardFooter({ className = '', children, ...props }) {
   return (
-    <div className={`px-6 py-4 border-t border-border-default/70 bg-surface-0/60 flex items-center justify-between gap-4 ${className}`} {...props}>
+    <div className={`px-6 py-4 border-t border-border-default/70 bg-surface-2/40 flex items-center justify-between gap-4 ${className}`} {...props}>
       {children}
     </div>
   );
 };
-

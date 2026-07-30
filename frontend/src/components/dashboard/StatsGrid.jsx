@@ -8,17 +8,17 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
   const isPositive = percentage > 0;
 
   return (
-    <div className="rounded-xl border border-border-default bg-white p-6 overflow-hidden shadow-sm transition-shadow duration-200 hover:shadow-md">
+    <div className="rounded-2xl border border-border-default bg-surface p-6 overflow-hidden shadow-floating transition-all duration-200 hover:shadow-lg hover:border-border-hover">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="text-caption font-semibold uppercase tracking-wider text-text-secondary">{title}</h3>
+          <h3 className="text-caption font-semibold uppercase tracking-wider text-text-muted">{title}</h3>
           <p className="mt-1.5 text-h2 font-bold text-text-primary tracking-tight">{value}</p>
         </div>
         <div
           className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-caption font-semibold whitespace-nowrap shrink-0 border ${
             isPositive
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : 'bg-red-50 text-red-700 border-red-200'
+              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
+              : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20'
           }`}
         >
           {isPositive ? <HiArrowUp className="h-3.5 w-3.5" /> : <HiArrowDown className="h-3.5 w-3.5" />}
@@ -34,8 +34,8 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
               dataKey="value"
               stroke={color}
               fill={color}
-              fillOpacity={0.12}
-              strokeWidth={2}
+              fillOpacity={0.15}
+              strokeWidth={2.5}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -61,7 +61,7 @@ const StatsGrid = () => {
 
         const formattedStats = [
           {
-            title: 'Total Income',
+            title: 'Total Revenue',
             value: format(orderStats?.totalRevenue || 0),
             percentage: orderStats?.revenuePercentageChange || 0,
             trend: 'Compared to last month',
@@ -69,7 +69,7 @@ const StatsGrid = () => {
               name: h.date,
               value: parseFloat(h?.revenue || 0)
             })),
-            color: '#D4A017'
+            color: 'var(--color-primary)'
           },
           {
             title: 'Total Orders',
@@ -80,7 +80,7 @@ const StatsGrid = () => {
               name: h.date,
               value: parseInt(h?.orders || 0)
             })),
-            color: '#0EA5E9'
+            color: '#D97706'
           },
           {
             title: 'Total Visitors',
@@ -91,7 +91,7 @@ const StatsGrid = () => {
               name: h.date,
               value: parseInt(h?.visitors || 0)
             })),
-            color: '#F97316'
+            color: '#10B981'
           },
           {
             title: 'Conversion Rate',
@@ -109,9 +109,9 @@ const StatsGrid = () => {
       } catch (error) {
         console.error('Error loading stats:', error);
         setStats([
-          { title: 'Total Income', value: format(0), percentage: 0, trend: 'No data', data: [], color: '#D4A017' },
-          { title: 'Total Orders', value: '0', percentage: 0, trend: 'No data', data: [], color: '#0EA5E9' },
-          { title: 'Total Visitors', value: '0', percentage: 0, trend: 'No data', data: [], color: '#F97316' },
+          { title: 'Total Revenue', value: format(0), percentage: 0, trend: 'No data', data: [], color: 'var(--color-primary)' },
+          { title: 'Total Orders', value: '0', percentage: 0, trend: 'No data', data: [], color: '#D97706' },
+          { title: 'Total Visitors', value: '0', percentage: 0, trend: 'No data', data: [], color: '#10B981' },
           { title: 'Conversion Rate', value: '0.0%', percentage: 0, trend: 'No data', data: [], color: '#8B5CF6' }
         ]);
       } finally {
@@ -126,10 +126,10 @@ const StatsGrid = () => {
     return (
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-xl border border-border-default bg-white p-6 shadow-sm animate-pulse">
-            <div className="mb-4 h-4 w-3/4 rounded bg-surface-3" />
-            <div className="mb-4 h-8 w-1/2 rounded bg-surface-3" />
-            <div className="h-14 rounded bg-surface-3" />
+          <div key={i} className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating animate-pulse">
+            <div className="mb-4 h-4 w-3/4 rounded bg-surface-2" />
+            <div className="mb-4 h-8 w-1/2 rounded bg-surface-2" />
+            <div className="h-14 rounded bg-surface-2" />
           </div>
         ))}
       </div>

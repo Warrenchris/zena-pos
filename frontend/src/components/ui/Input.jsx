@@ -2,7 +2,7 @@ import React, { useId, useState } from 'react';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
 /**
- * Input — Clean form field primitive with label, focus ring, helper & error texts
+ * Input — Clean enterprise form field primitive with label, focus ring, helper & error texts
  */
 export default function Input({
   id: customId,
@@ -41,10 +41,10 @@ export default function Input({
   ].filter(Boolean).join(' ') || undefined;
 
   const baseInputStyles = `
-    w-full bg-white text-text-primary placeholder-text-muted
-    border rounded-md text-body font-sans transition-all duration-150
+    w-full bg-surface text-text-primary placeholder-text-muted
+    border rounded-xl text-body font-sans transition-all duration-150
     focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
-    disabled:bg-surface-0 disabled:opacity-60 disabled:cursor-not-allowed
+    disabled:bg-surface-2 disabled:opacity-60 disabled:cursor-not-allowed
     ${error ? 'border-danger focus:ring-danger/30 focus:border-danger' : 'border-border-default hover:border-border-hover'}
   `;
 
@@ -54,7 +54,7 @@ export default function Input({
         <div className="flex justify-between items-center">
           <label
             htmlFor={inputId}
-            className="text-small font-medium text-text-primary select-none flex items-center gap-1"
+            className="text-small font-semibold text-text-primary select-none flex items-center gap-1"
           >
             {label}
             {required && <span className="text-danger" aria-hidden="true">*</span>}
@@ -69,7 +69,7 @@ export default function Input({
 
       <div className="relative w-full flex items-center">
         {LeftIcon && (
-          <div className="absolute left-3 pointer-events-none text-text-muted flex items-center justify-center">
+          <div className="absolute left-3.5 pointer-events-none text-text-muted flex items-center justify-center">
             {typeof LeftIcon === 'function' || typeof LeftIcon === 'object' ? (
               <LeftIcon className="h-5 w-5" aria-hidden="true" />
             ) : (
@@ -92,8 +92,8 @@ export default function Input({
             aria-required={required ? 'true' : undefined}
             aria-describedby={ariaDescribedBy}
             className={`
-              ${baseInputStyles} p-3
-              ${LeftIcon ? 'pl-10' : ''}
+              ${baseInputStyles} p-3.5
+              ${LeftIcon ? 'pl-11' : ''}
               ${className}
             `}
             {...props}
@@ -109,14 +109,14 @@ export default function Input({
             aria-required={required ? 'true' : undefined}
             aria-describedby={ariaDescribedBy}
             className={`
-              ${baseInputStyles} px-3 py-2.5 appearance-none pr-8 cursor-pointer
-              ${LeftIcon ? 'pl-10' : ''}
+              ${baseInputStyles} px-3.5 py-2.5 appearance-none pr-9 cursor-pointer
+              ${LeftIcon ? 'pl-11' : ''}
               ${className}
             `}
             {...props}
           >
             {placeholder && (
-              <option value="" disabled>
+              <option value="" disabled className="bg-surface text-text-muted">
                 {placeholder}
               </option>
             )}
@@ -124,7 +124,7 @@ export default function Input({
               <option
                 key={typeof opt === 'object' ? opt.value : opt}
                 value={typeof opt === 'object' ? opt.value : opt}
-                className="bg-white text-text-primary"
+                className="bg-surface text-text-primary"
               >
                 {typeof opt === 'object' ? opt.label : opt}
               </option>
@@ -144,9 +144,9 @@ export default function Input({
             aria-required={required ? 'true' : undefined}
             aria-describedby={ariaDescribedBy}
             className={`
-              ${baseInputStyles} px-3 py-2.5 min-h-[40px]
-              ${LeftIcon ? 'pl-10' : ''}
-              ${(RightIcon || isPassword) ? 'pr-10' : ''}
+              ${baseInputStyles} px-3.5 py-2.5 min-h-[42px]
+              ${LeftIcon ? 'pl-11' : ''}
+              ${(RightIcon || isPassword) ? 'pr-11' : ''}
               ${className}
             `}
             {...props}
@@ -158,7 +158,7 @@ export default function Input({
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             tabIndex={-1}
-            className="absolute right-3 text-text-muted hover:text-text-primary transition-colors focus:outline-none"
+            className="absolute right-3.5 text-text-muted hover:text-text-primary transition-colors focus:outline-none"
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? (
@@ -168,7 +168,7 @@ export default function Input({
             )}
           </button>
         ) : RightIcon ? (
-          <div className="absolute right-3 pointer-events-none text-text-muted flex items-center justify-center">
+          <div className="absolute right-3.5 pointer-events-none text-text-muted flex items-center justify-center">
             {typeof RightIcon === 'function' || typeof RightIcon === 'object' ? (
               <RightIcon className="h-5 w-5" aria-hidden="true" />
             ) : (

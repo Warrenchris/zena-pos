@@ -3,6 +3,7 @@ import Button from './Button';
 
 /**
  * PageHeader — Clean header component for enterprise SaaS screens
+ * Follows mathematical typography scale: H1 32px (-0.02em tracking)
  */
 export default function PageHeader({
   title,
@@ -16,17 +17,17 @@ export default function PageHeader({
     <div className={`mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${className}`}>
       <div>
         {breadcrumbs && (
-          <nav aria-label="Breadcrumb" className="mb-1.5">
-            <ol className="flex items-center gap-2 text-caption text-text-muted">
+          <nav aria-label="Breadcrumb" className="mb-2">
+            <ol className="flex items-center gap-2 text-caption font-medium text-text-muted">
               {breadcrumbs.map((crumb, idx) => (
                 <li key={idx} className="flex items-center gap-2">
-                  {idx > 0 && <span aria-hidden="true">/</span>}
+                  {idx > 0 && <span aria-hidden="true" className="text-text-muted/60">/</span>}
                   {crumb.href ? (
                     <a href={crumb.href} className="hover:text-text-primary transition-colors">
                       {crumb.label}
                     </a>
                   ) : (
-                    <span className="text-text-primary font-medium">{crumb.label}</span>
+                    <span className="text-text-primary font-semibold">{crumb.label}</span>
                   )}
                 </li>
               ))}
@@ -34,12 +35,12 @@ export default function PageHeader({
           </nav>
         )}
 
-        <h1 className="text-h2 font-bold text-text-primary tracking-tight">
+        <h1 className="text-h1 font-bold text-text-primary tracking-tight">
           {title}
         </h1>
 
         {description && (
-          <p className="text-body text-text-secondary mt-0.5 max-w-3xl">
+          <p className="text-body text-text-secondary mt-1 max-w-3xl">
             {description}
           </p>
         )}

@@ -3,7 +3,8 @@ import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 /**
- * Modal — Floating white modal dialog with backdrop blur & smooth transition
+ * Modal — Floating modal dialog primitive with backdrop blur & smooth transition
+ * Enterprise 24px radius floating shell container.
  */
 const sizeStyles = {
   sm: 'max-w-md',        // 448px
@@ -33,7 +34,7 @@ export default function Modal({
         onClose={onClose}
         initialFocus={initialFocusRef}
       >
-        {/* Backdrop */}
+        {/* Backdrop Overlay */}
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-200"
@@ -43,7 +44,7 @@ export default function Modal({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" />
+          <div className="fixed inset-0 bg-stone-950/50 backdrop-blur-xs transition-opacity" />
         </Transition.Child>
 
         {/* Container */}
@@ -60,7 +61,7 @@ export default function Modal({
             >
               <Dialog.Panel
                 className={`
-                  w-full transform overflow-hidden rounded-2xl bg-white border border-border-default
+                  w-full transform overflow-hidden rounded-2xl bg-surface border border-border-default
                   p-6 text-left align-middle shadow-modal transition-all responsive-modal
                   ${sizeStyles[size] || sizeStyles.md}
                   ${className}
@@ -71,7 +72,7 @@ export default function Modal({
                   <div className="flex items-start justify-between gap-4 pb-4 border-b border-border-default mb-4">
                     <div>
                       {title && (
-                        <Dialog.Title as="h3" className="text-h3 font-semibold text-text-primary tracking-tight">
+                        <Dialog.Title as="h3" className="text-h3 font-bold text-text-primary tracking-tight">
                           {title}
                         </Dialog.Title>
                       )}
@@ -85,7 +86,7 @@ export default function Modal({
                       <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        className="rounded-xl p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
                         aria-label="Close modal"
                       >
                         <XMarkIcon className="h-5 w-5" aria-hidden="true" />

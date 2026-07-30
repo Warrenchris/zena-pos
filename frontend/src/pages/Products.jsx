@@ -218,7 +218,7 @@ function ProductsContent() {
   };
 
   return (
-    <div className="space-y-6 min-h-full p-1 bg-brand-black">
+    <div className="space-y-6 min-h-full p-1">
       <LoadingOverlay 
         isLoading={loading} 
         text={
@@ -540,7 +540,7 @@ function ProductsContent() {
                                 <div className="flex justify-end gap-2">
                                   <button
                                     onClick={() => handleStockUpdate(product)}
-                                    className="inline-flex items-center px-2 py-1 text-xs rounded bg-black/50 text-gray-100 border border-brand-yellow/20 hover:bg-black/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="inline-flex items-center px-2.5 py-1 text-caption font-medium rounded-lg bg-surface-2 text-text-primary border border-border-default hover:bg-surface-3 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     disabled={loading || localLoading.delete || localLoading.stock}
                                     title="Update stock quantity"
                                     aria-label={`Update stock for ${product.name}`}
@@ -550,9 +550,9 @@ function ProductsContent() {
                                   </button>
                                   <button
                                     onClick={() => handleDelete(product.id, product.name)}
-                                    className={`inline-flex items-center px-2 py-1 text-xs rounded ${
-                                      localLoading.delete ? 'bg-red-800 cursor-not-allowed' : 'bg-red-600/80 hover:bg-red-600'
-                                    } text-white disabled:opacity-50`}
+                                    className={`inline-flex items-center px-2.5 py-1 text-caption font-medium rounded-lg ${
+                                      localLoading.delete ? 'bg-danger/80 text-white cursor-not-allowed' : 'bg-danger/10 text-danger hover:bg-danger/20'
+                                    } disabled:opacity-50 transition-colors`}
                                     disabled={loading || localLoading.delete || localLoading.stock}
                                     title={`Delete ${product.name}`}
                                     aria-label={`Delete ${product.name}`}

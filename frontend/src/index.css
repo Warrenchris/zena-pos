@@ -1,6 +1,7 @@
 /* ══════════════════════════════════════════════════
-   ZANA POS — Enterprise SaaS Design System (Calm Slate Blue v2.0)
-   Inspirations: Linear, Stripe Dashboard, Vercel, Notion, Raycast, Ramp
+   ZANA POS — Enterprise SaaS Design System v3.0
+   Floating Shell Architecture with Warm Mocha / Amber Palette
+   Dual Light & Dark Mode Operating System Aesthetics
    ══════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -8,6 +9,109 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  /* Canvas & Surface (Light Warm Mocha / Alabaster) */
+  --bg-app: #FBF9F7;               /* Warm soft canvas */
+  --bg-surface: #FFFFFF;           /* Floating card surface */
+  --bg-surface-2: #F4EFEA;         /* Warm Sand 100 */
+  --bg-surface-3: #EBE4DD;         /* Warm Sand 200 */
+
+  /* Primary Accent: Rich Warm Espresso / Mocha Brown */
+  --color-primary: #784421;        /* Warm Rich Espresso */
+  --color-primary-hover: #613518;  /* Deep Espresso */
+  --color-primary-active: #4E2A12; /* Dark Espresso */
+  --color-primary-light: #F4ECE4;  /* Cream Mocha Tint */
+  --color-primary-tint: #FDFBF7;   /* Pearl Cream */
+
+  /* Text Hierarchy (Warm Stone / Slate) */
+  --text-primary: #1C1917;         /* Warm Stone 950 */
+  --text-secondary: #57534E;       /* Warm Stone 600 */
+  --text-muted: #A8A29E;           /* Warm Stone 400 */
+  --text-disabled: #D6D3D1;        /* Warm Stone 300 */
+
+  /* Borders */
+  --border-default: #E7E5E4;       /* Warm Stone 200 */
+  --border-hover: #D6D3D1;         /* Warm Stone 300 */
+
+  /* Status Tokens Light */
+  --color-success-muted: #ECFDF5;
+  --color-success-border: #A7F3D0;
+  --color-success-text: #047857;
+
+  --color-warning-muted: #FFFBEB;
+  --color-warning-border: #FDE68A;
+  --color-warning-text: #B45309;
+
+  --color-danger-muted: #FEF2F2;
+  --color-danger-border: #FECACA;
+  --color-danger-text: #B91C1C;
+
+  --color-info-muted: #F0F9FF;
+  --color-info-border: #BAE6FD;
+  --color-info-text: #0369A1;
+
+  /* Shadows Light */
+  --shadow-sm: 0 1px 2px 0 rgba(28, 25, 23, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(28, 25, 23, 0.05), 0 2px 4px -2px rgba(28, 25, 23, 0.02);
+  --shadow-lg: 0 10px 25px -5px rgba(28, 25, 23, 0.06), 0 8px 10px -6px rgba(28, 25, 23, 0.03);
+  --shadow-floating: 0 12px 32px -4px rgba(28, 25, 23, 0.07), 0 4px 12px -2px rgba(28, 25, 23, 0.04);
+  --shadow-modal: 0 20px 48px -8px rgba(28, 25, 23, 0.14), 0 8px 16px -4px rgba(28, 25, 23, 0.06);
+
+  --container-max-width: min(1280px, 94vw);
+  --container-max-width-wide: min(1440px, 94vw);
+  --layout-padding-inline: clamp(1rem, 2vw, 2.5rem);
+  --layout-padding-inline-wide: clamp(1.5rem, 3.5vw, 3.5rem);
+}
+
+.dark {
+  /* Canvas & Surface (Dark Warm Charcoal / Obsidian) */
+  --bg-app: #12100E;               /* Warm Obsidian Canvas */
+  --bg-surface: #1C1917;           /* Warm Stone 900 Card Surface */
+  --bg-surface-2: #262320;         /* Warm Stone 800 Surface 2 */
+  --bg-surface-3: #34302C;         /* Warm Stone 700 Surface 3 */
+
+  /* Primary Accent: Golden Terracotta Amber in Dark Mode */
+  --color-primary: #D97706;        /* Warm Amber Accent */
+  --color-primary-hover: #F59E0B;  /* Lighter Amber */
+  --color-primary-active: #B45309;
+  --color-primary-light: #2E2218;  /* Deep Warm Tint */
+  --color-primary-tint: #231B13;
+
+  /* Text Hierarchy Dark */
+  --text-primary: #F5F5F4;         /* Warm Stone 100 */
+  --text-secondary: #D6D3D1;       /* Warm Stone 300 */
+  --text-muted: #A8A29E;           /* Warm Stone 400 */
+  --text-disabled: #57534E;        /* Warm Stone 600 */
+
+  /* Borders Dark */
+  --border-default: #292524;       /* Warm Stone 800 */
+  --border-hover: #44403C;         /* Warm Stone 700 */
+
+  /* Status Tokens Dark */
+  --color-success-muted: #064E3B;
+  --color-success-border: #047857;
+  --color-success-text: #6EE7B7;
+
+  --color-warning-muted: #451A03;
+  --color-warning-border: #B45309;
+  --color-warning-text: #FDE68A;
+
+  --color-danger-muted: #450A0A;
+  --color-danger-border: #B91C1C;
+  --color-danger-text: #FCA5A5;
+
+  --color-info-muted: #0C4A6E;
+  --color-info-border: #0369A1;
+  --color-info-text: #7DD3FC;
+
+  /* Shadows Dark */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+  --shadow-floating: 0 12px 32px -4px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-modal: 0 20px 48px -8px rgba(0, 0, 0, 0.85);
+}
 
 @layer base {
   html {
@@ -23,22 +127,16 @@
 
   body {
     min-height: 100vh;
-    background-color: #F8FAFC;  /* Slate 50 neutral app bg */
-    color: #0F172A;             /* Slate 900 primary text */
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    transition: background-color 200ms ease-out, color 200ms ease-out;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    color: #0F172A;
+    color: var(--text-primary);
     font-weight: 600;
     letter-spacing: -0.015em;
   }
-}
-
-:root {
-  --container-max-width:      min(1280px, 94vw);
-  --container-max-width-wide: min(1440px, 94vw);
-  --layout-padding-inline:      clamp(1rem, 2vw, 2.5rem);
-  --layout-padding-inline-wide: clamp(1.5rem, 3.5vw, 3.5rem);
 }
 
 @layer components {
@@ -102,19 +200,19 @@
   }
 
   .responsive-table th {
-    background-color: #F8FAFC;
-    color: #475569;
+    background-color: var(--bg-surface-2);
+    color: var(--text-secondary);
     font-weight: 500;
     font-size: 0.8125rem;
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid #E2E8F0;
+    border-bottom: 1px solid var(--border-default);
   }
 
   .responsive-table td {
     padding: 0.875rem 1rem;
     font-size: 0.9375rem;
-    color: #0F172A;
-    border-bottom: 1px solid #E2E8F0;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-default);
   }
 
   .responsive-table tbody tr {
@@ -122,7 +220,7 @@
   }
 
   .responsive-table tbody tr:hover {
-    background-color: #F1F5F9;
+    background-color: var(--bg-surface-2);
   }
 
   @media (max-width: 768px) {
@@ -147,9 +245,9 @@
     }
 
     .responsive-table tr {
-      background-color: #FFFFFF;
-      border: 1px solid #E2E8F0;
-      border-radius: 12px;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 16px;
       margin-bottom: 1rem;
       padding: 0.875rem;
     }
@@ -158,7 +256,7 @@
       display: flex;
       justify-content: space-between;
       padding: 0.5rem 0;
-      border-bottom: 1px solid #F1F5F9;
+      border-bottom: 1px solid var(--border-default);
     }
 
     .responsive-table td:last-child {
@@ -169,7 +267,7 @@
       content: attr(data-label);
       font-weight: 600;
       font-size: 0.75rem;
-      color: #475569;
+      color: var(--text-secondary);
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
@@ -185,12 +283,12 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #E2E8F0;
+    background: var(--border-default);
     border-radius: 999px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #CBD5E1;
+    background: var(--border-hover);
   }
 
   .scrollbar-hide {
@@ -204,47 +302,47 @@
 }
 
 .zena-calendar {
-  background-color: #FFFFFF !important;
-  color: #0F172A !important;
-  border-radius: 12px !important;
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border-radius: 16px !important;
   padding: 0.75rem !important;
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05) !important;
-  border: 1px solid #E2E8F0 !important;
+  box-shadow: var(--shadow-lg) !important;
+  border: 1px solid var(--border-default) !important;
   width: auto !important;
 }
 
 .zena-calendar .react-calendar__navigation button {
   background: transparent !important;
-  color: #0F172A !important;
-  border-radius: 6px !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
   padding: 0.35rem 0.5rem !important;
   font-weight: 600 !important;
 }
 
 .zena-calendar .react-calendar__navigation button:hover {
-  background: #F1F5F9 !important;
+  background: var(--bg-surface-2) !important;
 }
 
 .zena-calendar .react-calendar__month-view__weekdays {
-  color: #475569 !important;
+  color: var(--text-secondary) !important;
   font-size: 0.75rem !important;
   font-weight: 500 !important;
 }
 
 .zena-calendar .react-calendar__tile {
   background: transparent !important;
-  color: #0F172A !important;
-  border-radius: 6px !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
   padding: 0.4rem !important;
   font-size: 0.875rem !important;
 }
 
 .zena-calendar .react-calendar__tile:hover {
-  background: #F1F5F9 !important;
+  background: var(--bg-surface-2) !important;
 }
 
 .zena-calendar .react-calendar__tile--active {
-  background: #2563EB !important;
+  background: var(--color-primary) !important;
   color: #FFFFFF !important;
   font-weight: 600 !important;
 }
