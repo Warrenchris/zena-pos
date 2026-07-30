@@ -20,11 +20,11 @@ const SellingPlatform = () => {
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="rounded-[14px] border border-yellow-400/40 bg-[#0b0f1d] px-4 py-3 text-sm text-white shadow-[0_0_20px_rgba(250,204,21,0.18)]">
-          <p className="font-semibold text-yellow-200">{payload[0].name}</p>
-          <p className="text-white/80">{payload[0].value.toFixed(1)}% distribution</p>
-          <p className="text-sm text-white/70">{payload[0].payload.orders} orders</p>
-          <p className="text-sm text-white/60">{format(payload[0].payload.revenue)}</p>
+        <div className="rounded-xl border border-border-default bg-white px-4 py-3 text-caption text-text-primary shadow-floating">
+          <p className="font-semibold text-primary">{payload[0].name}</p>
+          <p className="text-text-secondary">{payload[0].value.toFixed(1)}% distribution</p>
+          <p className="text-caption text-text-muted">{payload[0].payload.orders} orders</p>
+          <p className="text-caption text-text-muted">{format(payload[0].payload.revenue)}</p>
         </div>
       );
     }
@@ -33,9 +33,9 @@ const SellingPlatform = () => {
 
   if (loading) {
     return (
-      <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
+      <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
         <div className="flex h-[300px] items-center justify-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-sky-400" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary" />
         </div>
       </div>
     );
@@ -43,8 +43,8 @@ const SellingPlatform = () => {
 
   if (error) {
     return (
-      <div className="rounded-[20px] border border-red-400/30 bg-black/50 p-6 shadow-[0_0_20px_rgba(248,113,113,0.25)]">
-        <div className="flex h-[300px] items-center justify-center text-center text-red-300">
+      <div className="rounded-2xl border border-danger/20 bg-danger/5 p-6 shadow-floating">
+        <div className="flex h-[300px] items-center justify-center text-center text-danger text-body">
           Error loading sales channels: {error}
         </div>
       </div>
@@ -52,15 +52,15 @@ const SellingPlatform = () => {
   }
 
   return (
-    <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp">
+    <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-yellow-200">
+          <h2 className="text-h3 font-semibold text-text-primary tracking-tight">
             Selling Platform Distribution
           </h2>
-          <div className="text-sm text-white/70">
+          <div className="text-caption text-text-secondary mt-0.5">
             Total Sales: {totalSales?.toLocaleString()}
-            <span className={`ml-2 ${salesPercentageChange >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+            <span className={`ml-2 font-medium ${salesPercentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
               {salesPercentageChange >= 0 ? '↑' : '↓'} {Math.abs(salesPercentageChange).toFixed(1)}%
             </span>
           </div>
@@ -68,11 +68,11 @@ const SellingPlatform = () => {
         <select
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-full border border-yellow-400/30 bg-black/40 px-4 py-2 text-sm font-medium text-yellow-100 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
         >
-          <option value="week" className="bg-[#0b0f1b] text-white">This Week</option>
-          <option value="month" className="bg-[#0b0f1b] text-white">This Month</option>
-          <option value="year" className="bg-[#0b0f1b] text-white">This Year</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
         </select>
       </div>
 
@@ -98,28 +98,27 @@ const SellingPlatform = () => {
           </ResponsiveContainer>
         </div>
 
-        <div className="flex flex-col justify-center space-y-4">
+        <div className="flex flex-col justify-center space-y-3">
           {platforms.map((entry, index) => (
             <div
               key={entry.name}
-              className="flex items-center justify-between rounded-[16px] border border-yellow-400/20 bg-black/30 px-4 py-3 text-sm text-white/80 shadow-[0_0_16px_rgba(250,204,21,0.08)]"
+              className="flex items-center justify-between rounded-xl border border-border-default/70 bg-surface-0/60 px-4 py-2.5 text-body text-text-primary"
             >
               <div className="flex items-center">
                 <div
                   className="mr-3 h-3 w-3 rounded-full"
                   style={{
                     backgroundColor: COLORS[index % COLORS.length],
-                    boxShadow: `0 0 12px ${COLORS[index % COLORS.length]}66`,
                   }}
                 />
                 <div>
-                  <p className="font-semibold text-white">{entry.name}</p>
-                  <p className="text-xs text-white/60">
+                  <p className="font-medium text-text-primary">{entry.name}</p>
+                  <p className="text-caption text-text-muted">
                     {entry.orders} orders · {format(entry.revenue)}
                   </p>
                 </div>
               </div>
-              <p className="text-sm font-semibold text-yellow-100">
+              <p className="text-body font-semibold text-text-primary">
                 {entry.percentage.toFixed(1)}%
               </p>
             </div>
@@ -127,7 +126,7 @@ const SellingPlatform = () => {
         </div>
       </div>
 
-      <div className="mt-6 border-t border-yellow-400/10 pt-6 text-sm text-white/60">
+      <div className="mt-6 border-t border-border-default/70 pt-4 text-caption text-text-secondary">
         Total Revenue: {format(totalRevenue)}
       </div>
     </div>

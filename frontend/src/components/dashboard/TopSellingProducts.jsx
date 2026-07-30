@@ -34,17 +34,17 @@ const TopSellingProducts = () => {
   const SortIcon = ({ field }) => {
     if (field !== sortField) return null;
     return sortDirection === 'asc' ? (
-      <HiSortAscending className="h-5 w-5 text-yellow-200" />
+      <HiSortAscending className="h-4 w-4 text-primary" />
     ) : (
-      <HiSortDescending className="h-5 w-5 text-yellow-200" />
+      <HiSortDescending className="h-4 w-4 text-primary" />
     );
   };
 
   if (loading) {
     return (
-      <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
+      <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
         <div className="flex h-[400px] items-center justify-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-yellow-400" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary" />
         </div>
       </div>
     );
@@ -52,10 +52,10 @@ const TopSellingProducts = () => {
 
   if (error) {
     return (
-      <div className="rounded-[20px] border border-red-400/30 bg-black/50 p-6 shadow-[0_0_20px_rgba(248,113,113,0.25)]">
+      <div className="rounded-2xl border border-danger/20 bg-danger/5 p-6 shadow-floating">
         <div className="flex h-[400px] flex-col items-center justify-center text-center">
-          <p className="mb-2 text-red-300">Error loading top products</p>
-          <p className="text-sm text-white/60">{error}</p>
+          <p className="mb-2 text-danger font-medium text-body">Error loading top products</p>
+          <p className="text-caption text-text-muted">{error}</p>
         </div>
       </div>
     );
@@ -63,26 +63,26 @@ const TopSellingProducts = () => {
 
   if (!products || products.length === 0) {
     return (
-      <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
+      <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-lg font-semibold text-yellow-200">Top Selling Products</h2>
-            <div className="text-sm text-white/60">No sales data available</div>
+            <h2 className="text-h3 font-semibold text-text-primary tracking-tight">Top Selling Products</h2>
+            <div className="text-caption text-text-muted">No sales data available</div>
           </div>
           <select
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="rounded-full border border-yellow-400/30 bg-black/40 px-4 py-2 text-sm font-medium text-yellow-100 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+            className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
           >
-            <option value="week" className="bg-[#0b0f1b] text-white">This Week</option>
-            <option value="month" className="bg-[#0b0f1b] text-white">This Month</option>
-            <option value="year" className="bg-[#0b0f1b] text-white">This Year</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
           </select>
         </div>
-        <div className="flex h-[300px] items-center justify-center text-center text-white/60">
+        <div className="flex h-[300px] items-center justify-center text-center text-text-muted">
           <div>
-            <p className="text-lg font-semibold text-yellow-100/80">No products sold in this period</p>
-            <p className="mt-2 text-sm text-white/60">Create some sales to see top products here.</p>
+            <p className="text-body font-semibold text-text-secondary">No products sold in this period</p>
+            <p className="mt-1 text-caption text-text-muted">Create some sales to see top products here.</p>
           </div>
         </div>
       </div>
@@ -90,13 +90,13 @@ const TopSellingProducts = () => {
   }
 
   return (
-    <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp overflow-x-auto">
+    <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating overflow-x-auto">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-yellow-200">Top Selling Products</h2>
-          <div className="text-sm text-white/70">
+          <h2 className="text-h3 font-semibold text-text-primary tracking-tight">Top Selling Products</h2>
+          <div className="text-caption text-text-secondary mt-0.5">
             Total Sales: {totalSales?.toLocaleString()}
-            <span className={`ml-2 ${salesPercentageChange >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+            <span className={`ml-2 font-medium ${salesPercentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
               {salesPercentageChange >= 0 ? '↑' : '↓'} {Math.abs(salesPercentageChange).toFixed(1)}%
             </span>
           </div>
@@ -104,22 +104,22 @@ const TopSellingProducts = () => {
         <select
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-full border border-yellow-400/30 bg-black/40 px-4 py-2 text-sm font-medium text-yellow-100 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
         >
-          <option value="week" className="bg-[#0b0f1b] text-white">This Week</option>
-          <option value="month" className="bg-[#0b0f1b] text-white">This Month</option>
-          <option value="year" className="bg-[#0b0f1b] text-white">This Year</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
         </select>
       </div>
 
-      <table className="min-w-full divide-y divide-yellow-400/15">
-        <thead className="bg-black/30">
+      <table className="min-w-full divide-y divide-border-default/70">
+        <thead className="bg-surface-0">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-yellow-100/70">
+            <th className="px-4 py-3 text-left text-caption font-semibold uppercase tracking-wider text-text-muted">
               Product
             </th>
             <th
-              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-yellow-100/70 cursor-pointer"
+              className="px-4 py-3 text-left text-caption font-semibold uppercase tracking-wider text-text-muted cursor-pointer hover:text-text-primary"
               onClick={() => handleSort('price')}
             >
               <div className="flex items-center space-x-1">
@@ -128,7 +128,7 @@ const TopSellingProducts = () => {
               </div>
             </th>
             <th
-              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-yellow-100/70 cursor-pointer"
+              className="px-4 py-3 text-left text-caption font-semibold uppercase tracking-wider text-text-muted cursor-pointer hover:text-text-primary"
               onClick={() => handleSort('quantity')}
             >
               <div className="flex items-center space-x-1">
@@ -137,7 +137,7 @@ const TopSellingProducts = () => {
               </div>
             </th>
             <th
-              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-yellow-100/70 cursor-pointer"
+              className="px-4 py-3 text-left text-caption font-semibold uppercase tracking-wider text-text-muted cursor-pointer hover:text-text-primary"
               onClick={() => handleSort('revenue')}
             >
               <div className="flex items-center space-x-1">
@@ -147,30 +147,30 @@ const TopSellingProducts = () => {
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-yellow-400/10">
+        <tbody className="divide-y divide-border-default/50">
           {sortedProducts.map((product) => (
-            <tr key={product.id} className="transition hover:bg-yellow-500/5">
-              <td className="px-6 py-4 whitespace-nowrap">
+            <tr key={product.id} className="transition hover:bg-surface-2/60">
+              <td className="px-4 py-3 whitespace-nowrap">
                 <div className="flex items-center">
                   {product.imageUrl && (
                     <img
-                      className="mr-3 h-10 w-10 rounded-md object-cover"
+                      className="mr-3 h-8 w-8 rounded-md object-cover border border-border-default"
                       src={product.imageUrl}
                       alt={product.name}
                     />
                   )}
-                  <div className="text-sm font-semibold text-white">
+                  <div className="text-body font-medium text-text-primary">
                     {product.name}
                   </div>
                 </div>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-yellow-100/80">
+              <td className="px-4 py-3 whitespace-nowrap text-body text-text-secondary">
                 {format(product.price)}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-yellow-100/80">
+              <td className="px-4 py-3 whitespace-nowrap text-body text-text-secondary">
                 {product.quantity.toLocaleString()}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-yellow-100">
+              <td className="px-4 py-3 whitespace-nowrap text-body font-semibold text-text-primary">
                 {format(product.revenue)}
               </td>
             </tr>

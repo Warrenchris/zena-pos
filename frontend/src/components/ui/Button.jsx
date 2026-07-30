@@ -96,17 +96,17 @@ export default function Button({
           {LeftIcon && (
             <span className="shrink-0">
               {typeof LeftIcon === 'function' || typeof LeftIcon === 'object' ? (
-                <LeftIcon className={size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-5 w-5' : 'h-4.5 w-4.5'} aria-hidden="true" />
+                <LeftIcon className={size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'} aria-hidden="true" />
               ) : (
                 LeftIcon
               )}
             </span>
           )}
-          {children}
+          <span>{children}</span>
           {RightIcon && (
             <span className="shrink-0">
               {typeof RightIcon === 'function' || typeof RightIcon === 'object' ? (
-                <RightIcon className={size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-5 w-5' : 'h-4.5 w-4.5'} aria-hidden="true" />
+                <RightIcon className={size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'} aria-hidden="true" />
               ) : (
                 RightIcon
               )}

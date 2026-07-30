@@ -237,9 +237,9 @@ function ProductsContent() {
           {/* Header */}
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold text-brand-yellow">Products</h1>
-              <div className="text-gray-400 flex items-center gap-2">
-                <span>Manage your product inventory</span>
+              <h1 className="text-h1 font-bold text-text-primary tracking-tight">Products</h1>
+              <div className="text-caption text-text-secondary flex items-center gap-2 mt-1">
+                <span>Manage your product catalog and inventory</span>
                 {loading && (
                   <InlineLoading 
                     text={localLoading.filter ? "Filtering..." : "Loading..."} 
@@ -248,46 +248,46 @@ function ProductsContent() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {/* View Mode Toggle */}
-              <div className="flex items-center bg-black/50 rounded-lg p-1 border border-brand-yellow/20">
+              <div className="flex items-center bg-surface-0 rounded-lg p-1 border border-border-default">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded ${
+                  className={`p-1.5 rounded-md transition-colors ${
                     viewMode === 'grid' 
-                      ? 'bg-brand-yellow text-brand-black' 
-                      : 'text-gray-400 hover:text-gray-200'
+                      ? 'bg-white text-primary shadow-xs' 
+                      : 'text-text-muted hover:text-text-primary'
                   }`}
                   title="Grid View"
                   aria-label="Switch to grid view"
                   aria-pressed={viewMode === 'grid'}
                 >
-                  <Squares2X2Icon className="h-5 w-5" />
+                  <Squares2X2Icon className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-2 rounded ${
+                  className={`p-1.5 rounded-md transition-colors ${
                     viewMode === 'list' 
-                      ? 'bg-brand-yellow text-brand-black' 
-                      : 'text-gray-400 hover:text-gray-200'
+                      ? 'bg-white text-primary shadow-xs' 
+                      : 'text-text-muted hover:text-text-primary'
                   }`}
                   title="List View"
                   aria-label="Switch to list view"
                   aria-pressed={viewMode === 'list'}
                 >
-                  <Bars4Icon className="h-5 w-5" />
+                  <Bars4Icon className="h-4 w-4" />
                 </button>
               </div>
               
               {/* Batch Actions */}
               {selectedProducts.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-400">
+                  <span className="text-caption text-text-secondary">
                     {selectedProducts.length} selected
                   </span>
                   <button
                     onClick={handleBatchDelete}
-                    className="bg-red-600/80 text-white px-3 py-1.5 rounded hover:bg-red-600 flex items-center gap-2 text-sm"
+                    className="bg-danger text-white px-3 py-1.5 rounded-lg hover:bg-red-700 flex items-center gap-1.5 text-caption font-medium shadow-2xs transition-colors"
                     disabled={loading || localLoading.delete}
                     title="Delete selected products"
                   >
@@ -300,29 +300,29 @@ function ProductsContent() {
               {/* Add Product Button */}
               <button
                 onClick={() => navigate('/products/create')}
-                className="bg-brand-yellow text-brand-black px-4 py-2 rounded-lg hover:bg-brand-yellowDark shadow flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover active:bg-primary-active shadow-2xs flex items-center gap-2 text-body font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={loading || localLoading.delete || localLoading.stock}
                 title="Add new product"
               >
-                <PlusIcon className="h-5 w-5" />
+                <PlusIcon className="h-4 w-4" />
                 Add Product
               </button>
             </div>
           </div>
 
           {/* Search and Filters */}
-          <div className="bg-brand-gray p-6 rounded-lg border border-brand-yellow/20">
+          <div className="bg-white p-5 rounded-2xl border border-border-default shadow-floating">
             <div className="flex flex-col lg:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <MagnifyingGlassIcon className="h-4 w-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-text-muted" />
                   <input
                     type="text"
                     placeholder="Search products..."
                     value={searchTerm}
                     onChange={handleSearch}
                     disabled={loading || localLoading.delete || localLoading.stock}
-                    className="w-full pl-10 pr-4 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow disabled:opacity-50"
+                    className="w-full pl-10 pr-4 py-2 rounded-lg bg-surface-0 text-text-primary border border-border-default focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary text-body placeholder-text-muted disabled:opacity-50 transition-colors"
                   />
                 </div>
               </div>
@@ -336,35 +336,19 @@ function ProductsContent() {
                     setCurrentPage(1);
                   }}
                   disabled={loading || localLoading.delete || localLoading.stock}
-                  className="px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow disabled:opacity-50 flex-1"
+                  className="px-3 py-2 rounded-lg bg-surface-0 text-text-primary border border-border-default focus:outline-none focus:ring-2 focus:ring-primary/30 text-body disabled:opacity-50 flex-1 transition-colors"
                 >
                   <option value="">All Categories</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
-                <div className="flex border border-brand-yellow/20 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    disabled={loading || localLoading.delete || localLoading.stock}
-                    className={`px-3 py-2 ${viewMode === 'grid' ? 'bg-brand-black text-brand-yellow' : 'text-gray-400 hover:bg-brand-black/50'}`}
-                  >
-                    <Squares2X2Icon className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    disabled={loading || localLoading.delete || localLoading.stock}
-                    className={`px-3 py-2 ${viewMode === 'list' ? 'bg-brand-black text-brand-yellow' : 'text-gray-400 hover:bg-brand-black/50'}`}
-                  >
-                    <Bars4Icon className="h-5 w-5" />
-                  </button>
-                </div>
               </div>
             </div>
           </div>
 
           {/* Products Grid/List */}
-          <div className="bg-brand-gray rounded-lg border border-brand-yellow/20 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-border-default shadow-floating overflow-hidden">
             <div className="overflow-x-auto">
               {loading ? (
                 viewMode === 'grid' ? (
@@ -378,39 +362,39 @@ function ProductsContent() {
                 )
               ) : (
                 viewMode === 'grid' ? (
-                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {sortedAndFilteredProducts.map((product) => {
                       const stockStatus = getStockStatus(product.stockQuantity, product.reorderPoint);
                       return (
-                        <div key={product.id} className="rounded-xl bg-brand-black border border-brand-yellow/20 hover:border-brand-yellow transition shadow-sm">
-                          <div className="aspect-video w-full bg-black/50 rounded-t-xl flex items-center justify-center text-gray-400">
-                            <span className="text-xs">No Image</span>
+                        <div key={product.id} className="rounded-xl bg-white border border-border-default hover:border-border-hover transition shadow-2xs flex flex-col overflow-hidden">
+                          <div className="aspect-video w-full bg-surface-2 flex items-center justify-center text-text-muted">
+                            <span className="text-caption">No Image</span>
                           </div>
-                          <div className="p-4 space-y-2">
+                          <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <p className="text-sm font-semibold text-gray-100">{product.name}</p>
-                                <p className="text-xs text-gray-300">{product.Category?.name || 'No Category'}</p>
+                                <p className="text-body font-semibold text-text-primary">{product.name}</p>
+                                <p className="text-caption text-text-secondary">{product.Category?.name || 'No Category'}</p>
                               </div>
-                              <p className="text-sm font-bold text-brand-yellow">{formatCurrency(product.price)}</p>
+                              <p className="text-body font-semibold text-primary">{formatCurrency(product.price)}</p>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <span className={`text-xs ${stockStatus.color}`}>
+                            <div className="flex items-center justify-between pt-2 border-t border-border-default/50">
+                              <span className={`text-caption font-medium ${stockStatus.color}`}>
                                 Stock: {product.stockQuantity}
                               </span>
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => handleStockUpdate(product)}
-                                  className="px-2 py-1 text-xs rounded bg-black/50 text-gray-100 border border-brand-yellow/20 hover:bg-black/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-2.5 py-1 text-caption font-medium rounded-md bg-surface-2 text-text-primary border border-border-default hover:bg-surface-3 disabled:opacity-50 transition-colors"
                                   disabled={loading || localLoading.delete || localLoading.stock}
                                 >
                                   Stock
                                 </button>
                                 <button
                                   onClick={() => handleDelete(product.id, product.name)}
-                                  className={`px-2 py-1 text-xs rounded ${
-                                    localLoading.delete ? 'bg-red-800 cursor-not-allowed' : 'bg-red-600/80 hover:bg-red-600'
-                                  } text-white disabled:opacity-50`}
+                                  className={`px-2.5 py-1 text-caption font-medium rounded-md ${
+                                    localLoading.delete ? 'bg-red-800 cursor-not-allowed' : 'bg-danger/10 text-danger hover:bg-danger/20'
+                                  } disabled:opacity-50 transition-colors`}
                                   disabled={loading || localLoading.delete || localLoading.stock}
                                 >
                                   {localLoading.delete ? 'Deleting...' : 'Delete'}
@@ -423,128 +407,128 @@ function ProductsContent() {
                     })}
                   </div>
                 ) : (
-                  <div className="min-w-full divide-y divide-brand-yellow/20">
-                    <table className="min-w-full divide-y divide-brand-yellow/20">
-                      <thead>
+                  <div className="min-w-full divide-y divide-border-default">
+                    <table className="min-w-full divide-y divide-border-default/70">
+                      <thead className="bg-surface-0">
                         <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400">
+                          <th scope="col" className="px-6 py-3.5 text-left text-caption font-medium text-text-muted">
                             <div className="flex items-center gap-2">
                               <input
                                 type="checkbox"
-                                className="rounded border-gray-500 text-brand-yellow focus:ring-brand-yellow"
+                                className="rounded border-border-default text-primary focus:ring-primary/40"
                                 checked={selectedProducts.length === sortedAndFilteredProducts.length}
                                 onChange={toggleSelectAll}
                                 aria-label="Select all products"
                               />
                               <button
                                 onClick={() => handleSort('name')}
-                                className="uppercase tracking-wider hover:text-brand-yellow flex items-center gap-1"
+                                className="uppercase tracking-wider hover:text-text-primary flex items-center gap-1"
                                 aria-label="Sort by product name"
                               >
                                 Product
                                 {sortConfig.field === 'name' && (
-                                  <span className="text-brand-yellow">
+                                  <span className="text-primary">
                                     {sortConfig.direction === 'asc' ? '↑' : '↓'}
                                   </span>
                                 )}
                               </button>
                             </div>
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400">
+                          <th scope="col" className="px-6 py-3.5 text-left text-caption font-medium text-text-muted">
                             <button
                               onClick={() => handleSort('category')}
-                              className="uppercase tracking-wider hover:text-brand-yellow flex items-center gap-1"
+                              className="uppercase tracking-wider hover:text-text-primary flex items-center gap-1"
                               aria-label="Sort by category"
                             >
                               Category
                               {sortConfig.field === 'category' && (
-                                <span className="text-brand-yellow">
+                                <span className="text-primary">
                                   {sortConfig.direction === 'asc' ? '↑' : '↓'}
                                 </span>
                               )}
                             </button>
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400">
+                          <th scope="col" className="px-6 py-3.5 text-left text-caption font-medium text-text-muted">
                             <button
                               onClick={() => handleSort('price')}
-                              className="uppercase tracking-wider hover:text-brand-yellow flex items-center gap-1"
+                              className="uppercase tracking-wider hover:text-text-primary flex items-center gap-1"
                               aria-label="Sort by price"
                             >
                               Price
                               {sortConfig.field === 'price' && (
-                                <span className="text-brand-yellow">
+                                <span className="text-primary">
                                   {sortConfig.direction === 'asc' ? '↑' : '↓'}
                                 </span>
                               )}
                             </button>
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400">
+                          <th scope="col" className="px-6 py-3.5 text-left text-caption font-medium text-text-muted">
                             <button
                               onClick={() => handleSort('weightGrams')}
-                              className="uppercase tracking-wider hover:text-brand-yellow flex items-center gap-1"
+                              className="uppercase tracking-wider hover:text-text-primary flex items-center gap-1"
                               aria-label="Sort by weight"
                             >
                               Weight
                               {sortConfig.field === 'weightGrams' && (
-                                <span className="text-brand-yellow">
+                                <span className="text-primary">
                                   {sortConfig.direction === 'asc' ? '↑' : '↓'}
                                 </span>
                               )}
                             </button>
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400">
+                          <th scope="col" className="px-6 py-3.5 text-left text-caption font-medium text-text-muted">
                             <button
                               onClick={() => handleSort('stockQuantity')}
-                              className="uppercase tracking-wider hover:text-brand-yellow flex items-center gap-1"
+                              className="uppercase tracking-wider hover:text-text-primary flex items-center gap-1"
                               aria-label="Sort by stock"
                             >
                               Stock
                               {sortConfig.field === 'stockQuantity' && (
-                                <span className="text-brand-yellow">
+                                <span className="text-primary">
                                   {sortConfig.direction === 'asc' ? '↑' : '↓'}
                                 </span>
                               )}
                             </button>
                           </th>
-                          <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          <th scope="col" className="px-6 py-3.5 text-right text-caption font-medium text-text-muted uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-brand-yellow/20">
+                      <tbody className="divide-y divide-border-default/50">
                         {sortedAndFilteredProducts.map((product) => {
                           const stockStatus = getStockStatus(product.stockQuantity, product.reorderPoint);
                           return (
-                            <tr key={product.id} className={selectedProducts.includes(product.id) ? 'bg-brand-yellow/5' : ''}>
+                            <tr key={product.id} className={selectedProducts.includes(product.id) ? 'bg-primary/5' : 'hover:bg-surface-2/60 transition-colors'}>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-3">
                                   <input
                                     type="checkbox"
-                                    className="rounded border-gray-500 text-brand-yellow focus:ring-brand-yellow"
+                                    className="rounded border-border-default text-primary focus:ring-primary/40"
                                     checked={selectedProducts.includes(product.id)}
                                     onChange={() => toggleProductSelection(product.id)}
                                     aria-label={`Select ${product.name}`}
                                   />
                                   <div>
-                                    <div className="text-sm font-medium text-gray-100">{product.name}</div>
-                                    <div className="text-sm text-gray-400">{product.sku || 'No SKU'}</div>
+                                    <div className="text-body font-medium text-text-primary">{product.name}</div>
+                                    <div className="text-caption text-text-muted">{product.sku || 'No SKU'}</div>
                                   </div>
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-300">{product.Category?.name || 'No Category'}</div>
+                                <div className="text-body text-text-secondary">{product.Category?.name || 'No Category'}</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-bold text-brand-yellow">{formatCurrency(product.price)}</div>
+                                <div className="text-body font-semibold text-primary">{formatCurrency(product.price)}</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-300" title={product.weightGrams ? `${product.weightGrams} grams` : 'No weight set'}>
+                                <div className="text-body text-text-secondary" title={product.weightGrams ? `${product.weightGrams} grams` : 'No weight set'}>
                                   {typeof product.weightGrams === 'number' ? `${product.weightGrams} g` : (product.weightGrams ? `${product.weightGrams} g` : '-')}
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span 
-                                  className={`text-sm ${stockStatus.color}`}
+                                  className={`text-body font-medium ${stockStatus.color}`}
                                   title={`${stockStatus.status === 'good' ? 'Stock level is good' :
                                           stockStatus.status === 'low' ? 'Stock is running low' :
                                           'Out of stock'}`}

@@ -101,11 +101,12 @@ const NotificationDropdown = () => {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-gray-300 hover:text-brand-yellow focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:ring-offset-2 focus:ring-offset-brand-gray rounded-lg transition-colors"
+        className="relative h-9 w-9 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-lg transition-colors duration-150"
+        aria-label="Notifications"
       >
-        <BellIcon className="h-6 w-6" />
+        <BellIcon className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 flex h-5 w-5 rounded-full bg-red-500 text-white text-xs font-medium items-center justify-center border-2 border-brand-gray">
+          <span className="absolute top-1 right-1 flex h-4 w-4 rounded-full bg-danger text-white text-[10px] font-bold items-center justify-center ring-2 ring-white">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -113,31 +114,31 @@ const NotificationDropdown = () => {
 
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 bg-brand-gray border border-brand-yellow/20 rounded-lg shadow-xl z-50 flex flex-col w-[22rem] sm:w-[24rem] md:w-[26rem] lg:w-[28rem] max-h-[85vh]"
+          className="absolute right-0 mt-2 bg-white border border-border-default rounded-xl shadow-floating z-50 flex flex-col w-[22rem] sm:w-[24rem] max-h-[85vh]"
           style={{
             insetInlineEnd: 0,
           }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-brand-yellow/10">
+          <div className="flex items-center justify-between p-4 border-b border-border-default/70">
             <div className="flex items-center space-x-2">
-              <BellIcon className="h-5 w-5 text-brand-yellow" />
-              <h3 className="text-lg font-semibold text-gray-100">Notifications</h3>
+              <BellIcon className="h-5 w-5 text-primary" />
+              <h3 className="text-h3 font-semibold text-text-primary tracking-tight">Notifications</h3>
             </div>
             <div className="flex items-center space-x-2">
               {notifications.length > 0 && (
                 <button
                   onClick={handleMarkAllAsRead}
-                  className="text-sm text-brand-yellow hover:text-yellow-400 transition-colors"
+                  className="text-caption font-medium text-primary hover:text-primary-hover transition-colors"
                 >
                   Mark all read
                 </button>
               )}
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-gray-300 transition-colors"
+                className="text-text-muted hover:text-text-primary transition-colors p-1 rounded-md"
               >
-                <XMarkIcon className="h-5 w-5" />
+                <XMarkIcon className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -145,12 +146,12 @@ const NotificationDropdown = () => {
           {/* Notifications List */}
           <div className="overflow-y-auto flex-1 min-h-0" style={{ maxHeight: '70vh' }}>
             {notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-8 text-gray-400">
-                <BellIcon className="h-12 w-12 mb-2 opacity-50" />
-                <p className="text-sm">No notifications</p>
+              <div className="flex flex-col items-center justify-center p-8 text-text-muted">
+                <BellIcon className="h-10 w-10 mb-2 opacity-40" />
+                <p className="text-caption">No notifications</p>
               </div>
             ) : (
-              <div className="divide-y divide-brand-yellow/10">
+              <div className="divide-y divide-border-default/50">
                 {notifications.map((notification) => {
                   const Icon = getIcon(notification.type);
                   const iconColor = getTypeColor(notification.type);
@@ -158,42 +159,42 @@ const NotificationDropdown = () => {
                   return (
                     <div
                       key={notification.id}
-                      className={`p-4 hover:bg-black/30 transition-colors ${!notification.read ? 'bg-brand-yellow/5' : ''}`}
+                      className={`p-4 hover:bg-surface-2/60 transition-colors ${!notification.read ? 'bg-primary/5' : ''}`}
                     >
                       <div className="flex items-start space-x-3">
                         <div className={`flex-shrink-0 ${iconColor}`}>
-                          <Icon className="h-6 w-6" />
+                          <Icon className="h-5 w-5" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <p className={`text-sm font-medium break-words ${notification.read ? 'text-gray-300' : 'text-gray-100'}`}>
+                              <p className={`text-body font-medium break-words ${notification.read ? 'text-text-secondary' : 'text-text-primary'}`}>
                                 {notification.title}
                               </p>
                               {notification.message && (
-                                <p className="mt-1 text-sm text-gray-400 break-words whitespace-pre-wrap">{notification.message}</p>
+                                <p className="mt-1 text-caption text-text-secondary break-words whitespace-pre-wrap">{notification.message}</p>
                               )}
                             </div>
-                            <div className="flex items-center space-x-2 ml-2">
+                            <div className="flex items-center space-x-1.5 ml-2">
                               {!notification.read && (
                                 <button
                                   onClick={() => handleMarkAsRead(notification.id)}
-                                  className="text-brand-yellow hover:text-yellow-400 transition-colors"
+                                  className="text-primary hover:text-primary-hover transition-colors p-1"
                                   title="Mark as read"
                                 >
-                                  <CheckIcon className="h-5 w-5" />
+                                  <CheckIcon className="h-4 w-4" />
                                 </button>
                               )}
                               <button
                                 onClick={() => handleRemove(notification.id)}
-                                className="text-gray-500 hover:text-red-500 transition-colors"
+                                className="text-text-muted hover:text-danger transition-colors p-1"
                                 title="Remove"
                               >
-                                <XMarkIcon className="h-4 w-4" />
+                                <XMarkIcon className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           </div>
-                          <p className="mt-1 text-xs text-gray-500">
+                          <p className="mt-1 text-caption text-text-muted">
                             {formatTimestamp(notification.timestamp)}
                           </p>
                         </div>
@@ -207,8 +208,8 @@ const NotificationDropdown = () => {
 
           {/* Footer */}
           {notifications.length > 10 && (
-            <div className="p-3 border-t border-brand-yellow/10 bg-black/20">
-              <button className="w-full text-sm text-brand-yellow hover:text-yellow-400 transition-colors text-center">
+            <div className="p-3 border-t border-border-default/70 bg-surface-0">
+              <button className="w-full text-caption font-medium text-primary hover:text-primary-hover transition-colors text-center">
                 View All Notifications
               </button>
             </div>

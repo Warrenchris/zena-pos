@@ -124,8 +124,8 @@ const LocationAudience = () => {
 
   if (error) {
     return (
-      <div className="rounded-[20px] border border-red-400/30 bg-black/50 p-6 shadow-[0_0_20px_rgba(248,113,113,0.25)]">
-        <div className="flex h-[400px] items-center justify-center text-center text-red-300">
+      <div className="rounded-2xl border border-danger/20 bg-danger/5 p-6 shadow-floating">
+        <div className="flex h-[400px] items-center justify-center text-center text-danger text-body">
           Error loading customer locations: {error}
         </div>
       </div>
@@ -143,15 +143,15 @@ const LocationAudience = () => {
   }) : [];
 
   return (
-    <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp">
+    <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-yellow-200">
+          <h2 className="text-h3 font-semibold text-text-primary tracking-tight">
             Location of Audience
           </h2>
-          <div className="text-sm text-white/70">
+          <div className="text-caption text-text-secondary mt-0.5">
             Total Customers: {totalCustomers?.toLocaleString()}
-            <span className={`ml-2 ${percentageChange >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+            <span className={`ml-2 font-medium ${percentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
               {percentageChange >= 0 ? '↑' : '↓'} {Math.abs(percentageChange).toFixed(1)}%
             </span>
           </div>
@@ -159,15 +159,15 @@ const LocationAudience = () => {
         <select
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-full border border-yellow-400/30 bg-black/40 px-4 py-2 text-sm font-medium text-yellow-100 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
         >
-          <option value="week" className="bg-[#0b0f1b] text-white">This Week</option>
-          <option value="month" className="bg-[#0b0f1b] text-white">This Month</option>
-          <option value="year" className="bg-[#0b0f1b] text-white">This Year</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
         </select>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {parsedLocations.map((location) => {
           const locationDetails = getLocationDetails(location);
           const Flag = Flags[locationDetails.code];
@@ -177,23 +177,23 @@ const LocationAudience = () => {
           return (
             <div
               key={location.address || `${location.country}-${location.city}`}
-              className="flex items-center justify-between rounded-[16px] border border-yellow-400/15 bg-black/30 px-4 py-3 transition hover:border-yellow-400/40 hover:bg-yellow-500/5"
+              className="flex items-center justify-between rounded-xl border border-border-default/70 bg-surface-0/60 px-4 py-2.5 transition hover:border-border-hover hover:bg-surface-2/60"
             >
               <div className="flex items-center space-x-3">
-                <div className="h-7 w-10 overflow-hidden rounded-[8px] border border-yellow-400/20 shadow-[0_0_12px_rgba(250,204,21,0.12)]">
+                <div className="h-7 w-10 overflow-hidden rounded-md border border-border-default shadow-2xs">
                   {Flag ? (
                     <Flag title={location.country} />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs text-white/70">
+                    <div className="flex h-full w-full items-center justify-center text-caption text-text-muted">
                       {locationDetails.code}
                     </div>
                   )}
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-semibold text-white">
+                  <span className="font-medium text-text-primary text-body">
                     {location.city}
                   </span>
-                  <span className="text-sm text-white/60">
+                  <span className="text-caption text-text-muted">
                     {location.state}, {location.country}
                   </span>
                 </div>
@@ -201,21 +201,21 @@ const LocationAudience = () => {
 
               <div className="flex items-center space-x-4">
                 <div className="flex flex-col items-end">
-                  <span className="font-semibold text-yellow-100">
+                  <span className="font-semibold text-text-primary text-body">
                     {location.percentage.toFixed(1)}%
                   </span>
-                  <span className="text-sm text-white/60">
+                  <span className="text-caption text-text-muted">
                     {location.customers} customers
                   </span>
                 </div>
-                <div className="text-sm text-white/60">
+                <div className="text-caption text-text-secondary hidden sm:block">
                   {location.orders} orders
                 </div>
-                <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                <div className="flex items-center gap-2 text-body font-semibold text-text-primary">
                   ₦{location.revenue.toLocaleString()}
                   <span
-                    className={`flex items-center gap-1 text-xs font-semibold ${
-                      isPositive ? 'text-emerald-300' : 'text-rose-300'
+                    className={`flex items-center gap-0.5 text-caption font-medium ${
+                      isPositive ? 'text-success' : 'text-danger'
                     }`}
                   >
                     {isPositive ? <HiArrowUp className="h-3 w-3" /> : <HiArrowDown className="h-3 w-3" />}

@@ -192,7 +192,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         }`}
       >
         <item.icon
-          className={`mr-3 flex-shrink-0 h-4.5 w-4.5 transition-colors duration-150 ${
+          className={`mr-3 shrink-0 h-5 w-5 transition-colors duration-150 ${
             active
               ? 'text-primary'
               : 'text-text-muted group-hover:text-text-secondary'
@@ -218,9 +218,9 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
             {section.title}
           </span>
           {isExpanded ? (
-            <ChevronDownIcon className="h-3.5 w-3.5 text-text-muted transition-transform duration-200" />
+            <ChevronDownIcon className="h-4 w-4 text-text-muted transition-transform duration-200" />
           ) : (
-            <ChevronRightIcon className="h-3.5 w-3.5 text-text-muted transition-transform duration-200" />
+            <ChevronRightIcon className="h-4 w-4 text-text-muted transition-transform duration-200" />
           )}
         </button>
         
@@ -264,7 +264,7 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         <div className="flex items-center justify-between h-14 px-5 border-b border-border-default bg-white">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-center text-primary shrink-0 shadow-2xs">
-              <StoreIcon className="h-4.5 w-4.5" />
+              <StoreIcon className="h-5 w-5" />
             </div>
             <div>
               <h1 id={sidebarLabelId} className="text-body font-semibold text-text-primary tracking-tight">
