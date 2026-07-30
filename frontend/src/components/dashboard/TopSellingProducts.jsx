@@ -42,7 +42,7 @@ const TopSellingProducts = () => {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
+      <div className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating">
         <div className="flex h-[400px] items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary" />
         </div>
@@ -63,7 +63,7 @@ const TopSellingProducts = () => {
 
   if (!products || products.length === 0) {
     return (
-      <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
+      <div className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-h3 font-semibold text-text-primary tracking-tight">Top Selling Products</h2>
@@ -90,7 +90,7 @@ const TopSellingProducts = () => {
   }
 
   return (
-    <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating overflow-x-auto">
+    <div className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating overflow-x-auto">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-h3 font-semibold text-text-primary tracking-tight">Top Selling Products</h2>

@@ -20,7 +20,7 @@ const SellingPlatform = () => {
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="rounded-xl border border-border-default bg-white px-4 py-3 text-caption text-text-primary shadow-floating">
+        <div className="rounded-xl border border-border-default bg-surface px-4 py-3 text-caption text-text-primary shadow-floating">
           <p className="font-semibold text-primary">{payload[0].name}</p>
           <p className="text-text-secondary">{payload[0].value.toFixed(1)}% distribution</p>
           <p className="text-caption text-text-muted">{payload[0].payload.orders} orders</p>
@@ -33,7 +33,7 @@ const SellingPlatform = () => {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
+      <div className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating">
         <div className="flex h-[300px] items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary" />
         </div>
@@ -52,7 +52,7 @@ const SellingPlatform = () => {
   }
 
   return (
-    <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
+    <div className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-h3 font-semibold text-text-primary tracking-tight">

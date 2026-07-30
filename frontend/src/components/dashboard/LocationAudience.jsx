@@ -3,6 +3,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
 import Flags from 'country-flag-icons/react/3x2';
 import { fetchCustomerLocations } from '../../store/slices/analyticsSlice';
+import useCurrency from '../../hooks/useCurrency';
+import Card from '../ui/Card';
 
 const COUNTRY_CODES = {
   Nigeria: 'NG',
@@ -24,6 +26,7 @@ const COUNTRY_CODES = {
 
 const LocationAudience = () => {
   const dispatch = useDispatch();
+  const { format } = useCurrency();
   const { locations, totalCustomers, percentageChange, loading, error } =
     useSelector((state) => state.analytics.customerLocations);
   const [selectedPeriod, setSelectedPeriod] = useState('week');
@@ -114,21 +117,21 @@ const LocationAudience = () => {
 
   if (loading) {
     return (
-      <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
+      <Card variant="default" className="p-6">
         <div className="flex h-[400px] items-center justify-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-yellow-400" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary" />
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-danger/20 bg-danger/5 p-6 shadow-floating">
+      <Card variant="default" className="p-6 border-danger/20 bg-danger/5">
         <div className="flex h-[400px] items-center justify-center text-center text-danger text-body">
           Error loading customer locations: {error}
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -143,16 +146,16 @@ const LocationAudience = () => {
   }) : [];
 
   return (
-    <div className="rounded-2xl border border-border-default bg-white p-6 shadow-floating">
+    <Card variant="default" className="p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-h3 font-semibold text-text-primary tracking-tight">
             Location of Audience
           </h2>
           <div className="text-caption text-text-secondary mt-0.5">
-            Total Customers: {totalCustomers?.toLocaleString()}
+            Total Customers: {totalCustomers?.toLocaleString() || 0}
             <span className={`ml-2 font-medium ${percentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
-              {percentageChange >= 0 ? '↑' : '↓'} {Math.abs(percentageChange).toFixed(1)}%
+              {percentageChange >= 0 ? '↑' : '↓'} {Math.abs(percentageChange || 0).toFixed(1)}%
             </span>
           </div>
         </div>
@@ -202,7 +205,7 @@ const LocationAudience = () => {
               <div className="flex items-center space-x-4">
                 <div className="flex flex-col items-end">
                   <span className="font-semibold text-text-primary text-body">
-                    {location.percentage.toFixed(1)}%
+                    {(location.percentage || 0).toFixed(1)}%
                   </span>
                   <span className="text-caption text-text-muted">
                     {location.customers} customers
@@ -212,7 +215,7 @@ const LocationAudience = () => {
                   {location.orders} orders
                 </div>
                 <div className="flex items-center gap-2 text-body font-semibold text-text-primary">
-                  ₦{location.revenue.toLocaleString()}
+                  {format(location.revenue || 0)}
                   <span
                     className={`flex items-center gap-0.5 text-caption font-medium ${
                       isPositive ? 'text-success' : 'text-danger'
@@ -227,7 +230,7 @@ const LocationAudience = () => {
           );
         })}
       </div>
-    </div>
+    </Card>
   );
 };
 

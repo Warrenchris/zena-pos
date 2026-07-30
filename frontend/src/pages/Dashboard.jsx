@@ -222,11 +222,11 @@ export default function Dashboard() {
   if (!user) {
     return (
       <div className="space-y-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-3xl font-bold text-gray-900">
+        <div className="bg-surface rounded-2xl border border-border-default shadow-floating p-6">
+          <h1 className="text-3xl font-bold text-text-primary">
             Welcome to Zana POS
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-text-secondary mt-2">
             Please log in to access your dashboard.
           </p>
           <div className="mt-4">
@@ -277,7 +277,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 min-h-screen">
       {/* Welcome Header */}
-      <Card variant="default" className="p-6 bg-white shadow-sm border border-border-default">
+      <Card variant="default" className="p-6">
         <h1 className="text-h2 font-bold text-text-primary tracking-tight">
           Welcome back, {user?.name || 'User'}!
         </h1>

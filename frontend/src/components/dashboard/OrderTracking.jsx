@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { fetchOrderStats } from '../../store/slices/analyticsSlice';
 import useCurrency from '../../hooks/useCurrency';
+import Card from '../ui/Card';
 
 const OrderTracking = () => {
   const dispatch = useDispatch();
@@ -26,11 +27,11 @@ const OrderTracking = () => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="rounded-[14px] border border-yellow-400/40 bg-[#0b0f1d] px-4 py-3 text-sm text-white shadow-[0_0_20px_rgba(250,204,21,0.18)]">
-          <p className="font-semibold text-yellow-200">{label}</p>
-          <p className="mt-1 font-semibold text-orange-300">{payload[0].value} orders</p>
+        <div className="rounded-xl border border-border-default bg-surface px-4 py-3 text-caption text-text-primary shadow-floating">
+          <p className="font-semibold text-primary">{label}</p>
+          <p className="mt-1 font-bold text-text-primary">{payload[0].value} orders</p>
           {payload[1] && (
-            <p className="text-emerald-300 font-semibold">{format(payload[1].value)}</p>
+            <p className="text-success font-semibold">{format(payload[1].value)}</p>
           )}
         </div>
       );
@@ -40,40 +41,40 @@ const OrderTracking = () => {
 
   if (loading) {
     return (
-      <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
+      <Card variant="default" className="p-6">
         <div className="flex h-[300px] items-center justify-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-orange-400" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary" />
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-[20px] border border-red-400/30 bg-black/50 p-6 shadow-[0_0_20px_rgba(248,113,113,0.25)]">
-        <div className="flex h-[300px] items-center justify-center text-center text-red-300">
+      <Card variant="default" className="p-6 border-danger/20 bg-danger/5">
+        <div className="flex h-[300px] items-center justify-center text-center text-danger text-body">
           Error loading order statistics: {error}
         </div>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp">
+    <Card variant="default" className="p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-yellow-200">Order Tracking</h2>
-          <div className="mt-2 flex flex-wrap gap-4 text-sm text-white/70">
+          <h2 className="text-h3 font-semibold text-text-primary tracking-tight">Order Tracking</h2>
+          <div className="mt-1 flex flex-wrap gap-4 text-caption text-text-secondary">
             <p>
-              Total Orders: {totalOrders?.toLocaleString()}
-              <span className={`ml-2 ${orderPercentageChange >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                {orderPercentageChange >= 0 ? '↑' : '↓'} {Math.abs(orderPercentageChange).toFixed(1)}%
+              Total Orders: <span className="font-semibold text-text-primary">{totalOrders?.toLocaleString() || 0}</span>
+              <span className={`ml-1.5 font-medium ${orderPercentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
+                {orderPercentageChange >= 0 ? '↑' : '↓'} {Math.abs(orderPercentageChange || 0).toFixed(1)}%
               </span>
             </p>
             <p>
-              Revenue: {format(totalRevenue)}
-              <span className={`ml-2 ${revenuePercentageChange >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                {revenuePercentageChange >= 0 ? '↑' : '↓'} {Math.abs(revenuePercentageChange).toFixed(1)}%
+              Revenue: <span className="font-semibold text-text-primary">{format(totalRevenue || 0)}</span>
+              <span className={`ml-1.5 font-medium ${revenuePercentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
+                {revenuePercentageChange >= 0 ? '↑' : '↓'} {Math.abs(revenuePercentageChange || 0).toFixed(1)}%
               </span>
             </p>
           </div>
@@ -81,47 +82,44 @@ const OrderTracking = () => {
         <select
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-full border border-yellow-400/30 bg-black/40 px-4 py-2 text-sm font-medium text-yellow-100 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
         >
-          <option value="week" className="bg-[#0b0f1b] text-white">This Week</option>
-          <option value="month" className="bg-[#0b0f1b] text-white">This Month</option>
-          <option value="year" className="bg-[#0b0f1b] text-white">This Year</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
         </select>
       </div>
 
       <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={orderData}
+            data={orderData || []}
             margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
           >
             <defs>
               <linearGradient id="orderGradientDashboard" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#fb923c" stopOpacity={0.9} />
-                <stop offset="100%" stopColor="#f97316" stopOpacity={0.4} />
+                <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.9} />
+                <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0.4} />
               </linearGradient>
               <linearGradient id="orderRevenueGradient" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#34d399" stopOpacity={0.85} />
-                <stop offset="100%" stopColor="#10b981" stopOpacity={0.35} />
+                <stop offset="0%" stopColor="#10B981" stopOpacity={0.85} />
+                <stop offset="100%" stopColor="#10B981" stopOpacity={0.35} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="4 4" stroke="rgba(250,204,21,0.12)" />
+            <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
             <XAxis
               dataKey="date"
-              stroke="#facc15"
-              tick={{ fill: 'rgba(255,255,255,0.65)', fontSize: 12 }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
               tickLine={false}
             />
             <YAxis
               yAxisId="left"
-              stroke="#facc15"
-              tick={{ fill: 'rgba(255,255,255,0.65)', fontSize: 12 }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
               tickLine={false}
             />
             <YAxis
               yAxisId="right"
-              stroke="#34d399"
-              tick={{ fill: 'rgba(52,211,153,0.75)', fontSize: 12 }}
+              tick={{ fill: '#10B981', fontSize: 12 }}
               tickLine={false}
               orientation="right"
               tickFormatter={(value) => format(value)}
@@ -131,20 +129,20 @@ const OrderTracking = () => {
               yAxisId="left"
               dataKey="orders"
               fill="url(#orderGradientDashboard)"
-              radius={[10, 10, 0, 0]}
+              radius={[8, 8, 0, 0]}
               maxBarSize={selectedPeriod === 'month' ? 18 : 28}
             />
             <Bar
               yAxisId="right"
               dataKey="revenue"
               fill="url(#orderRevenueGradient)"
-              radius={[10, 10, 0, 0]}
+              radius={[8, 8, 0, 0]}
               maxBarSize={selectedPeriod === 'month' ? 18 : 28}
             />
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </Card>
   );
 };
 

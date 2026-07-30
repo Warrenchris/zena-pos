@@ -64,7 +64,7 @@ const RevenueChart = () => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="rounded-xl border border-border-default bg-white px-4 py-3 text-small text-text-primary shadow-floating">
+        <div className="rounded-xl border border-border-default bg-surface px-4 py-3 text-small text-text-primary shadow-floating">
           <p className="font-semibold text-text-secondary text-caption">{label}</p>
           <p className="mt-0.5 font-bold text-primary text-body">
             {format(payload[0].value)}
