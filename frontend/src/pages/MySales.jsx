@@ -74,29 +74,29 @@ const SalesStats = ({ startDate, endDate, sales }) => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mb-8">
-      <div className="p-4 bg-brand-black shadow-zana rounded-xl border border-zana-borderTint transition-all duration-200 hover:shadow-brand-lg hover:-translate-y-0.5">
-        <div className="text-sm text-white/60">Total Sales</div>
-        <div className="text-2xl font-semibold mt-1 text-white">{formatCurrency(totalSales)}</div>
+      <div className="p-4 bg-surface shadow-floating rounded-xl border border-border-default transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
+        <div className="text-sm text-text-secondary">Total Sales</div>
+        <div className="text-2xl font-semibold mt-1 text-text-primary">{formatCurrency(totalSales)}</div>
         <div className="text-sm mt-2 flex items-center">
-          <span className={`mr-1 font-medium ${salesGrowth >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <span className={`mr-1 font-medium ${salesGrowth >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             {salesGrowth >= 0 ? '↑' : '↓'}
           </span>
-          <span className={salesGrowth >= 0 ? 'text-green-400' : 'text-red-400'}>
+          <span className={salesGrowth >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
             {Math.abs(salesGrowth).toFixed(1)}%
           </span>
         </div>
       </div>
 
-      <div className="p-4 bg-brand-black shadow-zana rounded-xl border border-zana-borderTint transition-all duration-200 hover:shadow-brand-lg hover:-translate-y-0.5">
-        <div className="text-sm text-white/60">Average Ticket</div>
-        <div className="text-2xl font-semibold mt-1 text-white">{formatCurrency(avgTicket)}</div>
-        <div className="text-sm text-white/60 mt-2">Per transaction</div>
+      <div className="p-4 bg-surface shadow-floating rounded-xl border border-border-default transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
+        <div className="text-sm text-text-secondary">Average Ticket</div>
+        <div className="text-2xl font-semibold mt-1 text-text-primary">{formatCurrency(avgTicket)}</div>
+        <div className="text-sm text-text-muted mt-2">Per transaction</div>
       </div>
 
-      <div className="p-4 bg-brand-black shadow-zana rounded-xl border border-zana-borderTint transition-all duration-200 hover:shadow-brand-lg hover:-translate-y-0.5">
-        <div className="text-sm text-white/60">Total Transactions</div>
-        <div className="text-2xl font-semibold mt-1 text-white">{sales.length}</div>
-        <div className="text-sm text-white/60 mt-2">For selected period</div>
+      <div className="p-4 bg-surface shadow-floating rounded-xl border border-border-default transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
+        <div className="text-sm text-text-secondary">Total Transactions</div>
+        <div className="text-2xl font-semibold mt-1 text-text-primary">{sales.length}</div>
+        <div className="text-sm text-text-muted mt-2">For selected period</div>
       </div>
     </div>
   );

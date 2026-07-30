@@ -149,149 +149,144 @@ export default function AdminSales() {
 
       {/* Filters */}
       {showFilters && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-surface rounded-2xl border border-border-default shadow-floating p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text-secondary mb-1">
                 Start Date
               </label>
               <input
                 type="date"
                 value={filters.startDate}
-                onChange={(e) => handleFilterChange('startDate', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                className="w-full rounded-lg border border-border-default bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text-secondary mb-1">
                 End Date
               </label>
               <input
                 type="date"
                 value={filters.endDate}
-                onChange={(e) => handleFilterChange('endDate', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                className="w-full rounded-lg border border-border-default bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text-secondary mb-1">
                 Cashier
               </label>
               <select
                 value={filters.cashierId}
-                onChange={(e) => handleFilterChange('cashierId', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setFilters({ ...filters, cashierId: e.target.value })}
+                className="w-full rounded-lg border border-border-default bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="">All Cashiers</option>
-                {employees.map(employee => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName}
+                {employees.map((cashier) => (
+                  <option key={cashier.id} value={cashier.id}>
+                    {cashier.firstName} {cashier.lastName}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Sort By
+              <label className="block text-sm font-medium text-text-secondary mb-1">
+                Payment Status
               </label>
               <select
-                value={filters.sortBy}
-                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={filters.paymentStatus}
+                onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })}
+                className="w-full rounded-lg border border-border-default bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
-                <option value="createdAt">Date</option>
-                <option value="total">Total</option>
-                <option value="invoiceNumber">Invoice</option>
+                <option value="">All Statuses</option>
+                <option value="PAID">Paid</option>
+                <option value="PENDING">Pending</option>
+                <option value="FAILED">Failed</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Order
+              <label className="block text-sm font-medium text-text-secondary mb-1">
+                Payment Method
               </label>
               <select
-                value={filters.sortOrder}
-                onChange={(e) => handleFilterChange('sortOrder', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={filters.paymentMethod}
+                onChange={(e) => setFilters({ ...filters, paymentMethod: e.target.value })}
+                className="w-full rounded-lg border border-border-default bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
-                <option value="DESC">Descending</option>
-                <option value="ASC">Ascending</option>
+                <option value="">All Methods</option>
+                <option value="CASH">Cash</option>
+                <option value="CARD">Card</option>
+                <option value="MOBILE">Mobile Money</option>
               </select>
             </div>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={clearFilters}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-            >
-              Clear Filters
-            </button>
           </div>
         </div>
       )}
 
       {/* Sales Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-surface rounded-2xl border border-border-default shadow-floating overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading sales...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-2 text-text-secondary">Loading sales...</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-border-default">
+              <thead className="bg-surface-2/60">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Invoice
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Customer
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Cashier
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Items
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Total
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Payment
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-transparent divide-y divide-border-default">
                 {(Array.isArray(sales) ? sales : []).map((sale) => (
-                  <tr key={sale?.id} className="hover:bg-gray-50">
+                  <tr key={sale?.id} className="hover:bg-surface-2/60 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{sale?.invoiceNumber}</div>
+                      <div className="text-sm font-medium text-text-primary">{sale?.invoiceNumber}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                      <div className="text-sm text-text-primary">
                         {sale?.Customer?.name || sale?.customerName || 'Walk-in Customer'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                      <div className="text-sm text-text-primary">
                         {getCashierName(sale)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                      <div className="text-sm text-text-primary">
                         {sale?.SaleItems 
                           ? `${sale.SaleItems.length} item(s)` 
                           : sale?.products 
                             ? `${sale.products.length} item(s)` 
                             : '0 item(s)'}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-text-muted">
                         {sale?.SaleItems 
                           ? (sale.SaleItems.map(item => item?.Product?.name).filter(Boolean).join(', ') || 'No items') 
                           : sale?.products 
@@ -299,30 +294,30 @@ export default function AdminSales() {
                             : 'No items'}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-primary">
                       {formatCurrency(sale?.total)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(sale?.paymentStatus)}`}>
                         {sale?.paymentStatus}
                       </span>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-text-muted mt-1">
                         {sale?.paymentMethod}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-primary">
                       {formatDate(sale?.createdAt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-2">
                         <button
-                          className="text-blue-600 hover:text-blue-900"
+                          className="text-primary hover:text-primary-hover"
                           title="View Details"
                         >
                           <EyeIcon className="h-4 w-4" />
                         </button>
                         <button
-                          className="text-gray-600 hover:text-gray-900"
+                          className="text-text-secondary hover:text-text-primary"
                           title="Print Receipt"
                         >
                           <PrinterIcon className="h-4 w-4" />
@@ -338,12 +333,12 @@ export default function AdminSales() {
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+          <div className="bg-surface px-4 py-3 flex items-center justify-between border-t border-border-default sm:px-6">
             <div className="flex-1 flex justify-between sm:hidden">
               <button
                 onClick={() => setCurrentPage(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                className="relative inline-flex items-center px-4 py-2 border border-border-default text-sm font-medium rounded-md text-text-secondary bg-surface hover:bg-surface-2 disabled:opacity-50"
               >
                 Previous
               </button>
