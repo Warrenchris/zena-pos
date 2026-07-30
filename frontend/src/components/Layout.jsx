@@ -23,22 +23,8 @@ export default function Layout() {
 			const currentPath = location.pathname
 			const isAllowed = allowedRoutes.some(path => currentPath === path || currentPath.startsWith(`${path}/`))
 
-			// Debug logging
-			if (process.env.NODE_ENV === 'development') {
-				console.log('🔐 Layout Route Check:', {
-					currentPath,
-					allowedRoutes,
-					isAllowed,
-					userRole: user?.role
-				})
-			}
-
 			if (!isAllowed) {
-				if (currentPath === '/') {
-					navigate('/dashboard')
-				} else {
-					navigate('/dashboard')
-				}
+				navigate('/dashboard')
 			}
 		}
 	}, [location.pathname, getRoutesByRole, navigate, isLoginPage, user])
@@ -65,23 +51,29 @@ export default function Layout() {
 	}
 
 	const Shell = ({ children }) => (
-		<div className="min-h-screen bg-brand-black">
+		<div className="min-h-screen bg-surface-0 text-text-primary font-sans antialiased">
+			{/* Skip link for keyboard accessibility */}
+			<a
+				href="#main-content"
+				className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-surface-0 focus:font-semibold focus:rounded-lg focus:shadow-lg focus:outline-none"
+			>
+				Skip to main content
+			</a>
 			{children}
 		</div>
 	)
 
-	// If it's the login page, render only the content without navigation
+	// If login page, render without navigation
 	if (isLoginPage) {
 		return (
 			<Shell>
-				<main className="flex-1">
+				<main id="main-content" className="flex-1">
 					<Outlet />
 				</main>
 			</Shell>
 		)
 	}
 
-	// Return the layout with the appropriate sidebar variant
 	return (
 		<Shell>
 			<ModernSidebar
@@ -96,7 +88,7 @@ export default function Layout() {
 					className="z-40"
 					isSidebarOpen={sidebarOpen}
 				/>
-				<main className="flex-1 pt-16 pb-10 safe-area-padding">
+				<main id="main-content" className="flex-1 pt-16 pb-10 safe-area-padding">
 					<div className="app-shell app-shell--wide">
 						<Outlet />
 					</div>

@@ -226,24 +226,25 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
       <Link
         key={item.path}
         to={item.path}
-        className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
+        aria-current={active ? 'page' : undefined}
+        className={`group flex items-center px-4 py-3 text-small font-medium rounded-xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
           active
-            ? 'bg-gradient-to-r from-brand-yellow to-yellow-400 text-brand-black shadow-lg transform scale-[1.02]'
-            : 'text-gray-200 hover:bg-white/10 hover:text-white hover:transform hover:scale-[1.01]'
+            ? 'bg-primary text-surface-0 font-semibold shadow-md'
+            : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary'
         }`}
         onMouseEnter={() => setHoveredItem(item.path)}
         onMouseLeave={() => setHoveredItem(null)}
       >
         <item.icon
           className={`mr-3 flex-shrink-0 h-5 w-5 transition-all duration-200 ${
-            active || isHovered
-              ? 'text-brand-black scale-110'
-              : 'text-gray-400 group-hover:text-white group-hover:scale-105'
+            active
+              ? 'text-surface-0'
+              : 'text-text-muted group-hover:text-text-primary'
           }`}
         />
         <span className="truncate font-medium">{item.name}</span>
         {active && (
-          <div className="ml-auto w-2 h-2 bg-brand-black rounded-full opacity-80 animate-pulse"></div>
+          <div className="ml-auto w-2 h-2 bg-surface-0 rounded-full opacity-80 animate-pulse"></div>
         )}
       </Link>
     );
@@ -253,15 +254,15 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
     const isExpanded = expandedSections[section.title];
     
     return (
-      <div key={section.title} className="mb-6">
+      <div key={section.title} className="mb-4">
         <button
           onClick={() => toggleSection(section.title)}
-          className="flex items-center justify-between w-full px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-300 transition-colors duration-200 group"
-        aria-expanded={Boolean(isExpanded)}
-        aria-controls={`sidebar-section-${section.title}`}
+          className="flex items-center justify-between w-full px-4 py-2 text-caption font-semibold text-text-muted uppercase tracking-wider hover:text-text-primary transition-colors duration-200 group rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          aria-expanded={Boolean(isExpanded)}
+          aria-controls={`sidebar-section-${section.title}`}
         >
           <span className="flex items-center">
-            <span className="w-1 h-4 bg-brand-yellow rounded-full mr-3 group-hover:bg-yellow-400 transition-colors duration-200"></span>
+            <span className="w-1 h-4 bg-primary rounded-full mr-3 group-hover:bg-primary-hover transition-colors duration-200"></span>
             {section.title}
           </span>
           {isExpanded ? (
@@ -274,8 +275,8 @@ const ModernSidebar = ({ isOpen, onClose, user, variant = 'admin' }) => {
         <div
           id={`sidebar-section-${section.title}`}
           className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-        }`}
+            isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+          }`}
           role="group"
           aria-hidden={!isExpanded}
         >
