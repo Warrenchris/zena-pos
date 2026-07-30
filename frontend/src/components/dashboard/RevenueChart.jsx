@@ -11,6 +11,8 @@ import {
 import useCurrency from '../../hooks/useCurrency';
 import { Tab } from '@headlessui/react';
 import analyticsService from '../../services/analytics.service';
+import Card from '../ui/Card';
+import Spinner from '../ui/Spinner';
 
 const RevenueChart = () => {
   const { format } = useCurrency();
@@ -62,9 +64,9 @@ const RevenueChart = () => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="rounded-[14px] border border-yellow-400/40 bg-[#0b0f1d] px-4 py-3 text-sm text-white shadow-[0_0_20px_rgba(250,204,21,0.18)]">
-          <p className="font-semibold text-yellow-200">{label}</p>
-          <p className="mt-1 font-semibold text-sky-300">
+        <div className="rounded-xl border border-border-default bg-white px-4 py-3 text-small text-text-primary shadow-floating">
+          <p className="font-semibold text-text-secondary text-caption">{label}</p>
+          <p className="mt-0.5 font-bold text-primary text-body">
             {format(payload[0].value)}
           </p>
         </div>
@@ -78,33 +80,33 @@ const RevenueChart = () => {
   const average = currentData.length ? total / currentData.length : 0;
 
   return (
-    <div className="rounded-[20px] border border-yellow-400/25 bg-black/40 p-6 shadow-[0_0_28px_rgba(250,204,21,0.12)] animate-fadeUp">
+    <Card variant="default" className="p-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-yellow-200">Revenue Overview</h2>
-          <p className="mt-1 text-sm text-white/70">Sales performance across the selected period</p>
+          <h2 className="text-h4 font-semibold text-text-primary tracking-tight">Revenue Overview</h2>
+          <p className="mt-0.5 text-small text-text-secondary">Sales performance across the selected period</p>
         </div>
-        <div className="flex gap-6 text-sm">
+        <div className="flex gap-6 text-small">
           <div>
-            <span className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">Total</span>
-            <p className="mt-1 text-base font-semibold text-white">{format(total)}</p>
+            <span className="text-caption font-semibold uppercase tracking-wider text-text-muted">Total</span>
+            <p className="mt-0.5 text-body font-bold text-text-primary">{format(total)}</p>
           </div>
           <div>
-            <span className="text-xs uppercase tracking-[0.18em] text-yellow-200/70">Average</span>
-            <p className="mt-1 text-base font-semibold text-white">{format(average)}</p>
+            <span className="text-caption font-semibold uppercase tracking-wider text-text-muted">Average</span>
+            <p className="mt-0.5 text-body font-bold text-text-primary">{format(average)}</p>
           </div>
         </div>
       </div>
 
       <Tab.Group>
-        <Tab.List className="mb-6 flex flex-wrap gap-3">
+        <Tab.List className="mb-6 flex flex-wrap gap-2">
           {Object.keys(periods).map((period) => (
             <Tab
               key={period}
               className={({ selected }) =>
-                `rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${selected
-                  ? 'border-yellow-400 bg-yellow-400 text-black shadow-[0_0_18px_rgba(250,204,21,0.35)]'
-                  : 'border-yellow-400/30 bg-black/40 text-yellow-200 hover:border-yellow-300 hover:text-yellow-100'
+                `rounded-full px-3.5 py-1.5 text-small font-medium transition-all duration-150 focus:outline-none ${selected
+                  ? 'bg-primary text-white shadow-sm font-semibold'
+                  : 'bg-surface-2 text-text-secondary hover:bg-surface-3 hover:text-text-primary border border-border-default'
                 }`
               }
               onClick={() => setSelectedPeriod(period)}
@@ -115,58 +117,51 @@ const RevenueChart = () => {
         </Tab.List>
       </Tab.Group>
 
-      <div className="h-[400px]">
+      <div className="h-[360px]">
         {loading ? (
           <div className="flex h-full w-full items-center justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-yellow-400" />
+            <Spinner size="lg" label="Loading revenue chart..." />
           </div>
         ) : currentData.length === 0 ? (
-          <div className="flex h-full w-full items-center justify-center text-center text-white/70">
+          <div className="flex h-full w-full items-center justify-center text-center text-text-muted">
             <div>
-              <p className="text-lg font-semibold text-yellow-100/80">No revenue data available</p>
-              <p className="mt-2 text-sm text-white/60">Start making sales to populate this chart.</p>
+              <p className="text-body font-semibold text-text-primary">No revenue data available</p>
+              <p className="mt-1 text-small text-text-secondary">Start making sales to populate this chart.</p>
             </div>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={currentData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-              <defs>
-                <linearGradient id="dashboardRevenueGradient" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.6} />
-                  <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.1} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="4 4" stroke="rgba(250,204,21,0.12)" />
+              <CartesianGrid strokeDasharray="4 4" stroke="#F3F4F6" />
               <XAxis
                 dataKey="date"
-                stroke="#facc15"
-                tick={{ fill: 'rgba(255,255,255,0.65)', fontSize: 12 }}
+                stroke="#E5E7EB"
+                tick={{ fill: '#6B7280', fontSize: 12 }}
                 tickLine={false}
               />
               <YAxis
-                stroke="#facc15"
-                tick={{ fill: 'rgba(255,255,255,0.65)', fontSize: 12 }}
+                stroke="#E5E7EB"
+                tick={{ fill: '#6B7280', fontSize: 12 }}
                 tickLine={false}
                 tickFormatter={(value) => format(value)}
               />
               <Tooltip
-                cursor={{ stroke: 'rgba(250,204,21,0.25)', strokeWidth: 1, strokeDasharray: '3 3' }}
+                cursor={{ stroke: '#E5E7EB', strokeWidth: 1, strokeDasharray: '3 3' }}
                 content={<CustomTooltip />}
               />
               <Line
                 type="monotone"
                 dataKey="revenue"
-                stroke="#38bdf8"
-                strokeWidth={3}
-                dot={{ stroke: '#38bdf8', strokeWidth: 2, r: 4, fill: '#0b0f1d' }}
-                activeDot={{ r: 7, strokeWidth: 2 }}
-                fill="url(#dashboardRevenueGradient)"
+                stroke="#D4A017"
+                strokeWidth={2.5}
+                dot={{ stroke: '#D4A017', strokeWidth: 2, r: 3.5, fill: '#FFFFFF' }}
+                activeDot={{ r: 6, strokeWidth: 2 }}
               />
             </LineChart>
           </ResponsiveContainer>
         )}
       </div>
-    </div>
+    </Card>
   );
 };
 

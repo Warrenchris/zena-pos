@@ -1,15 +1,15 @@
 /**
  * ChartTheme — Centralized configuration for all Recharts visualizations
- * Enforces Zana POS semantic color system and WCAG AA contrast standards.
+ * Enforces Zana POS Enterprise Light SaaS design standards (Linear / Stripe style).
  */
 
 export const CHART_COLORS = {
-  primary: '#FFD600',   // Gold accent
-  secondary: '#38BDF8', // Sky blue
-  success: '#22C55E',   // Emerald green
-  warning: '#F59E0B',   // Amber
-  purple: '#A855F7',    // Purple
-  danger: '#EF4444',    // Red
+  primary:   '#D4A017', // Refined Gold
+  secondary: '#0EA5E9', // Sky Blue
+  success:   '#22C55E', // Emerald Green
+  warning:   '#F59E0B', // Amber
+  purple:    '#8B5CF6', // Purple
+  danger:    '#EF4444', // Red
 };
 
 export const CHART_PALETTE = [
@@ -23,35 +23,35 @@ export const CHART_PALETTE = [
 
 export const chartDefaults = {
   grid: {
-    stroke: 'rgba(255, 214, 0, 0.08)',
+    stroke: '#F3F4F6',
     strokeDasharray: '4 4',
   },
   xAxis: {
-    stroke: 'rgba(255, 214, 0, 0.2)',
-    tick: { fill: '#9CA3AF', fontSize: 12, fontFamily: 'Inter, sans-serif' },
+    stroke: '#E5E7EB',
+    tick: { fill: '#6B7280', fontSize: 12, fontFamily: 'Inter, sans-serif' },
     tickLine: false,
   },
   yAxis: {
-    stroke: 'rgba(255, 214, 0, 0.2)',
-    tick: { fill: '#9CA3AF', fontSize: 12, fontFamily: 'Inter, sans-serif' },
+    stroke: '#E5E7EB',
+    tick: { fill: '#6B7280', fontSize: 12, fontFamily: 'Inter, sans-serif' },
     tickLine: false,
   },
   tooltip: {
     contentStyle: {
-      backgroundColor: '#1F2126', // surface-3
-      borderColor: 'rgba(255, 214, 0, 0.2)',
-      borderRadius: '10px',
-      color: '#F9FAFB',
-      boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4)',
+      backgroundColor: '#FFFFFF',
+      borderColor: '#E5E7EB',
+      borderRadius: '12px',
+      color: '#111827',
+      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)',
       padding: '12px 16px',
     },
     itemStyle: {
-      color: '#F9FAFB',
+      color: '#111827',
       fontSize: '14px',
       fontWeight: 500,
     },
     labelStyle: {
-      color: '#FFD600',
+      color: '#6B7280',
       fontSize: '12px',
       fontWeight: 600,
       marginBottom: '4px',

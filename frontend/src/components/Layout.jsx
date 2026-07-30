@@ -51,11 +51,11 @@ export default function Layout() {
 	}
 
 	const Shell = ({ children }) => (
-		<div className="min-h-screen bg-surface-0 text-text-primary font-sans antialiased">
+		<div className="min-h-screen bg-app text-text-primary font-sans antialiased selection:bg-primary/20">
 			{/* Skip link for keyboard accessibility */}
 			<a
 				href="#main-content"
-				className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-surface-0 focus:font-semibold focus:rounded-lg focus:shadow-lg focus:outline-none"
+				className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:font-semibold focus:rounded-xl focus:shadow-floating focus:outline-none"
 			>
 				Skip to main content
 			</a>
@@ -82,13 +82,14 @@ export default function Layout() {
 				user={user}
 				variant={user?.role === 'admin' ? 'admin' : 'cashier'}
 			/>
-			<div className={`${user?.role === 'admin' ? 'lg:pl-80 2xl:pl-96' : 'lg:pl-72 2xl:pl-80'} flex flex-col min-h-screen transition-[padding-left] duration-300 ease-out`}>
+			
+			{/* Floating Content Area offset to accommodate floating card sidebar */}
+			<div className="lg:pl-[304px] 2xl:pl-[336px] flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out">
 				<TopNavBar
 					onMenuClick={() => setSidebarOpen(true)}
-					className="z-40"
 					isSidebarOpen={sidebarOpen}
 				/>
-				<main id="main-content" className="flex-1 pt-16 pb-10 safe-area-padding">
+				<main id="main-content" className="flex-1 pb-12 safe-area-padding">
 					<div className="app-shell app-shell--wide">
 						<Outlet />
 					</div>

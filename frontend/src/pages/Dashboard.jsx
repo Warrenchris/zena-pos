@@ -277,12 +277,12 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 min-h-screen">
       {/* Welcome Header */}
-      <Card variant="default" className="p-6">
-        <h1 className="text-h2 font-bold text-primary">
+      <Card variant="default" className="p-6 bg-white shadow-sm border border-border-default">
+        <h1 className="text-h2 font-bold text-text-primary tracking-tight">
           Welcome back, {user?.name || 'User'}!
         </h1>
         <p className="text-text-secondary mt-1 text-body">
-          Here's what's happening with your business today.
+          Here is what is happening across your retail operations today.
         </p>
       </Card>
 
