@@ -5,13 +5,14 @@ import {
   EyeIcon,
   PrinterIcon,
   FunnelIcon,
-  ShoppingBagIcon
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { fetchAdminSales, fetchMySales } from '../store/slices/salesSlice';
 import { fetchProducts } from '../store/slices/productsSlice';
 import { fetchCustomers } from '../store/slices/customersSlice';
 import { employeesAPI } from '../services/api';
 import POSModal from '../components/POSModal';
+import SaleDetailModal from '../components/SaleDetailModal';
 import { useCurrency } from '../hooks/useCurrency';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -30,6 +31,7 @@ export default function Sales() {
   
   const [currentPage, setCurrentPage] = useState(1);
   const [showPOSModal, setShowPOSModal] = useState(false);
+  const [selectedSale, setSelectedSale] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [filters, setFilters] = useState({
@@ -53,7 +55,7 @@ export default function Sales() {
     dispatch(fetchCustomers());
   }, [dispatch, isAdmin]);
 
-  useEffect(() => {
+  const loadSalesData = () => {
     if (isAdmin) {
       dispatch(fetchAdminSales({ 
         page: currentPage, 
@@ -68,6 +70,10 @@ export default function Sales() {
         sortOrder: filters.sortOrder
       }));
     }
+  };
+
+  useEffect(() => {
+    loadSalesData();
   }, [dispatch, currentPage, filters, isAdmin]);
 
   const fetchEmployees = async () => {
@@ -82,8 +88,8 @@ export default function Sales() {
       } else {
         setEmployees([]);
       }
-    } catch (error) {
-      console.error('Error fetching employees:', error);
+    } catch {
+      setEmployees([]);
     }
   };
 
@@ -170,24 +176,22 @@ export default function Sales() {
       render: (_, row) => {
         const count = row?.SaleItems ? row.SaleItems.length : row?.products ? row.products.length : 0;
         return (
-          <div>
-            <span className="text-text-primary font-medium">{count} item(s)</span>
-          </div>
+          <span className="text-text-secondary text-small font-medium">{count} item(s)</span>
         );
       }
     },
     {
       key: 'total',
       label: 'Total',
-      render: (val) => <span className="font-bold text-primary">{formatCurrency(val || 0)}</span>
+      render: (val, row) => <span className="font-bold text-primary">{formatCurrency(val || row.totalAmount || 0)}</span>
     },
     {
       key: 'paymentStatus',
       label: 'Payment',
       render: (val, row) => (
         <div className="flex flex-col gap-1">
-          <Badge variant={getPaymentBadgeVariant(val)}>
-            {val || 'Completed'}
+          <Badge variant={getPaymentBadgeVariant(val || row.status)}>
+            {val || row.status || 'Completed'}
           </Badge>
           <span className="text-caption text-text-muted capitalize">{row?.paymentMethod || 'cash'}</span>
         </div>
@@ -202,14 +206,16 @@ export default function Sales() {
       key: 'actions',
       label: 'Actions',
       render: (_, row) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           <button
+            onClick={() => setSelectedSale(row)}
             className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
             title="View Sale Details"
           >
             <EyeIcon className="h-4 w-4" />
           </button>
           <button
+            onClick={() => window.print()}
             className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
             title="Print Receipt"
           >
@@ -225,96 +231,108 @@ export default function Sales() {
       {/* Header */}
       <PageHeader
         title={isAdmin ? 'Sales Management' : 'My Sales'}
-        description={isAdmin ? 'View, analyze, and manage all retail sales transactions' : 'View your completed sales transactions'}
+        description={isAdmin ? 'View, filter, analyze, and manage all retail sales transactions across cashiers.' : 'View your completed sales transactions'}
         primaryAction={{
           label: 'New Sale',
           icon: PlusIcon,
           onClick: () => setShowPOSModal(true)
         }}
         secondaryActions={
-          <Button
-            variant="outline"
-            size="md"
-            leftIcon={FunnelIcon}
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            {showFilters ? 'Hide Filters' : 'Filter Sales'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="md"
+              leftIcon={ArrowPathIcon}
+              onClick={loadSalesData}
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
+              leftIcon={FunnelIcon}
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              {showFilters ? 'Hide Filters' : 'Filter Sales'}
+            </Button>
+          </div>
         }
       />
 
       {/* Filter Panel Card */}
       {showFilters && (
-        <Card variant="default">
-          <Card.Body>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              <Input
-                type="date"
-                label="Start Date"
-                value={filters.startDate}
-                onChange={(e) => handleFilterChange('startDate', e.target.value)}
-              />
-              <Input
-                type="date"
-                label="End Date"
-                value={filters.endDate}
-                onChange={(e) => handleFilterChange('endDate', e.target.value)}
-              />
-              {isAdmin && (
-                <div>
-                  <label className="block text-small font-semibold text-text-primary mb-1.5">Cashier</label>
-                  <select
-                    value={filters.cashierId}
-                    onChange={(e) => handleFilterChange('cashierId', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="">All Cashiers</option>
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+        <Card variant="default" className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <Input
+              type="date"
+              label="Start Date"
+              value={filters.startDate}
+              onChange={(e) => handleFilterChange('startDate', e.target.value)}
+            />
+            <Input
+              type="date"
+              label="End Date"
+              value={filters.endDate}
+              onChange={(e) => handleFilterChange('endDate', e.target.value)}
+            />
+            {isAdmin && (
               <div>
-                <label className="block text-small font-semibold text-text-primary mb-1.5">Sort By</label>
+                <label className="block text-small font-semibold text-text-primary mb-1.5">Cashier</label>
                 <select
-                  value={filters.sortBy}
-                  onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                  value={filters.cashierId}
+                  onChange={(e) => handleFilterChange('cashierId', e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
                 >
-                  <option value="createdAt">Date</option>
-                  <option value="total">Total</option>
-                  <option value="invoiceNumber">Invoice</option>
+                  <option value="">All Cashiers</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
+                  ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-small font-semibold text-text-primary mb-1.5">Order</label>
-                <select
-                  value={filters.sortOrder}
-                  onChange={(e) => handleFilterChange('sortOrder', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="DESC">Descending</option>
-                  <option value="ASC">Ascending</option>
-                </select>
-              </div>
+            )}
+            <div>
+              <label className="block text-small font-semibold text-text-primary mb-1.5">Sort By</label>
+              <select
+                value={filters.sortBy}
+                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="createdAt">Date</option>
+                <option value="total">Total</option>
+                <option value="invoiceNumber">Invoice</option>
+              </select>
             </div>
-            <div className="mt-4 flex justify-end">
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                Clear All Filters
-              </Button>
+            <div>
+              <label className="block text-small font-semibold text-text-primary mb-1.5">Order</label>
+              <select
+                value={filters.sortOrder}
+                onChange={(e) => handleFilterChange('sortOrder', e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="DESC">Descending</option>
+                <option value="ASC">Ascending</option>
+              </select>
             </div>
-          </Card.Body>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear All Filters
+            </Button>
+          </div>
         </Card>
       )}
 
-      {/* Notion-Style Table Card */}
+      {/* Table */}
       <Table
         columns={columns}
         data={filteredSalesList}
         loading={loading}
         emptyTitle="No Sales Records Found"
         emptyDescription="Process transactions using the POS terminal to record sales."
+        onSelectRow={(id) => {
+          const sale = filteredSalesList.find(s => s.id === id);
+          if (sale) setSelectedSale(sale);
+        }}
         pagination={{
           currentPage,
           totalPages: pagination?.totalPages || 1,
@@ -322,6 +340,14 @@ export default function Sales() {
           pageSize: 10,
           onPageChange: (newPage) => setCurrentPage(newPage)
         }}
+      />
+
+      {/* Detail Modal */}
+      <SaleDetailModal
+        sale={selectedSale}
+        isOpen={Boolean(selectedSale)}
+        onClose={() => setSelectedSale(null)}
+        onPrint={() => window.print()}
       />
 
       {/* POS Modal */}
