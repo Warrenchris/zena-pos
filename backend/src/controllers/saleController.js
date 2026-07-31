@@ -548,9 +548,13 @@ exports.getCashierStats = async (req, res) => {
   try {
     const { employeeId, startDate, endDate } = req.query;
 
-    // Default the dates if not provided (use UTC day boundaries to avoid TZ drift)
+    // Default start date to start of current week if not provided
     const now = new Date();
-    const start = parseDate(startDate, new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)));
+    const defaultWeekStart = new Date(now);
+    defaultWeekStart.setDate(now.getDate() - now.getDay());
+    defaultWeekStart.setHours(0, 0, 0, 0);
+
+    const start = parseDate(startDate, defaultWeekStart);
     const end = parseDate(endDate, new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999)));
 
     // Build where clause
@@ -561,68 +565,49 @@ exports.getCashierStats = async (req, res) => {
       }
     };
 
-    // For cashiers and employees, always show their own stats only
+    // For cashiers and employees, include both userId and employeeId matching
     if (req.user.role === 'cashier' || req.user.role === 'employee') {
-      if (req.user.isEmployee) {
-        try {
-          whereClause.employeeId = UuidHelper.validate(req.user.id);
-        } catch (error) {
-          return res.status(400).json({
-            error: 'Invalid employee ID format',
-            details: error.message
-          });
-        }
-      } else {
-        // It's a User (Integer ID)
-        whereClause.userId = req.user.id;
-      }
+      whereClause[Op.or] = [
+        { userId: req.user.id },
+        { employeeId: req.user.id }
+      ];
     }
-    // For managers/admins, filter by employeeId or userId if provided
     else if (employeeId) {
-      // Check if it's a UUID (Employee) or Integer (User)
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId);
-
       if (isUuid) {
         whereClause.employeeId = employeeId;
       } else {
-        // Assume it's a User ID
         whereClause.userId = employeeId;
       }
     }
 
-    // Get sales data
+    // Get sales data with SaleItems for items count
     const sales = await Sale.findAll({
       where: whereClause,
       attributes: [
         'id',
         'total',
         'createdAt',
-        'employeeId'
+        'employeeId',
+        'userId'
       ],
       include: [
         {
-          model: Employee,
-          attributes: ['id', 'firstName', 'lastName'],
+          model: SaleItem,
+          attributes: ['quantity'],
           required: false
         }
       ],
       order: [['createdAt', 'DESC']]
     });
 
-    // Add debug logging
-    console.log('Fetched sales:', {
-      count: sales.length,
-      employeeIds: sales.map(s => s.employeeId)
-    });
-
-    // Calculate statistics with error handling
     const totalSales = sales.reduce((sum, sale) => {
       const total = parseFloat(sale.total || 0);
       return isNaN(total) ? sum : sum + total;
     }, 0);
     const orderCount = sales.length;
 
-    // Get today's stats specifically
+    // Today's stats
     const today = new Date();
     const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 0, 0, 0, 0));
     const todayEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999));
@@ -632,10 +617,14 @@ exports.getCashierStats = async (req, res) => {
       return saleDate >= todayStart && saleDate <= todayEnd;
     });
 
-    const todayTotal = todaySales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+    const todayTotal = todaySales.reduce((sum, sale) => sum + parseFloat(sale.total || 0), 0);
     const todayCount = todaySales.length;
+    const todayItemCount = todaySales.reduce((sum, sale) => {
+      const items = Array.isArray(sale.SaleItems) ? sale.SaleItems : [];
+      return sum + items.reduce((iSum, item) => iSum + (parseInt(item.quantity || 0, 10)), 0);
+    }, 0);
 
-    // Get this week's stats
+    // Week stats
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
     weekStart.setHours(0, 0, 0, 0);
@@ -649,13 +638,14 @@ exports.getCashierStats = async (req, res) => {
       return saleDate >= weekStart && saleDate <= weekEnd;
     });
 
-    const weekTotal = weekSales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+    const weekTotal = weekSales.reduce((sum, sale) => sum + parseFloat(sale.total || 0), 0);
     const weekCount = weekSales.length;
 
     res.json({
       today: {
         totalSales: todayTotal,
-        orderCount: todayCount
+        orderCount: todayCount,
+        itemCount: todayItemCount
       },
       week: {
         totalSales: weekTotal,
@@ -667,7 +657,7 @@ exports.getCashierStats = async (req, res) => {
         startDate: start,
         endDate: end
       },
-      sales: sales.slice(0, 10) // Return recent sales for the dashboard
+      sales: sales.slice(0, 10)
     });
 
   } catch (error) {
