@@ -30,6 +30,8 @@ export const usePermissions = () => {
           { path: '/categories', label: 'Categories' },
           { path: '/customers', label: 'Customers' },
           { path: '/expenses', label: 'Expenses' },
+          { path: '/coupons', label: 'Coupons' },
+          { path: '/discounts', label: 'Discounts' },
           // Support both canonical and admin-aliased employees routes
           { path: '/employees', label: 'Employees' },
           { path: '/admin/employees', label: 'Employees' },
@@ -51,6 +53,8 @@ export const usePermissions = () => {
           { path: '/categories', label: 'Categories' },
           { path: '/customers', label: 'Customers' },
           { path: '/expenses', label: 'Expenses' },
+          { path: '/coupons', label: 'Coupons' },
+          { path: '/discounts', label: 'Discounts' },
           // Managers can manage employees per role permissions
           { path: '/employees', label: 'Employees' },
           { path: '/settings', label: 'Settings' },
