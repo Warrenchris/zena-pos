@@ -37,6 +37,9 @@ const Brands = lazyLoad(() => import('./pages/Brands'))
 const Units = lazyLoad(() => import('./pages/Units'))
 const SubCategories = lazyLoad(() => import('./pages/SubCategories'))
 const Settings = lazyLoad(() => import('./pages/Settings'))
+const Purchases = lazyLoad(() => import('./pages/Purchases'))
+const PurchaseOrders = lazyLoad(() => import('./pages/PurchaseOrders'))
+const PurchaseReturns = lazyLoad(() => import('./pages/PurchaseReturns'))
 
 const AiServices = lazy(() => import('./pages/AiServices'))
 
@@ -131,9 +134,9 @@ export default function AppRoutes() {
           <Route path="/discounts" element={<PlaceholderPage />} />
           
           {/* Purchases Routes */}
-          <Route path="/purchases" element={<PlaceholderPage />} />
-          <Route path="/purchase-orders" element={<PlaceholderPage />} />
-          <Route path="/purchase-returns" element={<PlaceholderPage />} />
+          <Route path="/purchases" element={<Purchases />} />
+          <Route path="/purchase-orders" element={<PurchaseOrders />} />
+          <Route path="/purchase-returns" element={<PurchaseReturns />} />
           
           <Route index element={<Navigate to="/dashboard" replace />} />
           
