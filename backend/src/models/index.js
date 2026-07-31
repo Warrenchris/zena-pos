@@ -119,5 +119,7 @@ module.exports = {
   PendingPayment,
   SaleRefund,
   HeldCart,
-  SalePayment
+  SalePayment,
+  Coupon,
+  DiscountRule
 };

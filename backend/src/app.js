@@ -56,6 +56,8 @@ const invoiceRoutes = require('./routes/invoiceRoutes');
 const mpesaRoutes = require('./routes/mpesaRoutes');
 const cardRoutes = require('./routes/cardRoutes');
 const heldCartRoutes = require('./routes/heldCartRoutes');
+const couponRoutes = require('./routes/coupons');
+const discountRoutes = require('./routes/discounts');
 
 const app = express();
 
@@ -119,6 +121,8 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/mpesa', mpesaRoutes);
 app.use('/api/card', cardRoutes);
 app.use('/api/held-carts', heldCartRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/discounts', discountRoutes);
 
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);
