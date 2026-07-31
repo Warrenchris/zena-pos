@@ -75,6 +75,14 @@ async def create_forecast(
             'y': data.values
         }).sort_values('ds').reset_index(drop=True)
 
+        freq = 'D'
+        if len(df) >= 2:
+            avg_diff = (df['ds'].iloc[-1] - df['ds'].iloc[0]).days / max(1, len(df) - 1)
+            if avg_diff >= 25:
+                freq = 'MS'
+            elif avg_diff >= 6:
+                freq = 'W'
+
         model_quality = None
         split_idx = int(len(df) * 0.8)
         train_df = df.iloc[:split_idx]
@@ -111,19 +119,24 @@ async def create_forecast(
 
         model = Prophet(
             yearly_seasonality=len(df) > 365,
-            weekly_seasonality=True,
+            weekly_seasonality=freq == 'D',
             daily_seasonality=False
         )
         model.fit(df)
 
-        future = model.make_future_dataframe(periods=periods)
+        future = model.make_future_dataframe(periods=periods, freq=freq)
         forecast = model.predict(future)
+
+        # Revenue predictions must be non-negative (>= 0)
+        preds = [max(0.0, float(val)) for val in forecast['yhat'].tolist()[-periods:]]
+        lowers = [max(0.0, float(val)) for val in forecast['yhat_lower'].tolist()[-periods:]]
+        uppers = [max(0.0, float(val)) for val in forecast['yhat_upper'].tolist()[-periods:]]
 
         return {
             "dates": forecast['ds'].tolist()[-periods:],
-            "predictions": forecast['yhat'].tolist()[-periods:],
-            "lower_bounds": forecast['yhat_lower'].tolist()[-periods:],
-            "upper_bounds": forecast['yhat_upper'].tolist()[-periods:],
+            "predictions": preds,
+            "lower_bounds": lowers,
+            "upper_bounds": uppers,
             "model_quality": model_quality,
             "training_samples": len(df),
             "algorithm": "prophet"

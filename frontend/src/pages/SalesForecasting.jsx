@@ -40,9 +40,15 @@ export default function SalesForecasting() {
     setIsUsingDemoData(false);
     try {
       await fetchHealth();
-      const revenueResp = await api.get('/api/insights/monthly-revenue');
-      const dates = revenueResp.data?.dates ?? [];
-      const values = revenueResp.data?.values ?? [];
+      let revenueResp = await api.get('/api/insights/daily-sales').catch(() => null);
+      let dates = revenueResp?.data?.dates ?? [];
+      let values = revenueResp?.data?.values ?? [];
+
+      if (dates.length < 2) {
+        revenueResp = await api.get('/api/insights/monthly-revenue');
+        dates = revenueResp?.data?.dates ?? [];
+        values = revenueResp?.data?.values ?? [];
+      }
       setHistorical({ dates, values });
 
       if (dates.length < 2) {
@@ -80,9 +86,9 @@ export default function SalesForecasting() {
     const predPoints = forecastDates.map((d, i) => ({
       date: new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
       actual: null,
-      predicted: predictions[i],
-      lower: lower[i],
-      upper: upper[i],
+      predicted: predictions[i] != null ? Math.max(0, predictions[i]) : null,
+      lower: lower[i] != null ? Math.max(0, lower[i]) : null,
+      upper: upper[i] != null ? Math.max(0, upper[i]) : null,
     }));
 
     return [...histPoints, ...predPoints];

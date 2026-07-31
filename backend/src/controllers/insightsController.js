@@ -657,7 +657,14 @@ const getDailySales = async (req, res) => {
       raw: true
     });
 
-    res.json({ daily_data: dailySales });
+    const dates = dailySales.map(d => d.date);
+    const values = dailySales.map(d => parseFloat(d.revenue || 0));
+
+    res.json({
+      dates,
+      values,
+      daily_data: dailySales
+    });
   } catch (error) {
     console.error('[getDailySales] Error:', error.message);
     res.status(500).json({ error: 'Failed to fetch daily sales' });
