@@ -105,10 +105,12 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/purchase-orders — Create PO
+// POST /api/purchase-orders — Create PO with strict input validation & duplicate check
 router.post('/', async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const {
+      poNumber: customPo,
       supplierName,
       supplierEmail,
       supplierPhone,
@@ -119,31 +121,63 @@ router.post('/', async (req, res) => {
       items = []
     } = req.body;
 
-    if (!supplierName || !supplierName.trim()) {
-      return res.status(400).json({ error: 'Supplier name is required' });
+    // Strict Validation 1: Supplier Name
+    if (!supplierName || typeof supplierName !== 'string' || !supplierName.trim()) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Supplier name is required and must be a valid text string' });
     }
 
+    // Strict Validation 2: Non-empty items array
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'At least one product item is required' });
+      await transaction.rollback();
+      return res.status(400).json({ error: 'At least one product item is required for purchase order' });
     }
 
-    const totalAmount = items.reduce((sum, item) => {
-      const qty = parseFloat(item.quantityOrdered || item.quantity || 0);
-      const cost = parseFloat(item.unitCost || 0);
-      return sum + (qty * cost);
-    }, 0);
+    // Strict Validation 3: Line items validation
+    const validatedItems = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const qtyOrdered = parseInt(item.quantityOrdered || item.quantity, 10);
+      const unitCost = parseFloat(item.unitCost);
 
-    const poNumber = await generatePoNumber();
+      if (isNaN(qtyOrdered) || qtyOrdered <= 0) {
+        await transaction.rollback();
+        return res.status(400).json({ error: `Item #${i + 1} (${item.productName || 'Product'}) has invalid ordered quantity. Must be a positive integer greater than 0.` });
+      }
 
-    const formattedItems = items.map(i => ({
-      productId: i.productId,
-      productName: i.productName || 'Product',
-      sku: i.sku || '',
-      quantityOrdered: parseFloat(i.quantityOrdered || i.quantity || 0),
-      quantityReceived: 0,
-      unitCost: parseFloat(i.unitCost || 0),
-      subtotal: parseFloat(i.quantityOrdered || i.quantity || 0) * parseFloat(i.unitCost || 0)
-    }));
+      if (isNaN(unitCost) || unitCost < 0) {
+        await transaction.rollback();
+        return res.status(400).json({ error: `Item #${i + 1} (${item.productName || 'Product'}) has invalid unit cost. Must be a non-negative number.` });
+      }
+
+      if (item.productId) {
+        const product = await Product.findByPk(item.productId, { transaction });
+        if (!product) {
+          await transaction.rollback();
+          return res.status(404).json({ error: `Product ID ${item.productId} not found in inventory` });
+        }
+      }
+
+      validatedItems.push({
+        productId: item.productId || null,
+        productName: item.productName || 'Product',
+        sku: item.sku || '',
+        quantityOrdered: qtyOrdered,
+        quantityReceived: parseInt(item.quantityReceived || 0, 10),
+        unitCost: unitCost,
+        subtotal: qtyOrdered * unitCost
+      });
+    }
+
+    const totalAmount = validatedItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const poNumber = customPo ? customPo.trim() : await generatePoNumber();
+
+    // Check duplicate PO number
+    const existingPo = await PurchaseOrder.findOne({ where: { poNumber }, transaction });
+    if (existingPo) {
+      await transaction.rollback();
+      return res.status(409).json({ error: `Purchase Order number '${poNumber}' already exists` });
+    }
 
     const po = await PurchaseOrder.create({
       poNumber,
@@ -155,21 +189,29 @@ router.post('/', async (req, res) => {
       status,
       totalAmount,
       notes: notes ? notes.trim() : null,
-      items: formattedItems
-    });
+      items: validatedItems
+    }, { transaction });
 
+    await transaction.commit();
     res.status(201).json(po);
   } catch (error) {
+    if (transaction.finished !== 'commit' && transaction.finished !== 'rollback') {
+      await transaction.rollback();
+    }
     console.error('Error creating purchase order:', error);
+
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({ error: 'Duplicate purchase order number' });
+    }
     res.status(500).json({ error: error.message || 'Failed to create purchase order' });
   }
 });
 
-// PATCH /api/purchase-orders/:id/status — Update PO Status (Receiving PO converts to Purchase & adds Stock)
+// PATCH /api/purchase-orders/:id/status — Update PO Status (Supports Full & Partial Receiving with atomic stock delta increments)
 router.patch('/:id/status', async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const { status } = req.body;
+    const { status, receivedItems } = req.body;
     const po = await PurchaseOrder.findByPk(req.params.id, { transaction });
 
     if (!po) {
@@ -177,23 +219,84 @@ router.patch('/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Purchase Order not found' });
     }
 
-    const previousStatus = po.status;
-    po.status = status;
+    const currentItems = po.items || [];
+    let updatedItems = [];
+    const stockDeltas = [];
 
-    // If changing status to RECEIVED (and wasn't previously RECEIVED)
-    if (status === 'RECEIVED' && previousStatus !== 'RECEIVED') {
-      const purchaseRef = `PUR-${po.poNumber.replace('PO-', '')}`;
+    if (Array.isArray(receivedItems) && receivedItems.length > 0) {
+      // Partial or full itemized receiving logic
+      for (const curItem of currentItems) {
+        const recMatch = receivedItems.find(r => r.productId === curItem.productId || (r.sku && r.sku === curItem.sku));
+        const prevRec = parseInt(curItem.quantityReceived || 0, 10);
+        let newRec = prevRec;
 
-      const purchaseItems = (po.items || []).map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        sku: item.sku,
-        quantity: item.quantityOrdered || item.quantity || 0,
-        unitCost: item.unitCost || 0,
-        totalCost: (item.quantityOrdered || item.quantity || 0) * (item.unitCost || 0)
-      }));
+        if (recMatch) {
+          const specifiedQty = parseInt(recMatch.quantityReceived, 10);
+          if (isNaN(specifiedQty) || specifiedQty < 0) {
+            await transaction.rollback();
+            return res.status(400).json({ error: `Invalid received quantity for ${curItem.productName}` });
+          }
+          newRec = specifiedQty;
+        } else if (status === 'RECEIVED') {
+          newRec = parseInt(curItem.quantityOrdered || 0, 10);
+        }
 
-      // Create linked Purchase record
+        const delta = newRec - prevRec;
+        if (delta > 0 && curItem.productId) {
+          stockDeltas.push({ productId: curItem.productId, productName: curItem.productName, delta, unitCost: curItem.unitCost });
+        }
+
+        updatedItems.push({
+          ...curItem,
+          quantityReceived: newRec
+        });
+      }
+    } else if (status === 'RECEIVED') {
+      // Full receive all items
+      for (const curItem of currentItems) {
+        const prevRec = parseInt(curItem.quantityReceived || 0, 10);
+        const ordered = parseInt(curItem.quantityOrdered || 0, 10);
+        const delta = Math.max(0, ordered - prevRec);
+
+        if (delta > 0 && curItem.productId) {
+          stockDeltas.push({ productId: curItem.productId, productName: curItem.productName, delta, unitCost: curItem.unitCost });
+        }
+
+        updatedItems.push({
+          ...curItem,
+          quantityReceived: ordered
+        });
+      }
+    } else {
+      updatedItems = currentItems;
+    }
+
+    // Determine new status based on fulfillment ratio
+    let finalStatus = status || po.status;
+    const totalOrdered = updatedItems.reduce((s, i) => s + (parseInt(i.quantityOrdered, 10) || 0), 0);
+    const totalReceived = updatedItems.reduce((s, i) => s + (parseInt(i.quantityReceived, 10) || 0), 0);
+
+    if (totalReceived >= totalOrdered && totalOrdered > 0) {
+      finalStatus = 'RECEIVED';
+    } else if (totalReceived > 0 && totalReceived < totalOrdered) {
+      finalStatus = 'PARTIALLY_RECEIVED';
+    }
+
+    po.status = finalStatus;
+    po.items = updatedItems;
+    await po.save({ transaction });
+
+    // Atomically increment stock for newly received delta quantities & log purchase
+    if (stockDeltas.length > 0) {
+      for (const sd of stockDeltas) {
+        const product = await Product.findByPk(sd.productId, { transaction });
+        if (product) {
+          await product.increment('stockQuantity', { by: sd.delta, transaction });
+        }
+      }
+
+      // Create linked Purchase log for the newly received items
+      const purchaseRef = `PUR-${po.poNumber.replace('PO-', '')}-${Date.now().toString().slice(-4)}`;
       await Purchase.create({
         referenceNo: purchaseRef,
         supplierName: po.supplierName,
@@ -202,37 +305,24 @@ router.patch('/:id/status', async (req, res) => {
         status: 'RECEIVED',
         paymentStatus: 'PAID',
         paymentMethod: 'BANK TRANSFER',
-        totalAmount: po.totalAmount,
-        notes: `Automatically generated from ${po.poNumber}`,
-        items: purchaseItems
+        totalAmount: stockDeltas.reduce((s, d) => s + (d.delta * (d.unitCost || 0)), 0),
+        notes: `Generated from PO ${po.poNumber} (${finalStatus})`,
+        items: stockDeltas.map(d => ({
+          productId: d.productId,
+          productName: d.productName,
+          quantity: d.delta,
+          unitCost: d.unitCost || 0,
+          totalCost: d.delta * (d.unitCost || 0)
+        }))
       }, { transaction });
-
-      // Auto increment inventory stock for each product in PO
-      for (const item of purchaseItems) {
-        if (item.productId) {
-          const product = await Product.findByPk(item.productId, { transaction });
-          if (product) {
-            const addQty = parseInt(item.quantity || 0, 10);
-            if (!isNaN(addQty) && addQty > 0) {
-              await product.increment('stockQuantity', { by: addQty, transaction });
-            }
-          }
-        }
-      }
-
-      // Mark items quantityReceived = quantityOrdered
-      po.items = (po.items || []).map(i => ({
-        ...i,
-        quantityReceived: i.quantityOrdered
-      }));
     }
 
-    await po.save({ transaction });
     await transaction.commit();
-
     res.json(po);
   } catch (error) {
-    await transaction.rollback();
+    if (transaction.finished !== 'commit' && transaction.finished !== 'rollback') {
+      await transaction.rollback();
+    }
     console.error('Error updating purchase order status:', error);
     res.status(500).json({ error: error.message || 'Failed to update purchase order status' });
   }
