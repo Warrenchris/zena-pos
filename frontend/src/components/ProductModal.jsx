@@ -263,8 +263,10 @@ export default function ProductModal({ product, categories, onClose }) {
               value={formData.description}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            </div>
+              className="w-full px-3 py-2 bg-surface border border-border-default rounded-xl text-text-primary text-small focus:ring-2 focus:ring-primary/30"
+              placeholder="Enter product description"
+            />
+          </div>
           </div>
 
           <div className="flex-shrink-0 flex justify-end gap-3 pt-3 border-t border-border-default mt-2">
