@@ -28,6 +28,9 @@ import { useToast } from '../components/Toast';
 import { notifySaleComplete, notifyError as notifyErrorUtil } from '../utils/notifications';
 import MetricCard from '../components/pos/MetricCard';
 import { usePersistedCart } from '../hooks/usePersistedCart';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import Badge from '../components/ui/Badge';
 
 export default function CashierDashboard() {
   const { format: formatCurrency } = useCurrency();
@@ -801,38 +804,32 @@ export default function CashierDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0b0b0c] via-[#0f0f11] to-[#0b0b0c]">
-      {/* Animated background elements */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-20 left-20 w-72 h-72 bg-brand-yellow/5 rounded-full blur-3xl opacity-20"></div>
-        <div className="absolute bottom-32 right-20 w-96 h-96 bg-brand-yellow/3 rounded-full blur-3xl opacity-10"></div>
-      </div>
-
+    <div className="space-y-6">
       {/* Main Content */}
-      <div className="flex flex-col min-h-screen relative z-10">
+      <div className="flex flex-col relative z-10 space-y-6">
         {pendingCart && (
-          <div className="bg-brand-yellow/15 border-b border-brand-yellow/30 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slideIn">
+          <div className="bg-primary/10 border border-primary/30 rounded-2xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slideIn">
             <div className="flex items-center space-x-3">
               <span className="text-xl">🛒</span>
-              <p className="text-sm text-brand-yellow font-medium">
+              <p className="text-small font-medium text-text-primary">
                 You have an unsaved cart from your last session ({pendingCart.items?.length || 0} items).
               </p>
             </div>
             <div className="flex items-center space-x-3">
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={handleRestoreCart}
-                className="px-4 py-2 bg-brand-yellow text-brand-black font-bold text-xs rounded-xl hover:bg-brand-yellowDark transition-all"
               >
                 Restore Cart
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleDismissPendingCart}
-                className="px-4 py-2 bg-transparent text-gray-400 hover:text-white text-xs font-bold rounded-xl transition-all border border-gray-600 hover:border-gray-400"
               >
                 Dismiss
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -840,147 +837,125 @@ export default function CashierDashboard() {
         <div className="flex-1 overflow-hidden">
           {/* Sales Mode Content */}
           {salesMode === 'idle' && (
-            <div className="min-h-screen flex flex-col overflow-y-auto">
-              {/* Hero Section */}
-              <div className="p-4 sm:p-8 md:p-12 text-center">
-                <div className="max-w-4xl mx-auto mb-8 sm:mb-12 animate-fadeIn">
-                  <div className="inline-flex items-center justify-center space-x-2 mb-6">
-                    <div className="h-1 w-8 bg-brand-yellow rounded-full"></div>
-                    <p className="text-brand-yellow text-sm font-semibold tracking-wider uppercase">WELCOME</p>
-                    <div className="h-1 w-8 bg-brand-yellow rounded-full"></div>
+            <div className="space-y-6">
+              {/* Hero Banner Card */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-primary/15 via-surface to-primary/5 border border-border-default shadow-floating p-8 sm:p-12 text-center">
+                <div className="max-w-2xl mx-auto space-y-4">
+                  <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary text-caption font-semibold uppercase tracking-wider">
+                    <span>Point of Sale Terminal</span>
                   </div>
 
-                  <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
-                    Ready to <span className="text-brand-yellow">Process</span> Sales?
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-text-primary tracking-tight">
+                    Ready to <span className="text-primary">Process</span> Sales?
                   </h1>
 
-                  <p className="text-lg sm:text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-                    Fast, secure, and reliable POS processing. Start a new transaction to begin selling.
+                  <p className="text-body text-text-secondary max-w-xl mx-auto">
+                    Fast, secure, and reliable POS processing. Start a new transaction to begin selling immediately.
                   </p>
 
-                  {/* Primary Action Button */}
-                  <div className="mb-8">
-                    <button
-                      type="button"
+                  <div className="pt-2">
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      leftIcon={ShoppingBagIcon}
                       onClick={withTrustedClick(startNewSale)}
-                      className="relative inline-flex items-center justify-center space-x-3 px-8 sm:px-10 py-4 sm:py-5 bg-brand-yellow text-brand-black rounded-2xl sm:rounded-3xl font-bold text-base sm:text-lg transition-all duration-300 hover:shadow-2xl hover:shadow-brand-yellow/50 hover:scale-105 active:scale-95 group"
+                      className="px-8 py-3.5 text-body font-bold rounded-2xl shadow-lg hover:scale-105 transition-transform"
                     >
-                      <ShoppingBagIcon className="h-6 w-6 transition-transform group-hover:translate-y-0.5" />
-                      <span>Start New Sale</span>
-                      <div className="absolute inset-0 rounded-2xl sm:rounded-3xl bg-brand-yellow opacity-0 group-hover:opacity-20 transition-opacity duration-300 -z-10"></div>
-                    </button>
+                      Start New Sale
+                    </Button>
                   </div>
                 </div>
               </div>
 
-              {/* Metrics Dashboard */}
-              <div className="px-4 sm:px-8 md:px-12 pb-8 sm:pb-12">
-                <div className="max-w-6xl mx-auto">
-                  {/* Section Header */}
-                  <div className="mb-8">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Your Performance Today</h2>
-                    <p className="text-gray-400">Key metrics and insights at a glance</p>
-                  </div>
-
-                  {/* Metrics Grid */}
-                  {error ? (
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-8 text-center animate-fadeIn">
-                      <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <XMarkIcon className="h-8 w-8 text-red-400" />
-                      </div>
-                      <p className="text-red-300 text-lg font-medium">{error}</p>
-                      <button
-                        onClick={withTrustedClick(fetchCashierStats)}
-                        className="mt-4 px-6 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-colors text-sm font-medium"
-                      >
-                        Try Again
-                      </button>
-                    </div>
-                  ) : statsLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="rounded-2xl bg-gradient-to-br from-brand-gray to-brand-gray/50 border border-brand-yellow/10 p-6 sm:p-8 animate-pulse">
-                          <div className="space-y-3">
-                            <div className="w-14 h-14 bg-brand-yellow/10 rounded-2xl"></div>
-                            <div className="h-4 w-24 bg-brand-yellow/10 rounded"></div>
-                            <div className="h-8 w-32 bg-brand-yellow/20 rounded"></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                      <MetricCard
-                        icon={CurrencyDollarIcon}
-                        label="Today's Revenue"
-                        value={formatCurrency(cashierStats.today.totalSales)}
-                        subtext={`From ${cashierStats.today.orderCount} sales`}
-                        gradient="bg-gradient-to-br from-brand-green to-[#059669]"
-                        animated
-                      />
-
-                      <MetricCard
-                        icon={ShoppingCartIcon}
-                        label="Total Transactions"
-                        value={cashierStats.today.orderCount}
-                        subtext="Completed today"
-                        gradient="bg-gradient-to-br from-brand-blue to-[#2563eb]"
-                        animated
-                      />
-
-                      <MetricCard
-                        icon={ChartBarIcon}
-                        label="This Week's Revenue"
-                        value={formatCurrency(cashierStats.week.totalSales)}
-                        subtext={`${cashierStats.week.orderCount} transactions`}
-                        gradient="bg-gradient-to-br from-brand-cyan to-[#06b6d4]"
-                        animated
-                      />
-
-                      <MetricCard
-                        icon={ShoppingBagIcon}
-                        label="Items Sold"
-                        value={(currentSale.items || []).reduce((sum, item) => sum + item.quantity, 0)}
-                        subtext="Current session"
-                        gradient="bg-gradient-to-br from-brand-amber to-[#d97706]"
-                        animated
-                      />
-                    </div>
-                  )}
+              {/* Performance Today Section */}
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-h2 font-bold text-text-primary">Your Performance Today</h2>
+                  <p className="text-caption text-text-secondary">Key metrics and checkout statistics at a glance</p>
                 </div>
+
+                {error ? (
+                  <div className="bg-danger/10 border border-danger/30 rounded-2xl p-6 text-center">
+                    <p className="text-danger font-medium">{error}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={withTrustedClick(fetchCashierStats)}
+                      className="mt-3"
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                ) : statsLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="h-28 bg-surface border border-border-default rounded-2xl animate-pulse"></div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <MetricCard
+                      icon={CurrencyDollarIcon}
+                      label="Today's Revenue"
+                      value={formatCurrency(cashierStats.today.totalSales)}
+                      subtext={`From ${cashierStats.today.orderCount} sales`}
+                      gradient="bg-success text-white"
+                      animated
+                    />
+
+                    <MetricCard
+                      icon={ShoppingCartIcon}
+                      label="Total Transactions"
+                      value={cashierStats.today.orderCount}
+                      subtext="Completed today"
+                      gradient="bg-primary text-white"
+                      animated
+                    />
+
+                    <MetricCard
+                      icon={ChartBarIcon}
+                      label="This Week's Revenue"
+                      value={formatCurrency(cashierStats.week.totalSales)}
+                      subtext={`${cashierStats.week.orderCount} transactions`}
+                      gradient="bg-secondary text-white"
+                      animated
+                    />
+
+                    <MetricCard
+                      icon={ShoppingBagIcon}
+                      label="Items Sold"
+                      value={(currentSale.items || []).reduce((sum, item) => sum + item.quantity, 0)}
+                      subtext="Current session"
+                      gradient="bg-warning text-white"
+                      animated
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Recent Activity Section */}
               {recentSales.length > 0 && (
-                <div className="px-4 sm:px-8 md:px-12 pb-12">
-                  <div className="max-w-6xl mx-auto">
-                    <div className="mb-6">
-                      <h3 className="text-2xl font-bold text-white mb-2">Recent Sales</h3>
-                      <p className="text-gray-400">Your latest transactions</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {recentSales.slice(0, 3).map((sale, idx) => (
-                        <div
-                          key={idx}
-                          className="group bg-gradient-to-br from-brand-gray/50 to-brand-gray/30 border border-brand-yellow/20 rounded-2xl p-6 hover:border-brand-yellow/40 transition-all duration-300 hover:shadow-lg"
-                          style={{ animationDelay: `${idx * 0.1}s` }}
-                        >
-                          <div className="flex items-start justify-between mb-4">
-                            <div>
-                              <p className="text-sm text-gray-400">Receipt #</p>
-                              <p className="text-lg font-bold text-white">{sale?.id || 'N/A'}</p>
-                            </div>
-                            <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center">
-                              <ShoppingCartIcon className="h-5 w-5 text-green-400" />
-                            </div>
+                <div className="space-y-4 pt-2">
+                  <div>
+                    <h3 className="text-h3 font-bold text-text-primary">Recent Completed Sales</h3>
+                    <p className="text-caption text-text-secondary">Latest transactions recorded at this terminal</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {recentSales.slice(0, 3).map((sale, idx) => (
+                      <Card key={idx} variant="default" className="p-5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-caption font-semibold text-text-muted uppercase">Receipt #</p>
+                            <p className="text-body font-bold text-text-primary">{sale?.id || 'N/A'}</p>
                           </div>
-                          <div className="border-t border-brand-yellow/10 pt-4">
-                            <p className="text-sm text-gray-400 mb-1">Total Amount</p>
-                            <p className="text-2xl font-bold text-brand-yellow">{formatCurrency(sale?.total || 0)}</p>
-                          </div>
+                          <Badge variant="success" size="sm">Completed</Badge>
                         </div>
-                      ))}
-                    </div>
+                        <div className="pt-2 border-t border-border-default flex justify-between items-center">
+                          <span className="text-small text-text-secondary">Total Amount</span>
+                          <span className="text-h3 font-bold text-primary">{formatCurrency(sale?.total || 0)}</span>
+                        </div>
+                      </Card>
+                    ))}
                   </div>
                 </div>
               )}
