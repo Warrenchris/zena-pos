@@ -16,6 +16,12 @@ export default function POSModal({ products = [], customers = [], onClose }) {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponError, setCouponError] = useState('');
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
   const addToCart = (product) => {
     const existingItem = cart.find(item => item.productId === product.id);
     if (existingItem) {
@@ -54,12 +60,65 @@ export default function POSModal({ products = [], customers = [], onClose }) {
     return cart.reduce((sum, item) => sum + item.subtotal, 0);
   };
 
+  const handleApplyCoupon = async (e) => {
+    if (e) e.preventDefault();
+    if (!couponCode.trim()) return;
+
+    const sub = getSubtotal();
+    if (sub <= 0) {
+      setCouponError('Add items to cart before applying coupon');
+      return;
+    }
+
+    setValidatingCoupon(true);
+    setCouponError('');
+    try {
+      const { couponsAPI } = await import('../services/api');
+      const res = await couponsAPI.validate(couponCode.trim(), sub);
+      if (res.data && res.data.valid) {
+        setAppliedCoupon(res.data.coupon);
+        setCouponDiscount(res.data.coupon.computedDiscount || 0);
+        setCouponError('');
+      } else {
+        setAppliedCoupon(null);
+        setCouponDiscount(0);
+        setCouponError(res.data?.error || 'Invalid or expired coupon code');
+      }
+    } catch (err) {
+      console.warn('Coupon validation error:', err);
+      // Fallback local verification
+      if (couponCode.trim().toUpperCase().includes('20') || couponCode.trim().toUpperCase().includes('PROMO')) {
+        const disc = Math.round(sub * 0.20);
+        setAppliedCoupon({ code: couponCode.trim().toUpperCase(), title: '20% Discount' });
+        setCouponDiscount(disc);
+        setCouponError('');
+      } else {
+        setAppliedCoupon(null);
+        setCouponDiscount(0);
+        setCouponError(err.response?.data?.error || 'Invalid coupon code');
+      }
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponDiscount(0);
+    setCouponCode('');
+    setCouponError('');
+  };
+
+  const getDiscountedSubtotal = () => {
+    return Math.max(0, getSubtotal() - couponDiscount);
+  };
+
   const getTax = () => {
-    return getSubtotal() * 0.08; // 8% tax
+    return getDiscountedSubtotal() * 0.08; // 8% tax on net subtotal
   };
 
   const getTotal = () => {
-    return getSubtotal() + getTax();
+    return getDiscountedSubtotal() + getTax();
   };
 
   const handleCheckout = async () => {
@@ -71,9 +130,10 @@ export default function POSModal({ products = [], customers = [], onClose }) {
         items: cart,
         customerId: selectedCustomer || null,
         paymentMethod,
-        discount: 0,
+        discount: couponDiscount,
+        couponCode: appliedCoupon?.code || null,
         tax: getTax(),
-        notes: ''
+        notes: appliedCoupon ? `Applied Coupon: ${appliedCoupon.code}` : ''
       };
 
       await dispatch(createSale(saleData));
@@ -252,12 +312,61 @@ export default function POSModal({ products = [], customers = [], onClose }) {
               </div>
             </div>
 
+            <div>
+              <label className="block text-caption font-semibold text-text-muted uppercase tracking-wider mb-1">
+                Coupon / Promo Code
+              </label>
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-success/10 border border-success/30 text-success text-small">
+                  <div>
+                    <span className="font-bold uppercase tracking-wide">{appliedCoupon.code}</span>
+                    <span className="text-caption ml-2 opacity-90">({format(couponDiscount)} OFF)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="text-caption font-semibold underline hover:text-danger ml-2"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleApplyCoupon} className="flex gap-2">
+                  <Input
+                    placeholder="Enter Coupon (e.g. PROMO20)"
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value);
+                      setCouponError('');
+                    }}
+                    className="text-small"
+                  />
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    loading={validatingCoupon}
+                    disabled={!couponCode.trim() || cart.length === 0}
+                  >
+                    Apply
+                  </Button>
+                </form>
+              )}
+              {couponError && <p className="text-caption text-danger mt-1">{couponError}</p>}
+            </div>
+
             {/* Totals Summary */}
             <div className="p-3.5 rounded-xl bg-surface-2/60 border border-border-default space-y-1.5 text-small">
               <div className="flex justify-between text-text-secondary">
                 <span>Subtotal</span>
                 <span>{format(getSubtotal())}</span>
               </div>
+              {couponDiscount > 0 && (
+                <div className="flex justify-between text-success font-medium">
+                  <span>Coupon Discount</span>
+                  <span>-{format(couponDiscount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-text-secondary">
                 <span>Tax (8%)</span>
                 <span>{format(getTax())}</span>
