@@ -75,9 +75,9 @@ Invoice.init({
 });
 
 // Invoice number generation: INV-{timestamp}-{shopId}
-Invoice.addHook('beforeCreate', async (invoice) => {
+Invoice.addHook('beforeValidate', (invoice) => {
   if (!invoice.invoiceNumber) {
-    invoice.invoiceNumber = `INV-${Date.now()}-${invoice.shopId}`;
+    invoice.invoiceNumber = `INV-${Date.now()}-${invoice.shopId || 1}`;
   }
 });
 

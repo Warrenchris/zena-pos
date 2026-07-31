@@ -63,33 +63,41 @@ exports.createInvoice = async (req, res) => {
     const sale = await Sale.findOne({ where: { id: saleId, shopId: req.user.shopId } });
     if (!sale) return res.status(400).json({ error: 'Sale not found for this shop' });
 
+    // Generate unique invoice number: INV-{timestamp}-{shopId}
+    const invoiceNumber = `INV-${Date.now()}-${req.user.shopId}`;
+    const subtotal = sale.subtotal ?? (sale.total - (sale.tax ?? 0) + (sale.discount ?? 0));
+    const tax = sale.tax ?? 0;
+    const discount = sale.discount ?? 0;
+    const total = sale.total ?? 0;
+
     // Create Invoice
     const invoice = await Invoice.create({
+      invoiceNumber,
       saleId,
       userId: req.user.id,
       shopId: req.user.shopId,
-      subtotal: sale.subtotal,
-      tax: sale.tax,
-      discount: sale.discount,
-      total: sale.total,
+      subtotal,
+      tax,
+      discount,
+      total,
       status: 'pending',
-      paymentMethod: paymentMethod || null,
+      paymentMethod: paymentMethod || sale.paymentMethod || null,
       paymentDate: paymentDate || null,
     });
-
-    // Generate unique invoice number: INV-{timestamp}-{shopId}
-    invoice.invoiceNumber = `INV-${Date.now()}-${req.user.shopId}`;
-    await invoice.save();
 
     // Copy SaleItems to InvoiceItems
     const saleItems = await SaleItem.findAll({ where: { saleId: sale.id } });
     for (const sItem of saleItems) {
+      const price = Number(sItem.unitPrice ?? sItem.price ?? sItem.originalPrice ?? 0);
+      const quantity = Number(sItem.quantity || 1);
+      const totalItem = Number(sItem.subtotal ?? (price * quantity));
+
       await InvoiceItem.create({
         invoiceId: invoice.id,
         productId: sItem.productId,
-        quantity: sItem.quantity,
-        price: sItem.unitPrice || sItem.price,
-        total: sItem.subtotal || sItem.total,
+        quantity,
+        price,
+        total: totalItem,
       });
     }
 
@@ -105,7 +113,8 @@ exports.createInvoice = async (req, res) => {
     });
     res.status(201).json(result);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create invoice' });
+    console.error('Error creating invoice:', error);
+    res.status(500).json({ error: 'Failed to create invoice', details: error.message });
   }
 };
 
