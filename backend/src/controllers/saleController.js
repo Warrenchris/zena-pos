@@ -910,6 +910,7 @@ exports.getMySales = async (req, res) => {
         items: saleItems.length > 0 ? itemsText : '0 items',
         itemCount: `${saleItems.length} items`,
         totalAmount: parseFloat(sale.total ?? 0),
+        total: parseFloat(sale.total ?? 0),
         paymentMethod: (sale.paymentMethod || 'cash').toUpperCase(),
         status: (sale.saleStatus || 'completed').toUpperCase()
       };

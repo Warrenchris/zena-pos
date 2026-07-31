@@ -924,8 +924,8 @@ export default function CashierDashboard() {
                     <MetricCard
                       icon={ShoppingBagIcon}
                       label="Items Sold"
-                      value={(currentSale.items || []).reduce((sum, item) => sum + item.quantity, 0)}
-                      subtext="Current session"
+                      value={cashierStats.today.itemCount !== undefined ? cashierStats.today.itemCount : (currentSale.items || []).reduce((sum, item) => sum + item.quantity, 0)}
+                      subtext="Completed today"
                       gradient="bg-warning text-white"
                       animated
                     />
@@ -946,13 +946,13 @@ export default function CashierDashboard() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-caption font-semibold text-text-muted uppercase">Receipt #</p>
-                            <p className="text-body font-bold text-text-primary">{sale?.id || 'N/A'}</p>
+                            <p className="text-body font-bold text-text-primary">{sale?.invoiceNumber || sale?.id || 'N/A'}</p>
                           </div>
                           <Badge variant="success" size="sm">Completed</Badge>
                         </div>
                         <div className="pt-2 border-t border-border-default flex justify-between items-center">
                           <span className="text-small text-text-secondary">Total Amount</span>
-                          <span className="text-h3 font-bold text-primary">{formatCurrency(sale?.total || 0)}</span>
+                          <span className="text-h3 font-bold text-primary">{formatCurrency(sale?.totalAmount ?? sale?.total ?? 0)}</span>
                         </div>
                       </Card>
                     ))}
