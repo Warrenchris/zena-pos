@@ -111,7 +111,7 @@ export default function Layout() {
           isSidebarOpen={sidebarOpen}
         />
         <main id="main-content" className="flex-1 pb-12 safe-area-padding">
-          <div className="app-shell app-shell--wide">
+          <div className={location.pathname === '/pos' ? 'w-full px-3 sm:px-6' : 'app-shell app-shell--wide'}>
             <Outlet />
           </div>
         </main>

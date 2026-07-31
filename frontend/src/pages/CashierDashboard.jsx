@@ -963,35 +963,35 @@ export default function CashierDashboard() {
           )}
 
           {salesMode === 'product-selection' && (
-            <div className="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-140px)]">
+            <div className="flex flex-col xl:flex-row gap-4 sm:gap-6 w-full">
               {/* POS Terminal - Main Area */}
-              <div className="flex-1 flex flex-col space-y-4">
+              <div className="flex-1 flex flex-col space-y-4 min-w-0">
                 {/* Sale Header */}
                 <div className="bg-surface border border-border-default rounded-2xl p-4 sm:p-5 shadow-floating">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-3 h-3 rounded-full bg-success animate-pulse"></div>
-                      <div>
+                    <div className="flex items-center space-x-4 min-w-0">
+                      <div className="w-3 h-3 rounded-full bg-success animate-pulse shrink-0"></div>
+                      <div className="min-w-0">
                         <p className="text-caption font-semibold text-text-muted uppercase tracking-wider">Current Sale</p>
-                        <h2 className="text-h2 font-bold text-text-primary">{currentSale.customer.name}</h2>
+                        <h2 className="text-h2 font-bold text-text-primary truncate">{currentSale.customer.name}</h2>
                         {currentSale.customer.location && (
-                          <p className="text-caption text-text-secondary">📍 {currentSale.customer.location}</p>
+                          <p className="text-caption text-text-secondary truncate">📍 {currentSale.customer.location}</p>
                         )}
                       </div>
                       {/* Scanner Status Indicator */}
-                      <div className="flex items-center space-x-2 pl-4 border-l border-border-default">
+                      <div className="flex items-center space-x-2 pl-4 border-l border-border-default shrink-0">
                         <span className="text-caption font-semibold text-text-muted">📷 Scanner</span>
                         <Badge variant={isModalOpen ? 'warning' : 'success'} size="sm">
                           {isModalOpen ? 'Paused' : 'Ready'}
                         </Badge>
                       </div>
                     </div>
-                      <div className="flex flex-wrap gap-2 sm:gap-3">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setShowHeldCartsDrawer(true)}
-                          className="flex items-center space-x-2"
+                          className="flex items-center space-x-2 shrink-0"
                         >
                           <span>⏸️ Held Carts</span>
                           {heldCarts.length > 0 && (
@@ -1001,6 +1001,7 @@ export default function CashierDashboard() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="shrink-0"
                           onClick={withTrustedClick(cancelSale)}
                         >
                           ✕ Cancel
@@ -1009,6 +1010,7 @@ export default function CashierDashboard() {
                           <Button
                             variant="primary"
                             size="sm"
+                            className="shrink-0"
                             onClick={withTrustedClick(handleProceedToPayment)}
                           >
                             ✓ Proceed to Payment
@@ -1021,7 +1023,7 @@ export default function CashierDashboard() {
                   {/* Search and Filters - Clean Design */}
                   <div className="p-4 sm:p-5 space-y-3 bg-surface-2/30 border-b border-border-default rounded-b-2xl">
                     <div className="flex flex-col sm:flex-row gap-3">
-                      <div className="flex-1 relative group">
+                      <div className="flex-1 relative group min-w-0">
                         <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-text-muted group-focus-within:text-primary transition-colors" />
                         <input
                           ref={searchInputRef}
@@ -1041,6 +1043,7 @@ export default function CashierDashboard() {
                         variant="primary"
                         size="md"
                         leftIcon={QrCodeIcon}
+                        className="shrink-0 min-w-[100px]"
                         onClick={withTrustedClick(handleBarcodeScan)}
                       >
                         Scan
