@@ -242,31 +242,31 @@ exports.validateCoupon = async (req, res) => {
     });
 
     if (!coupon) {
-      return res.json({ valid: false, message: 'Invalid coupon code' });
+      return res.status(400).json({ valid: false, error: 'Invalid coupon code' });
     }
 
     if (!coupon.isActive) {
-      return res.json({ valid: false, message: 'This coupon is inactive' });
+      return res.status(400).json({ valid: false, error: 'This coupon is inactive' });
     }
 
     const now = new Date();
     if (coupon.startDate && new Date(coupon.startDate) > now) {
-      return res.json({ valid: false, message: 'This coupon is not valid yet' });
+      return res.status(400).json({ valid: false, error: 'This coupon is not valid yet' });
     }
 
     if (coupon.endDate && new Date(coupon.endDate + 'T23:59:59') < now) {
-      return res.json({ valid: false, message: 'This coupon has expired' });
+      return res.status(400).json({ valid: false, error: 'This coupon has expired' });
     }
 
     if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-      return res.json({ valid: false, message: 'Coupon redemption limit reached' });
+      return res.status(400).json({ valid: false, error: 'Coupon redemption limit reached' });
     }
 
     const subtotal = parseFloat(cartAmount) || 0;
     if (coupon.minSpend > 0 && subtotal < parseFloat(coupon.minSpend)) {
-      return res.json({
+      return res.status(400).json({
         valid: false,
-        message: `Minimum spend of KSh ${coupon.minSpend} required to use this coupon`
+        error: `Minimum spend of KSh ${coupon.minSpend} required to use this coupon`
       });
     }
 
