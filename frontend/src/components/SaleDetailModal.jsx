@@ -127,61 +127,46 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
       onClose={onClose}
       title={`Sale #${sale.invoiceNumber || sale.id}`}
       description={sale.createdAt ? format(new Date(sale.createdAt), 'MMM dd, yyyy • hh:mm a') : ''}
-      footer={
-        <>
-          {hasPermission('process_refunds') && sale.status?.toUpperCase() !== 'REFUNDED' && (
-            <Button variant="danger" size="md" leftIcon={ArrowUturnLeftIcon} onClick={() => setShowRefundModal(true)}>
-              Process Refund
-            </Button>
-          )}
-          <Button variant="outline" size="md" leftIcon={PrinterIcon} onClick={handlePrint}>
-            Print Receipt
-          </Button>
-          <Button variant="primary" size="md" onClick={onClose}>
-            Close
-          </Button>
-        </>
-      }
     >
-      <div className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Sale Info */}
-          <div className="p-3 rounded-xl border border-border-default bg-surface-2/30 space-y-1.5 text-caption sm:text-small">
+          <div className="p-4 rounded-xl border border-border-default bg-surface-2/30 space-y-3">
             <div className="flex justify-between items-center">
-              <span className="font-semibold uppercase tracking-wider text-text-muted">Status</span>
+              <span className="text-caption font-semibold uppercase tracking-wider text-text-muted">Status</span>
               <Badge variant={sale.status?.toUpperCase() === 'COMPLETED' ? 'success' : 'warning'}>
                 {sale.saleStatus || sale.status || 'COMPLETED'}
               </Badge>
             </div>
             <div className="flex justify-between items-center">
-              <span className="font-semibold uppercase tracking-wider text-text-muted">Payment</span>
-              <span className="font-semibold text-text-primary capitalize">{sale.paymentMethod || 'CASH'}</span>
+              <span className="text-caption font-semibold uppercase tracking-wider text-text-muted">Payment Method</span>
+              <span className="text-small font-semibold text-text-primary capitalize">{sale.paymentMethod || 'CASH'}</span>
             </div>
             {(shopName || shop?.name) && (
-              <div className="flex justify-between items-center pt-1 border-t border-border-default">
-                <span className="text-text-muted">Shop Location</span>
-                <span className="font-semibold text-text-primary truncate max-w-[120px]">{shop?.name || shopName}</span>
+              <div className="pt-2 border-t border-border-default">
+                <p className="text-caption text-text-muted">Shop Location</p>
+                <p className="text-small font-semibold text-text-primary">{shop?.name || shopName}</p>
               </div>
             )}
             {(employee || user) && (
-              <div className="flex justify-between items-center pt-1 border-t border-border-default">
-                <span className="text-text-muted">Cashier</span>
-                <span className="font-semibold text-text-primary truncate max-w-[120px]">
+              <div className="pt-2 border-t border-border-default">
+                <p className="text-caption text-text-muted">Cashier</p>
+                <p className="text-small font-semibold text-text-primary">
                   {employee ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim() : user?.name || 'Staff'}
-                </span>
+                </p>
               </div>
             )}
             {customer && (
-              <div className="flex justify-between items-center pt-1 border-t border-border-default">
-                <span className="text-text-muted">Customer</span>
-                <span className="font-semibold text-text-primary truncate max-w-[120px]">{customer.name}</span>
+              <div className="pt-2 border-t border-border-default">
+                <p className="text-caption text-text-muted">Customer</p>
+                <p className="text-small font-semibold text-text-primary">{customer.name}</p>
               </div>
             )}
           </div>
 
           {/* Payment Info */}
-          <div className="p-3 rounded-xl border border-border-default bg-surface-2/30 space-y-1.5 text-caption sm:text-small">
-            <h4 className="font-semibold uppercase tracking-wider text-text-muted mb-1">Payment Summary</h4>
+          <div className="p-4 rounded-xl border border-border-default bg-surface-2/30 space-y-2 text-small">
+            <h4 className="text-caption font-semibold uppercase tracking-wider text-text-muted mb-2">Payment Summary</h4>
             <div className="flex justify-between text-text-secondary">
               <span>Amount Paid</span>
               <span className="font-semibold text-text-primary">{formatCurrency(total)}</span>
@@ -203,17 +188,17 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
 
         {/* Products Table */}
         <div>
-          <h4 className="text-caption font-semibold uppercase tracking-wider text-text-muted mb-1.5">
+          <h4 className="text-caption font-semibold uppercase tracking-wider text-text-muted mb-3">
             Itemized Products ({saleItems.length})
           </h4>
-          <div className="border border-border-default rounded-xl overflow-hidden bg-surface-0 max-h-40 sm:max-h-48 overflow-y-auto scrollbar-thin">
-            <table className="w-full text-left text-caption sm:text-small">
-              <thead className="bg-surface-2/60 text-text-secondary text-caption font-semibold uppercase tracking-wider sticky top-0 z-10 border-b border-border-default">
+          <div className="border border-border-default rounded-xl overflow-hidden bg-surface-0">
+            <table className="w-full text-left text-small">
+              <thead className="bg-surface-2/60 text-text-secondary text-caption font-semibold uppercase tracking-wider border-b border-border-default">
                 <tr>
-                  <th className="p-2 sm:px-3 sm:py-2">Product</th>
-                  <th className="p-2 sm:px-3 sm:py-2 text-center">Qty</th>
-                  <th className="p-2 sm:px-3 sm:py-2 text-right">Unit Price</th>
-                  <th className="p-2 sm:px-3 sm:py-2 text-right">Subtotal</th>
+                  <th className="p-3">Product</th>
+                  <th className="p-3 text-center">Qty</th>
+                  <th className="p-3 text-right">Unit Price</th>
+                  <th className="p-3 text-right">Subtotal</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-default">
@@ -224,10 +209,10 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                   const quantity = parseInt(item.quantity || 0);
                   return (
                     <tr key={index} className="hover:bg-surface-2/40 transition-colors">
-                      <td className="p-2 sm:px-3 sm:py-2 font-semibold text-text-primary truncate max-w-[150px]">{productName}</td>
-                      <td className="p-2 sm:px-3 sm:py-2 text-center text-text-secondary">{quantity}</td>
-                      <td className="p-2 sm:px-3 sm:py-2 text-right text-text-secondary">{formatCurrency(unitPrice)}</td>
-                      <td className="p-2 sm:px-3 sm:py-2 text-right font-bold text-primary">{formatCurrency(unitPrice * quantity)}</td>
+                      <td className="p-3 font-semibold text-text-primary">{productName}</td>
+                      <td className="p-3 text-center text-text-secondary">{quantity}</td>
+                      <td className="p-3 text-right text-text-secondary">{formatCurrency(unitPrice)}</td>
+                      <td className="p-3 text-right font-bold text-primary">{formatCurrency(unitPrice * quantity)}</td>
                     </tr>
                   );
                 })}
@@ -237,7 +222,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
         </div>
 
         {/* Totals Summary */}
-        <div className="p-2.5 sm:p-3 rounded-xl bg-surface-2/50 border border-border-default space-y-1 text-caption sm:text-small">
+        <div className="p-4 rounded-xl bg-surface-2/50 border border-border-default space-y-2 text-small">
           {subtotal > 0 && (
             <div className="flex justify-between text-text-secondary">
               <span>Subtotal</span>
@@ -256,10 +241,25 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
               <span>{formatCurrency(tax)}</span>
             </div>
           )}
-          <div className="flex justify-between text-small sm:text-body font-bold text-text-primary pt-1.5 border-t border-border-default">
+          <div className="flex justify-between text-body font-bold text-text-primary pt-2 border-t border-border-default">
             <span>Grand Total</span>
             <span className="text-primary">{formatCurrency(total)}</span>
           </div>
+        </div>
+
+        {/* Modal Actions */}
+        <div className="flex gap-3 justify-end pt-4 border-t border-border-default">
+          {hasPermission('process_refunds') && sale.status?.toUpperCase() !== 'REFUNDED' && (
+            <Button variant="danger" size="md" leftIcon={ArrowUturnLeftIcon} onClick={() => setShowRefundModal(true)}>
+              Process Refund
+            </Button>
+          )}
+          <Button variant="outline" size="md" leftIcon={PrinterIcon} onClick={handlePrint}>
+            Print Receipt
+          </Button>
+          <Button variant="primary" size="md" onClick={onClose}>
+            Close
+          </Button>
         </div>
       </div>
     </Modal>
