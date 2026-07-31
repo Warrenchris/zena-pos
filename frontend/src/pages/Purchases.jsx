@@ -81,9 +81,15 @@ export default function Purchases() {
   const fetchProducts = async () => {
     try {
       const res = await api.get('/api/products');
-      setProducts(res.data || []);
+      const list = Array.isArray(res.data)
+        ? res.data
+        : (Array.isArray(res.data?.products)
+            ? res.data.products
+            : (Array.isArray(res.data?.rows) ? res.data.rows : []));
+      setProducts(list);
     } catch (err) {
       console.error('Failed to fetch products:', err);
+      setProducts([]);
     }
   };
 
