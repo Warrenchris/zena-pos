@@ -4,20 +4,19 @@ const { validate } = require('../validate');
 const invoiceValidation = {
   create: [
     body('customerId')
-      .optional()
-      .isInt()
-      .withMessage('Customer ID must be an integer'),
+      .optional(),
     
     body('saleId')
-      .optional()
-      .isInt()
-      .withMessage('Sale ID must be an integer'),
+      .notEmpty()
+      .withMessage('Sale ID is required'),
     
     body('status')
+      .optional()
       .isIn(['draft', 'pending', 'paid', 'overdue', 'cancelled'])
       .withMessage('Invalid invoice status'),
     
     body('subtotal')
+      .optional()
       .isNumeric()
       .withMessage('Subtotal must be a number')
       .custom(value => value >= 0)
@@ -38,6 +37,7 @@ const invoiceValidation = {
       .withMessage('Discount cannot be negative'),
     
     body('total')
+      .optional()
       .isNumeric()
       .withMessage('Total must be a number')
       .custom(value => value >= 0)
