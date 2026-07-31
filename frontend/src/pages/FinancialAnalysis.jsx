@@ -44,11 +44,12 @@ export default function FinancialAnalysis() {
     try {
       await fetchHealth();
 
-      const [statsResp, shopResp, revenueResp, expenseStatsResp] = await Promise.all([
+      const [statsResp, shopResp, revenueResp, expenseStatsResp, pnlResp] = await Promise.all([
         api.get('/api/dashboard/stats').then((r) => r.data).catch(() => null),
         api.get('/api/shop/me').then((r) => r.data).catch(() => null),
         api.get('/api/insights/monthly-revenue').then((r) => r.data).catch(() => null),
         api.get('/api/expenses/statistics').then((r) => r.data).catch(() => null),
+        api.get('/api/reports/profit-loss').then((r) => r.data).catch(() => null),
       ]);
 
       const revenueHistory = revenueResp?.dates ? revenueResp.dates.map((date, idx) => ({
@@ -69,21 +70,29 @@ export default function FinancialAnalysis() {
         totalRevenue = statsResp.totalIncome;
       }
 
+      const pnlRevenue = pnlResp?.revenue;
+      const pnlCogs = pnlResp?.cogs;
+      const pnlExpenses = pnlResp?.operatingExpenses ?? pnlResp?.totalExpenses;
+
+      const finalRevenue = (pnlRevenue !== undefined && pnlRevenue !== null && pnlRevenue > 0) ? pnlRevenue : totalRevenue;
+      const finalCogs = (pnlCogs !== undefined && pnlCogs !== null) ? pnlCogs : 0;
+      const finalExpenses = (pnlExpenses !== undefined && pnlExpenses !== null) ? pnlExpenses : (expenseStatsResp?.totalExpenses || 0);
+
       setShopSummary({
         shopName: shopResp?.name || 'Your shop',
-        totalRevenue,
-        totalCosts,
+        totalRevenue: finalRevenue,
+        totalCosts: finalExpenses,
         monthsTracked: revenueResp?.dates?.length ?? 1,
       });
 
-      const hasRealData = totalRevenue > 0;
+      const hasRealData = finalRevenue > 0;
       let fmPayload;
 
       if (hasRealData) {
         fmPayload = {
-          revenue: totalRevenue,
-          costs: totalCosts,
-          expenses: expenseStatsResp?.totalExpenses || statsResp?.totalExpenses || 0,
+          revenue: finalRevenue,
+          costs: finalCogs,
+          expenses: finalExpenses,
           assets: shopResp?.assets || 0,
           liabilities: shopResp?.liabilities || 0,
           date: new Date().toISOString(),
