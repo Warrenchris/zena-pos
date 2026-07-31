@@ -18,10 +18,69 @@ exports.getCoupons = async (req, res) => {
       where.isActive = req.query.isActive === 'true';
     }
 
-    const coupons = await Coupon.findAll({
+    let coupons = await Coupon.findAll({
       where,
       order: [['createdAt', 'DESC']]
     });
+
+    // Auto-seed default coupons into DB table if empty
+    if (coupons.length === 0 && !req.query.search) {
+      try {
+        const defaultSeed = [
+          {
+            code: 'WELCOME10',
+            title: 'Welcome New Customer',
+            discountType: 'percentage',
+            discountValue: 10,
+            minSpend: 500,
+            maxDiscount: 200,
+            usageLimit: 100,
+            usedCount: 24,
+            perUserLimit: 1,
+            startDate: '2026-01-01',
+            endDate: '2026-12-31',
+            isActive: true,
+            description: '10% discount for first-time shoppers on orders over KSh 500.',
+            shopId: req.user.shopId
+          },
+          {
+            code: 'EASTER500',
+            title: 'Easter Shopping Voucher',
+            discountType: 'fixed',
+            discountValue: 500,
+            minSpend: 2500,
+            usageLimit: 50,
+            usedCount: 50,
+            perUserLimit: 1,
+            startDate: '2026-04-01',
+            endDate: '2026-04-30',
+            isActive: true,
+            description: 'Flat KSh 500 discount on Easter festival cart totals over KSh 2,500.',
+            shopId: req.user.shopId
+          },
+          {
+            code: 'FLASH20',
+            title: 'Flash Sale Promo',
+            discountType: 'percentage',
+            discountValue: 20,
+            minSpend: 1000,
+            maxDiscount: 1000,
+            usageLimit: 200,
+            usedCount: 18,
+            perUserLimit: 2,
+            startDate: '2026-07-01',
+            endDate: '2026-08-15',
+            isActive: true,
+            description: '20% off storewide during Mid-Year Flash Sales.',
+            shopId: req.user.shopId
+          }
+        ];
+        await Coupon.bulkCreate(defaultSeed, { ignoreDuplicates: true });
+        coupons = await Coupon.findAll({ where, order: [['createdAt', 'DESC']] });
+      } catch (seedErr) {
+        console.warn('Coupon auto-seed skipped:', seedErr.message);
+      }
+    }
 
     res.json(coupons);
   } catch (error) {
