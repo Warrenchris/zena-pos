@@ -280,6 +280,25 @@ export const salesAPI = {
     api.get('/api/sales/returns/all'),
 };
 
+// Coupons API
+export const couponsAPI = {
+  getAll: (params) => api.get('/api/coupons', { params }),
+  getById: (id) => api.get(`/api/coupons/${id}`),
+  create: (data) => api.post('/api/coupons', data),
+  update: (id, data) => api.put(`/api/coupons/${id}`, data),
+  delete: (id) => api.delete(`/api/coupons/${id}`),
+  validate: (code, cartAmount) => api.post('/api/coupons/validate', { code, cartAmount }),
+};
+
+// Discounts API
+export const discountsAPI = {
+  getAll: (params) => api.get('/api/discounts', { params }),
+  getById: (id) => api.get(`/api/discounts/${id}`),
+  create: (data) => api.post('/api/discounts', data),
+  update: (id, data) => api.put(`/api/discounts/${id}`, data),
+  delete: (id) => api.delete(`/api/discounts/${id}`),
+};
+
 // Expenses API
 export const expensesAPI = {
   getAll: (params) =>

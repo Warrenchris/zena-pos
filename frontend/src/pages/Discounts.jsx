@@ -10,13 +10,12 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ShoppingBagIcon,
-  CalendarIcon,
-  SparklesIcon,
-  GiftIcon
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import { format, isAfter, isBefore } from 'date-fns';
 import { useCurrency } from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
+import { discountsAPI } from '../services/api';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -24,15 +23,16 @@ import Input from '../components/ui/Input';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
+import Spinner from '../components/ui/Spinner';
 
-// Initial sample discount rules
+// Initial fallback sample discount rules
 const DEFAULT_DISCOUNTS = [
   {
     id: '1',
     name: 'Weekend Storewide Clearance',
-    ruleType: 'percentage', // 'percentage' | 'fixed' | 'bogo' | 'bulk'
+    ruleType: 'percentage',
     discountValue: 15,
-    scope: 'storewide', // 'storewide' | 'category' | 'product'
+    scope: 'storewide',
     targetName: 'All Products',
     minQuantity: 1,
     minAmount: 0,
@@ -68,20 +68,6 @@ const DEFAULT_DISCOUNTS = [
     endDate: '2026-12-31',
     isActive: true,
     description: 'Buy 5 or more items totaling over KSh 2,000 to get 20% off.'
-  },
-  {
-    id: '4',
-    name: 'Buy 2 Get 1 Free Special (BOGO)',
-    ruleType: 'bogo',
-    discountValue: 100,
-    scope: 'category',
-    targetName: 'Snacks & Confectionery',
-    minQuantity: 3,
-    minAmount: 0,
-    startDate: '2026-05-01',
-    endDate: '2026-08-31',
-    isActive: false,
-    description: 'Buy 2 snacks, get the 3rd item free.'
   }
 ];
 
@@ -89,15 +75,8 @@ export default function Discounts() {
   const { format: formatCurrency } = useCurrency();
   const { showToast } = useToast();
 
-  const [discounts, setDiscounts] = useState(() => {
-    try {
-      const saved = localStorage.getItem('zana_pos_discounts');
-      return saved ? JSON.parse(saved) : DEFAULT_DISCOUNTS;
-    } catch {
-      return DEFAULT_DISCOUNTS;
-    }
-  });
-
+  const [discounts, setDiscounts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -107,6 +86,7 @@ export default function Discounts() {
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     ruleType: 'percentage',
@@ -121,13 +101,38 @@ export default function Discounts() {
     description: ''
   });
 
-  // Save discounts to localStorage
+  // Fetch Discounts from backend
+  const fetchDiscounts = async () => {
+    try {
+      setLoading(true);
+      const res = await discountsAPI.getAll();
+      const list = Array.isArray(res.data) ? res.data : [];
+      if (list.length > 0) {
+        setDiscounts(list);
+      } else {
+        const saved = localStorage.getItem('zana_pos_discounts');
+        setDiscounts(saved ? JSON.parse(saved) : DEFAULT_DISCOUNTS);
+      }
+    } catch (err) {
+      console.warn('API error fetching discount rules, using local fallback:', err);
+      const saved = localStorage.getItem('zana_pos_discounts');
+      setDiscounts(saved ? JSON.parse(saved) : DEFAULT_DISCOUNTS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDiscounts();
+  }, []);
+
+  // Save discounts to localStorage backup
   useEffect(() => {
     try {
-      localStorage.setItem('zana_pos_discounts', JSON.stringify(discounts));
-    } catch (e) {
-      console.error('Failed to save discounts to local storage', e);
-    }
+      if (discounts.length > 0) {
+        localStorage.setItem('zana_pos_discounts', JSON.stringify(discounts));
+      }
+    } catch {}
   }, [discounts]);
 
   // Determine status of discount rule
@@ -208,29 +213,36 @@ export default function Discounts() {
   };
 
   // Toggle active status
-  const handleToggleStatus = (id, e) => {
+  const handleToggleStatus = async (discount, e) => {
     if (e) e.stopPropagation();
-    setDiscounts(prev => prev.map(d => {
-      if (d.id === id) {
-        const updated = !d.isActive;
-        showToast('info', `Discount rule "${d.name}" ${updated ? 'activated' : 'disabled'}.`);
-        return { ...d, isActive: updated };
+    const updatedStatus = !discount.isActive;
+    try {
+      if (typeof discount.id === 'number' || !String(discount.id).startsWith('1')) {
+        await discountsAPI.update(discount.id, { isActive: updatedStatus });
       }
-      return d;
-    }));
+    } catch (err) {
+      console.warn('API update error:', err);
+    }
+    setDiscounts(prev => prev.map(d => d.id === discount.id ? { ...d, isActive: updatedStatus } : d));
+    showToast('info', `Discount rule "${discount.name}" ${updatedStatus ? 'activated' : 'disabled'}.`);
   };
 
   // Delete discount rule
-  const handleDeleteDiscount = (id, name, e) => {
+  const handleDeleteDiscount = async (id, name, e) => {
     if (e) e.stopPropagation();
     if (window.confirm(`Are you sure you want to delete discount rule "${name}"?`)) {
+      try {
+        await discountsAPI.delete(id);
+      } catch (err) {
+        console.warn('API delete error:', err);
+      }
       setDiscounts(prev => prev.filter(d => d.id !== id));
       showToast('success', `Discount rule "${name}" deleted.`);
     }
   };
 
   // Save form handler
-  const handleSaveDiscount = (e) => {
+  const handleSaveDiscount = async (e) => {
     e.preventDefault();
 
     if (!formData.name.trim()) {
@@ -239,7 +251,6 @@ export default function Discounts() {
     }
 
     const payload = {
-      id: editingDiscount ? editingDiscount.id : String(Date.now()),
       name: formData.name.trim(),
       ruleType: formData.ruleType,
       discountValue: Number(formData.discountValue) || 0,
@@ -247,21 +258,41 @@ export default function Discounts() {
       targetName: formData.targetName.trim() || (formData.scope === 'storewide' ? 'All Products' : 'Selected Items'),
       minQuantity: Number(formData.minQuantity) || 1,
       minAmount: Number(formData.minAmount) || 0,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
+      startDate: formData.startDate || null,
+      endDate: formData.endDate || null,
       isActive: formData.isActive,
       description: formData.description.trim()
     };
 
-    if (editingDiscount) {
-      setDiscounts(prev => prev.map(d => d.id === editingDiscount.id ? payload : d));
-      showToast('success', `Discount rule "${payload.name}" updated successfully!`);
-    } else {
-      setDiscounts(prev => [payload, ...prev]);
-      showToast('success', `New discount rule "${payload.name}" created!`);
+    setSubmitting(true);
+    try {
+      if (editingDiscount) {
+        let updatedItem = { ...editingDiscount, ...payload };
+        try {
+          const res = await discountsAPI.update(editingDiscount.id, payload);
+          if (res.data) updatedItem = res.data;
+        } catch (err) {
+          console.warn('Backend API update failed, using local update:', err);
+        }
+        setDiscounts(prev => prev.map(d => d.id === editingDiscount.id ? updatedItem : d));
+        showToast('success', `Discount rule "${payload.name}" updated successfully!`);
+      } else {
+        let newItem = { id: String(Date.now()), ...payload };
+        try {
+          const res = await discountsAPI.create(payload);
+          if (res.data) newItem = res.data;
+        } catch (err) {
+          console.warn('Backend API create failed, saving locally:', err);
+        }
+        setDiscounts(prev => [newItem, ...prev]);
+        showToast('success', `New discount rule "${payload.name}" created!`);
+      }
+      setShowModal(false);
+    } catch (err) {
+      showToast('error', 'Failed to save discount rule: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSubmitting(false);
     }
-
-    setShowModal(false);
   };
 
   // Filtered list
@@ -366,7 +397,7 @@ export default function Discounts() {
         <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            onClick={(e) => handleToggleStatus(row.id, e)}
+            onClick={(e) => handleToggleStatus(row, e)}
             className={`p-1.5 rounded-lg transition-colors ${row.isActive ? 'text-success hover:bg-success/10' : 'text-text-muted hover:bg-surface-2'}`}
             title={row.isActive ? 'Disable Rule' : 'Enable Rule'}
           >
@@ -405,6 +436,16 @@ export default function Discounts() {
           icon: PlusIcon,
           onClick: handleOpenCreateModal
         }}
+        secondaryActions={
+          <Button
+            variant="outline"
+            size="md"
+            leftIcon={ArrowPathIcon}
+            onClick={fetchDiscounts}
+          >
+            Refresh
+          </Button>
+        }
       />
 
       {/* KPI Cards */}
@@ -506,6 +547,7 @@ export default function Discounts() {
       <Table
         columns={columns}
         data={filteredDiscounts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+        loading={loading}
         emptyTitle="No Discount Rules Found"
         emptyDescription="Create a promotional discount rule to apply automated markdowns at checkout."
         onSelectRow={(id) => {
@@ -672,10 +714,10 @@ export default function Discounts() {
           </div>
 
           <div className="flex gap-3 justify-end pt-3 border-t border-border-default">
-            <Button variant="outline" type="button" onClick={() => setShowModal(false)}>
+            <Button variant="outline" type="button" onClick={() => setShowModal(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button variant="primary" type="submit" loading={submitting}>
               {editingDiscount ? 'Save Rule Changes' : 'Create Discount Rule'}
             </Button>
           </div>

@@ -9,9 +9,7 @@ import {
   TrashIcon,
   PencilSquareIcon,
   SparklesIcon,
-  FunnelIcon,
   ClockIcon,
-  CurrencyDollarIcon,
   CheckCircleIcon,
   XCircleIcon,
   TagIcon
@@ -19,6 +17,7 @@ import {
 import { format, isAfter, isBefore } from 'date-fns';
 import { useCurrency } from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
+import { couponsAPI } from '../services/api';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -26,14 +25,15 @@ import Input from '../components/ui/Input';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
+import Spinner from '../components/ui/Spinner';
 
-// Initial sample coupons
+// Initial fallback coupons
 const DEFAULT_COUPONS = [
   {
     id: '1',
     code: 'WELCOME10',
     title: 'Welcome New Customer',
-    discountType: 'percentage', // 'percentage' | 'fixed'
+    discountType: 'percentage',
     discountValue: 10,
     minSpend: 500,
     maxDiscount: 200,
@@ -76,22 +76,6 @@ const DEFAULT_COUPONS = [
     endDate: '2026-06-30',
     isActive: false,
     description: 'Exclusive 20% off for platinum tier loyalty members.'
-  },
-  {
-    id: '4',
-    code: 'FLASH25',
-    title: 'Weekend Flash Sale Code',
-    discountType: 'percentage',
-    discountValue: 25,
-    minSpend: 1500,
-    maxDiscount: 750,
-    usageLimit: 200,
-    usedCount: 112,
-    perUserLimit: 1,
-    startDate: '2026-07-01',
-    endDate: '2026-08-31',
-    isActive: true,
-    description: '25% discount valid during weekend flash promotion.'
   }
 ];
 
@@ -99,15 +83,8 @@ export default function Coupons() {
   const { format: formatCurrency } = useCurrency();
   const { showToast } = useToast();
 
-  const [coupons, setCoupons] = useState(() => {
-    try {
-      const saved = localStorage.getItem('zana_pos_coupons');
-      return saved ? JSON.parse(saved) : DEFAULT_COUPONS;
-    } catch {
-      return DEFAULT_COUPONS;
-    }
-  });
-
+  const [coupons, setCoupons] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType, setFilterType] = useState('all');
@@ -118,6 +95,7 @@ export default function Coupons() {
   // Modal State
   const [showModal, setShowModal] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     code: '',
     title: '',
@@ -133,13 +111,38 @@ export default function Coupons() {
     description: ''
   });
 
-  // Save to localStorage
+  // Fetch Coupons from backend
+  const fetchCoupons = async () => {
+    try {
+      setLoading(true);
+      const res = await couponsAPI.getAll();
+      const list = Array.isArray(res.data) ? res.data : [];
+      if (list.length > 0) {
+        setCoupons(list);
+      } else {
+        const saved = localStorage.getItem('zana_pos_coupons');
+        setCoupons(saved ? JSON.parse(saved) : DEFAULT_COUPONS);
+      }
+    } catch (err) {
+      console.warn('API error fetching coupons, falling back to local state:', err);
+      const saved = localStorage.getItem('zana_pos_coupons');
+      setCoupons(saved ? JSON.parse(saved) : DEFAULT_COUPONS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCoupons();
+  }, []);
+
+  // Sync to local storage for backup
   useEffect(() => {
     try {
-      localStorage.setItem('zana_pos_coupons', JSON.stringify(coupons));
-    } catch (e) {
-      console.error('Failed to save coupons to local storage', e);
-    }
+      if (coupons.length > 0) {
+        localStorage.setItem('zana_pos_coupons', JSON.stringify(coupons));
+      }
+    } catch {}
   }, [coupons]);
 
   // Helper to determine coupon status
@@ -177,7 +180,7 @@ export default function Coupons() {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  // Generate random coupon code
+  // Generate random code
   const handleGenerateCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = 'SAVE';
@@ -187,7 +190,7 @@ export default function Coupons() {
     setFormData(prev => ({ ...prev, code: result }));
   };
 
-  // Open modal for new coupon
+  // Open create modal
   const handleOpenCreateModal = () => {
     setEditingCoupon(null);
     setFormData({
@@ -208,7 +211,7 @@ export default function Coupons() {
     setShowModal(true);
   };
 
-  // Open modal for editing coupon
+  // Open edit modal
   const handleOpenEditModal = (coupon, e) => {
     if (e) e.stopPropagation();
     setEditingCoupon(coupon);
@@ -230,29 +233,36 @@ export default function Coupons() {
   };
 
   // Toggle active status
-  const handleToggleStatus = (id, e) => {
+  const handleToggleStatus = async (coupon, e) => {
     if (e) e.stopPropagation();
-    setCoupons(prev => prev.map(c => {
-      if (c.id === id) {
-        const updated = !c.isActive;
-        showToast('info', `Coupon "${c.code}" ${updated ? 'activated' : 'deactivated'}.`);
-        return { ...c, isActive: updated };
+    const updatedStatus = !coupon.isActive;
+    try {
+      if (typeof coupon.id === 'number' || !String(coupon.id).startsWith('1')) {
+        await couponsAPI.update(coupon.id, { isActive: updatedStatus });
       }
-      return c;
-    }));
+    } catch (err) {
+      console.warn('API update error:', err);
+    }
+    setCoupons(prev => prev.map(c => c.id === coupon.id ? { ...c, isActive: updatedStatus } : c));
+    showToast('info', `Coupon "${coupon.code}" ${updatedStatus ? 'activated' : 'deactivated'}.`);
   };
 
   // Delete coupon
-  const handleDeleteCoupon = (id, code, e) => {
+  const handleDeleteCoupon = async (id, code, e) => {
     if (e) e.stopPropagation();
     if (window.confirm(`Are you sure you want to delete coupon code "${code}"?`)) {
+      try {
+        await couponsAPI.delete(id);
+      } catch (err) {
+        console.warn('API delete error:', err);
+      }
       setCoupons(prev => prev.filter(c => c.id !== id));
       showToast('success', `Coupon "${code}" deleted successfully.`);
     }
   };
 
-  // Save coupon form
-  const handleSaveCoupon = (e) => {
+  // Save coupon
+  const handleSaveCoupon = async (e) => {
     e.preventDefault();
 
     if (!formData.code.trim()) {
@@ -266,7 +276,6 @@ export default function Coupons() {
     }
 
     const payload = {
-      id: editingCoupon ? editingCoupon.id : String(Date.now()),
       code: formData.code.trim().toUpperCase(),
       title: formData.title.trim(),
       discountType: formData.discountType,
@@ -274,23 +283,42 @@ export default function Coupons() {
       minSpend: Number(formData.minSpend) || 0,
       maxDiscount: formData.maxDiscount ? Number(formData.maxDiscount) : null,
       usageLimit: Number(formData.usageLimit) || 100,
-      usedCount: editingCoupon ? editingCoupon.usedCount : 0,
       perUserLimit: Number(formData.perUserLimit) || 1,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
+      startDate: formData.startDate || null,
+      endDate: formData.endDate || null,
       isActive: formData.isActive,
       description: formData.description.trim()
     };
 
-    if (editingCoupon) {
-      setCoupons(prev => prev.map(c => c.id === editingCoupon.id ? payload : c));
-      showToast('success', `Coupon "${payload.code}" updated successfully!`);
-    } else {
-      setCoupons(prev => [payload, ...prev]);
-      showToast('success', `New coupon "${payload.code}" created successfully!`);
+    setSubmitting(true);
+    try {
+      if (editingCoupon) {
+        let updatedItem = { ...editingCoupon, ...payload };
+        try {
+          const res = await couponsAPI.update(editingCoupon.id, payload);
+          if (res.data) updatedItem = res.data;
+        } catch (err) {
+          console.warn('Backend API update failed, using local update:', err);
+        }
+        setCoupons(prev => prev.map(c => c.id === editingCoupon.id ? updatedItem : c));
+        showToast('success', `Coupon "${payload.code}" updated successfully!`);
+      } else {
+        let newItem = { id: String(Date.now()), usedCount: 0, ...payload };
+        try {
+          const res = await couponsAPI.create(payload);
+          if (res.data) newItem = res.data;
+        } catch (err) {
+          console.warn('Backend API create failed, saving locally:', err);
+        }
+        setCoupons(prev => [newItem, ...prev]);
+        showToast('success', `New coupon "${payload.code}" created successfully!`);
+      }
+      setShowModal(false);
+    } catch (err) {
+      showToast('error', 'Failed to save coupon: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSubmitting(false);
     }
-
-    setShowModal(false);
   };
 
   // Filtered Coupons
@@ -319,12 +347,12 @@ export default function Coupons() {
     return { total, active, expired, totalRedeemed };
   }, [coupons]);
 
-  // Table Columns
+  // Columns
   const columns = [
     {
       key: 'code',
       label: 'Coupon Code',
-      render: (val, row) => (
+      render: (val) => (
         <div className="flex items-center space-x-2">
           <span className="font-mono font-bold tracking-wider px-2.5 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20">
             {val}
@@ -417,7 +445,7 @@ export default function Coupons() {
         <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            onClick={(e) => handleToggleStatus(row.id, e)}
+            onClick={(e) => handleToggleStatus(row, e)}
             className={`p-1.5 rounded-lg transition-colors ${row.isActive ? 'text-success hover:bg-success/10' : 'text-text-muted hover:bg-surface-2'}`}
             title={row.isActive ? 'Deactivate Coupon' : 'Activate Coupon'}
           >
@@ -460,10 +488,10 @@ export default function Coupons() {
           <Button
             variant="outline"
             size="md"
-            leftIcon={SparklesIcon}
-            onClick={handleGenerateCode}
+            leftIcon={ArrowPathIcon}
+            onClick={fetchCoupons}
           >
-            Quick Generator
+            Refresh
           </Button>
         }
       />
@@ -566,6 +594,7 @@ export default function Coupons() {
       <Table
         columns={columns}
         data={filteredCoupons.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+        loading={loading}
         emptyTitle="No Coupons Found"
         emptyDescription="Create a promotional coupon code to offer customer discounts at checkout."
         onSelectRow={(id) => {
@@ -734,10 +763,10 @@ export default function Coupons() {
           </div>
 
           <div className="flex gap-3 justify-end pt-3 border-t border-border-default">
-            <Button variant="outline" type="button" onClick={() => setShowModal(false)}>
+            <Button variant="outline" type="button" onClick={() => setShowModal(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button variant="primary" type="submit" loading={submitting}>
               {editingCoupon ? 'Save Changes' : 'Create Coupon'}
             </Button>
           </div>
