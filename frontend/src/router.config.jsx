@@ -5,51 +5,89 @@ import RootLayout from './components/RootLayout';
 import Layout from './components/Layout';
 import DashboardRouter from './components/DashboardRouter';
 import ErrorBoundary from './components/ErrorBoundary';
+import RouteError from './components/RouteError';
 
-const Login = lazy(() => import('./pages/Login'));
-const Signup = lazy(() => import('./pages/Signup'));
-const ToastExample = lazy(() => import('./pages/ToastExample'));
-const CashierDashboard = lazy(() => import('./pages/CashierDashboard.jsx'));
-const Products = lazy(() => import('./pages/Products'));
-const Customers = lazy(() => import('./pages/Customers'));
-const Employees = lazy(() => import('./pages/Employees'));
-const MySales = lazy(() => import('./pages/MySales'));
-const TestDatePicker = lazy(() => import('./pages/TestDatePicker'));
-const PlaceholderPage = lazy(() => import('./components/PlaceholderPage'));
-const AiServices = lazy(() => import('./pages/AiServices'));
-const AIInsights = lazy(() => import('./pages/AIInsights'));
-const SalesForecasting = lazy(() => import('./pages/SalesForecasting'));
-const FinancialAnalysis = lazy(() => import('./pages/FinancialAnalysis'));
-const Reports = lazy(() => import('./pages/Reports'));
-const Settings = lazy(() => import('./pages/Settings'));
-const Invoices = lazy(() => import('./pages/Invoices'));
-const Quotations = lazy(() => import('./pages/Quotations'));
-const Purchases = lazy(() => import('./pages/Purchases'));
-const PurchaseOrders = lazy(() => import('./pages/PurchaseOrders'));
-const PurchaseReturns = lazy(() => import('./pages/PurchaseReturns'));
-const SalesReturns = lazy(() => import('./pages/SalesReturns'));
-const Coupons = lazy(() => import('./pages/Coupons'));
-const GiftCards = lazy(() => import('./pages/GiftCards'));
-const Discounts = lazy(() => import('./pages/Discounts'));
-const Brands = lazy(() => import('./pages/Brands'));
-const Units = lazy(() => import('./pages/Units'));
-const Variants = lazy(() => import('./pages/Variants'));
-const Warranties = lazy(() => import('./pages/Warranties'));
-const PrintBarcode = lazy(() => import('./pages/PrintBarcode'));
-const PrintQR = lazy(() => import('./pages/PrintQR'));
-const ManageStock = lazy(() => import('./pages/ManageStock'));
-const StockAdjustment = lazy(() => import('./pages/StockAdjustment'));
-const StockTransfer = lazy(() => import('./pages/StockTransfer'));
-const ExpensesPage = lazy(() => import('./pages/Expenses'));
-const CategoriesPage = lazy(() => import('./pages/Categories'));
-const SubCategories = lazy(() => import('./pages/SubCategories'));
-const Pos = lazy(() => import('./pages/Pos'));
-const CreateProduct = lazy(() => import('./pages/CreateProduct'));
+// Safe Lazy Loader with automatic retry and graceful fallback on Vite HMR/Chunk loading errors
+const safeLazy = (importFunc) => {
+  return lazy(() =>
+    importFunc().catch(error => {
+      console.error('Dynamic module import failed:', error);
+      if (typeof window !== 'undefined') {
+        const key = 'chunk_retry_' + window.location.pathname;
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, 'true');
+          window.location.reload();
+          return new Promise(() => {});
+        }
+        sessionStorage.removeItem(key);
+      }
+      return {
+        default: () => (
+          <div className="p-8 max-w-md mx-auto my-12 bg-surface border border-border-default rounded-2xl shadow-floating text-center">
+            <div className="w-12 h-12 bg-warning/10 text-warning rounded-full flex items-center justify-center mx-auto mb-3">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-h3 font-bold text-text-primary mb-1">Page Update Available</h3>
+            <p className="text-small text-text-muted mb-4">A new application update or component file was updated. Please refresh your browser.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-primary text-white font-semibold rounded-xl hover:bg-primary-hover transition-colors"
+            >
+              Reload Page
+            </button>
+          </div>
+        )
+      };
+    })
+  );
+};
+
+const Login = safeLazy(() => import('./pages/Login'));
+const Signup = safeLazy(() => import('./pages/Signup'));
+const ToastExample = safeLazy(() => import('./pages/ToastExample'));
+const Products = safeLazy(() => import('./pages/Products'));
+const Customers = safeLazy(() => import('./pages/Customers'));
+const Employees = safeLazy(() => import('./pages/Employees'));
+const MySales = safeLazy(() => import('./pages/MySales'));
+const TestDatePicker = safeLazy(() => import('./pages/TestDatePicker'));
+const PlaceholderPage = safeLazy(() => import('./components/PlaceholderPage'));
+const AiServices = safeLazy(() => import('./pages/AiServices'));
+const AIInsights = safeLazy(() => import('./pages/AIInsights'));
+const SalesForecasting = safeLazy(() => import('./pages/SalesForecasting'));
+const FinancialAnalysis = safeLazy(() => import('./pages/FinancialAnalysis'));
+const Reports = safeLazy(() => import('./pages/Reports'));
+const Settings = safeLazy(() => import('./pages/Settings'));
+const Invoices = safeLazy(() => import('./pages/Invoices'));
+const Quotations = safeLazy(() => import('./pages/Quotations'));
+const Purchases = safeLazy(() => import('./pages/Purchases'));
+const PurchaseOrders = safeLazy(() => import('./pages/PurchaseOrders'));
+const PurchaseReturns = safeLazy(() => import('./pages/PurchaseReturns'));
+const SalesReturns = safeLazy(() => import('./pages/SalesReturns'));
+const Coupons = safeLazy(() => import('./pages/Coupons'));
+const GiftCards = safeLazy(() => import('./pages/GiftCards'));
+const Discounts = safeLazy(() => import('./pages/Discounts'));
+const Brands = safeLazy(() => import('./pages/Brands'));
+const Units = safeLazy(() => import('./pages/Units'));
+const Variants = safeLazy(() => import('./pages/Variants'));
+const Warranties = safeLazy(() => import('./pages/Warranties'));
+const PrintBarcode = safeLazy(() => import('./pages/PrintBarcode'));
+const PrintQR = safeLazy(() => import('./pages/PrintQR'));
+const ManageStock = safeLazy(() => import('./pages/ManageStock'));
+const StockAdjustment = safeLazy(() => import('./pages/StockAdjustment'));
+const StockTransfer = safeLazy(() => import('./pages/StockTransfer'));
+const ExpensesPage = safeLazy(() => import('./pages/Expenses'));
+const CategoriesPage = safeLazy(() => import('./pages/Categories'));
+const SubCategories = safeLazy(() => import('./pages/SubCategories'));
+const Pos = safeLazy(() => import('./pages/Pos'));
+const CreateProduct = safeLazy(() => import('./pages/CreateProduct'));
 
 export const routes = [
   {
     path: '/',
     element: <RootLayout />,
+    errorElement: <RouteError />,
     children: [
       {
         index: true,
@@ -69,6 +107,7 @@ export const routes = [
       },
       {
         element: <Layout />,
+        errorElement: <RouteError />,
         children: [
           {
             path: 'dashboard',
@@ -91,90 +130,12 @@ export const routes = [
             element: (
               <ErrorBoundary>
                 <PrivateRoute>
-                  <Suspense fallback={<div>Loading...</div>}>
+                  <Suspense fallback={<div className="p-8 text-center text-text-muted">Loading...</div>}>
                     <CreateProduct />
                   </Suspense>
                 </PrivateRoute>
               </ErrorBoundary>
             )
-          },
-          {
-            path: 'customers',
-            element: <PrivateRoute><Customers /></PrivateRoute>
-          },
-          {
-            path: 'employees',
-            element: (
-              <ErrorBoundary>
-                <PrivateRoute><Employees /></PrivateRoute>
-              </ErrorBoundary>
-            )
-          },
-          // Admin aliases
-          {
-            path: 'admin/employees',
-            element: (
-              <ErrorBoundary>
-                <PrivateRoute><Employees /></PrivateRoute>
-              </ErrorBoundary>
-            )
-          },
-          {
-            path: 'admin/users',
-            element: <PlaceholderPage />
-          },
-          {
-            path: 'admin/company',
-            element: <PlaceholderPage />
-          },
-          // Settings are handled by the /settings route below
-          {
-            path: 'admin/ai',
-            element: (
-              <PrivateRoute>
-                <AiServices />
-              </PrivateRoute>
-            )
-          },
-          {
-            path: 'my-sales',
-            element: <PrivateRoute><MySales /></PrivateRoute>
-          },
-          {
-            // alias for legacy routes that reference /sales
-            path: 'sales',
-            element: <PrivateRoute><MySales /></PrivateRoute>
-          },
-          // Common admin items not yet implemented
-          {
-            path: 'reports',
-            element: <PrivateRoute><Reports /></PrivateRoute>
-          },
-          {
-            path: 'settings',
-            element: <PrivateRoute><Settings /></PrivateRoute>
-          },
-          {
-            path: 'test-date-picker',
-            element: <TestDatePicker />
-          },
-          // Main sections
-          {
-            path: 'super-admin',
-            element: <PlaceholderPage />
-          },
-          {
-            path: 'applications',
-            element: <PlaceholderPage />
-          },
-          {
-            path: 'layouts',
-            element: <PlaceholderPage />
-          },
-          // Inventory sections
-          {
-            path: 'products/create',
-            element: <PrivateRoute><Products /></PrivateRoute>
           },
           {
             path: 'products/expired',
@@ -207,6 +168,51 @@ export const routes = [
           {
             path: 'warranties',
             element: <PrivateRoute><Warranties /></PrivateRoute>
+          },
+          {
+            path: 'customers',
+            element: <PrivateRoute><Customers /></PrivateRoute>
+          },
+          {
+            path: 'employees',
+            element: <PrivateRoute><Employees /></PrivateRoute>
+          },
+          {
+            path: 'admin/employees',
+            element: <PrivateRoute><Employees /></PrivateRoute>
+          },
+          {
+            path: 'my-sales',
+            element: <PrivateRoute><MySales /></PrivateRoute>
+          },
+          {
+            path: 'sales',
+            element: <PrivateRoute><MySales /></PrivateRoute>
+          },
+          {
+            path: 'reports',
+            element: <PrivateRoute><Reports /></PrivateRoute>
+          },
+          {
+            path: 'settings',
+            element: <PrivateRoute><Settings /></PrivateRoute>
+          },
+          {
+            path: 'test-date-picker',
+            element: <TestDatePicker />
+          },
+          // Main sections
+          {
+            path: 'super-admin',
+            element: <PlaceholderPage />
+          },
+          {
+            path: 'applications',
+            element: <PlaceholderPage />
+          },
+          {
+            path: 'layouts',
+            element: <PlaceholderPage />
           },
           {
             path: 'print/barcode',
@@ -244,32 +250,20 @@ export const routes = [
           },
           {
             path: 'pos',
-            element: <PrivateRoute><CashierDashboard /></PrivateRoute>
+            element: <PrivateRoute><Pos /></PrivateRoute>
           },
           // AI & Analytics
           {
             path: 'ai/forecasting',
-            element: (
-              <PrivateRoute>
-                <SalesForecasting />
-              </PrivateRoute>
-            )
+            element: <PrivateRoute><SalesForecasting /></PrivateRoute>
           },
           {
             path: 'ai/insights',
-            element: (
-              <PrivateRoute>
-                <AIInsights />
-              </PrivateRoute>
-            )
+            element: <PrivateRoute><AIInsights /></PrivateRoute>
           },
           {
             path: 'ai/finance',
-            element: (
-              <PrivateRoute>
-                <FinancialAnalysis />
-              </PrivateRoute>
-            )
+            element: <PrivateRoute><FinancialAnalysis /></PrivateRoute>
           },
           // Promo sections
           {
