@@ -20,7 +20,7 @@ import {
   CurrencyDollarIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
-import api from '../services/api';
+import api, { couponsAPI } from '../services/api';
 import cashierAPI from '../services/cashierAPI';
 import CustomerModal from '../components/CustomerModal';
 import PaymentModal from '../components/PaymentModal';
@@ -288,6 +288,72 @@ export default function CashierDashboard() {
   const [error, setError] = useState(null);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
+
+  // Coupon / Voucher states
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState('');
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
+  // Apply Coupon handler
+  const handleApplyCoupon = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!couponCode.trim()) return;
+
+    setValidatingCoupon(true);
+    setCouponError('');
+    try {
+      const subtotal = currentSale.items
+        .filter(item => !pendingRemovals[item.id])
+        .reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+
+      const res = await couponsAPI.validate(couponCode.trim(), subtotal);
+      if (res.data && res.data.valid) {
+        const { coupon, discountAmount } = res.data;
+        const calcDiscount = parseFloat(discountAmount || 0);
+        setAppliedCoupon({
+          code: coupon.code,
+          title: coupon.title,
+          discountAmount: calcDiscount,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue
+        });
+
+        // Recalculate total with coupon discount
+        const newTotal = Math.max(0, subtotal - calcDiscount);
+        setCurrentSale(prev => ({
+          ...prev,
+          total: newTotal,
+          appliedCoupon: coupon.code
+        }));
+
+        setCouponCode('');
+        showToast(`Coupon '${coupon.code}' applied! Saved ${formatCurrency(calcDiscount)}`, 'success');
+      } else {
+        setCouponError(res.data?.message || 'Invalid or expired coupon');
+      }
+    } catch (err) {
+      setCouponError(err.response?.data?.error || err.response?.data?.message || 'Invalid coupon code');
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  // Remove Coupon handler
+  const handleRemoveCoupon = () => {
+    const subtotal = currentSale.items
+      .filter(item => !pendingRemovals[item.id])
+      .reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+
+    setAppliedCoupon(null);
+    setCouponError('');
+    setCurrentSale(prev => ({
+      ...prev,
+      total: subtotal,
+      appliedCoupon: null
+    }));
+    showToast('Coupon removed.', 'info');
+  };
 
   // Prevent accidental programmatic clicks; only allow real user-initiated events
   const withTrustedClick = (handler) => (event, ...rest) => {
@@ -1286,6 +1352,48 @@ export default function CashierDashboard() {
                   {/* Total and Checkout */}
                   {currentSale.items.length > 0 && (
                     <div className="p-4 border-t border-border-default bg-surface-2/30 space-y-3">
+                      {/* Coupon / Voucher Code Input */}
+                      <div className="space-y-1">
+                        {appliedCoupon ? (
+                          <div className="flex items-center justify-between p-2 bg-success/10 border border-success/30 rounded-xl text-caption">
+                            <div className="flex items-center space-x-2 truncate">
+                              <span className="text-base">🎟️</span>
+                              <div className="min-w-0">
+                                <p className="font-bold text-success truncate">{appliedCoupon.code}</p>
+                                <p className="text-text-muted text-[10px]">Saved {formatCurrency(appliedCoupon.discountAmount)}</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleRemoveCoupon}
+                              className="p-1 text-danger hover:bg-danger/10 rounded-lg transition-colors shrink-0"
+                              title="Remove coupon"
+                            >
+                              <XMarkIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <form onSubmit={handleApplyCoupon} className="flex gap-1.5 items-center">
+                            <input
+                              type="text"
+                              placeholder="Voucher / Promo Code"
+                              value={couponCode}
+                              onChange={(e) => {
+                                setCouponCode(e.target.value);
+                                setCouponError('');
+                              }}
+                              className="flex-1 px-3 py-1.5 bg-surface border border-border-default text-text-primary rounded-xl text-caption uppercase focus:ring-2 focus:ring-primary/30"
+                            />
+                            <Button type="submit" variant="outline" size="sm" loading={validatingCoupon} disabled={!couponCode.trim()}>
+                              Apply
+                            </Button>
+                          </form>
+                        )}
+                        {couponError && (
+                          <p className="text-[11px] text-danger font-medium mt-0.5">⚠️ {couponError}</p>
+                        )}
+                      </div>
+
                       {/* Summary */}
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-caption">
@@ -1294,6 +1402,14 @@ export default function CashierDashboard() {
                             {formatCurrency(currentSale.items.filter(item => !pendingRemovals[item.id]).reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0))}
                           </span>
                         </div>
+
+                        {appliedCoupon && (
+                          <div className="flex justify-between items-center text-caption text-success font-semibold">
+                            <span>Discount ({appliedCoupon.code})</span>
+                            <span>-{formatCurrency(appliedCoupon.discountAmount)}</span>
+                          </div>
+                        )}
+
                         <div className="h-px bg-border-default"></div>
                         <div className="flex justify-between items-center pt-1">
                           <span className="text-body font-bold text-text-primary">Total</span>
