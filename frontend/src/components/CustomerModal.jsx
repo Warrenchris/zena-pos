@@ -5,8 +5,7 @@ import Modal from './ui/Modal';
 import Input from './ui/Input';
 import Button from './ui/Button';
 
-const CustomerModal = ({ isOpen = true, customer, onClose, onSubmit }) => {
-  if (!isOpen) return null;
+const CustomerModal = ({ isOpen = false, customer, onClose, onSubmit }) => {
 
   const [customerData, setCustomerData] = useState({
     id: customer?.id || null,
