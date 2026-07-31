@@ -9,6 +9,7 @@ async function invalidateShopProductCache(shopId) {
   if (!shopId) return;
   const cacheKey = `products:shop:${shopId}`;
   try {
+    if (redisClient.status !== 'ready') return;
     await redisClient.del(cacheKey);
     logger.info(`Invalidated product catalogue cache in Redis for shop: ${shopId}`);
   } catch (error) {
