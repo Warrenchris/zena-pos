@@ -57,8 +57,7 @@ export default function SalesForecasting() {
       setForecast(fc.data);
     } catch (err) {
       setError(err.response?.data?.detail || err.response?.data?.error || err.message);
-    } rehabilitation:
-    finally {
+    } finally {
       setLoading(false);
     }
   }, [fetchHealth, model, periods]);

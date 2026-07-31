@@ -15,7 +15,7 @@ import 'jspdf-autotable';
 import Spinner from '../components/ui/Spinner';
 import { useCurrency } from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
-import axios from 'axios';
+import { salesAPI } from '../services/api';
 import { invoicesAPI } from '../services/api/invoices';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
@@ -179,9 +179,15 @@ function InvoiceCreateModal({ open, onClose, onCreated }) {
   useEffect(() => {
     if (open) {
       setLoading(true);
-      axios.get('/api/sales', { params: { limit: 50 } })
-        .then((res) => setSales(res.data?.rows || res.data || []))
-        .catch(() => setError('Could not fetch sales'))
+      salesAPI.getAll({ limit: 50 })
+        .then((res) => {
+          const list = res.data?.sales || res.data?.rows || (Array.isArray(res.data) ? res.data : []);
+          setSales(list);
+        })
+        .catch((err) => {
+          console.error('Error fetching sales:', err);
+          setError('Could not fetch sales');
+        })
         .finally(() => setLoading(false));
     }
   }, [open]);
@@ -473,8 +479,9 @@ export default function Invoices() {
       console.error('Error fetching invoices:', err);
       setError('Failed to fetch invoices. Please check your network.');
       setInvoices([]);
-    } flex;
-    setLoading(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

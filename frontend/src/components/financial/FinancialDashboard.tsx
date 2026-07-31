@@ -9,7 +9,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import axios from 'axios';
+// @ts-ignore
+import api from '../../services/api';
 
 const FinancialDashboard = () => {
   const [metrics, setMetrics] = useState<Record<string, any> | null>(null);
@@ -24,15 +25,15 @@ const FinancialDashboard = () => {
         setLoading(true);
         
         // Fetch financial metrics
-        const metricsResponse = await axios.get('/api/finance/analyze');
+        const metricsResponse = await api.get('/api/finance/analyze');
         setMetrics(metricsResponse.data);
         
         // Fetch business insights
-        const insightsResponse = await axios.get('/api/insights/analyze');
+        const insightsResponse = await api.get('/api/insights/analyze');
         setInsights(insightsResponse.data);
         
         // Fetch forecasts
-        const forecastsResponse = await axios.get('/api/forecasting/forecast');
+        const forecastsResponse = await api.get('/api/forecasting/forecast');
         setForecasts(forecastsResponse.data);
         
         setLoading(false);
