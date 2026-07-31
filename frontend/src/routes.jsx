@@ -129,7 +129,7 @@ export default function AppRoutes() {
           <Route path="/invoices" element={<PlaceholderPage />} />
           <Route path="/sales/returns" element={<PlaceholderPage />} />
           <Route path="/quotations" element={<PlaceholderPage />} />
-          <Route path="/pos" element={<PlaceholderPage />} />
+          <Route path="/pos" element={<CashierDashboard />} />
           
           {/* Promo Routes */}
           <Route path="/coupons" element={<PlaceholderPage />} />
