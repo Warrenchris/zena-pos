@@ -40,6 +40,9 @@ const Settings = lazyLoad(() => import('./pages/Settings'))
 const Purchases = lazyLoad(() => import('./pages/Purchases'))
 const PurchaseOrders = lazyLoad(() => import('./pages/PurchaseOrders'))
 const PurchaseReturns = lazyLoad(() => import('./pages/PurchaseReturns'))
+const ManageStock = lazyLoad(() => import('./pages/ManageStock'))
+const StockAdjustment = lazyLoad(() => import('./pages/StockAdjustment'))
+const StockTransfer = lazyLoad(() => import('./pages/StockTransfer'))
 
 const AiServices = lazy(() => import('./pages/AiServices'))
 
@@ -118,9 +121,9 @@ export default function AppRoutes() {
           <Route path="/print/qr" element={<PlaceholderPage />} />
           
           {/* Stock Routes */}
-          <Route path="/stock/manage" element={<PlaceholderPage />} />
-          <Route path="/stock/adjustment" element={<PlaceholderPage />} />
-          <Route path="/stock/transfer" element={<PlaceholderPage />} />
+          <Route path="/stock/manage" element={<ManageStock />} />
+          <Route path="/stock/adjustment" element={<StockAdjustment />} />
+          <Route path="/stock/transfer" element={<StockTransfer />} />
           
           {/* Sales Routes */}
           <Route path="/invoices" element={<PlaceholderPage />} />
