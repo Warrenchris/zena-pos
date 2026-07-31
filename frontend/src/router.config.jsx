@@ -80,7 +80,7 @@ const StockTransfer = safeLazy(() => import('./pages/StockTransfer'));
 const ExpensesPage = safeLazy(() => import('./pages/Expenses'));
 const CategoriesPage = safeLazy(() => import('./pages/Categories'));
 const SubCategories = safeLazy(() => import('./pages/SubCategories'));
-const Pos = safeLazy(() => import('./pages/Pos'));
+const Pos = safeLazy(() => import('./pages/CashierDashboard'));
 const CreateProduct = safeLazy(() => import('./pages/CreateProduct'));
 
 export const routes = [
