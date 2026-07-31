@@ -1507,27 +1507,7 @@ export default function CashierDashboard() {
         </div>
       )}
 
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-6 right-6 lg:bottom-8 lg:right-8 flex flex-col space-y-3 z-40">
-        <button
-          type="button"
-          onClick={withTrustedClick(() => window.print())}
-          className="group relative w-14 h-14 lg:w-16 lg:h-16 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center justify-center text-gray-700 hover:text-blue-600 hover:bg-white active:scale-95"
-          title="Print Last Receipt"
-        >
-          <PrinterIcon className="h-6 w-6 lg:h-7 lg:w-7" />
-          <div className="absolute inset-0 rounded-2xl bg-white opacity-0 group-hover:opacity-40 transition-opacity duration-300 -z-10"></div>
-        </button>
-        <button
-          type="button"
-          onClick={withTrustedClick(() => setShowStatsPanel(!showStatsPanel))}
-          className="group relative w-14 h-14 lg:w-16 lg:h-16 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center justify-center text-gray-700 hover:text-green-600 hover:bg-white active:scale-95"
-          title="View Performance Stats"
-        >
-          <ChartBarIcon className="h-6 w-6 lg:h-7 lg:w-7" />
-          <div className="absolute inset-0 rounded-2xl bg-white opacity-0 group-hover:opacity-40 transition-opacity duration-300 -z-10"></div>
-        </button>
-      </div>
+      {/* Floating Action Buttons Removed to prevent blocking catalog cards and cart view */}
 
       {/* Stats Panel Overlay - Premium Design */}
       {
