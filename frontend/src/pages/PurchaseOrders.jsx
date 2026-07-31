@@ -524,7 +524,7 @@ export default function PurchaseOrders() {
                   className="w-full px-3 py-1.5 bg-surface border border-border-default rounded-lg text-text-primary text-caption focus:ring-2 focus:ring-primary/30"
                 >
                   <option value="">Select Inventory Product...</option>
-                  {products.map(p => (
+                  {(Array.isArray(products) ? products : []).map(p => (
                     <option key={p.id} value={p.id}>
                       {p.name} (Current Stock: {p.stockQuantity})
                     </option>
