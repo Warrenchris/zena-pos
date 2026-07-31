@@ -19,6 +19,8 @@ const PendingPayment = require('./PendingPayment');
 const SaleRefund = require('./SaleRefund');
 const HeldCart = require('./HeldCart');
 const SalePayment = require('./SalePayment');
+const Coupon = require('./Coupon');
+const DiscountRule = require('./DiscountRule');
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
