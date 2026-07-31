@@ -21,6 +21,8 @@ const HeldCart = require('./HeldCart');
 const SalePayment = require('./SalePayment');
 const Coupon = require('./Coupon');
 const DiscountRule = require('./DiscountRule');
+const Purchase = require('./Purchase');
+const PurchaseOrder = require('./PurchaseOrder');
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -54,6 +56,8 @@ Expense.belongsTo(Shop, { foreignKey: 'shopId' });
 ActivityLog.belongsTo(Shop, { foreignKey: 'shopId' });
 Employee.belongsTo(Shop, { foreignKey: 'shopId' });
 PendingPayment.belongsTo(Shop, { foreignKey: 'shopId' });
+Purchase.belongsTo(Shop, { foreignKey: 'shopId' });
+PurchaseOrder.belongsTo(Shop, { foreignKey: 'shopId' });
 
 // Shop has many of each entity
 Shop.hasMany(Product, { foreignKey: 'shopId' });
@@ -64,6 +68,8 @@ Shop.hasMany(Expense, { foreignKey: 'shopId' });
 Shop.hasMany(ActivityLog, { foreignKey: 'shopId' });
 Shop.hasMany(Employee, { foreignKey: 'shopId' });
 Shop.hasMany(PendingPayment, { foreignKey: 'shopId' });
+Shop.hasMany(Purchase, { foreignKey: 'shopId' });
+Shop.hasMany(PurchaseOrder, { foreignKey: 'shopId' });
 Shop.hasOne(SystemSettings, { foreignKey: 'shopId' });
 SystemSettings.belongsTo(Shop, { foreignKey: 'shopId' });
 
@@ -99,6 +105,10 @@ Invoice.hasMany(InvoiceItem, { foreignKey: 'invoiceId', as: 'items' });
 InvoiceItem.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
 InvoiceItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 
+// Auto sync tables if missing
+Purchase.sync();
+PurchaseOrder.sync();
+
 // Export models and sequelize instance
 module.exports = {
   sequelize,
@@ -121,5 +131,7 @@ module.exports = {
   HeldCart,
   SalePayment,
   Coupon,
-  DiscountRule
+  DiscountRule,
+  Purchase,
+  PurchaseOrder
 };
