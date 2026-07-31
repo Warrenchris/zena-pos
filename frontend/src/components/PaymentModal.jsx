@@ -413,15 +413,15 @@ export default function PaymentModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 animate-fadeIn"
+      className="fixed inset-0 bg-stone-950/65 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 animate-fadeIn"
       onClick={withTrustedClick(onClose)}
     >
       <div 
-        className="bg-surface border border-border-default rounded-3xl shadow-2xl w-full max-w-xl p-5 sm:p-6 space-y-4 max-h-[95vh] overflow-y-auto"
+        className="bg-surface border border-border-default rounded-3xl shadow-2xl w-full max-w-xl p-4 sm:p-5 flex flex-col max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2.5rem)] overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-border-default pb-3">
+        <div className="flex-shrink-0 flex items-center justify-between border-b border-border-default pb-2.5 mb-3">
           <div className="flex items-center space-x-3">
             <div className="p-2 rounded-xl bg-primary/10 text-primary">
               <BanknotesIcon className="h-6 w-6" />
@@ -441,20 +441,22 @@ export default function PaymentModal({
           </button>
         </div>
 
-        {/* Top Summary Banner: Total Due + Customer Info inline */}
-        <div className="grid grid-cols-2 gap-3 p-3.5 bg-surface-2/40 border border-border-default rounded-2xl">
-          <div>
-            <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Total Due</span>
-            <p className="text-h2 font-extrabold text-primary leading-tight">{formatCurrency(currentSale.total)}</p>
+        {/* Scrollable Body Content */}
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-0.5 scrollbar-thin">
+          {/* Top Summary Banner: Total Due + Customer Info inline */}
+          <div className="grid grid-cols-2 gap-3 p-3 bg-surface-2/40 border border-border-default rounded-2xl">
+            <div>
+              <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Total Due</span>
+              <p className="text-h2 font-extrabold text-primary leading-tight">{formatCurrency(currentSale.total)}</p>
+            </div>
+            <div className="text-right">
+              <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Customer</span>
+              <p className="text-small font-bold text-text-primary truncate">{currentSale.customer?.name || 'Walk-in Customer'}</p>
+              {currentSale.customer?.phone && (
+                <p className="text-caption text-text-muted font-mono">{currentSale.customer.phone}</p>
+              )}
+            </div>
           </div>
-          <div className="text-right">
-            <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Customer</span>
-            <p className="text-small font-bold text-text-primary truncate">{currentSale.customer?.name || 'Walk-in Customer'}</p>
-            {currentSale.customer?.phone && (
-              <p className="text-caption text-text-muted font-mono">{currentSale.customer.phone}</p>
-            )}
-          </div>
-        </div>
 
         {/* Payment Methods Selector */}
         <div className="space-y-1.5">
@@ -716,9 +718,10 @@ export default function PaymentModal({
             ⚠️ {localError || paymentError}
           </div>
         )}
+        </div>
 
         {/* Action Buttons Footer */}
-        <div className="flex space-x-3 pt-2 border-t border-border-default">
+        <div className="flex-shrink-0 flex space-x-3 pt-3 border-t border-border-default mt-2">
           <Button
             type="button"
             variant="outline"

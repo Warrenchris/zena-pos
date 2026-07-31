@@ -50,79 +50,83 @@ export default function StockModal({ product, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
+    <div className="fixed inset-0 bg-stone-950/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50">
+      <div className="bg-surface border border-border-default rounded-2xl shadow-modal w-full max-w-md p-4 sm:p-5 flex flex-col max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2.5rem)] overflow-hidden">
+        <div className="flex-shrink-0 flex justify-between items-center pb-3 border-b border-border-default mb-3">
+          <h3 className="text-h3 font-bold text-text-primary">
             Update Stock - {product?.name}
           </h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-text-muted hover:text-text-primary p-1 rounded-lg hover:bg-surface-2 transition-colors"
           >
-            <XMarkIcon className="h-6 w-6" />
+            <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="mb-4">
-          <p className="text-sm text-gray-600 mb-2">
-            Current Stock: <span className="font-medium">{product?.stockQuantity}</span>
-          </p>
-          <p className="text-sm text-gray-600">
-            SKU: <span className="font-medium">{product?.sku}</span>
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Quantity Change
-            </label>
-            <input
-              type="number"
-              value={quantity}
-              onChange={(e) => {
-                setQuantity(e.target.value)
-                setError('')
-              }}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                error ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Enter quantity (+ for increase, - for decrease)"
-            />
-            {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-            <p className="text-xs text-gray-500 mt-1">
-              Use positive numbers to add stock, negative numbers to remove stock
+        <div className="flex-1 overflow-y-auto space-y-3 pr-0.5 scrollbar-thin">
+          <div className="p-3 bg-surface-2/40 rounded-xl border border-border-default text-small">
+            <p className="text-text-secondary">
+              Current Stock: <span className="font-bold text-text-primary">{product?.stockQuantity}</span>
+            </p>
+            <p className="text-text-secondary">
+              SKU: <span className="font-mono text-text-primary">{product?.sku}</span>
             </p>
           </div>
 
-          {quantity && quantity !== '0' && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-md">
-              <p className="text-sm text-gray-700">
-                New stock will be: <span className="font-medium">
-                  {product?.stockQuantity + parseInt(quantity || 0)}
-                </span>
+          <form id="stockForm" onSubmit={handleSubmit} className="space-y-3">
+            <div>
+              <label className="block text-caption font-semibold text-text-secondary mb-1">
+                Quantity Change
+              </label>
+              <input
+                type="number"
+                value={quantity}
+                onChange={(e) => {
+                  setQuantity(e.target.value)
+                  setError('')
+                }}
+                className={`w-full px-3 py-2 bg-surface border rounded-xl font-bold text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+                  error ? 'border-danger' : 'border-border-default'
+                }`}
+                placeholder="e.g. +10 or -5"
+                autoFocus
+              />
+              {error && <p className="text-danger text-caption mt-1">{error}</p>}
+              <p className="text-caption text-text-muted mt-1">
+                Use positive numbers to add stock, negative to remove stock
               </p>
             </div>
-          )}
 
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || !quantity || quantity === '0'}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-            >
-              {loading ? 'Updating...' : 'Update Stock'}
-            </button>
-          </div>
-        </form>
+            {quantity && quantity !== '0' && (
+              <div className="p-2.5 bg-primary/10 border border-primary/20 rounded-xl">
+                <p className="text-small text-text-primary">
+                  New stock will be: <span className="font-bold text-primary">
+                    {product?.stockQuantity + parseInt(quantity || 0)}
+                  </span>
+                </p>
+              </div>
+            )}
+          </form>
+        </div>
+
+        <div className="flex-shrink-0 flex justify-end gap-3 pt-3 border-t border-border-default mt-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 border border-border-default rounded-xl text-text-secondary hover:bg-surface-2 font-medium transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="stockForm"
+            disabled={loading || !quantity || quantity === '0'}
+            className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary-hover font-semibold disabled:opacity-50 transition-colors"
+          >
+            {loading ? 'Updating...' : 'Update Stock'}
+          </button>
+        </div>
       </div>
     </div>
   )
