@@ -14,18 +14,19 @@ async function testPurchasesAndOrders() {
     await Product.sync();
     console.log('✅ Database models synchronized.');
 
-    // 2. Ensure test product exists
-    let [product] = await Product.findOrCreate({
-      where: { sku: 'TEST-PURCH-SKU-001' },
-      defaults: {
+    // 2. Ensure test product exists (pick first existing or create standalone)
+    let product = await Product.findOne();
+    if (!product) {
+      product = await Product.create({
+        sku: 'TEST-PURCH-SKU-001',
         name: 'Test Purchase Energy Drink 500ml',
         price: 150.00,
         cost: 100.00,
         stockQuantity: 10,
         reorderPoint: 5,
-        categoryId: 1
-      }
-    });
+        shopId: 1
+      });
+    }
 
     const initialStock = product.stockQuantity;
     console.log(`📦 Initial Product Stock for SKU ${product.sku}: ${initialStock}`);
@@ -132,8 +133,8 @@ async function testPurchasesAndOrders() {
     await testPurchase.destroy();
     await linkedPurchase.destroy();
     await testPo.destroy();
-    await product.destroy();
-    console.log('🧹 Cleaned up temporary test records.');
+    await product.decrement('stockQuantity', { by: 75 });
+    console.log('🧹 Cleaned up temporary test records and restored original stock quantity.');
 
     console.log('\n🎉 ALL PURCHASES & PURCHASE ORDERS TESTS PASSED SUCCESSFULLY! 🚀\n');
     process.exit(0);
