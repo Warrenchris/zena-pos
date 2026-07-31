@@ -263,6 +263,12 @@ router.get('/my-sales',
   saleController.getMySales
 );
 
+// Get all sales returns for shop
+router.get('/returns/all',
+  checkRole(['admin', 'manager', 'cashier', 'employee']),
+  saleController.getAllReturns
+);
+
 // Get payments for a specific sale
 router.get('/:saleId/payments',
   saleController.getSalePayments

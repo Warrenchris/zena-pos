@@ -1178,3 +1178,88 @@ exports.getSaleRefunds = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch refunds' });
   }
 };
+
+exports.getAllReturns = async (req, res) => {
+  const shopId = req.shopId || req.user.shopId;
+
+  try {
+    const refunds = await SaleRefund.findAll({
+      where: { shopId },
+      include: [
+        {
+          model: Product,
+          as: 'product',
+          attributes: ['id', 'name', 'sku', 'price']
+        },
+        {
+          model: Sale,
+          as: 'sale',
+          attributes: ['id', 'invoiceNumber', 'customerName', 'total', 'paymentMethod', 'createdAt']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const userIds = [];
+    const employeeIds = [];
+
+    refunds.forEach(r => {
+      const refBy = r.refundedBy;
+      if (refBy) {
+        if (/^[0-9]+$/.test(refBy)) {
+          userIds.push(parseInt(refBy, 10));
+        } else {
+          employeeIds.push(refBy);
+        }
+      }
+    });
+
+    const [users, employees] = await Promise.all([
+      User.findAll({
+        where: { id: userIds, shopId },
+        attributes: ['id', 'name']
+      }),
+      Employee.findAll({
+        where: { id: employeeIds, shopId },
+        attributes: ['id', 'firstName', 'lastName']
+      })
+    ]);
+
+    const userMap = new Map(users.map(u => [String(u.id), u.name]));
+    const employeeMap = new Map(employees.map(e => [String(e.id), `${e.firstName} ${e.lastName}`.trim()]));
+
+    const formattedRefunds = refunds.map(r => {
+      let performerName = 'System Admin';
+      const refBy = r.refundedBy;
+      if (refBy) {
+        if (userMap.has(refBy)) {
+          performerName = userMap.get(refBy);
+        } else if (employeeMap.has(refBy)) {
+          performerName = employeeMap.get(refBy);
+        }
+      }
+
+      return {
+        id: r.id,
+        saleId: r.saleId,
+        productId: r.productId,
+        quantity: r.quantity,
+        amount: parseFloat(r.amount || 0),
+        refundAmount: parseFloat(r.refundAmount || 0),
+        reason: r.reason || 'Customer Return',
+        refundMethod: r.refundMethod || 'cash',
+        refundedBy: r.refundedBy,
+        refunderName: performerName,
+        refundedAt: r.refundedAt || r.createdAt,
+        product: r.product,
+        sale: r.sale
+      };
+    });
+
+    res.json(formattedRefunds);
+  } catch (error) {
+    console.error('Error fetching all returns:', error);
+    res.status(500).json({ error: 'Failed to fetch sales returns' });
+  }
+};
+

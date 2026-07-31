@@ -271,6 +271,13 @@ export const salesAPI = {
   // Cashier endpoints
   getMySales: (params) =>
     api.get('/api/sales/my-sales', { params }),
+  // Refund & Returns endpoints
+  processRefund: (saleId, refundData) =>
+    api.post(`/api/sales/${saleId}/refund`, refundData),
+  getRefunds: (saleId) =>
+    api.get(`/api/sales/${saleId}/refunds`),
+  getAllReturns: () =>
+    api.get('/api/sales/returns/all'),
 };
 
 // Expenses API
