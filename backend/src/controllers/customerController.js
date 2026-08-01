@@ -64,9 +64,18 @@ exports.getCustomerById = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
+    const activeSaleCondition = {
+      customerId: customer.id,
+      shopId,
+      [Op.or]: [
+        { saleStatus: { [Op.ne]: 'cancelled' } },
+        { status: { [Op.ne]: 'cancelled' } }
+      ]
+    };
+
     // 1. Spending Stats (live aggregate)
     const salesStats = await Sale.findOne({
-      where: { customerId: customer.id, shopId, status: { [Op.ne]: 'cancelled' } },
+      where: activeSaleCondition,
       attributes: [
         [sequelize.fn('COUNT', sequelize.col('id')), 'totalOrders'],
         [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('total')), 0), 'totalSpend'],
@@ -102,7 +111,7 @@ exports.getCustomerById = async (req, res) => {
         invoiceNumber: s.invoiceNumber,
         total: parseFloat(s.total),
         paymentMethod: s.paymentMethod,
-        status: s.status,
+        status: s.saleStatus || s.status || 'completed',
         createdAt: s.createdAt,
         itemCount
       };
@@ -119,7 +128,7 @@ exports.getCustomerById = async (req, res) => {
       include: [
         {
           model: Sale,
-          where: { customerId: customer.id, shopId, status: { [Op.ne]: 'cancelled' } },
+          where: activeSaleCondition,
           attributes: []
         },
         {
