@@ -357,7 +357,10 @@ exports.getTaxEstimate = async (req, res) => {
 exports.getEmployeeSales = async (req, res) => {
   try {
     const { startDate, endDate, limit = 10 } = req.query;
-    const where = { shopId: req.user.shopId };
+    const where = {
+      shopId: req.user.shopId,
+      saleStatus: { [Op.ne]: 'cancelled' }
+    };
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
       const e = endDate ? new Date(endDate) : new Date();
