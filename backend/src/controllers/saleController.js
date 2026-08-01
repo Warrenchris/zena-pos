@@ -1071,6 +1071,21 @@ exports.processRefund = async (req, res) => {
       // Update Sales.saleStatus
       await sale.update({ saleStatus }, { transaction: t });
 
+      // e. Decrement customer totalPurchases and loyaltyPoints if sale was for a registered customer
+      if (sale.customerId) {
+        const totalRefundedAmount = createdRefunds.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+        const pointsToDeduct = Math.floor(totalRefundedAmount);
+        const customerRecord = await Customer.findOne({ where: { id: sale.customerId, shopId }, transaction: t });
+        if (customerRecord) {
+          const newTotalPurchases = Math.max(0, parseFloat(customerRecord.totalPurchases || 0) - totalRefundedAmount);
+          const newLoyaltyPoints = Math.max(0, (customerRecord.loyaltyPoints || 0) - pointsToDeduct);
+          await customerRecord.update({
+            totalPurchases: newTotalPurchases,
+            loyaltyPoints: newLoyaltyPoints
+          }, { transaction: t });
+        }
+      }
+
       // d. Log activity
       await logActivity({
         shopId,

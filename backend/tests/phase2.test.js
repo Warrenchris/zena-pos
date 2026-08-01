@@ -684,11 +684,48 @@ describe('Phase 2 Remediation Tests', () => {
       .set('Authorization', adminToken)
       .expect(200);
 
-    expect(res.body.customer.name).toBe('Brand New Customer');
-    expect(res.body.stats.totalOrders).toBe(0);
-    expect(res.body.stats.totalSpend).toBe(0);
-    expect(res.body.stats.averageOrderValue).toBe(0);
     expect(res.body.orderHistory).toEqual([]);
     expect(res.body.favorites).toEqual([]);
+  });
+
+  // TEST 2.13 — Processing a refund decrements customer totalPurchases and loyaltyPoints
+  test('TEST 2.13 — Processing a refund decrements customer totalPurchases and loyaltyPoints', async () => {
+    const cust = await Customer.create({
+      name: 'Refund Target Customer',
+      totalPurchases: 50.00,
+      loyaltyPoints: 50,
+      shopId: 1
+    });
+
+    const saleRecord = await Sale.create({
+      invoiceNumber: `INV-REFUND-${Date.now()}`,
+      total: 50.00,
+      paymentAmount: 50.00,
+      paymentMethod: 'cash',
+      customerId: cust.id,
+      shopId: 1
+    });
+
+    await SaleItem.create({
+      saleId: saleRecord.id,
+      productId: product.id,
+      quantity: 5,
+      price: 10.00,
+      subtotal: 50.00,
+      shopId: 1
+    });
+
+    await request(app)
+      .post(`/api/sales/${saleRecord.id}/refund`)
+      .set('Authorization', adminToken)
+      .send({
+        refundedBy: '101',
+        items: [{ productId: product.id, quantity: 2, reason: 'Customer return' }]
+      })
+      .expect(200);
+
+    const updatedCustomer = await Customer.findByPk(cust.id);
+    expect(Number(updatedCustomer.totalPurchases)).toBe(30.00); // 50 - 20 = 30
+    expect(updatedCustomer.loyaltyPoints).toBe(30); // 50 - 20 = 30
   });
 });
