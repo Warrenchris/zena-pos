@@ -489,9 +489,9 @@ describe('Phase 2 Remediation Tests', () => {
     });
 
     const payload = {
-      items: [{ productId: product.id, quantity: 1, price: 5.00 }],
-      total: 5.00,
-      paymentAmount: 5.00,
+      items: [{ productId: product.id, quantity: 1, price: 10.00 }],
+      total: 10.00,
+      paymentAmount: 10.00,
       paymentMethod: 'cash',
       customerId: existing.id,
       customer: {
@@ -506,7 +506,7 @@ describe('Phase 2 Remediation Tests', () => {
       .expect(201);
 
     const updatedCustomer = await Customer.findByPk(existing.id);
-    expect(Number(updatedCustomer.totalPurchases)).toBe(5.00);
+    expect(Number(updatedCustomer.totalPurchases)).toBe(10.00);
   });
 
   // TEST 2.9 — Employee sales report includes UUID cashier sales
