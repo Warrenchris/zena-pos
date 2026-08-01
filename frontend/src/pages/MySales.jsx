@@ -8,6 +8,7 @@ import { cashierAPI } from '../services/cashierAPI';
 import useCurrency from '../hooks/useCurrency';
 import api from '../services/api';
 import SaleDetailModal from '../components/SaleDetailModal';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 
 const SaleDetails = ({ sale, onClose }) => {
   return (
@@ -300,7 +301,7 @@ const MySales = () => {
                         {sale.invoiceNumber}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-text-secondary">
-                        {sale.customer?.name || 'Walk-in Customer'}
+                        {sale.customer?.name || WALK_IN_CUSTOMER_NAME}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-text-muted">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-2 text-text-secondary border border-border-default">
