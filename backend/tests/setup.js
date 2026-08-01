@@ -16,13 +16,9 @@ module.exports = async () => {
     execSync('npx sequelize-cli db:create --env test', { stdio: 'inherit' });
     console.log('[Test Setup] Running migrations on test database...');
     execSync('npx sequelize-cli db:migrate --env test', { stdio: 'inherit' });
+    console.log('[Test Setup] Database schema migrations completed successfully.');
   } catch (e) {
     console.error('[Test Setup] Migration execution failed:', e.message);
     throw e;
   }
-
-  const { sequelize } = require('../src/models');
-  await sequelize.authenticate();
-  console.log('[Test Setup] Database schema migrations completed successfully.');
-  await sequelize.close();
 };
