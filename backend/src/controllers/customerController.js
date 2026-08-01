@@ -142,15 +142,15 @@ exports.getCustomerById = async (req, res) => {
     });
 
     const formattedFavorites = favorites.map(fav => {
-      const f = fav.toJSON();
+      const f = fav.toJSON ? fav.toJSON() : fav;
       return {
         productId: f.productId,
         name: f.Product?.name || 'Unknown Product',
         sku: f.Product?.sku || '',
         price: parseFloat(f.Product?.price || 0),
-        timesPurchased: parseInt(f.dataValues.timesPurchased || 0, 10),
-        totalQuantity: parseInt(f.dataValues.totalQuantity || 0, 10),
-        lastPurchasedAt: f.dataValues.lastPurchasedAt
+        timesPurchased: parseInt(f.timesPurchased || fav.dataValues?.timesPurchased || 0, 10),
+        totalQuantity: parseInt(f.totalQuantity || fav.dataValues?.totalQuantity || 0, 10),
+        lastPurchasedAt: f.lastPurchasedAt || fav.dataValues?.lastPurchasedAt || null
       };
     });
 
