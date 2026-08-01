@@ -14,6 +14,7 @@ import StatsGrid from '../components/dashboard/StatsGrid';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 
 // Lazy load chart components to reduce initial bundle size
 const RevenueChart = lazy(() => import('../components/dashboard/RevenueChart'));

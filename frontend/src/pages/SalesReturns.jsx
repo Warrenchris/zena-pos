@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { useCurrency } from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
 import { salesAPI } from '../services/api';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -284,7 +285,7 @@ export default function SalesReturns() {
       render: (_, row) => (
         <div>
           <p className="font-semibold text-text-primary">{row.sale?.invoiceNumber || `#${row.saleId}`}</p>
-          <p className="text-caption text-text-muted">{row.sale?.customerName || 'Walk-in Customer'}</p>
+          <p className="text-caption text-text-muted">{row.sale?.customerName || WALK_IN_CUSTOMER_NAME}</p>
         </div>
       )
     },
@@ -496,7 +497,7 @@ export default function SalesReturns() {
                 <option value="">Choose a sale to return...</option>
                 {salesList.map((sale) => (
                   <option key={sale.id} value={sale.id}>
-                    {sale.invoiceNumber || `#${sale.id}`} • {sale.customerName || sale.customer?.name || 'Walk-in'} • Total: {formatCurrency(sale.total)} • {new Date(sale.createdAt).toLocaleDateString()}
+                    {sale.invoiceNumber || `#${sale.id}`} • {sale.customerName || sale.customer?.name || WALK_IN_CUSTOMER_NAME} • Total: {formatCurrency(sale.total)} • {new Date(sale.createdAt).toLocaleDateString()}
                   </option>
                 ))}
               </select>
@@ -675,7 +676,7 @@ export default function SalesReturns() {
               </div>
               <div>
                 <p className="text-caption font-semibold text-text-muted uppercase">Customer</p>
-                <p className="text-body font-semibold text-text-primary">{selectedReturn.sale?.customerName || 'Walk-in Customer'}</p>
+                <p className="text-body font-semibold text-text-primary">{selectedReturn.sale?.customerName || WALK_IN_CUSTOMER_NAME}</p>
               </div>
               <div>
                 <p className="text-caption font-semibold text-text-muted uppercase">Processed Date</p>

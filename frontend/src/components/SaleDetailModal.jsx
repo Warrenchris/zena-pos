@@ -13,6 +13,7 @@ import useCurrency from '../hooks/useCurrency';
 import { format } from 'date-fns';
 import { usePermissions } from '../hooks/usePermissions';
 import api from '../services/api';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
@@ -53,7 +54,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
     }
   };
 
-  const customerName = sale.Customer?.name || sale.customer?.name || sale.customerName || 'Walk-in Customer';
+  const customerName = sale.Customer?.name || sale.customer?.name || sale.customerName || WALK_IN_CUSTOMER_NAME;
   const employee = sale.Employee || sale.employee || null;
   const user = sale.User || sale.user || null;
 

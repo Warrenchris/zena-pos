@@ -23,6 +23,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import Modal from '../components/ui/Modal';
 
 const getStatusVariant = (status) => {
@@ -99,7 +100,7 @@ const InvoiceDetailDrawer = ({ invoice, isOpen, onClose, onDownload, onPrint }) 
                 <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-surface-2/40 border border-border-default">
                   <div>
                     <h4 className="text-caption font-semibold text-text-muted uppercase tracking-wider">Customer</h4>
-                    <p className="mt-1 text-body font-semibold text-text-primary">{invoice.customerName || 'Walk-in Customer'}</p>
+                    <p className="mt-1 text-body font-semibold text-text-primary">{invoice.customerName || WALK_IN_CUSTOMER_NAME}</p>
                   </div>
                   <div>
                     <h4 className="text-caption font-semibold text-text-muted uppercase tracking-wider">Status</h4>
@@ -226,7 +227,7 @@ function InvoiceCreateModal({ open, onClose, onCreated }) {
             <option value="">Choose sale transaction...</option>
             {sales.map((sale) => (
               <option key={sale.id} value={sale.id}>
-                {sale.invoiceNumber || sale.id} • {sale.customerName || sale.customer?.name || 'Walk-in'} • {new Date(sale.createdAt).toLocaleString()}
+                {sale.invoiceNumber || sale.id} • {sale.customerName || sale.customer?.name || WALK_IN_CUSTOMER_NAME} • {new Date(sale.createdAt).toLocaleString()}
               </option>
             ))}
           </select>
@@ -350,7 +351,7 @@ export default function Invoices() {
     doc.text('BILL TO:', margin, clientY);
     doc.setFont(undefined, 'normal');
     const customer = inv.customer || {};
-    doc.text(customer.name || inv.customerName || 'Walk-in Customer', margin, clientY + 14);
+    doc.text(customer.name || inv.customerName || WALK_IN_CUSTOMER_NAME, margin, clientY + 14);
 
     const items = inv.items || [];
     const tableBody = items.map((item, index) => [
@@ -461,7 +462,7 @@ export default function Invoices() {
         return {
           id: inv.id ?? inv.invoice_id,
           invoiceNumber: inv.invoiceNumber || inv.invoice_no || inv.ref || '',
-          customerName: inv.customerName || inv.customer_name || customer.name || 'Walk-in Customer',
+          customerName: inv.customerName || inv.customer_name || customer.name || WALK_IN_CUSTOMER_NAME,
           dateIssued: inv.dateIssued || inv.createdAt || new Date().toISOString(),
           status: inv.status || 'Paid',
           items: normalizedItems,

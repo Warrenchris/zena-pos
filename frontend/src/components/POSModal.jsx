@@ -282,7 +282,7 @@ export default function POSModal({ products = [], customers = [], onClose }) {
                 onChange={(e) => setSelectedCustomer(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-surface border border-border-default text-text-primary text-small focus:ring-2 focus:ring-primary/30"
               >
-                <option value="">Walk-in Customer</option>
+                <option value="">{WALK_IN_CUSTOMER_NAME}</option>
                 {customers.map((customer) => (
                   <option key={customer.id} value={customer.id}>
                     {customer.name}

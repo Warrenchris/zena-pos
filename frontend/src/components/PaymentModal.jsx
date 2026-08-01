@@ -11,6 +11,7 @@ import useCurrency from '../hooks/useCurrency';
 import api from '../services/api';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 
 export default function PaymentModal({
   isOpen,
@@ -134,7 +135,7 @@ export default function PaymentModal({
         amount: parseFloat(amount),
         currency: 'KES',
         customerEmail: currentSale.customer?.email || 'customer@example.com',
-        customerName: currentSale.customer?.name || 'Walk-in Customer',
+        customerName: currentSale.customer?.name || WALK_IN_CUSTOMER_NAME,
         orderId,
       });
 
@@ -346,7 +347,7 @@ export default function PaymentModal({
         amount: currentSale.total,
         currency: 'KES',
         customerEmail: currentSale.customer?.email || 'customer@example.com',
-        customerName: currentSale.customer?.name || 'Walk-in Customer',
+        customerName: currentSale.customer?.name || WALK_IN_CUSTOMER_NAME,
         orderId,
         saleData
       });
@@ -449,7 +450,7 @@ export default function PaymentModal({
           </div>
           <div className="text-right">
             <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Customer</span>
-            <p className="text-small font-bold text-text-primary truncate">{currentSale.customer?.name || 'Walk-in Customer'}</p>
+            <p className="text-small font-bold text-text-primary truncate">{currentSale.customer?.name || WALK_IN_CUSTOMER_NAME}</p>
             {currentSale.customer?.phone && (
               <p className="text-caption text-text-muted font-mono">{currentSale.customer?.phone}</p>
             )}

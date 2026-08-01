@@ -13,6 +13,7 @@ import { fetchCustomers } from '../store/slices/customersSlice';
 import { employeesAPI } from '../services/api';
 import POSModal from '../components/POSModal';
 import SaleDetailModal from '../components/SaleDetailModal';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import { useCurrency } from '../hooks/useCurrency';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -161,7 +162,7 @@ export default function Sales() {
       label: 'Customer',
       render: (val, row) => (
         <span className="text-text-primary font-medium">
-          {val?.name || row?.customerName || 'Walk-in Customer'}
+          {val?.name || row?.customerName || WALK_IN_CUSTOMER_NAME}
         </span>
       )
     },
