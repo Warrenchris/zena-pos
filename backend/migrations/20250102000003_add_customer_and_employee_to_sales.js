@@ -3,44 +3,45 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     const tableInfo = await queryInterface.describeTable('Sales');
+    const hasCol = (name) => Object.keys(tableInfo).some(k => k.toLowerCase() === name.toLowerCase());
 
     // Only add customer fields if they don't exist
-    if (!tableInfo.customerName) {
+    if (!hasCol('customerName')) {
       await queryInterface.addColumn('Sales', 'customerName', {
         type: Sequelize.STRING,
         allowNull: true
       });
     }
 
-    if (!tableInfo.customerLocation) {
+    if (!hasCol('customerLocation')) {
       await queryInterface.addColumn('Sales', 'customerLocation', {
         type: Sequelize.STRING,
         allowNull: true
       });
     }
 
-    if (!tableInfo.customerPhone) {
+    if (!hasCol('customerPhone')) {
       await queryInterface.addColumn('Sales', 'customerPhone', {
         type: Sequelize.STRING,
         allowNull: true
       });
     }
 
-    if (!tableInfo.customerEmail) {
+    if (!hasCol('customerEmail')) {
       await queryInterface.addColumn('Sales', 'customerEmail', {
         type: Sequelize.STRING,
         allowNull: true
       });
     }
 
-    if (!tableInfo.paymentAmount) {
+    if (!hasCol('paymentAmount')) {
       await queryInterface.addColumn('Sales', 'paymentAmount', {
         type: Sequelize.DECIMAL(10, 2),
         allowNull: true
       });
     }
 
-    if (!tableInfo.change) {
+    if (!hasCol('change')) {
       await queryInterface.addColumn('Sales', 'change', {
         type: Sequelize.DECIMAL(10, 2),
         allowNull: true,
@@ -48,7 +49,7 @@ module.exports = {
       });
     }
 
-    if (!tableInfo.employeeId) {
+    if (!hasCol('employeeId')) {
       await queryInterface.addColumn('Sales', 'employeeId', {
         type: Sequelize.UUID,
         allowNull: true,
@@ -60,7 +61,7 @@ module.exports = {
     }
 
     // Update paymentMethod enum to include 'mobile' (only if column exists)
-    if (tableInfo.paymentMethod) {
+    if (hasCol('paymentMethod')) {
       try {
         await queryInterface.changeColumn('Sales', 'paymentMethod', {
           type: Sequelize.ENUM('cash', 'card', 'mobile', 'mobile_money', 'other'),

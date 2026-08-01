@@ -419,13 +419,14 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
       processedBy:   user?.isEmployee ? user.id : null,
     }, { transaction: t });
 
-    let finalCustomerId = customerId;
-    const isWalkIn = !customerId && (!customer || !customer.id || customer.name === WALK_IN_CUSTOMER_NAME);
+    const resolvedCustomerId = customerId || customer?.id || null;
+    let finalCustomerId = resolvedCustomerId;
+    const isWalkIn = !resolvedCustomerId && (!customer?.name || customer.name === WALK_IN_CUSTOMER_NAME);
 
     if (!isWalkIn) {
-      if (customerId) {
+      if (resolvedCustomerId) {
         const existingCustomer = await Customer.findOne({
-          where: { id: customerId, shopId },
+          where: { id: resolvedCustomerId, shopId },
           transaction: t
         });
         if (existingCustomer) {
