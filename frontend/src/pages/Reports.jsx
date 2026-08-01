@@ -439,7 +439,7 @@ export default function Reports() {
       />
 
       {/* Sticky Filter Toolbar */}
-      <Card variant="default" className="p-4 sticky top-0 z-40 backdrop-blur-md bg-surface/90">
+      <Card variant="default" className="p-4 sticky top-0 z-40 backdrop-blur-md bg-surface/90 !overflow-visible">
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="flex items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default">
             <TabButton active={tab === 'sales'} onClick={() => setTab('sales')}>Sales Summary</TabButton>
@@ -458,12 +458,15 @@ export default function Reports() {
 
           <div className="flex flex-wrap items-center gap-2">
             <DateRangePicker 
-              startDate={new Date(startDate)} 
-              endDate={new Date(endDate)} 
+              startDate={startDate} 
+              endDate={endDate} 
               onChange={([start, end]) => {
-                setStartDate(start.toISOString().split('T')[0]);
-                setEndDate(end.toISOString().split('T')[0]);
-                setQuick('custom');
+                if (start) {
+                  const toISO = (d) => (typeof d === 'string' ? d : d.toISOString().split('T')[0]);
+                  setStartDate(toISO(start));
+                  setEndDate(toISO(end || start));
+                  setQuick('custom');
+                }
               }}
             />
             <select
