@@ -118,41 +118,47 @@ exports.getCustomerById = async (req, res) => {
     });
 
     // 3. Favorites / Frequently Purchased Items (Single SQL Aggregation)
-    const favorites = await SaleItem.findAll({
-      attributes: [
-        'productId',
-        [sequelize.fn('COUNT', sequelize.col('SaleItem.id')), 'timesPurchased'],
-        [sequelize.fn('SUM', sequelize.col('SaleItem.quantity')), 'totalQuantity'],
-        [sequelize.fn('MAX', sequelize.col('Sale.createdAt')), 'lastPurchasedAt']
-      ],
-      include: [
-        {
-          model: Sale,
-          where: activeSaleCondition,
-          attributes: []
-        },
-        {
-          model: Product,
-          attributes: ['id', 'name', 'sku', 'price']
-        }
-      ],
-      group: ['SaleItem.productId', 'Product.id'],
-      order: [[sequelize.literal('timesPurchased'), 'DESC'], [sequelize.literal('totalQuantity'), 'DESC']],
-      limit: 5
-    });
+    let formattedFavorites = [];
+    try {
+      const favorites = await SaleItem.findAll({
+        attributes: [
+          'productId',
+          [sequelize.fn('COUNT', sequelize.col('SaleItem.id')), 'timesPurchased'],
+          [sequelize.fn('SUM', sequelize.col('SaleItem.quantity')), 'totalQuantity'],
+          [sequelize.fn('MAX', sequelize.col('SaleItem.createdAt')), 'lastPurchasedAt']
+        ],
+        include: [
+          {
+            model: Sale,
+            where: activeSaleCondition,
+            attributes: []
+          },
+          {
+            model: Product,
+            attributes: ['id', 'name', 'sku', 'price']
+          }
+        ],
+        group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.sku', 'Product.price'],
+        order: [[sequelize.literal('timesPurchased'), 'DESC'], [sequelize.literal('totalQuantity'), 'DESC']],
+        limit: 5
+      });
 
-    const formattedFavorites = favorites.map(fav => {
-      const f = fav.toJSON ? fav.toJSON() : fav;
-      return {
-        productId: f.productId,
-        name: f.Product?.name || 'Unknown Product',
-        sku: f.Product?.sku || '',
-        price: parseFloat(f.Product?.price || 0),
-        timesPurchased: parseInt(f.timesPurchased || fav.dataValues?.timesPurchased || 0, 10),
-        totalQuantity: parseInt(f.totalQuantity || fav.dataValues?.totalQuantity || 0, 10),
-        lastPurchasedAt: f.lastPurchasedAt || fav.dataValues?.lastPurchasedAt || null
-      };
-    });
+      formattedFavorites = favorites.map(fav => {
+        const f = fav.toJSON ? fav.toJSON() : fav;
+        return {
+          productId: f.productId,
+          name: f.Product?.name || 'Unknown Product',
+          sku: f.Product?.sku || '',
+          price: parseFloat(f.Product?.price || 0),
+          timesPurchased: parseInt(f.timesPurchased || fav.dataValues?.timesPurchased || 0, 10),
+          totalQuantity: parseInt(f.totalQuantity || fav.dataValues?.totalQuantity || 0, 10),
+          lastPurchasedAt: f.lastPurchasedAt || fav.dataValues?.lastPurchasedAt || null
+        };
+      });
+    } catch (favErr) {
+      console.warn('Could not compute favorites aggregation:', favErr.message);
+      formattedFavorites = [];
+    }
 
     res.json({
       customer,
