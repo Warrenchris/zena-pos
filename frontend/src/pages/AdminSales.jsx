@@ -13,6 +13,7 @@ import { fetchProducts } from '../store/slices/productsSlice'
 import { fetchCustomers } from '../store/slices/customersSlice'
 import { employeesAPI } from '../services/api'
 import POSModal from '../components/POSModal'
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer'
 
 export default function AdminSales() {
   const dispatch = useDispatch()
@@ -270,7 +271,7 @@ export default function AdminSales() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-text-primary">
-                        {sale?.Customer?.name || sale?.customerName || 'Walk-in Customer'}
+                        {sale?.Customer?.name || sale?.customerName || WALK_IN_CUSTOMER_NAME}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

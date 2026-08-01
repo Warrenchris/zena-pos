@@ -395,7 +395,7 @@ export default function Dashboard() {
                         {sale.invoiceNumber}
                       </p>
                       <p className="text-small text-text-muted">
-                        {sale.Customer?.name || sale.customer?.name || 'Walk-in Customer'}
+                        {sale.Customer?.name || sale.customer?.name || WALK_IN_CUSTOMER_NAME}
                       </p>
                     </div>
                     <div className="text-right">
