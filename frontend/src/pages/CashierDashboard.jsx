@@ -23,6 +23,7 @@ import {
 import api, { couponsAPI } from '../services/api';
 import cashierAPI from '../services/cashierAPI';
 import CustomerModal from '../components/CustomerModal';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import PaymentModal from '../components/PaymentModal';
 import { useToast } from '../components/Toast';
 import { notifySaleComplete, notifyError as notifyErrorUtil } from '../utils/notifications';
@@ -136,7 +137,7 @@ export default function CashierDashboard() {
       const newTotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
 
       setCurrentSale({
-        customer: customer || { name: 'Walk-in Customer', location: '', phone: '', email: '' },
+        customer: customer || { name: WALK_IN_CUSTOMER_NAME, location: '', phone: '', email: '' },
         customerId: customerId || null,
         items: updatedItems,
         total: newTotal,
@@ -236,7 +237,7 @@ export default function CashierDashboard() {
       const newTotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
 
       setCurrentSale({
-        customer: customer || { name: 'Walk-in Customer', location: '', phone: '', email: '' },
+        customer: customer || { name: WALK_IN_CUSTOMER_NAME, location: '', phone: '', email: '' },
         customerId: customer?.id || null,
         items: updatedItems,
         total: newTotal,
@@ -511,7 +512,7 @@ export default function CashierDashboard() {
   const skipCustomerInfo = () => {
     setCurrentSale(prev => ({
       ...prev,
-      customer: { name: 'Walk-in Customer', location: '', phone: '', email: '' },
+      customer: { name: WALK_IN_CUSTOMER_NAME, location: '', phone: '', email: '' },
       customerId: null
     }));
     setSalesMode('product-selection');

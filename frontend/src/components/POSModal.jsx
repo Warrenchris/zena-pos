@@ -6,6 +6,7 @@ import Button from './ui/Button';
 import Input from './ui/Input';
 import Badge from './ui/Badge';
 import useCurrency from '../hooks/useCurrency';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 
 export default function POSModal({ products = [], customers = [], onClose }) {
   const dispatch = useDispatch();

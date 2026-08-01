@@ -43,7 +43,7 @@ export function usePersistedCart(cashierId) {
     if (!cashierId) return;
 
     const hasItems = currentSale.items && currentSale.items.length > 0;
-    const hasCustomer = currentSale.customer && currentSale.customer.name && currentSale.customer.name !== 'Walk-in Customer';
+    const hasCustomer = currentSale.customer && currentSale.customer.name && currentSale.customer.name !== WALK_IN_CUSTOMER_NAME;
 
     if (hasItems || hasCustomer) {
       const dataToSave = {
