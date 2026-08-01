@@ -93,10 +93,13 @@ export default function Customers() {
       key: 'name',
       label: 'Customer',
       render: (val, row) => (
-        <div>
-          <div className="font-semibold text-text-primary text-body">{val}</div>
-          {row.address && <div className="text-caption text-text-muted">{row.address}</div>}
-        </div>
+        <button
+          onClick={() => setSelectedCustomer(row)}
+          className="text-left font-semibold text-text-primary text-body hover:text-brand-yellow hover:underline transition-colors focus:outline-none"
+        >
+          <div>{val}</div>
+          {row.address && <div className="text-caption text-text-muted font-normal">{row.address}</div>}
+        </button>
       )
     },
     {

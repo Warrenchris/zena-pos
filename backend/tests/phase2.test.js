@@ -628,4 +628,67 @@ describe('Phase 2 Remediation Tests', () => {
     expect(res.body[0].totalSales).toBe(1);
     expect(Number(res.body[0].totalRevenue)).toBe(15.00);
   });
+
+  // TEST 2.12a — Customer profile with sales returns stats, order history, and aggregated favorites
+  test('TEST 2.12a — GET /api/customers/:id returns profile, stats, order history, and favorites', async () => {
+    const cust = await Customer.create({
+      name: 'Profile User',
+      email: 'profile@user.com',
+      shopId: 1
+    });
+
+    const saleRecord = await Sale.create({
+      invoiceNumber: `INV-PROF-${Date.now()}`,
+      total: 30.00,
+      paymentAmount: 30.00,
+      paymentMethod: 'cash',
+      customerId: cust.id,
+      shopId: 1
+    });
+
+    await SaleItem.create({
+      saleId: saleRecord.id,
+      productId: product.id,
+      quantity: 3,
+      price: 10.00,
+      subtotal: 30.00,
+      shopId: 1
+    });
+
+    const res = await request(app)
+      .get(`/api/customers/${cust.id}`)
+      .set('Authorization', adminToken)
+      .expect(200);
+
+    expect(res.body.customer.name).toBe('Profile User');
+    expect(res.body.stats.totalOrders).toBe(1);
+    expect(res.body.stats.totalSpend).toBe(30.00);
+    expect(res.body.stats.averageOrderValue).toBe(30.00);
+    expect(res.body.orderHistory.length).toBe(1);
+    expect(res.body.orderHistory[0].total).toBe(30.00);
+    expect(res.body.favorites.length).toBe(1);
+    expect(res.body.favorites[0].timesPurchased).toBe(1);
+    expect(res.body.favorites[0].totalQuantity).toBe(3);
+  });
+
+  // TEST 2.12b — Customer with zero sales returns 200 OK with zero stats and empty arrays
+  test('TEST 2.12b — GET /api/customers/:id handles customer with 0 sales without 404 error', async () => {
+    const newCust = await Customer.create({
+      name: 'Brand New Customer',
+      email: 'newbie@customer.com',
+      shopId: 1
+    });
+
+    const res = await request(app)
+      .get(`/api/customers/${newCust.id}`)
+      .set('Authorization', adminToken)
+      .expect(200);
+
+    expect(res.body.customer.name).toBe('Brand New Customer');
+    expect(res.body.stats.totalOrders).toBe(0);
+    expect(res.body.stats.totalSpend).toBe(0);
+    expect(res.body.stats.averageOrderValue).toBe(0);
+    expect(res.body.orderHistory).toEqual([]);
+    expect(res.body.favorites).toEqual([]);
+  });
 });

@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 const Customer = require('../models/Customer');
 const { parseDate } = require('../utils/dateUtils');
 const Sale = require('../models/Sale');
@@ -45,66 +46,125 @@ exports.getAllCustomers = async (req, res) => {
   }
 };
 
-// Get customer by ID with purchase history
+// Get customer by ID with full profile: spending stats, paginated order history, favorites
 exports.getCustomerById = async (req, res) => {
   try {
+    const { id } = req.params;
+    const shopId = req.user.shopId;
+
     const customer = await Customer.findOne({
-      where: { id: req.params.id, active: true, shopId: req.user.shopId },
-      include: [{
-        model: Sale,
-        where: { shopId: req.user.shopId },
-        include: [{
-          model: SaleItem,
-          include: [{
-            model: Product,
-            attributes: ['id', 'name', 'sku', 'price'],
-            where: { shopId: req.user.shopId }
-          }]
-        }]
-      }]
+      where: { id, active: true, shopId }
     });
 
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
 
-    // Calculate customer insights
-    const totalSales = customer.Sales.length;
-    const totalSpent = customer.Sales.reduce((sum, sale) => sum + sale.total, 0);
-    const averageTicket = totalSales > 0 ? totalSpent / totalSales : 0;
-    
-    // Get frequently purchased products
-    const productFrequency = {};
-    customer.Sales.forEach(sale => {
-      sale.SaleItems.forEach(item => {
-        const productId = item.Product.id;
-        if (!productFrequency[productId]) {
-          productFrequency[productId] = {
-            product: item.Product,
-            quantity: 0,
-            totalSpent: 0
-          };
-        }
-        productFrequency[productId].quantity += item.quantity;
-        productFrequency[productId].totalSpent += item.subtotal;
-      });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    // 1. Spending Stats (live aggregate)
+    const salesStats = await Sale.findOne({
+      where: { customerId: customer.id, shopId, status: { [Op.ne]: 'cancelled' } },
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('id')), 'totalOrders'],
+        [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('total')), 0), 'totalSpend'],
+        [sequelize.fn('MIN', sequelize.col('createdAt')), 'firstOrderDate'],
+        [sequelize.fn('MAX', sequelize.col('createdAt')), 'lastOrderDate']
+      ],
+      raw: true
     });
 
-    const frequentProducts = Object.values(productFrequency)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
+    const totalOrders = parseInt(salesStats?.totalOrders || 0, 10);
+    const totalSpend = parseFloat(salesStats?.totalSpend || 0);
+    const averageOrderValue = totalOrders > 0 ? parseFloat((totalSpend / totalOrders).toFixed(2)) : 0;
+    const firstOrderDate = salesStats?.firstOrderDate || null;
+    const lastOrderDate = salesStats?.lastOrderDate || customer.lastVisit || null;
+
+    // 2. Paginated Order History
+    const { count: orderCount, rows: sales } = await Sale.findAndCountAll({
+      where: { customerId: customer.id, shopId },
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      include: [{
+        model: SaleItem,
+        attributes: ['id', 'quantity', 'price', 'subtotal']
+      }]
+    });
+
+    const orderHistory = sales.map(sale => {
+      const s = sale.toJSON();
+      const itemCount = s.SaleItems ? s.SaleItems.reduce((acc, item) => acc + (item.quantity || 1), 0) : 0;
+      return {
+        id: s.id,
+        invoiceNumber: s.invoiceNumber,
+        total: parseFloat(s.total),
+        paymentMethod: s.paymentMethod,
+        status: s.status,
+        createdAt: s.createdAt,
+        itemCount
+      };
+    });
+
+    // 3. Favorites / Frequently Purchased Items (Single SQL Aggregation)
+    const favorites = await SaleItem.findAll({
+      attributes: [
+        'productId',
+        [sequelize.fn('COUNT', sequelize.col('SaleItem.id')), 'timesPurchased'],
+        [sequelize.fn('SUM', sequelize.col('SaleItem.quantity')), 'totalQuantity'],
+        [sequelize.fn('MAX', sequelize.col('Sale.createdAt')), 'lastPurchasedAt']
+      ],
+      include: [
+        {
+          model: Sale,
+          where: { customerId: customer.id, shopId, status: { [Op.ne]: 'cancelled' } },
+          attributes: []
+        },
+        {
+          model: Product,
+          attributes: ['id', 'name', 'sku', 'price']
+        }
+      ],
+      group: ['SaleItem.productId', 'Product.id'],
+      order: [[sequelize.literal('timesPurchased'), 'DESC'], [sequelize.literal('totalQuantity'), 'DESC']],
+      limit: 5
+    });
+
+    const formattedFavorites = favorites.map(fav => {
+      const f = fav.toJSON();
+      return {
+        productId: f.productId,
+        name: f.Product?.name || 'Unknown Product',
+        sku: f.Product?.sku || '',
+        price: parseFloat(f.Product?.price || 0),
+        timesPurchased: parseInt(f.dataValues.timesPurchased || 0, 10),
+        totalQuantity: parseInt(f.dataValues.totalQuantity || 0, 10),
+        lastPurchasedAt: f.dataValues.lastPurchasedAt
+      };
+    });
 
     res.json({
       customer,
-      insights: {
-        totalSales,
-        totalSpent,
-        averageTicket,
-        frequentProducts,
-        lastVisit: customer.lastVisit
-      }
+      stats: {
+        totalSpend,
+        totalOrders,
+        averageOrderValue,
+        firstOrderDate,
+        lastOrderDate
+      },
+      orderHistory,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(orderCount / limit) || 1,
+        totalOrders: orderCount,
+        limit
+      },
+      favorites: formattedFavorites
     });
   } catch (error) {
+    console.error('Error fetching customer profile:', error);
     res.status(500).json({ error: 'Failed to fetch customer details' });
   }
 };
