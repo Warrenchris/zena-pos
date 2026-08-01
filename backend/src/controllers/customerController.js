@@ -67,10 +67,7 @@ exports.getCustomerById = async (req, res) => {
     const activeSaleCondition = {
       customerId: customer.id,
       shopId,
-      [Op.or]: [
-        { saleStatus: { [Op.ne]: 'cancelled' } },
-        { status: { [Op.ne]: 'cancelled' } }
-      ]
+      saleStatus: { [Op.ne]: 'cancelled' }
     };
 
     // 1. Spending Stats (live aggregate)
