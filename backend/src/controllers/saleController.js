@@ -420,56 +420,62 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
     }, { transaction: t });
 
     let finalCustomerId = customerId;
+    const isWalkIn = !customerId && (!customer || !customer.id || customer.name === WALK_IN_CUSTOMER_NAME);
 
-    if (customer && customer.name && customer.name !== WALK_IN_CUSTOMER_NAME) {
-      let customerRecord = await Customer.findOne({
-        where: {
-          shopId,
-          [Op.or]: [
-            ...(customer.email ? [{ email: customer.email }] : []),
-            ...(customer.phone ? [{ phone: customer.phone }] : []),
-            { name: customer.name }
-          ]
-        },
-        transaction: t
-      });
+    if (!isWalkIn) {
+      if (customerId) {
+        const existingCustomer = await Customer.findOne({
+          where: { id: customerId, shopId },
+          transaction: t
+        });
+        if (existingCustomer) {
+          const loyaltyPoints = Math.floor(total);
+          await existingCustomer.update({
+            totalPurchases: parseFloat(existingCustomer.totalPurchases || 0) + total,
+            loyaltyPoints: (existingCustomer.loyaltyPoints || 0) + loyaltyPoints,
+            lastVisit: new Date(),
+            ...(customer?.email && { email: customer.email }),
+            ...(customer?.phone && { phone: customer.phone }),
+            ...(customer?.location && { location: customer.location })
+          }, { transaction: t });
+        }
+      } else if (customer && customer.name && customer.name !== WALK_IN_CUSTOMER_NAME) {
+        let customerRecord = await Customer.findOne({
+          where: {
+            shopId,
+            [Op.or]: [
+              ...(customer.email ? [{ email: customer.email }] : []),
+              ...(customer.phone ? [{ phone: customer.phone }] : []),
+              { name: customer.name }
+            ]
+          },
+          transaction: t
+        });
 
-      if (!customerRecord) {
-        customerRecord = await Customer.create({
-          name: customer.name,
-          email: customer.email || null,
-          phone: customer.phone || null,
-          location: customer.location || null,
-          totalPurchases: total,
-          lastVisit: new Date(),
-          shopId
-        }, { transaction: t });
-      } else {
-        const loyaltyPoints = Math.floor(total);
-        await customerRecord.update({
-          totalPurchases: parseFloat(customerRecord.totalPurchases) + total,
-          loyaltyPoints: customerRecord.loyaltyPoints + loyaltyPoints,
-          lastVisit: new Date(),
-          ...(customer.email && { email: customer.email }),
-          ...(customer.phone && { phone: customer.phone }),
-          ...(customer.location && { location: customer.location })
-        }, { transaction: t });
-      }
+        if (!customerRecord) {
+          customerRecord = await Customer.create({
+            name: customer.name,
+            email: customer.email || null,
+            phone: customer.phone || null,
+            location: customer.location || null,
+            totalPurchases: total,
+            lastVisit: new Date(),
+            shopId
+          }, { transaction: t });
+        } else {
+          const loyaltyPoints = Math.floor(total);
+          await customerRecord.update({
+            totalPurchases: parseFloat(customerRecord.totalPurchases || 0) + total,
+            loyaltyPoints: (customerRecord.loyaltyPoints || 0) + loyaltyPoints,
+            lastVisit: new Date(),
+            ...(customer.email && { email: customer.email }),
+            ...(customer.phone && { phone: customer.phone }),
+            ...(customer.location && { location: customer.location })
+          }, { transaction: t });
+        }
 
-      finalCustomerId = customerRecord.id;
-      await sale.update({ customerId: finalCustomerId }, { transaction: t });
-    } else if (customerId) {
-      const existingCustomer = await Customer.findOne({
-        where: { id: customerId, shopId },
-        transaction: t
-      });
-      if (existingCustomer) {
-        const loyaltyPoints = Math.floor(total);
-        await existingCustomer.update({
-          totalPurchases: existingCustomer.totalPurchases + total,
-          loyaltyPoints: existingCustomer.loyaltyPoints + loyaltyPoints,
-          lastVisit: new Date()
-        }, { transaction: t });
+        finalCustomerId = customerRecord.id;
+        await sale.update({ customerId: finalCustomerId }, { transaction: t });
       }
     }
 
