@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, PendingPayment, SalePayment, ActivityLog } = require('../src/models');
+const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, PendingPayment, SalePayment, SaleRefund, ActivityLog } = require('../src/models');
 const axios = require('axios');
 
 jest.mock('axios');
