@@ -42,10 +42,31 @@ export function usePersistedCart(cashierId) {
   useEffect(() => {
     if (!cashierId) return;
 
-    const hasItems = currentSale.items && currentSale.items.length > 0;
-    const hasCustomer = currentSale.customer && currentSale.customer.name && currentSale.customer.name !== WALK_IN_CUSTOMER_NAME;
+    const handleStorageChange = (e) => {
+      if (e.key === key) {
+        if (e.newValue) {
+          try {
+            const parsed = JSON.parse(e.newValue);
+            setPendingCart(parsed);
+          } catch {
+            setPendingCart(null);
+          }
+        } else {
+          setPendingCart(null);
+        }
+      }
+    };
 
-    if (hasItems || hasCustomer) {
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [cashierId, key]);
+
+  useEffect(() => {
+    if (!cashierId) return;
+
+    const hasItems = currentSale.items && currentSale.items.length > 0;
+
+    if (hasItems) {
       const dataToSave = {
         items: currentSale.items.map(item => ({
           id: item.id,
