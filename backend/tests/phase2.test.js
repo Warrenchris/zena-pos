@@ -822,4 +822,27 @@ describe('Phase 2 Remediation Tests', () => {
       .set('Authorization', cashierToken)
       .expect(403);
   });
+
+  // TEST 2.14d — Non-admin employee can view their OWN profile via JWT token (200 OK)
+  test('TEST 2.14d — Non-admin employee can view their OWN profile via JWT token (200 OK)', async () => {
+    const ownEmp = await Employee.create({
+      firstName: 'SelfView',
+      lastName: 'Cashier',
+      email: `selfview-${Date.now()}@shop1.com`,
+      position: 'cashier',
+      status: 'active',
+      salary: 26000,
+      password: 'password123',
+      shopId: 1
+    });
+
+    const empToken = tokenFor({ id: ownEmp.id, role: 'cashier', shopId: 1, isEmployee: true });
+
+    const res = await request(app)
+      .get(`/api/employees/${ownEmp.id}`)
+      .set('Authorization', empToken)
+      .expect(200);
+
+    expect(res.body.employee.firstName).toBe('SelfView');
+  });
 });
