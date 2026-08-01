@@ -758,6 +758,7 @@ export default function CashierDashboard() {
 
       setCurrentSale({
         customer: { name: '', location: '', phone: '', email: '' },
+        customerId: null,
         items: [],
         total: 0,
         paymentMethod: 'cash',
@@ -802,6 +803,7 @@ export default function CashierDashboard() {
       setSalesMode('idle');
       setCurrentSale({
         customer: { name: '', location: '', phone: '', email: '' },
+        customerId: null,
         items: [],
         total: 0,
         paymentMethod: 'cash',
@@ -825,6 +827,7 @@ export default function CashierDashboard() {
     setSalesMode('idle');
     setCurrentSale({
       customer: { name: '', location: '', phone: '', email: '' },
+      customerId: null,
       items: [],
       total: 0,
       paymentMethod: 'cash',
