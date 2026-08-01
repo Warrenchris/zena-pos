@@ -729,4 +729,97 @@ describe('Phase 2 Remediation Tests', () => {
     expect(Number(updatedCustomer.totalPurchases)).toBe(30.00); // 50 - 20 = 30
     expect(updatedCustomer.loyaltyPoints).toBe(30); // 50 - 20 = 30
   });
+
+  // TEST 2.14a — GET /api/employees/:id returns profile, stats, sales history, and top products
+  test('TEST 2.14a — GET /api/employees/:id returns profile, stats, sales history, and top products', async () => {
+    const testEmp = await Employee.create({
+      firstName: 'Sarah',
+      lastName: 'Cashier',
+      email: `sarah-${Date.now()}@shop1.com`,
+      position: 'cashier',
+      status: 'active',
+      salary: 25000,
+      password: 'password123',
+      shopId: 1
+    });
+
+    const saleRecord = await Sale.create({
+      invoiceNumber: `INV-EMP-${Date.now()}`,
+      total: 75.00,
+      paymentAmount: 75.00,
+      paymentMethod: 'cash',
+      employeeId: testEmp.id,
+      shopId: 1
+    });
+
+    await SaleItem.create({
+      saleId: saleRecord.id,
+      productId: product.id,
+      quantity: 3,
+      price: 25.00,
+      subtotal: 75.00,
+      shopId: 1
+    });
+
+    const res = await request(app)
+      .get(`/api/employees/${testEmp.id}`)
+      .set('Authorization', adminToken)
+      .expect(200);
+
+    expect(res.body.employee.firstName).toBe('Sarah');
+    expect(res.body.stats.totalSales).toBe(1);
+    expect(res.body.stats.totalRevenue).toBe(75.00);
+    expect(res.body.stats.averageSaleValue).toBe(75.00);
+    expect(res.body.salesHistory.length).toBe(1);
+    expect(res.body.salesHistory[0].total).toBe(75.00);
+    expect(res.body.topProducts.length).toBe(1);
+    expect(res.body.topProducts[0].timesSold).toBe(1);
+    expect(res.body.topProducts[0].totalQuantity).toBe(3);
+  });
+
+  // TEST 2.14b — GET /api/employees/:id handles employee with 0 sales without error (200 OK)
+  test('TEST 2.14b — GET /api/employees/:id handles employee with 0 sales without 404 error', async () => {
+    const newEmp = await Employee.create({
+      firstName: 'New',
+      lastName: 'Hire',
+      email: `newhire-${Date.now()}@shop1.com`,
+      position: 'barista',
+      status: 'active',
+      salary: 20000,
+      password: 'password123',
+      shopId: 1
+    });
+
+    const res = await request(app)
+      .get(`/api/employees/${newEmp.id}`)
+      .set('Authorization', adminToken)
+      .expect(200);
+
+    expect(res.body.employee.firstName).toBe('New');
+    expect(res.body.stats.totalSales).toBe(0);
+    expect(res.body.stats.totalRevenue).toBe(0);
+    expect(res.body.stats.averageSaleValue).toBe(0);
+    expect(res.body.salesHistory).toEqual([]);
+    expect(res.body.topProducts).toEqual([]);
+  });
+
+  // TEST 2.14c — Role-based access control blocks non-admin from viewing another employee profile
+  test('TEST 2.14c — RBAC blocks non-admin user from viewing another employee profile', async () => {
+    const otherEmp = await Employee.create({
+      firstName: 'Other',
+      lastName: 'Staff',
+      email: `other-${Date.now()}@shop1.com`,
+      position: 'cashier',
+      status: 'active',
+      salary: 22000,
+      password: 'password123',
+      shopId: 1
+    });
+
+    // Cashier token trying to access another employee's profile
+    await request(app)
+      .get(`/api/employees/${otherEmp.id}`)
+      .set('Authorization', cashierToken)
+      .expect(403);
+  });
 });

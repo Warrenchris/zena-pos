@@ -175,8 +175,11 @@ export default function Employees() {
       key: 'name',
       label: 'Employee Name',
       render: (_, emp) => (
-        <div>
-          <div className="font-semibold text-text-primary text-body">{emp.firstName} {emp.lastName}</div>
+        <div 
+          className="cursor-pointer hover:opacity-80 group"
+          onClick={() => setSelected(emp)}
+        >
+          <div className="font-semibold text-text-primary text-body group-hover:text-primary group-hover:underline">{emp.firstName} {emp.lastName}</div>
           <div className="text-caption text-text-muted">{emp.position || 'Staff'}</div>
         </div>
       )
