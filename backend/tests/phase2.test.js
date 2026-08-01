@@ -38,6 +38,7 @@ describe('Phase 2 Remediation Tests', () => {
   const cleanDb = async () => {
     await ActivityLog.destroy({ where: {} });
     await PendingPayment.destroy({ where: {} });
+    await SaleRefund.destroy({ where: {} });
     await SaleItem.destroy({ where: {} });
     await SalePayment.destroy({ where: {} });
     await Sale.destroy({ where: {} });
