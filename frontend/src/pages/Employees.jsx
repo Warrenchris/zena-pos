@@ -10,7 +10,7 @@ import {
   ClockIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import { employeesAPI, reportsAPI, activityAPI } from '../services/api';
+import { employeesAPI, reportsAPI, activityAPI, usersAPI } from '../services/api';
 import EmployeeDetailsCard from '../components/EmployeeDetailsCard';
 import useCurrency from '../hooks/useCurrency';
 import PageHeader from '../components/ui/PageHeader';
@@ -63,9 +63,33 @@ export default function Employees() {
     try {
       setLoading(true);
       setError(null);
-      const res = await employeesAPI.getAll();
+      const [empRes, userRes] = await Promise.all([
+        employeesAPI.getAll().catch(() => ({ data: [] })),
+        usersAPI.getAll().catch(() => ({ data: [] }))
+      ]);
       if (!mountedRef.current) return;
-      setEmployees(Array.isArray(res.data) ? res.data : []);
+      
+      const empList = Array.isArray(empRes.data) ? empRes.data : [];
+      const userList = Array.isArray(userRes.data) ? userRes.data : [];
+
+      const empEmails = new Set(empList.map(e => e.email?.toLowerCase()).filter(Boolean));
+      
+      const formattedUsers = userList
+        .filter(u => !empEmails.has(u.email?.toLowerCase()))
+        .map(u => ({
+          id: u.id,
+          firstName: u.name ? u.name.split(' ')[0] : 'User',
+          lastName: u.name && u.name.split(' ').length > 1 ? u.name.split(' ').slice(1).join(' ') : '',
+          email: u.email,
+          phone: '-',
+          position: u.role ? u.role.charAt(0).toUpperCase() + u.role.slice(1) : 'Staff',
+          status: u.active ? 'active' : 'inactive',
+          hireDate: u.createdAt,
+          salary: 0,
+          isUserAccount: true
+        }));
+
+      setEmployees([...empList, ...formattedUsers]);
     } catch (e) {
       if (!mountedRef.current) return;
       setError(e?.response?.data?.error || 'Failed to load employee data. Please try again.');
@@ -360,8 +384,18 @@ export default function Employees() {
                     </tr>
                   ) : (
                     employeeStats.map((r, i) => (
-                      <tr key={i} className="hover:bg-surface-2/60 transition-colors">
-                        <td className="p-4 font-semibold text-text-primary flex items-center gap-2">
+                      <tr 
+                        key={i} 
+                        className="hover:bg-surface-2/60 transition-colors cursor-pointer group"
+                        onClick={() => setSelected({ 
+                          id: r.performerId, 
+                          firstName: r.performerName || 'Staff', 
+                          lastName: '',
+                          position: r.role || 'Staff'
+                        })}
+                        title="Click to view full sales performance profile"
+                      >
+                        <td className="p-4 font-semibold text-text-primary flex items-center gap-2 group-hover:text-primary group-hover:underline">
                           <span>{r.performerName || r.name || 'Staff Member'}</span>
                           {r.role && <Badge variant="primary">{r.role}</Badge>}
                         </td>
