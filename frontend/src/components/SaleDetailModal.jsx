@@ -53,7 +53,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
     }
   };
 
-  const customer = sale.Customer || sale.customer || null;
+  const customerName = sale.Customer?.name || sale.customer?.name || sale.customerName || 'Walk-in Customer';
   const employee = sale.Employee || sale.employee || null;
   const user = sale.User || sale.user || null;
 
@@ -156,12 +156,10 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                 </p>
               </div>
             )}
-            {customer && (
-              <div className="pt-2 border-t border-border-default">
-                <p className="text-caption text-text-muted">Customer</p>
-                <p className="text-small font-semibold text-text-primary">{customer.name}</p>
-              </div>
-            )}
+            <div className="pt-2 border-t border-border-default">
+              <p className="text-caption text-text-muted">Customer</p>
+              <p className="text-small font-semibold text-text-primary">{customerName}</p>
+            </div>
           </div>
 
           {/* Payment Info */}

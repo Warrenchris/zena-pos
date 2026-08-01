@@ -7,6 +7,7 @@ const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const Employee = require('../models/Employee');
 const sequelize = require('../config/database');
+const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 
 class EnhancedSaleService {
   constructor() {
@@ -322,7 +323,7 @@ class EnhancedSaleService {
         paymentAmount: sumPayments,
         change: sumPayments > serverTotal ? sumPayments - serverTotal : 0,
         paymentStatus: 'completed',
-        customerName: customer?.name || 'Walk-in Customer',
+        customerName: customer?.name || WALK_IN_CUSTOMER_NAME,
         customerLocation: customer?.location || null,
         customerPhone: customer?.phone || null,
         customerEmail: customer?.email || null,
@@ -362,7 +363,7 @@ class EnhancedSaleService {
 
       // Update customer purchases/loyalty points if applicable
       let finalCustomerId = customerId;
-      if (customer && customer.name && customer.name !== 'Walk-in Customer') {
+      if (customer && customer.name && customer.name !== WALK_IN_CUSTOMER_NAME) {
         let customerRecord = await Customer.findOne({
           where: {
             shopId,

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 
 /**
  * Custom Hook for Persisted Cart in localStorage

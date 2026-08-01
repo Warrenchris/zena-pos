@@ -133,8 +133,8 @@ export default function PaymentModal({
       const response = await api.post('/api/card/initiate', {
         amount: parseFloat(amount),
         currency: 'KES',
-        customerEmail: currentSale.customer.email || 'customer@example.com',
-        customerName: currentSale.customer.name || 'Walk-in Customer',
+        customerEmail: currentSale.customer?.email || 'customer@example.com',
+        customerName: currentSale.customer?.name || 'Walk-in Customer',
         orderId,
       });
 
@@ -256,10 +256,10 @@ export default function PaymentModal({
         paymentMethod: 'mobile',
         paymentAmount: parseFloat(currentSale.total),
         customer: {
-          name: currentSale.customer.name,
+          name: currentSale.customer?.name,
           phone: mpesaPhone,
-          email: currentSale.customer.email,
-          location: currentSale.customer.location
+          email: currentSale.customer?.email,
+          location: currentSale.customer?.location
         },
         customerId: currentSale.customerId || null,
         notes: currentSale.notes
@@ -333,10 +333,10 @@ export default function PaymentModal({
         paymentMethod: 'card',
         paymentAmount: parseFloat(currentSale.total),
         customer: {
-          name: currentSale.customer.name,
-          phone: currentSale.customer.phone || mpesaPhone,
-          email: currentSale.customer.email,
-          location: currentSale.customer.location
+          name: currentSale.customer?.name,
+          phone: currentSale.customer?.phone || mpesaPhone,
+          email: currentSale.customer?.email,
+          location: currentSale.customer?.location
         },
         customerId: currentSale.customerId || null,
         notes: currentSale.notes
@@ -345,8 +345,8 @@ export default function PaymentModal({
       const response = await api.post('/api/card/initiate', {
         amount: currentSale.total,
         currency: 'KES',
-        customerEmail: currentSale.customer.email || 'customer@example.com',
-        customerName: currentSale.customer.name || 'Walk-in Customer',
+        customerEmail: currentSale.customer?.email || 'customer@example.com',
+        customerName: currentSale.customer?.name || 'Walk-in Customer',
         orderId,
         saleData
       });
@@ -451,7 +451,7 @@ export default function PaymentModal({
             <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Customer</span>
             <p className="text-small font-bold text-text-primary truncate">{currentSale.customer?.name || 'Walk-in Customer'}</p>
             {currentSale.customer?.phone && (
-              <p className="text-caption text-text-muted font-mono">{currentSale.customer.phone}</p>
+              <p className="text-caption text-text-muted font-mono">{currentSale.customer?.phone}</p>
             )}
           </div>
         </div>

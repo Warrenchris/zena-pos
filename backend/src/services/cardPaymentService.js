@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 
 /**
  * Initiate Card payment via Flutterwave API
@@ -17,7 +18,7 @@ async function initiateCardPayment({ amount, currency, customerEmail, customerNa
     redirect_url: process.env.FLW_REDIRECT_URL || 'http://localhost:5173/card-redirect',
     customer: {
       email: customerEmail || 'customer@example.com',
-      name: customerName || 'Walk-in Customer'
+      name: customerName || WALK_IN_CUSTOMER_NAME
     },
     customizations: {
       title: 'Zena POS Card Payment',
