@@ -455,6 +455,60 @@ describe('Phase 2 Remediation Tests', () => {
     expect(createdCustomer).toBeDefined();
   });
 
+  // TEST 2.8b — Walk-in sale does not create Customer record
+  test('TEST 2.8b — Walk-in sale does not create Customer record', async () => {
+    const initialCustomerCount = await Customer.count();
+
+    const payload = {
+      items: [{ productId: product.id, quantity: 1, price: 10.00 }],
+      total: 10.00,
+      paymentAmount: 10.00,
+      paymentMethod: 'cash',
+      customerId: null,
+      customer: {
+        name: 'Walk-in Customer'
+      }
+    };
+
+    await request(app)
+      .post('/api/sales')
+      .set('Authorization', adminToken)
+      .send(payload)
+      .expect(201);
+
+    const finalCustomerCount = await Customer.count();
+    expect(finalCustomerCount).toBe(initialCustomerCount);
+  });
+
+  // TEST 2.8c — Sale with customerId updates customer record regardless of customer.name
+  test('TEST 2.8c — Sale with customerId updates customer record regardless of customer.name', async () => {
+    const existing = await Customer.create({
+      name: 'Walk-in Customer',
+      shopId: 1,
+      totalPurchases: 0
+    });
+
+    const payload = {
+      items: [{ productId: product.id, quantity: 1, price: 5.00 }],
+      total: 5.00,
+      paymentAmount: 5.00,
+      paymentMethod: 'cash',
+      customerId: existing.id,
+      customer: {
+        name: 'Walk-in Customer'
+      }
+    };
+
+    await request(app)
+      .post('/api/sales')
+      .set('Authorization', adminToken)
+      .send(payload)
+      .expect(201);
+
+    const updatedCustomer = await Customer.findByPk(existing.id);
+    expect(Number(updatedCustomer.totalPurchases)).toBe(5.00);
+  });
+
   // TEST 2.9 — Employee sales report includes UUID cashier sales
   test('TEST 2.9 — Employee sales report includes UUID cashier sales', async () => {
     // Clear sales first
