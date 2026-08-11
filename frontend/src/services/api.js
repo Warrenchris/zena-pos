@@ -322,6 +322,11 @@ export const settingsAPI = {
   getNotifications: () => api.get('/api/settings/notifications'),
 };
 
+export const permissionsAPI = {
+  getMatrix: () => api.get('/api/permissions/matrix'),
+  updateMatrix: (updates) => api.put('/api/permissions/matrix', { updates }),
+};
+
 // Users (admin only)
 export const usersAPI = {
   getAll: () => api.get('/api/users'),

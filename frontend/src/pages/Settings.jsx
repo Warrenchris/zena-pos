@@ -37,11 +37,15 @@ import {
   KeyIcon
 } from '@heroicons/react/24/outline';
 
+import RolePermissionMatrix from '../components/RolePermissionMatrix';
+
 const Settings = () => {
   const dispatch = useDispatch();
   const settings = useSelector(selectSettings);
   const loading = useSelector(selectLoading);
   const error = useSelector(selectError);
+  const currentUser = useSelector((state) => state.auth?.user);
+  const userRole = currentUser?.role || 'cashier';
   
   const [activeTab, setActiveTab] = useState('general');
   const [formData, setFormData] = useState({});
@@ -218,9 +222,15 @@ const Settings = () => {
 
   const tabs = [
     { id: 'general', name: 'General', icon: CogIcon },
+    { id: 'pos', name: 'POS Configuration', icon: ReceiptPercentIcon },
+    { id: 'receipt', name: 'Receipt & Printer', icon: PrinterIcon },
+    { id: 'payments', name: 'Payment Methods', icon: CreditCardIcon },
     { id: 'currency', name: 'Currency', icon: CurrencyDollarIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
+    ...(userRole === 'admin' || userRole === 'manager'
+      ? [{ id: 'permissions', name: 'Role Permissions', icon: ShieldCheckIcon }]
+      : []),
     { id: 'backup', name: 'Data & Backup', icon: CloudArrowUpIcon },
     { id: 'users', name: 'User Management', icon: UsersIcon },
   ];
@@ -1060,6 +1070,8 @@ const Settings = () => {
         return renderNotificationSettings();
       case 'security':
         return renderSecuritySettings();
+      case 'permissions':
+        return <RolePermissionMatrix />;
       case 'backup':
         return renderBackupSettings();
       case 'users':
