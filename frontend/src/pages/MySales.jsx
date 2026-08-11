@@ -301,7 +301,7 @@ const MySales = () => {
                         {sale.invoiceNumber}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-text-secondary">
-                        {sale.customer?.name || WALK_IN_CUSTOMER_NAME}
+                        {sale.Customer?.name || sale.customer?.name || sale.customerName || WALK_IN_CUSTOMER_NAME}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-text-muted">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-2 text-text-secondary border border-border-default">

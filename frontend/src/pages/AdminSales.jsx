@@ -271,7 +271,7 @@ export default function AdminSales() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-text-primary">
-                        {sale?.Customer?.name || sale?.customerName || WALK_IN_CUSTOMER_NAME}
+                        {sale?.Customer?.name || sale?.customer?.name || sale?.customerName || WALK_IN_CUSTOMER_NAME}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
