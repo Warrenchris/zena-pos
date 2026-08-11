@@ -2,6 +2,7 @@ const Sale = require('../models/Sale');
 const Product = require('../models/Product');
 const Expense = require('../models/Expense');
 const SaleItem = require('../models/SaleItem');
+const SystemSettings = require('../models/SystemSettings');
 const { Op, Sequelize } = require('sequelize');
 const sequelize = require('../config/database');
 const insightsConfig = require('../config/insightsConfig');
