@@ -1,5 +1,15 @@
 const { SystemSettings, Shop } = require('../models');
 const { validationResult } = require('express-validator');
+const { maskSecret, encrypt, isMaskedValue } = require('../utils/encryption');
+
+const sanitizeSettingsResponse = (settingsInstance) => {
+  if (!settingsInstance) return null;
+  const data = settingsInstance.toJSON ? settingsInstance.toJSON() : { ...settingsInstance };
+  if (data.consumerKey) data.consumerKey = maskSecret(data.consumerKey);
+  if (data.consumerSecret) data.consumerSecret = maskSecret(data.consumerSecret);
+  if (data.passkey) data.passkey = maskSecret(data.passkey);
+  return data;
+};
 
 // Get all settings for a shop
 exports.getSettings = async (req, res) => {
@@ -26,7 +36,7 @@ exports.getSettings = async (req, res) => {
 
     res.json({
       success: true,
-      data: settings
+      data: sanitizeSettingsResponse(settings)
     });
   } catch (error) {
     console.error('Error fetching settings:', error);
@@ -61,22 +71,25 @@ exports.updateSettings = async (req, res) => {
     const updateData = req.body;
     console.log('Settings update request for shop', shopId, ':', updateData);
 
-    // 4. Clean and validate settings data
-    const validationResults = validationResult(req);
-    if (!validationResults.isEmpty()) {
-      console.error('Settings validation failed:', validationResults.array());
-      return res.status(400).json({ 
-        error: 'Validation failed',
-        details: validationResults.array() 
-      });
-    }
-
     // Process and clean update data
     const cleanData = {};
     Object.entries(updateData).forEach(([key, value]) => {
       // Only include defined values, allowing explicit null
       if (value !== undefined) {
         cleanData[key] = value;
+      }
+    });
+
+    // Handle M-Pesa secrets: encrypt if provided and not masked placeholder
+    const secretFields = ['consumerKey', 'consumerSecret', 'passkey'];
+    secretFields.forEach((field) => {
+      if (cleanData[field] !== undefined) {
+        if (isMaskedValue(cleanData[field])) {
+          // Keep existing DB secret if user didn't change the masked placeholder
+          delete cleanData[field];
+        } else if (cleanData[field] && typeof cleanData[field] === 'string' && cleanData[field].trim() !== '') {
+          cleanData[field] = encrypt(cleanData[field].trim());
+        }
       }
     });
 
@@ -137,13 +150,13 @@ exports.updateSettings = async (req, res) => {
       }
     });
 
-    // 8. Return updated settings
+    // 8. Return updated settings with secrets sanitized/masked
     await settings.reload(); // Refresh the instance to get the latest data
     
     res.json({
       success: true,
       message: 'Settings updated successfully',
-      data: settings
+      data: sanitizeSettingsResponse(settings)
     });
   } catch (error) {
     console.error('Error updating settings:', error);

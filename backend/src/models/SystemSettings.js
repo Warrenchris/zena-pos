@@ -139,6 +139,60 @@ const SystemSettings = sequelize.define('SystemSettings', {
     defaultValue: true
   },
   
+  // POS & Tax Settings
+  taxRate: {
+    type: DataTypes.DECIMAL(5, 2),
+    defaultValue: 0.00
+  },
+
+  // Receipt Customization & Printer Settings
+  receiptHeader: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  receiptFooter: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  showLogoOnReceipt: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
+  printerType: {
+    type: DataTypes.ENUM('browser', 'thermal'),
+    defaultValue: 'browser'
+  },
+  printerIP: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+
+  // Payment Methods & M-Pesa Credentials
+  paybillNumber: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  tillNumber: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  consumerKey: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  consumerSecret: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  passkey: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  enabledPaymentMethods: {
+    type: DataTypes.JSON,
+    defaultValue: { cash: true, mobile: true, bank: false }
+  },
+
   // Additional Settings (JSON for extensibility)
   additionalSettings: {
     type: DataTypes.JSON,
@@ -221,6 +275,18 @@ SystemSettings.getDefaultSettings = function() {
     backupRetentionDays: 30,
     allowUserRegistration: false,
     requireEmailVerification: true,
+    taxRate: 0.00,
+    receiptHeader: null,
+    receiptFooter: null,
+    showLogoOnReceipt: true,
+    printerType: 'browser',
+    printerIP: null,
+    paybillNumber: null,
+    tillNumber: null,
+    consumerKey: null,
+    consumerSecret: null,
+    passkey: null,
+    enabledPaymentMethods: { cash: true, mobile: true, bank: false },
     additionalSettings: {}
   };
 };

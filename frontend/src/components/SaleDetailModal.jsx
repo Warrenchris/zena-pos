@@ -14,11 +14,13 @@ import { format } from 'date-fns';
 import { usePermissions } from '../hooks/usePermissions';
 import api from '../services/api';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
+import { useSelector } from 'react-redux';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
 
 const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => {
+  const settings = useSelector((state) => state.settings?.settings || {});
   const { format: formatCurrency } = useCurrency();
   const { hasPermission } = usePermissions();
 
@@ -220,6 +222,22 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
           </div>
         </div>
 
+        {/* Receipt Customization Header */}
+        {(settings.showLogoOnReceipt !== false && (settings.businessLogo || shop?.logo)) && (
+          <div className="flex justify-center my-2">
+            <img 
+              src={settings.businessLogo || shop?.logo} 
+              alt="Business Logo" 
+              className="h-16 w-auto object-contain rounded-lg border border-border-default"
+            />
+          </div>
+        )}
+        {settings.receiptHeader && (
+          <div className="p-3 rounded-xl bg-surface-2/30 border border-border-default text-center text-small text-text-secondary whitespace-pre-line font-medium">
+            {settings.receiptHeader}
+          </div>
+        )}
+
         {/* Totals Summary */}
         <div className="p-4 rounded-xl bg-surface-2/50 border border-border-default space-y-2 text-small">
           {subtotal > 0 && (
@@ -245,6 +263,13 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
             <span className="text-primary">{formatCurrency(total)}</span>
           </div>
         </div>
+
+        {/* Receipt Customization Footer */}
+        {settings.receiptFooter && (
+          <div className="p-3 rounded-xl bg-surface-2/30 border border-border-default text-center text-caption text-text-muted whitespace-pre-line">
+            {settings.receiptFooter}
+          </div>
+        )}
 
         {/* Modal Actions */}
         <div className="flex gap-3 justify-end pt-4 border-t border-border-default">

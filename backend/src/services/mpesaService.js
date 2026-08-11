@@ -17,18 +17,43 @@ function formatPhoneNumber(phone) {
   return cleaned;
 }
 
+const { SystemSettings } = require('../models');
+const { decrypt } = require('../utils/encryption');
+
+/**
+ * Retrieve M-Pesa credentials from DB SystemSettings (decrypted), falling back to process.env
+ */
+async function getMpesaConfig(shopId) {
+  let dbSettings = null;
+  if (shopId) {
+    dbSettings = await SystemSettings.findOne({ where: { shopId } }).catch(() => null);
+  }
+
+  const dbConsumerKey = dbSettings?.consumerKey ? decrypt(dbSettings.consumerKey) : null;
+  const dbConsumerSecret = dbSettings?.consumerSecret ? decrypt(dbSettings.consumerSecret) : null;
+  const dbPasskey = dbSettings?.passkey ? decrypt(dbSettings.passkey) : null;
+  const dbShortcode = dbSettings?.paybillNumber || dbSettings?.tillNumber || null;
+
+  return {
+    consumerKey: dbConsumerKey || process.env.MPESA_CONSUMER_KEY,
+    consumerSecret: dbConsumerSecret || process.env.MPESA_CONSUMER_SECRET,
+    shortcode: dbShortcode || process.env.MPESA_SHORTCODE,
+    passkey: dbPasskey || process.env.MPESA_PASSKEY,
+    callbackUrl: process.env.MPESA_CALLBACK_URL
+  };
+}
+
 /**
  * Call Safaricom Daraja OAuth endpoint to get a bearer token
  */
-async function getOAuthToken() {
-  const consumerKey = process.env.MPESA_CONSUMER_KEY;
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+async function getOAuthToken(shopId) {
+  const config = await getMpesaConfig(shopId);
 
-  if (!consumerKey || !consumerSecret) {
+  if (!config.consumerKey || !config.consumerSecret) {
     throw new Error('M-Pesa credentials not configured (MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET).');
   }
 
-  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+  const auth = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
   const env = process.env.MPESA_ENV === 'production' ? 'api' : 'sandbox';
   const url = `https://${env}.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials`;
 
@@ -49,11 +74,10 @@ async function getOAuthToken() {
  * Initiate Daraja STK Push request
  */
 async function initiateStkPush({ phone, amount, orderId, shopId }) {
-  const accessToken = await getOAuthToken();
+  const config = await getMpesaConfig(shopId);
+  const accessToken = await getOAuthToken(shopId);
   
-  const shortcode = process.env.MPESA_SHORTCODE;
-  const passkey = process.env.MPESA_PASSKEY;
-  const callbackUrl = process.env.MPESA_CALLBACK_URL;
+  const { shortcode, passkey, callbackUrl } = config;
 
   if (!shortcode || !passkey || !callbackUrl) {
     throw new Error('M-Pesa configuration missing (MPESA_SHORTCODE, MPESA_PASSKEY, MPESA_CALLBACK_URL).');

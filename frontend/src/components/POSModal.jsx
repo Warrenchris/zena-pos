@@ -114,8 +114,18 @@ export default function POSModal({ products = [], customers = [], onClose }) {
     return Math.max(0, getSubtotal() - couponDiscount);
   };
 
+  const settings = useSelector((state) => state.settings?.settings || {});
+  const taxRateNum = parseFloat(settings.taxRate !== undefined && settings.taxRate !== null ? settings.taxRate : 0);
+
+  const enabledMethodsObj = settings.enabledPaymentMethods || { cash: true, mobile: true, bank: false };
+  const availableMethods = [];
+  if (enabledMethodsObj.cash !== false) availableMethods.push({ id: 'cash', label: 'Cash' });
+  if (enabledMethodsObj.mobile !== false) availableMethods.push({ id: 'mobile', label: 'Mobile Money' });
+  if (enabledMethodsObj.bank !== false || enabledMethodsObj.card !== false) availableMethods.push({ id: 'card', label: 'Card / Bank' });
+  if (availableMethods.length === 0) availableMethods.push({ id: 'cash', label: 'Cash' });
+
   const getTax = () => {
-    return getDiscountedSubtotal() * 0.08; // 8% tax on net subtotal
+    return getDiscountedSubtotal() * (taxRateNum / 100);
   };
 
   const getTotal = () => {
@@ -296,18 +306,18 @@ export default function POSModal({ products = [], customers = [], onClose }) {
                 Payment Method
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {['cash', 'card', 'check'].map((method) => (
+                {availableMethods.map((m) => (
                   <button
-                    key={method}
+                    key={m.id}
                     type="button"
-                    onClick={() => setPaymentMethod(method)}
+                    onClick={() => setPaymentMethod(m.id)}
                     className={`py-2 px-3 rounded-xl border text-caption font-semibold uppercase tracking-wider transition-all ${
-                      paymentMethod === method
+                      paymentMethod === m.id
                         ? 'bg-primary text-white border-primary shadow-2xs'
                         : 'bg-surface border-border-default text-text-secondary hover:bg-surface-2'
                     }`}
                   >
-                    {method}
+                    {m.label}
                   </button>
                 ))}
               </div>
@@ -369,7 +379,7 @@ export default function POSModal({ products = [], customers = [], onClose }) {
                 </div>
               )}
               <div className="flex justify-between text-text-secondary">
-                <span>Tax (8%)</span>
+                <span>Tax ({taxRateNum}%)</span>
                 <span>{format(getTax())}</span>
               </div>
               <div className="flex justify-between text-h3 font-bold text-text-primary pt-2 border-t border-border-default">
