@@ -4,7 +4,7 @@ import { Tab } from '@headlessui/react'
 import { CogIcon, PaintBrushIcon, GlobeAltIcon, BuildingOfficeIcon } from '@heroicons/react/24/outline'
 
 export default function CompanySettings() {
-  const [companyForm, setCompanyForm] = useState({ name: '', address: '', phone: '' })
+  const [companyForm, setCompanyForm] = useState({ name: '', address: '', phone: '', kraPin: '', registrationNumber: '' })
   const [themeForm, setThemeForm] = useState({ 
     theme: 'light',
     primaryColor: '#3B82F6',
@@ -36,7 +36,9 @@ export default function CompanySettings() {
         setCompanyForm({ 
           name: data.name || '', 
           address: data.address || '', 
-          phone: data.phone || '' 
+          phone: data.phone || '',
+          kraPin: data.kraPin || '',
+          registrationNumber: data.registrationNumber || ''
         })
         // In a real app, these would be fetched from the API
         setThemeForm(data.theme || themeForm)
@@ -165,6 +167,26 @@ export default function CompanySettings() {
                     name="address"
                     value={companyForm.address}
                     onChange={onCompanyChange}
+                    className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">KRA PIN</label>
+                  <input
+                    name="kraPin"
+                    value={companyForm.kraPin}
+                    onChange={onCompanyChange}
+                    placeholder="e.g. A012345678Z"
+                    className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Business Registration Number</label>
+                  <input
+                    name="registrationNumber"
+                    value={companyForm.registrationNumber}
+                    onChange={onCompanyChange}
+                    placeholder="e.g. CPR/2023/12345"
                     className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2"
                   />
                 </div>

@@ -47,5 +47,6 @@ router.post(
 );
 
 router.get('/profile', auth, authController.getProfile);
+router.post('/change-password', auth, authController.changePassword);
 
 module.exports = router;

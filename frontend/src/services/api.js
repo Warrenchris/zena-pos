@@ -199,6 +199,7 @@ export const authAPI = {
   },
   forgotPassword: (email) => api.post('/api/auth/forgot-password', { email }),
   resetPassword: (payload) => api.post('/api/auth/reset-password', payload),
+  changePassword: (payload) => api.post('/api/auth/change-password', payload),
 };
 
 // Brands API
@@ -314,6 +315,7 @@ export const expensesAPI = {
 export const settingsAPI = {
   getAll: () => api.get('/api/settings'),
   update: (data) => api.put('/api/settings', data),
+  uploadLogo: (formData) => api.post('/api/settings/logo', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   reset: () => api.post('/api/settings/reset'),
   getCurrency: () => api.get('/api/settings/currency'),
   getTheme: () => api.get('/api/settings/theme'),

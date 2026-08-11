@@ -187,6 +187,44 @@ exports.updateSettings = async (req, res) => {
   }
 };
 
+// Upload business logo
+exports.uploadLogo = async (req, res) => {
+  try {
+    const { shopId } = req;
+    if (!shopId) {
+      return res.status(400).json({ error: 'Shop context required' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const logoUrl = `/uploads/logos/${req.file.filename}`;
+
+    let settings = await SystemSettings.findOne({ where: { shopId } });
+    if (!settings) {
+      const defaultSettings = SystemSettings.getDefaultSettings();
+      settings = await SystemSettings.create({
+        shopId,
+        ...defaultSettings,
+        businessLogo: logoUrl
+      });
+    } else {
+      await settings.update({ businessLogo: logoUrl });
+    }
+
+    res.json({
+      success: true,
+      message: 'Business logo uploaded successfully',
+      logoUrl,
+      data: sanitizeSettingsResponse(settings)
+    });
+  } catch (error) {
+    console.error('Error uploading logo:', error);
+    res.status(500).json({ error: 'Failed to upload logo', details: error.message });
+  }
+};
+
 // Reset settings to defaults
 exports.resetSettings = async (req, res) => {
   try {

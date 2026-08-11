@@ -256,3 +256,52 @@ exports.getProfile = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
+
+// Authenticated user/employee change password
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    const { id: userId, isEmployee } = req.user;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: 'Current password, new password, and confirmation are required.' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'New password and confirmation do not match.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    }
+
+    let account = null;
+    if (isEmployee) {
+      account = await Employee.findByPk(userId);
+    } else {
+      account = await User.findByPk(userId);
+    }
+
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found.' });
+    }
+
+    // Verify current password
+    const isValid = await account.validatePassword(currentPassword);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Incorrect current password.' });
+    }
+
+    // Set new password (beforeUpdate hook will hash it)
+    account.password = newPassword;
+    await account.save();
+
+    return res.json({
+      success: true,
+      message: 'Password updated successfully.'
+    });
+  } catch (error) {
+    logger.error('Error in changePassword:', error);
+    return res.status(500).json({ error: 'Failed to change password.', details: error.message });
+  }
+};

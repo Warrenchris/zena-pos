@@ -3,14 +3,64 @@ const router = express.Router();
 const { body } = require('express-validator');
 const { auth } = require('../middleware/auth');
 const { checkPermission } = require('../middleware/rolePermissions');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
 const {
   getSettings,
   updateSettings,
   resetSettings,
   getCurrencyFormat,
   getThemeSettings,
-  getNotificationSettings
+  getNotificationSettings,
+  uploadLogo: uploadLogoController
 } = require('../controllers/settingsController');
+
+const uploadsDir = path.join(__dirname, '../../uploads/logos');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const uniqueName = `logo_${req.shopId || 'shop'}_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, uniqueName);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only image files (JPEG, PNG, WEBP, GIF, SVG) are allowed.'), false);
+  }
+};
+
+const uploadLogo = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+  fileFilter
+});
+
+const handleLogoUploadMiddleware = (req, res, next) => {
+  uploadLogo.single('logo')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size limit exceeded. Maximum allowed size is 2MB.' });
+      }
+      return res.status(400).json({ error: err.message });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+};
 
 // Custom validator for optional nullable fields
 const isNullable = (value) => {
@@ -117,6 +167,9 @@ router.use(checkPermission('manage_settings'));
 
 // Update settings
 router.put('/', settingsValidation, updateSettings);
+
+// Upload business logo
+router.post('/logo', handleLogoUploadMiddleware, uploadLogoController);
 
 // Reset settings to defaults
 router.post('/reset', resetSettings);
