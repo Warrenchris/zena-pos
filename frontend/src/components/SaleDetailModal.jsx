@@ -15,12 +15,13 @@ import { usePermissions } from '../hooks/usePermissions';
 import api from '../services/api';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import { useSelector } from 'react-redux';
+import { selectSettings } from '../store/slices/settingsSlice';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
 
 const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => {
-  const settings = useSelector((state) => state.settings?.settings || {});
+  const settings = useSelector(selectSettings);
   const { format: formatCurrency } = useCurrency();
   const { hasPermission } = usePermissions();
 
