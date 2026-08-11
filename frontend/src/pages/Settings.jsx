@@ -228,7 +228,7 @@ const Settings = () => {
     { id: 'currency', name: 'Currency', icon: CurrencyDollarIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
-    ...(userRole === 'admin' || userRole === 'manager'
+    ...(userRole === 'admin'
       ? [{ id: 'permissions', name: 'Role Permissions', icon: ShieldCheckIcon }]
       : []),
     { id: 'backup', name: 'Data & Backup', icon: CloudArrowUpIcon },
