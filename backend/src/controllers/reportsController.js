@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Employee = require('../models/Employee');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
+const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 // GET /api/reports/sales-summary?range=daily|monthly&startDate=&endDate=
 exports.getSalesSummary = async (req, res) => {
@@ -44,7 +45,7 @@ exports.getSalesSummary = async (req, res) => {
       max: salesRange?.getDataValue('maxDate')
     });
 
-    const where = { shopId };
+    const where = { shopId, ...NON_CANCELLED_SALE_FILTER };
     
     // If we have sales, use their date range if no specific dates provided
     if (salesRange?.getDataValue('minDate')) {
@@ -257,13 +258,15 @@ exports.getSalesSummary = async (req, res) => {
 exports.getProfitAndLoss = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const where = { shopId: req.user.shopId };
+    const where = { shopId: req.user.shopId, ...NON_CANCELLED_SALE_FILTER };
+    const expenseWhere = { shopId: req.user.shopId };
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
       const e = endDate ? new Date(endDate) : new Date();
       s.setHours(0,0,0,0);
       e.setHours(23,59,59,999);
       where.createdAt = { [Op.between]: [ s, e ] };
+      expenseWhere.createdAt = { [Op.between]: [ s, e ] };
     }
 
     // Revenue components (exclude tax, subtract discounts)
@@ -300,7 +303,7 @@ exports.getProfitAndLoss = async (req, res) => {
     const cogs = Number(cogsRow?.cogs || 0);
 
     // Operating expenses
-    const operatingExpenses = Number(await Expense.sum('amount', { where }) || 0);
+    const operatingExpenses = Number(await Expense.sum('amount', { where: expenseWhere }) || 0);
 
     const grossProfit = revenue - cogs;
     const profit = grossProfit - operatingExpenses;
@@ -336,7 +339,7 @@ exports.getTaxEstimate = async (req, res) => {
   try {
     const { startDate, endDate, rate } = req.query;
     const taxRate = rate ? Number(rate) : 0.16; // default 16%
-    const where = { shopId: req.user.shopId };
+    const where = { shopId: req.user.shopId, ...NON_CANCELLED_SALE_FILTER };
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
       const e = endDate ? new Date(endDate) : new Date();
@@ -359,7 +362,7 @@ exports.getEmployeeSales = async (req, res) => {
     const { startDate, endDate, limit = 10 } = req.query;
     const where = {
       shopId: req.user.shopId,
-      saleStatus: { [Op.ne]: 'cancelled' }
+      ...NON_CANCELLED_SALE_FILTER
     };
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');

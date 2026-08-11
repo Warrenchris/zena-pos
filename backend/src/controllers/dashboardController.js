@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const SaleItem = require('../models/SaleItem');
 const User = require('../models/User');
 const { parseDate } = require('../utils/dateUtils');
+const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 // Helper function to resolve start and end dates from req
 const getValidatedDates = (req) => {
@@ -37,6 +38,7 @@ const dashboardController = {
         Sale.findAll({
           where: {
             shopId,
+            ...NON_CANCELLED_SALE_FILTER,
             createdAt: { [Op.between]: [start, end] }
           },
           include: [{ model: SaleItem }]
@@ -62,6 +64,7 @@ const dashboardController = {
       const prevSales = await Sale.findAll({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [prevStart, start] }
         }
       });
@@ -112,6 +115,7 @@ const dashboardController = {
       const sales = await Sale.findAll({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [start, end] }
         },
         order: [['createdAt', 'ASC']]
@@ -200,6 +204,7 @@ const dashboardController = {
       const visitorData = await Sale.findAll({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [start, end] }
         },
         attributes: [
@@ -217,6 +222,7 @@ const dashboardController = {
       const prevVisitors = await Sale.count({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [prevStart, start] }
         },
         distinct: true,
@@ -251,6 +257,7 @@ const dashboardController = {
       const orderData = await Sale.findAll({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [start, end] }
         },
         attributes: [
@@ -270,6 +277,7 @@ const dashboardController = {
       const prevOrders = await Sale.count({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [prevStart, start] }
         }
       });
@@ -277,6 +285,7 @@ const dashboardController = {
       const prevRevenue = await Sale.sum('total', {
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [prevStart, start] }
         }
       }) || 0;
@@ -309,6 +318,7 @@ const dashboardController = {
       const platforms = await Sale.findAll({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [start, end] }
         },
         attributes: [
