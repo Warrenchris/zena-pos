@@ -28,7 +28,10 @@ import {
   CheckIcon,
   XMarkIcon,
   ExclamationTriangleIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  PrinterIcon,
+  CreditCardIcon,
+  ReceiptPercentIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -580,10 +583,247 @@ const Settings = () => {
     </div>
   );
 
+  const renderPosSettings = () => (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Default Tax / VAT Rate (%)
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          max="100"
+          value={formData.taxRate !== undefined && formData.taxRate !== null ? formData.taxRate : 0}
+          onChange={(e) => handleInputChange('taxRate', parseFloat(e.target.value) || 0)}
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          placeholder="e.g. 16.00"
+        />
+        <p className="text-xs text-white/50 mt-1">
+          This tax rate will be automatically applied to net order subtotals in the POS checkout modal.
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderReceiptSettings = () => (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Receipt Header Text
+        </label>
+        <textarea
+          rows={3}
+          value={formData.receiptHeader || ''}
+          onChange={(e) => handleInputChange('receiptHeader', e.target.value)}
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          placeholder="Welcome to Zana POS! Thank you for shopping with us."
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Receipt Footer Text
+        </label>
+        <textarea
+          rows={3}
+          value={formData.receiptFooter || ''}
+          onChange={(e) => handleInputChange('receiptFooter', e.target.value)}
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          placeholder="Goods once sold are non-refundable. Please come again!"
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-medium text-white">Show Business Logo on Receipt</h4>
+          <p className="text-sm text-white/60">Display uploaded shop logo at the top of receipts</p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.showLogoOnReceipt !== false}
+            onChange={(e) => handleInputChange('showLogoOnReceipt', e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-zana-yellow"></div>
+        </label>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Printer Type
+        </label>
+        <select
+          value={formData.printerType || 'browser'}
+          onChange={(e) => handleInputChange('printerType', e.target.value)}
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+        >
+          <option value="browser" className="bg-brand-black text-white">Browser Print Dialog</option>
+          <option value="thermal" className="bg-brand-black text-white">Thermal POS Printer (ESC/POS)</option>
+        </select>
+      </div>
+
+      {formData.printerType === 'thermal' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Printer IP Address / Port
+          </label>
+          <input
+            type="text"
+            value={formData.printerIP || ''}
+            onChange={(e) => handleInputChange('printerIP', e.target.value)}
+            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            placeholder="e.g. 192.168.1.100:9100"
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  const renderPaymentSettings = () => {
+    const enabledMethods = formData.enabledPaymentMethods || { cash: true, mobile: true, bank: false };
+    
+    const handleMethodToggle = (methodKey, isChecked) => {
+      handleInputChange('enabledPaymentMethods', {
+        ...enabledMethods,
+        [methodKey]: isChecked
+      });
+    };
+
+    return (
+      <div className="space-y-8">
+        <div>
+          <h3 className="text-md font-semibold text-zana-yellow mb-4">Enabled Payment Methods</h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-black/40 border border-zana-borderTint rounded-md">
+              <div>
+                <h4 className="text-sm font-medium text-white">Cash Payments</h4>
+                <p className="text-xs text-white/60">Allow cash checkout at POS</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={enabledMethods.cash !== false}
+                onChange={(e) => handleMethodToggle('cash', e.target.checked)}
+                className="h-5 w-5 text-zana-yellow focus:ring-zana-yellow border-gray-600 rounded bg-gray-800"
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-black/40 border border-zana-borderTint rounded-md">
+              <div>
+                <h4 className="text-sm font-medium text-white">Mobile Money (M-Pesa)</h4>
+                <p className="text-xs text-white/60">Allow STK push and M-Pesa mobile money checkout</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={enabledMethods.mobile !== false}
+                onChange={(e) => handleMethodToggle('mobile', e.target.checked)}
+                className="h-5 w-5 text-zana-yellow focus:ring-zana-yellow border-gray-600 rounded bg-gray-800"
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-black/40 border border-zana-borderTint rounded-md">
+              <div>
+                <h4 className="text-sm font-medium text-white">Card / Bank Transfer</h4>
+                <p className="text-xs text-white/60">Allow debit/credit card and bank transfer checkout</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={enabledMethods.bank === true || enabledMethods.card === true}
+                onChange={(e) => handleMethodToggle('bank', e.target.checked)}
+                className="h-5 w-5 text-zana-yellow focus:ring-zana-yellow border-gray-600 rounded bg-gray-800"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-zana-borderTint space-y-4">
+          <h3 className="text-md font-semibold text-zana-yellow mb-2">M-Pesa Daraja API Credentials</h3>
+          <p className="text-xs text-white/60 mb-4">
+            Enter your Safaricom Daraja API details. Secrets will be encrypted at rest.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Paybill Number
+              </label>
+              <input
+                type="text"
+                value={formData.paybillNumber || ''}
+                onChange={(e) => handleInputChange('paybillNumber', e.target.value)}
+                className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+                placeholder="e.g. 174379"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Till Number
+              </label>
+              <input
+                type="text"
+                value={formData.tillNumber || ''}
+                onChange={(e) => handleInputChange('tillNumber', e.target.value)}
+                className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+                placeholder="e.g. 888999"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Consumer Key
+            </label>
+            <input
+              type="password"
+              value={formData.consumerKey || ''}
+              onChange={(e) => handleInputChange('consumerKey', e.target.value)}
+              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              placeholder="Enter Consumer Key"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Consumer Secret
+            </label>
+            <input
+              type="password"
+              value={formData.consumerSecret || ''}
+              onChange={(e) => handleInputChange('consumerSecret', e.target.value)}
+              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              placeholder="Enter Consumer Secret"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Online Passkey
+            </label>
+            <input
+              type="password"
+              value={formData.passkey || ''}
+              onChange={(e) => handleInputChange('passkey', e.target.value)}
+              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              placeholder="Enter Passkey"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'general':
         return renderGeneralSettings();
+      case 'pos':
+        return renderPosSettings();
+      case 'receipt':
+        return renderReceiptSettings();
+      case 'payments':
+        return renderPaymentSettings();
       case 'currency':
         return renderCurrencySettings();
       case 'notifications':
