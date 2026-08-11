@@ -63,7 +63,7 @@ node backend/test-sprint4-settings.js   # ✅ SKU/EAN-13 Generator & Low-Stock F
    # Generate key command
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
-2. **`uploads/` Folder Permissions**: Ensure the `backend/public/uploads` directory has write permissions for Multer file uploads.
+2. **`uploads/` Folder Permissions**: Ensure the `backend/uploads` directory (and subfolder `logos/`) has write permissions for Multer file uploads.
 3. **Static File Serving**: Confirm reverse proxies (Nginx / Cloudflare) forward `/uploads/` requests cleanly to Node static middleware.
 
 ### 📌 Backlog Tickets & Future Scope
