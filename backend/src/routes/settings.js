@@ -150,7 +150,11 @@ const settingsValidation = [
   body('consumerKey').optional({ nullable: true }).isString(),
   body('consumerSecret').optional({ nullable: true }).isString(),
   body('passkey').optional({ nullable: true }).isString(),
-  body('enabledPaymentMethods').optional().isObject()
+  body('enabledPaymentMethods').optional().isObject(),
+  body('lowStockThreshold').optional().isInt({ min: 0, max: 10000 }).withMessage('Low stock threshold must be a non-negative integer'),
+  body('skuPrefix').optional().isString().isLength({ min: 1, max: 20 }),
+  body('barcodeFormat').optional().isIn(['EAN13', 'UPC', 'CODE128']),
+  body('aiDigestFrequency').optional().isIn(['none', 'daily', 'weekly'])
 ];
 
 // All routes require authentication

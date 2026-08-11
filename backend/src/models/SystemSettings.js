@@ -193,6 +193,28 @@ const SystemSettings = sequelize.define('SystemSettings', {
     defaultValue: { cash: true, mobile: true, bank: false }
   },
 
+  // Inventory & AI Settings
+  lowStockThreshold: {
+    type: DataTypes.INTEGER,
+    defaultValue: 10,
+    allowNull: false
+  },
+  skuPrefix: {
+    type: DataTypes.STRING,
+    defaultValue: 'SKU',
+    allowNull: false
+  },
+  barcodeFormat: {
+    type: DataTypes.STRING,
+    defaultValue: 'EAN13',
+    allowNull: false
+  },
+  aiDigestFrequency: {
+    type: DataTypes.ENUM('none', 'daily', 'weekly'),
+    defaultValue: 'weekly',
+    allowNull: false
+  },
+
   // Additional Settings (JSON for extensibility)
   additionalSettings: {
     type: DataTypes.JSON,
@@ -233,7 +255,8 @@ SystemSettings.prototype.getNotificationSettings = function() {
     enableSoundAlerts: this.enableSoundAlerts,
     enableEmailAlerts: this.enableEmailAlerts,
     enableSuccessToasts: this.enableSuccessToasts,
-    enableErrorToasts: this.enableErrorToasts
+    enableErrorToasts: this.enableErrorToasts,
+    aiDigestFrequency: this.aiDigestFrequency
   };
 };
 
@@ -287,6 +310,10 @@ SystemSettings.getDefaultSettings = function() {
     consumerSecret: null,
     passkey: null,
     enabledPaymentMethods: { cash: true, mobile: true, bank: false },
+    lowStockThreshold: 10,
+    skuPrefix: 'SKU',
+    barcodeFormat: 'EAN13',
+    aiDigestFrequency: 'weekly',
     additionalSettings: {}
   };
 };
