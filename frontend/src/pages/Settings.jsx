@@ -571,79 +571,159 @@ const Settings = () => {
   );
 
   const renderSecuritySettings = () => (
-    <div className="space-y-6">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Password Minimum Length
-        </label>
-        <input
-          type="number"
-          min="6"
-          max="20"
-          value={formData.passwordMinLength || 8}
-          onChange={(e) => handleInputChange('passwordMinLength', parseInt(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-sm font-medium text-gray-900">Require Special Characters</h4>
-          <p className="text-sm text-gray-500">Force special characters in passwords</p>
+    <div className="space-y-8">
+      {/* Change Password Form */}
+      <div className="p-5 bg-black/40 border border-zana-borderTint rounded-lg space-y-4">
+        <div className="flex items-center space-x-2 text-zana-yellow">
+          <KeyIcon className="h-5 w-5" />
+          <h3 className="text-md font-semibold">Change Account Password</h3>
         </div>
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={formData.requireSpecialChars || false}
-            onChange={(e) => handleInputChange('requireSpecialChars', e.target.checked)}
-            className="sr-only peer"
-          />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-        </label>
+
+        {passwordStatus && (
+          <div
+            className={`p-3 rounded-md text-sm flex items-center ${
+              passwordStatus.type === 'success'
+                ? 'bg-green-950/40 border border-green-500/50 text-green-300'
+                : 'bg-red-950/40 border border-red-500/50 text-red-300'
+            }`}
+          >
+            {passwordStatus.type === 'success' ? (
+              <CheckIcon className="h-5 w-5 mr-2 shrink-0 text-green-400" />
+            ) : (
+              <ExclamationTriangleIcon className="h-5 w-5 mr-2 shrink-0 text-red-400" />
+            )}
+            <span>{passwordStatus.message}</span>
+          </div>
+        )}
+
+        <form onSubmit={handlePasswordSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Current Password
+            </label>
+            <input
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              placeholder="Enter current password"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              New Password
+            </label>
+            <input
+              type="password"
+              value={passwordForm.newPassword}
+              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              placeholder="Enter new password"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Confirm New Password
+            </label>
+            <input
+              type="password"
+              value={passwordForm.confirmPassword}
+              onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              placeholder="Confirm new password"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={passwordLoading}
+            className={`px-4 py-2 text-sm font-medium text-black bg-zana-yellow rounded-md hover:bg-zana-yellow/90 focus:outline-none ${
+              passwordLoading ? 'opacity-50 cursor-wait' : ''
+            }`}
+          >
+            {passwordLoading ? 'Updating Password...' : 'Update Password'}
+          </button>
+        </form>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Session Timeout (minutes)
-        </label>
-        <input
-          type="number"
-          min="30"
-          max="1440"
-          value={formData.sessionTimeout || 480}
-          onChange={(e) => handleInputChange('sessionTimeout', parseInt(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div className="flex items-center justify-between">
+      <div className="pt-4 border-t border-zana-borderTint space-y-6">
+        <h3 className="text-md font-semibold text-white">System Security Policies</h3>
+        
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Two-Factor Authentication</h4>
-          <p className="text-sm text-gray-500">Enable 2FA for enhanced security</p>
-        </div>
-        <label className="relative inline-flex items-center cursor-pointer">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Password Minimum Length
+          </label>
           <input
-            type="checkbox"
-            checked={formData.enableTwoFactor || false}
-            onChange={(e) => handleInputChange('enableTwoFactor', e.target.checked)}
-            className="sr-only peer"
+            type="number"
+            min="6"
+            max="20"
+            value={formData.passwordMinLength || 8}
+            onChange={(e) => handleInputChange('passwordMinLength', parseInt(e.target.value))}
+            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-        </label>
-      </div>
+        </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Max Login Attempts
-        </label>
-        <input
-          type="number"
-          min="3"
-          max="10"
-          value={formData.maxLoginAttempts || 5}
-          onChange={(e) => handleInputChange('maxLoginAttempts', parseInt(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-white">Require Special Characters</h4>
+            <p className="text-sm text-white/60">Force special characters in passwords</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.requireSpecialChars || false}
+              onChange={(e) => handleInputChange('requireSpecialChars', e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-zana-yellow"></div>
+          </label>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Session Timeout (minutes)
+          </label>
+          <input
+            type="number"
+            min="30"
+            max="1440"
+            value={formData.sessionTimeout || 480}
+            onChange={(e) => handleInputChange('sessionTimeout', parseInt(e.target.value))}
+            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-white">Two-Factor Authentication</h4>
+            <p className="text-sm text-white/60">Enable 2FA for enhanced security</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.enableTwoFactor || false}
+              onChange={(e) => handleInputChange('enableTwoFactor', e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-zana-yellow"></div>
+          </label>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Max Login Attempts
+          </label>
+          <input
+            type="number"
+            min="3"
+            max="10"
+            value={formData.maxLoginAttempts || 5}
+            onChange={(e) => handleInputChange('maxLoginAttempts', parseInt(e.target.value))}
+            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          />
+        </div>
       </div>
     </div>
   );
