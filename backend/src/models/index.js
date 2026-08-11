@@ -23,6 +23,8 @@ const Coupon = require('./Coupon');
 const DiscountRule = require('./DiscountRule');
 const Purchase = require('./Purchase');
 const PurchaseOrder = require('./PurchaseOrder');
+const Permission = require('./Permission');
+const RolePermission = require('./RolePermission');
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -133,5 +135,7 @@ module.exports = {
   Coupon,
   DiscountRule,
   Purchase,
-  PurchaseOrder
+  PurchaseOrder,
+  Permission,
+  RolePermission
 };
