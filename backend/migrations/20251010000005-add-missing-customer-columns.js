@@ -4,8 +4,10 @@ module.exports = {
   up: async (queryInterface, Sequelize) => {
     const tableInfo = await queryInterface.describeTable('Customers');
 
+    const hasCol = (name) => Object.keys(tableInfo).some(k => k.toLowerCase() === name.toLowerCase());
+
     // 1. Add loyaltyPoints if not present
-    if (!tableInfo.loyaltyPoints) {
+    if (!hasCol('loyaltyPoints')) {
       await queryInterface.addColumn('Customers', 'loyaltyPoints', {
         type: Sequelize.INTEGER,
         defaultValue: 0
@@ -13,7 +15,7 @@ module.exports = {
     }
 
     // 2. Add totalPurchases if not present
-    if (!tableInfo.totalPurchases) {
+    if (!hasCol('totalPurchases')) {
       await queryInterface.addColumn('Customers', 'totalPurchases', {
         type: Sequelize.DECIMAL(10, 2),
         defaultValue: 0.00
@@ -21,7 +23,7 @@ module.exports = {
     }
 
     // 3. Add lastVisit if not present
-    if (!tableInfo.lastVisit) {
+    if (!hasCol('lastVisit')) {
       await queryInterface.addColumn('Customers', 'lastVisit', {
         type: Sequelize.DATE,
         allowNull: true
@@ -29,7 +31,7 @@ module.exports = {
     }
 
     // 4. Add notes if not present
-    if (!tableInfo.notes) {
+    if (!hasCol('notes')) {
       await queryInterface.addColumn('Customers', 'notes', {
         type: Sequelize.TEXT,
         allowNull: true
@@ -37,7 +39,7 @@ module.exports = {
     }
 
     // 5. Add active if not present
-    if (!tableInfo.active) {
+    if (!hasCol('active')) {
       await queryInterface.addColumn('Customers', 'active', {
         type: Sequelize.BOOLEAN,
         defaultValue: true
