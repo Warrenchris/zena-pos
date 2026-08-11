@@ -19,6 +19,14 @@ const Shop = sequelize.define('Shop', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  kraPin: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  registrationNumber: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
