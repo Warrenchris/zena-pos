@@ -17,6 +17,7 @@ import {
   formatCurrency
 } from '../store/slices/settingsSlice';
 import { validateSettings } from '../utils/validation';
+import { settingsAPI, authAPI, shopAPI } from '../services/api';
 import useErrorHandler from '../hooks/useErrorHandler';
 import {
   CogIcon,
@@ -31,7 +32,9 @@ import {
   InformationCircleIcon,
   PrinterIcon,
   CreditCardIcon,
-  ReceiptPercentIcon
+  ReceiptPercentIcon,
+  PhotoIcon,
+  KeyIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -45,6 +48,11 @@ const Settings = () => {
   const [hasChanges, setHasChanges] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // 'saving', 'success', 'error'
+  
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordStatus, setPasswordStatus] = useState(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   
   // Enhanced error handling
   const {
@@ -130,6 +138,67 @@ const Settings = () => {
     }
   };
 
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file (PNG, JPEG, WEBP, GIF, SVG)');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image file size must be less than 2MB');
+      return;
+    }
+
+    try {
+      setLogoUploading(true);
+      const data = new FormData();
+      data.append('logo', file);
+      const res = await settingsAPI.uploadLogo(data);
+      if (res.data?.logoUrl) {
+        handleInputChange('businessLogo', res.data.logoUrl);
+      }
+    } catch (err) {
+      console.error('Logo upload error:', err);
+      alert(err.response?.data?.error || 'Failed to upload logo');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e) => {
+    if (e) e.preventDefault();
+    setPasswordStatus(null);
+
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setPasswordStatus({ type: 'error', message: 'Please fill in all password fields.' });
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordStatus({ type: 'error', message: 'New password and confirmation do not match.' });
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordStatus({ type: 'error', message: 'New password must be at least 6 characters long.' });
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      await authAPI.changePassword(passwordForm);
+      setPasswordStatus({ type: 'success', message: 'Password changed successfully!' });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err) {
+      setPasswordStatus({ type: 'error', message: err.response?.data?.error || 'Failed to change password.' });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   const handleReset = async () => {
     try {
       setSaveStatus('saving');
@@ -158,104 +227,185 @@ const Settings = () => {
 
   const renderGeneralSettings = () => (
     <div className="space-y-6">
+      {/* Business Logo Upload */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Business Logo
+        </label>
+        <div className="flex items-center space-x-4">
+          {formData.businessLogo ? (
+            <div className="relative group">
+              <img
+                src={formData.businessLogo}
+                alt="Business Logo Preview"
+                className="h-20 w-20 object-contain rounded-lg border border-zana-borderTint bg-black/40 p-1"
+              />
+              <button
+                type="button"
+                onClick={() => handleInputChange('businessLogo', null)}
+                className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 focus:outline-none"
+                title="Remove logo"
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="h-20 w-20 rounded-lg border-2 border-dashed border-zana-borderTint bg-black/20 flex flex-col items-center justify-center text-white/50">
+              <PhotoIcon className="h-8 w-8 text-white/40 mb-1" />
+              <span className="text-[10px]">No Logo</span>
+            </div>
+          )}
+
+          <div className="flex-1">
+            <input
+              type="file"
+              accept="image/*"
+              id="businessLogoInput"
+              onChange={handleLogoUpload}
+              className="hidden"
+            />
+            <label
+              htmlFor="businessLogoInput"
+              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border text-black bg-zana-yellow border-zana-yellow hover:bg-zana-yellow/90 cursor-pointer transition-colors ${
+                logoUploading ? 'opacity-50 cursor-wait' : ''
+              }`}
+            >
+              <PhotoIcon className="mr-2 h-5 w-5" />
+              {logoUploading ? 'Uploading Logo...' : 'Upload Logo Image'}
+            </label>
+            <p className="text-xs text-white/50 mt-1">
+              Supports PNG, JPEG, WEBP, or SVG (Max size: 2MB).
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
           System Name
         </label>
         <input
           type="text"
           value={formData.systemName || ''}
           onChange={(e) => handleInputChange('systemName', e.target.value)}
-          className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+          className={`w-full px-3 py-2 bg-black/40 border rounded-md text-white focus:outline-none focus:ring-2 ${
             getError('systemName') 
-              ? 'border-red-300 focus:ring-red-500' 
-              : 'border-gray-300 focus:ring-blue-500'
+              ? 'border-red-500/50 focus:ring-red-500' 
+              : 'border-zana-borderTint focus:ring-zana-yellow'
           }`}
           placeholder="Enter system name"
         />
         {getError('systemName') && (
-          <p className="mt-1 text-sm text-red-600">{getError('systemName')}</p>
+          <p className="mt-1 text-sm text-red-400">{getError('systemName')}</p>
         )}
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            KRA PIN
+          </label>
+          <input
+            type="text"
+            value={formData.kraPin || ''}
+            onChange={(e) => handleInputChange('kraPin', e.target.value)}
+            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            placeholder="e.g. A012345678Z"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Business Registration Number
+          </label>
+          <input
+            type="text"
+            value={formData.registrationNumber || ''}
+            onChange={(e) => handleInputChange('registrationNumber', e.target.value)}
+            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            placeholder="e.g. CPR/2023/12345"
+          />
+        </div>
+      </div>
+
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
           Contact Email
         </label>
         <input
           type="email"
           value={formData.contactEmail || ''}
           onChange={(e) => handleInputChange('contactEmail', e.target.value)}
-          className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+          className={`w-full px-3 py-2 bg-black/40 border rounded-md text-white focus:outline-none focus:ring-2 ${
             getError('contactEmail') 
-              ? 'border-red-300 focus:ring-red-500' 
-              : 'border-gray-300 focus:ring-blue-500'
+              ? 'border-red-500/50 focus:ring-red-500' 
+              : 'border-zana-borderTint focus:ring-zana-yellow'
           }`}
           placeholder="Enter contact email"
         />
         {getError('contactEmail') && (
-          <p className="mt-1 text-sm text-red-600">{getError('contactEmail')}</p>
+          <p className="mt-1 text-sm text-red-400">{getError('contactEmail')}</p>
         )}
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
           Contact Phone
         </label>
         <input
           type="tel"
           value={formData.contactPhone || ''}
           onChange={(e) => handleInputChange('contactPhone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
           placeholder="Enter contact phone"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
           Timezone
         </label>
         <select
           value={formData.timezone || 'Africa/Nairobi'}
           onChange={(e) => handleInputChange('timezone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
         >
-          <option value="Africa/Nairobi">Africa/Nairobi</option>
-          <option value="Africa/Lagos">Africa/Lagos</option>
-          <option value="Africa/Johannesburg">Africa/Johannesburg</option>
-          <option value="Africa/Cairo">Africa/Cairo</option>
-          <option value="UTC">UTC</option>
+          <option value="Africa/Nairobi" className="bg-brand-black text-white">Africa/Nairobi</option>
+          <option value="Africa/Lagos" className="bg-brand-black text-white">Africa/Lagos</option>
+          <option value="Africa/Johannesburg" className="bg-brand-black text-white">Africa/Johannesburg</option>
+          <option value="Africa/Cairo" className="bg-brand-black text-white">Africa/Cairo</option>
+          <option value="UTC" className="bg-brand-black text-white">UTC</option>
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
           Language
         </label>
         <select
           value={formData.language || 'en'}
           onChange={(e) => handleInputChange('language', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
         >
-          <option value="en">English</option>
-          <option value="sw">Swahili</option>
-          <option value="fr">French</option>
-          <option value="ar">Arabic</option>
+          <option value="en" className="bg-brand-black text-white">English</option>
+          <option value="sw" className="bg-brand-black text-white">Swahili</option>
+          <option value="fr" className="bg-brand-black text-white">French</option>
+          <option value="ar" className="bg-brand-black text-white">Arabic</option>
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
           Theme
         </label>
         <select
           value={formData.theme || 'dark'}
           onChange={(e) => handleInputChange('theme', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
         >
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="system">System</option>
+          <option value="light" className="bg-brand-black text-white">Light</option>
+          <option value="dark" className="bg-brand-black text-white">Dark</option>
+          <option value="system" className="bg-brand-black text-white">System</option>
         </select>
       </div>
     </div>
