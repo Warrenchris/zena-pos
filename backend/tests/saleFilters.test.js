@@ -56,6 +56,7 @@ describe('Shared NON_CANCELLED_SALE_FILTER Verification', () => {
       subtotal: 100,
       tax: 0,
       total: 100,
+      paymentAmount: 100,
       paymentMethod: 'cash',
       saleStatus: 'completed',
       shopId: shop.id,
@@ -68,6 +69,7 @@ describe('Shared NON_CANCELLED_SALE_FILTER Verification', () => {
       subtotal: 500,
       tax: 0,
       total: 500,
+      paymentAmount: 500,
       paymentMethod: 'cash',
       saleStatus: 'cancelled',
       shopId: shop.id,
@@ -94,7 +96,7 @@ describe('Shared NON_CANCELLED_SALE_FILTER Verification', () => {
     await dashboardController.getStats(req, resStats);
     expect(resStats.json).toHaveBeenCalled();
     const statsData = resStats.json.mock.calls[0][0];
-    expect(statsData.totalIncome).toBe(100);
+    expect(Number(statsData.totalIncome)).toBe(100);
     expect(statsData.totalSales).toBe(1);
 
     // Clean up test records
