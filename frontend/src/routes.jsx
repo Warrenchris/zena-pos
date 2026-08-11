@@ -97,8 +97,11 @@ export default function AppRoutes() {
           <Route path="/my-sales" element={<MySales />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/admin/users" element={<Users />} />
+          <Route path="/users" element={<Users />} />
           <Route path="/admin/employees" element={<Employees />} />
           <Route path="/admin/company" element={<CompanySettings />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/admin/settings" element={<Settings />} />
           {/* Settings are now handled by the /settings route */}
           <Route path="/reports" element={<Reports />} />
           <Route path="/admin/ai" element={<AiServices />} />
