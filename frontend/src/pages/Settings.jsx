@@ -142,8 +142,8 @@ const Settings = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file (PNG, JPEG, WEBP, GIF, SVG)');
+    if (!file.type.startsWith('image/') || file.type.includes('svg')) {
+      alert('Please select a valid image file (PNG, JPEG, WEBP, GIF)');
       return;
     }
 

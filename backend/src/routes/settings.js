@@ -34,11 +34,11 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only image files (JPEG, PNG, WEBP, GIF, SVG) are allowed.'), false);
+    cb(new Error('Invalid file type. Only image files (JPEG, PNG, WEBP, GIF) are allowed.'), false);
   }
 };
 
