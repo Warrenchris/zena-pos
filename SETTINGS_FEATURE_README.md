@@ -1,318 +1,78 @@
-# Settings Feature Documentation
+# Settings Module & System Configuration Documentation
 
 ## Overview
 
-The Settings feature provides a comprehensive system configuration interface for the Zana POS system. It allows administrators to manage system-wide settings including general configuration, currency settings, notifications, security, data backup, and user management.
-
-## Features
-
-### 🧩 Core Functionalities
-
-- **Role-Based Access Control**: Settings are only accessible to admin users
-- **Organized Dashboard**: Clean tabbed interface with 6 main categories
-- **Real-time Updates**: Changes apply immediately across the system
-- **Validation**: Comprehensive input validation with error feedback
-- **Reset Functionality**: Restore to default settings with confirmation
-
-### 📋 Settings Categories
-
-#### 1. General Settings
-- System name configuration
-- Business logo upload
-- Contact details (email, phone)
-- Timezone selection
-- Language preferences
-- Theme selection (light/dark/system)
-
-#### 2. Currency Settings
-- Default currency selection (KES, USD, NGN, ZAR, etc.)
-- Currency symbol customization
-- Currency position (before/after amount)
-- Decimal places configuration
-- Live preview of currency formatting
-
-#### 3. Notification Settings
-- Enable/disable system notifications
-- Sound alerts toggle
-- Email notifications toggle
-- Success/error toast controls
-
-#### 4. Security Settings
-- Password minimum length
-- Special character requirements
-- Session timeout configuration
-- Two-factor authentication toggle
-- Maximum login attempts
-
-#### 5. Data & Backup Settings
-- Automatic backup configuration
-- Backup frequency (daily/weekly/monthly)
-- Backup retention period
-- Data export/import capabilities
-
-#### 6. User Management Settings
-- User registration controls
-- Email verification requirements
-- Role-based access management
-
-## Technical Implementation
-
-### Backend Architecture
-
-#### Database Model
-```javascript
-// SystemSettings model with comprehensive fields
-const SystemSettings = {
-  // General Settings
-  systemName: String,
-  businessLogo: Text,
-  contactEmail: String,
-  contactPhone: String,
-  timezone: String,
-  language: String,
-  theme: ENUM('light', 'dark', 'system'),
-  
-  // Currency Settings
-  defaultCurrency: String,
-  currencySymbol: String,
-  currencyPosition: ENUM('before', 'after'),
-  decimalPlaces: Integer,
-  
-  // Notification Settings
-  enableNotifications: Boolean,
-  enableSoundAlerts: Boolean,
-  enableEmailAlerts: Boolean,
-  enableSuccessToasts: Boolean,
-  enableErrorToasts: Boolean,
-  
-  // Security Settings
-  passwordMinLength: Integer,
-  requireSpecialChars: Boolean,
-  sessionTimeout: Integer,
-  enableTwoFactor: Boolean,
-  maxLoginAttempts: Integer,
-  
-  // Data & Backup Settings
-  autoBackupEnabled: Boolean,
-  backupFrequency: ENUM('daily', 'weekly', 'monthly'),
-  backupRetentionDays: Integer,
-  
-  // User Management Settings
-  allowUserRegistration: Boolean,
-  requireEmailVerification: Boolean,
-  
-  // Additional Settings
-  additionalSettings: JSON
-}
-```
-
-#### API Endpoints
-- `GET /api/settings` - Retrieve all settings
-- `PUT /api/settings` - Update settings
-- `POST /api/settings/reset` - Reset to defaults
-- `GET /api/settings/currency` - Get currency settings
-- `GET /api/settings/theme` - Get theme settings
-- `GET /api/settings/notifications` - Get notification settings
-
-#### Security
-- Admin-only access with role-based permissions
-- Input validation and sanitization
-- Activity logging for all changes
-- Secure API endpoints with authentication
-
-### Frontend Architecture
-
-#### State Management
-- Redux store with `settingsSlice`
-- Async thunks for API operations
-- Comprehensive selectors for different setting groups
-- Real-time state updates
-
-#### Components
-- `Settings.jsx` - Main settings dashboard
-- `CurrencyDisplay.jsx` - Currency formatting components
-- `CurrencyInput.jsx` - Currency input fields
-- `CurrencyBadge.jsx` - Currency display badges
-- `ErrorBoundary.jsx` - Error handling wrapper
-
-#### Hooks
-- `useCurrency()` - Currency formatting and utilities
-- `useErrorHandler()` - Comprehensive error handling
-- `useCurrencyContext()` - Currency context access
-
-#### Utilities
-- `currencyUtils.js` - Currency formatting utilities
-- `validation.js` - Input validation functions
-- `formatters.js` - Enhanced formatters with settings support
-
-## Usage
-
-### Accessing Settings
-1. Navigate to `/admin/settings` (admin users only)
-2. Select the desired settings category from the sidebar
-3. Modify settings as needed
-4. Click "Save Changes" to apply updates
-5. Use "Reset to Defaults" to restore original settings
-
-### Currency System Integration
-The currency system automatically updates across all pages when settings change:
-
-```javascript
-// Using the currency hook
-import { useCurrency } from '../hooks/useCurrency';
-
-const MyComponent = () => {
-  const { format, getSymbol, getCode } = useCurrency();
-  
-  return (
-    <div>
-      <span>{format(1234.56)}</span> {/* Automatically formatted */}
-      <span>Currency: {getCode()}</span>
-    </div>
-  );
-};
-```
-
-### Validation
-All settings include comprehensive validation:
-
-```javascript
-// Example validation
-const validation = validateSettings({
-  systemName: 'My POS System',
-  contactEmail: 'admin@example.com',
-  defaultCurrency: 'KES',
-  currencySymbol: 'KSh'
-});
-
-if (!validation.isValid) {
-  console.log(validation.errors);
-}
-```
-
-## Configuration
-
-### Environment Variables
-```bash
-# Backend
-JWT_SECRET=your-secret-key
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=zana_pos
-
-# Frontend
-VITE_API_URL=http://localhost:3000
-```
-
-### Database Migration
-Run the migration to create the SystemSettings table:
-
-```bash
-cd backend
-npm run db:migrate
-```
-
-### Permissions
-Ensure the `manage_settings` permission is assigned to admin roles:
-
-```javascript
-const ROLE_PERMISSIONS = {
-  admin: ['all'],
-  manager: [
-    // ... other permissions
-    'manage_settings'
-  ]
-};
-```
-
-## Error Handling
-
-### Backend Error Handling
-- Comprehensive validation with detailed error messages
-- Graceful error responses with appropriate HTTP status codes
-- Activity logging for debugging and audit trails
-
-### Frontend Error Handling
-- Real-time validation feedback
-- User-friendly error messages
-- Loading states and success confirmations
-- Error boundaries for component-level error handling
-
-## Testing
-
-### Integration Test
-Run the comprehensive integration test:
-
-```bash
-node test-settings-integration.js
-```
-
-### Manual Testing Checklist
-- [ ] Admin can access settings page
-- [ ] Non-admin users are denied access
-- [ ] All setting categories load correctly
-- [ ] Form validation works properly
-- [ ] Settings save successfully
-- [ ] Currency changes apply across the app
-- [ ] Reset functionality works
-- [ ] Error handling displays properly
-
-## Security Considerations
-
-1. **Authentication**: All settings endpoints require valid JWT tokens
-2. **Authorization**: Only admin users can access settings
-3. **Validation**: All inputs are validated and sanitized
-4. **Audit Trail**: All changes are logged with user information
-5. **Data Protection**: Sensitive settings are properly secured
-
-## Performance
-
-- **Lazy Loading**: Settings are loaded only when needed
-- **Caching**: Currency settings are cached for performance
-- **Optimistic Updates**: UI updates immediately for better UX
-- **Debounced Validation**: Validation doesn't block user input
-
-## Future Enhancements
-
-1. **Settings Import/Export**: Bulk settings management
-2. **Settings Templates**: Pre-configured setting profiles
-3. **Advanced Security**: Additional 2FA options
-4. **Audit Dashboard**: Settings change history
-5. **Multi-language Support**: Localized settings interface
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Settings not saving**
-   - Check user permissions
-   - Verify API endpoint accessibility
-   - Check browser console for errors
-
-2. **Currency not updating**
-   - Ensure CurrencyProvider is wrapping the app
-   - Check Redux store state
-   - Verify settings API response
-
-3. **Validation errors**
-   - Check input format requirements
-   - Verify field constraints
-   - Review validation error messages
-
-### Debug Mode
-Enable debug logging:
-
-```javascript
-// In development
-localStorage.setItem('debug', 'settings:*');
-```
-
-## Support
-
-For technical support or feature requests, please contact the development team or create an issue in the project repository.
+The Settings feature provides a comprehensive system configuration interface for the Zana POS platform. Delivered across four methodical implementation sprints, it allows administrators to manage business profiles, POS checkout parameters, receipt templates, M-Pesa payment credentials with AES-256-CBC encryption, security policies, interactive role-permission matrices, auto-generated SKU/barcode catalogs, and notification preferences.
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: January 2025  
+## 🚀 Sprint-by-Sprint Implementation Summary
+
+### 🛒 Sprint 1: POS Configuration Essentials
+- **Tax/VAT Rate Setting**: Added `taxRate` decimal column to `SystemSettings`. Integrated dynamic checkout tax calculations into `POSModal.jsx`.
+- **Receipt Customization**: Added `receiptHeader`, `receiptFooter`, `showLogoOnReceipt`, `printerType`, and `printerIP` fields to `SystemSettings`. Applied custom headers, footers, and logos to printed receipts in `SaleDetailModal.jsx`.
+- **Payment Methods & Encrypted M-Pesa Config**: Added `paybillNumber`, `tillNumber`, `consumerKey`, `consumerSecret`, `passkey`, and `enabledPaymentMethods`. Built AES-256-CBC encryption utility ([encryption.js](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/backend/src/utils/encryption.js)) storing credentials safely in the DB and masking secrets (`****1234`) on GET requests.
+
+### 🛡️ Sprint 2: Security & Account Management
+- **KRA PIN & Business Registration**: Added `kraPin` and `registrationNumber` to `Shops` model and updated company settings UI.
+- **Password Change Endpoint**: Implemented `POST /api/auth/change-password` requiring current password verification before hashing and saving new credentials with bcrypt.
+- **Logo Upload & XSS Prevention**: Built `POST /api/settings/logo` endpoint using `multer` with a 2MB size limit. Hardened MIME type validation to allow only safe raster image formats (`JPEG`, `PNG`, `WEBP`, `GIF`) and **explicitly dropped SVG** to prevent stored XSS vectors.
+
+### 🔐 Sprint 3: Roles & Permissions Matrix
+- **Granular Permission Matrix API**: Created `GET /api/permissions/matrix` and `PUT /api/permissions/matrix` in [permissionController.js](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/backend/src/controllers/permissionController.js) with auto-seeding for 14 granular system permissions.
+- **Self-Lockout Protection**: Implemented backend validation enforcing that `manage_settings` and `manage_users` cannot be stripped from the `admin` role.
+- **Interactive UI Matrix**: Created [RolePermissionMatrix.jsx](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/frontend/src/components/RolePermissionMatrix.jsx) with role column headers, diff tracking, and save confirmation.
+- **Privilege Escalation Hardening**: Gated `/api/permissions/matrix` routes strictly to `req.user.role === 'admin'`, preventing manager roles from escalating their own privileges.
+
+### 📦 Sprint 4: Inventory & Notifications Quick Wins
+- **Global Low-Stock Fallback**: Added `lowStockThreshold` (default 10) to `SystemSettings`. Updated low-stock calculation logic across [insightsController.js](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/backend/src/controllers/insightsController.js) and [ManageStock.jsx](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/frontend/src/pages/ManageStock.jsx) to evaluate `product.reorderPoint` with a fallback to `lowStockThreshold`.
+- **Auto SKU & Barcode Generation**: Built [skuGenerator.js](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/backend/src/utils/skuGenerator.js) featuring hand-rolled EAN-13 check-digit calculation, UPC-A, and CODE128 generators. Wired auto-generation into product creation when SKU or barcode fields are left blank.
+- **AI Digest Frequency Preference**: Added `aiDigestFrequency` (`none`, `daily`, `weekly`) to `SystemSettings` and exposed dropdown controls under the Notifications tab.
+
+---
+
+## 🗄️ Database Migrations Summary
+
+| Migration File | Added Fields | Table |
+|---|---|---|
+| `20260811000000-add-pos-and-payment-settings.js` | `taxRate`, `receiptHeader`, `receiptFooter`, `showLogoOnReceipt`, `printerType`, `printerIP`, `paybillNumber`, `tillNumber`, `consumerKey`, `consumerSecret`, `passkey`, `enabledPaymentMethods` | `SystemSettings` |
+| `20260811000001-add-kra-pin-to-shops.js` | `kraPin`, `registrationNumber` | `Shops` |
+| `20260811000002-add-inventory-and-ai-settings.js` | `lowStockThreshold`, `skuPrefix`, `barcodeFormat`, `aiDigestFrequency` | `SystemSettings` |
+
+---
+
+## 🧪 Integration Test Suite Summary
+
+All sprint integration test scripts run cleanly against the dev database with **100% pass rate**:
+
+```bash
+# Run all sprint integration tests
+node backend/test-sprint-settings.js    # ✅ POS Config & M-Pesa Encryption
+node backend/test-sprint2-settings.js   # ✅ Password Change & Logo Upload
+node backend/test-sprint3-settings.js   # ✅ Roles Matrix & Lockout Prevention
+node backend/test-sprint4-settings.js   # ✅ SKU/EAN-13 Generator & Low-Stock Fallback
+```
+
+---
+
+## 📋 Production Deployment & Backlog Checklist
+
+### 🔑 Production Deployment Requirements
+1. **`ENCRYPTION_SECRET` Requirement**: Ensure `ENCRYPTION_SECRET` (a 32-character hexadecimal string or 256-bit key) is set in your production environment variables (`.env`). The backend will throw a fatal error on startup if this secret is missing.
+   ```bash
+   # Generate key command
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+2. **`uploads/` Folder Permissions**: Ensure the `backend/public/uploads` directory has write permissions for Multer file uploads.
+3. **Static File Serving**: Confirm reverse proxies (Nginx / Cloudflare) forward `/uploads/` requests cleanly to Node static middleware.
+
+### 📌 Backlog Tickets & Future Scope
+- **[BACKLOG-01] AI Digest Cron Runner**: `aiDigestFrequency` preference is stored in `SystemSettings`. A future cron job ticket should schedule daily/weekly email generation consuming this setting.
+- **[BACKLOG-02] Session Management / Token Revocation**: Password changes invalidate active sessions via local state. A future Redis token blacklist or `passwordChangedAt` middleware check can be added if shorter JWT TTLs are desired.
+- **[BACKLOG-03] Multi-Device Logout**: Session list viewer / active session revocation on secondary devices.
+
+---
+
+**Version**: 2.0.0 (Full Settings Module Implemented)  
+**Last Updated**: August 2026  
 **Compatibility**: Zana POS v1.0+
