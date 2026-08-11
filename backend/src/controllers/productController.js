@@ -3,6 +3,7 @@ const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
+const SystemSettings = require('../models/SystemSettings');
 const redisClient = require('../config/redis');
 const { invalidateShopProductCache } = require('../services/productCache');
 const logger = require('../utils/logger');
@@ -265,6 +266,8 @@ exports.getProductById = async (req, res) => {
   }
 };
 
+const { generateSKU, generateBarcode } = require('../utils/skuGenerator');
+
 // Create product
 exports.createProduct = async (req, res) => {
   try {
@@ -287,19 +290,44 @@ exports.createProduct = async (req, res) => {
       weightGrams
     } = req.body;
 
+    const shopId = req.shopId || req.user?.shopId;
+    let finalSku = sku ? String(sku).trim() : '';
+    let finalBarcode = barcode ? String(barcode).trim() : '';
+    let finalReorderPoint = (reorderPoint !== undefined && reorderPoint !== null && reorderPoint !== '')
+      ? parseInt(reorderPoint, 10)
+      : null;
+
+    if (!finalSku || !finalBarcode || finalReorderPoint === null) {
+      const settings = await SystemSettings.findOne({ where: { shopId } });
+      const skuPrefix = settings?.skuPrefix || 'SKU';
+      const barcodeFormat = settings?.barcodeFormat || 'EAN13';
+      const defaultLowStock = settings?.lowStockThreshold !== undefined ? settings.lowStockThreshold : 10;
+
+      if (!finalSku) {
+        const count = await Product.count({ where: { shopId } });
+        finalSku = generateSKU(skuPrefix, count + 1);
+      }
+      if (!finalBarcode) {
+        finalBarcode = generateBarcode(barcodeFormat);
+      }
+      if (finalReorderPoint === null) {
+        finalReorderPoint = defaultLowStock;
+      }
+    }
+
     const product = await Product.create({
       name,
-      sku,
-      barcode,
+      sku: finalSku,
+      barcode: finalBarcode,
       description,
       price,
       cost,
       stockQuantity,
-      reorderPoint,
+      reorderPoint: finalReorderPoint,
       CategoryId,
       expirationDate: expirationDate || null,
       weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
-      shopId: req.user.shopId
+      shopId
     });
 
     const productWithCategory = await Product.findOne({
@@ -325,7 +353,7 @@ exports.createProduct = async (req, res) => {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(400).json({ error: 'SKU or barcode already exists' });
     }
-    res.status(500).json({ error: 'Failed to create product' });
+    res.status(500).json({ error: 'Failed to create product', details: error.message });
   }
 };
 

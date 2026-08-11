@@ -11,6 +11,8 @@ import {
   PlusIcon,
   MinusIcon
 } from '@heroicons/react/24/outline';
+import { useSelector } from 'react-redux';
+import { selectSettings } from '../store/slices/settingsSlice';
 import api from '../services/api';
 import useCurrency from '../hooks/useCurrency';
 import PageHeader from '../components/ui/PageHeader';
@@ -24,6 +26,8 @@ import { useToast } from '../components/Toast';
 export default function ManageStock() {
   const { format: formatCurrency } = useCurrency();
   const { showToast } = useToast();
+  const settings = useSelector(selectSettings);
+  const defaultLowStock = settings?.lowStockThreshold !== undefined ? settings.lowStockThreshold : 10;
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,8 +53,8 @@ export default function ManageStock() {
             : (Array.isArray(res.data?.rows) ? res.data.rows : []));
       setProducts(list);
     } catch (err) {
-      console.error('Failed to load inventory stock:', err);
-      showToast({ type: 'error', title: 'Error', message: 'Failed to load stock data.' });
+      console.error('Error fetching inventory stock:', err);
+      showToast({ type: 'error', title: 'Error', message: 'Failed to load inventory stock.' });
     } finally {
       setLoading(false);
     }
@@ -59,6 +63,13 @@ export default function ManageStock() {
   useEffect(() => {
     fetchProducts();
   }, []);
+
+  const getEffectiveReorder = (p) => {
+    if (p.reorderPoint !== null && p.reorderPoint !== undefined && p.reorderPoint !== '') {
+      return parseInt(p.reorderPoint, 10);
+    }
+    return defaultLowStock;
+  };
 
   const handleOpenAdjustModal = (product) => {
     setSelectedProduct(product);
@@ -261,7 +272,7 @@ export default function ManageStock() {
               ) : (
                 filteredProducts.map((product) => {
                   const stock = parseInt(product.stockQuantity || 0, 10);
-                  const reorder = parseInt(product.reorderPoint || 5, 10);
+                  const reorder = getEffectiveReorder(product);
                   const isOut = stock === 0;
                   const isLow = stock <= reorder && stock > 0;
 

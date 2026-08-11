@@ -51,14 +51,14 @@ const calculateTrends = async (shopId) => {
 const generateRecommendations = async (shopId) => {
   const recommendations = [];
 
-  // Check low stock products
-  const lowStockProducts = await Product.findAll({
-    where: {
-      shopId,
-      stockQuantity: {
-        [Op.lte]: sequelize.col('reorderPoint')
-      }
-    }
+  // Check low stock products using reorderPoint or SystemSettings.lowStockThreshold fallback
+  const settings = await SystemSettings.findOne({ where: { shopId } });
+  const defaultLowStock = settings?.lowStockThreshold !== undefined ? settings.lowStockThreshold : 10;
+
+  const allShopProducts = await Product.findAll({ where: { shopId } });
+  const lowStockProducts = allShopProducts.filter(p => {
+    const threshold = (p.reorderPoint !== null && p.reorderPoint !== undefined) ? p.reorderPoint : defaultLowStock;
+    return p.stockQuantity <= threshold;
   });
 
   if (lowStockProducts.length > 0) {
@@ -70,7 +70,7 @@ const generateRecommendations = async (shopId) => {
         id: p.id,
         name: p.name,
         currentStock: p.stockQuantity,
-        reorderPoint: p.reorderPoint
+        reorderPoint: (p.reorderPoint !== null && p.reorderPoint !== undefined) ? p.reorderPoint : defaultLowStock
       }))
     });
   }

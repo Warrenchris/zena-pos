@@ -34,7 +34,8 @@ import {
   CreditCardIcon,
   ReceiptPercentIcon,
   PhotoIcon,
-  KeyIcon
+  KeyIcon,
+  ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
 
 import RolePermissionMatrix from '../components/RolePermissionMatrix';
@@ -223,6 +224,7 @@ const Settings = () => {
   const tabs = [
     { id: 'general', name: 'General', icon: CogIcon },
     { id: 'pos', name: 'POS Configuration', icon: ReceiptPercentIcon },
+    { id: 'inventory', name: 'Inventory & Catalog', icon: ArchiveBoxIcon },
     { id: 'receipt', name: 'Receipt & Printer', icon: PrinterIcon },
     { id: 'payments', name: 'Payment Methods', icon: CreditCardIcon },
     { id: 'currency', name: 'Currency', icon: CurrencyDollarIcon },
@@ -576,6 +578,80 @@ const Settings = () => {
           />
           <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
+      </div>
+
+      <div className="pt-4 border-t border-zana-borderTint">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          AI Insights Digest Frequency
+        </label>
+        <select
+          value={formData.aiDigestFrequency || 'weekly'}
+          onChange={(e) => handleInputChange('aiDigestFrequency', e.target.value)}
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+        >
+          <option value="none" className="bg-brand-black text-white">Disabled (None)</option>
+          <option value="daily" className="bg-brand-black text-white">Daily Summary Email</option>
+          <option value="weekly" className="bg-brand-black text-white">Weekly Summary Email</option>
+        </select>
+        <p className="text-xs text-white/50 mt-1">
+          Frequency of automated AI inventory and sales digest reports sent to admin email.
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderInventorySettings = () => (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Global Low-Stock Threshold
+        </label>
+        <input
+          type="number"
+          min="0"
+          max="10000"
+          value={formData.lowStockThreshold !== undefined && formData.lowStockThreshold !== null ? formData.lowStockThreshold : 10}
+          onChange={(e) => handleInputChange('lowStockThreshold', parseInt(e.target.value, 10) || 0)}
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          placeholder="e.g. 10"
+        />
+        <p className="text-xs text-white/50 mt-1">
+          Default stock reorder threshold used when a product's individual reorder point is unconfigured.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Auto SKU Prefix
+        </label>
+        <input
+          type="text"
+          value={formData.skuPrefix || 'SKU'}
+          onChange={(e) => handleInputChange('skuPrefix', e.target.value)}
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          placeholder="e.g. SKU, PROD, ITEM"
+        />
+        <p className="text-xs text-white/50 mt-1">
+          Prefix used when automatically generating product SKUs during product creation.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Auto Barcode Standard
+        </label>
+        <select
+          value={formData.barcodeFormat || 'EAN13'}
+          onChange={(e) => handleInputChange('barcodeFormat', e.target.value)}
+          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+        >
+          <option value="EAN13" className="bg-brand-black text-white">EAN-13 (13 Digits with Check-Digit)</option>
+          <option value="UPC" className="bg-brand-black text-white">UPC-A (12 Digits with Check-Digit)</option>
+          <option value="CODE128" className="bg-brand-black text-white">CODE128 (Alpha-Numeric)</option>
+        </select>
+        <p className="text-xs text-white/50 mt-1">
+          Standard used to generate barcode values when a product barcode is left blank.
+        </p>
       </div>
     </div>
   );
@@ -1060,6 +1136,8 @@ const Settings = () => {
         return renderGeneralSettings();
       case 'pos':
         return renderPosSettings();
+      case 'inventory':
+        return renderInventorySettings();
       case 'receipt':
         return renderReceiptSettings();
       case 'payments':

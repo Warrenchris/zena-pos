@@ -13,13 +13,12 @@ const validateProduct = [
     .isLength({ max: 200 })
     .withMessage('Product name must be less than 200 characters'),
   body('sku')
+    .optional({ checkFalsy: true })
     .trim()
-    .notEmpty()
-    .withMessage('SKU is required')
     .isLength({ max: 50 })
     .withMessage('SKU must be less than 50 characters'),
   body('barcode')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .isLength({ max: 50 })
     .withMessage('Barcode must be less than 50 characters'),
@@ -44,8 +43,7 @@ const validateProduct = [
     .isInt({ min: 0 })
     .withMessage('Stock quantity must be a positive integer'),
   body('reorderPoint')
-    .notEmpty()
-    .withMessage('Reorder point is required')
+    .optional({ checkFalsy: true })
     .isInt({ min: 0 })
     .withMessage('Reorder point must be a positive integer'),
   body('CategoryId')
