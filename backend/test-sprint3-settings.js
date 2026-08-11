@@ -97,13 +97,11 @@ async function runSprint3Tests() {
 
   // Test 3: Lockout Prevention (Attempting to remove admin manage_settings)
   console.log('\n3. Testing Self-Lockout Prevention (Removing admin manage_settings)...');
-  const manageSettingsPerm = getRes.responseData?.permissions.find(p => p.name === 'manage_settings');
-  
   const lockoutRes = createMockRes();
   await permissionController.updatePermissionMatrix(
     createMockReq(adminUser, {
       updates: [
-        { role: 'admin', permissionId: manageSettingsPerm.id, permissionName: 'manage_settings', enabled: false }
+        { role: 'admin', permissionName: 'manage_settings', enabled: false }
       ]
     }),
     lockoutRes
