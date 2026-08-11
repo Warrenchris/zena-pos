@@ -2,6 +2,7 @@ const { Op, Sequelize } = require('sequelize');
 const { Sale, Customer, ActivityLog, SaleItem, Product } = require('../models');
 const sequelize = require('../config/database');
 const { getCachedAnalytics, setCachedAnalytics } = require('../utils/analyticsCache');
+const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 // Helper function to calculate start date
 function calculateStartDate(now, period) {
@@ -49,7 +50,7 @@ const analyticsController = {
           COUNT(CASE WHEN createdAt >= ? AND createdAt <= ? THEN 1 END) as current_visitors,
           COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_visitors
         FROM Sales
-        WHERE shopId = ? AND createdAt >= ?
+        WHERE shopId = ? AND createdAt >= ? AND saleStatus != 'cancelled'
         GROUP BY DATE(createdAt)
         ORDER BY DATE(createdAt) ASC
       `, {
@@ -113,7 +114,7 @@ const analyticsController = {
           COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_count,
           SUM(CASE WHEN createdAt >= ? AND createdAt < ? THEN total ELSE 0 END) as previous_revenue
         FROM Sales
-        WHERE shopId = ? AND createdAt >= ?
+        WHERE shopId = ? AND createdAt >= ? AND saleStatus != 'cancelled'
         GROUP BY DATE(createdAt), HOUR(createdAt)
         ORDER BY DATE(createdAt), HOUR(createdAt)
       `, {
@@ -196,6 +197,7 @@ const analyticsController = {
         INNER JOIN Sales s ON si.saleId = s.id
         INNER JOIN Products p ON si.productId = p.id
         WHERE s.shopId = :shopId
+          AND s.saleStatus != 'cancelled'
           AND s.createdAt BETWEEN :startDate AND :now
           AND p.shopId = :shopId
         GROUP BY p.id, p.name, p.price, p.sku
@@ -218,6 +220,7 @@ const analyticsController = {
         FROM SaleItems si
         INNER JOIN Sales s ON si.saleId = s.id
         WHERE s.shopId = :shopId
+          AND s.saleStatus != 'cancelled'
           AND s.createdAt BETWEEN :previousStartDate AND :startDate
       `, {
         replacements: { shopId, previousStartDate, startDate },
@@ -263,6 +266,7 @@ const analyticsController = {
       const channels = await Sale.findAll({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [startDate, now] }
         },
         attributes: [
@@ -282,6 +286,7 @@ const analyticsController = {
       const previousChannels = await Sale.findAll({
         where: {
           shopId,
+          ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [previousStartDate, startDate] }
         },
         attributes: [

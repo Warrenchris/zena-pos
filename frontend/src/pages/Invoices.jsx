@@ -100,7 +100,7 @@ const InvoiceDetailDrawer = ({ invoice, isOpen, onClose, onDownload, onPrint }) 
                 <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-surface-2/40 border border-border-default">
                   <div>
                     <h4 className="text-caption font-semibold text-text-muted uppercase tracking-wider">Customer</h4>
-                    <p className="mt-1 text-body font-semibold text-text-primary">{invoice.customerName || WALK_IN_CUSTOMER_NAME}</p>
+                    <p className="mt-1 text-body font-semibold text-text-primary">{invoice.Customer?.name || invoice.customer?.name || invoice.customerName || WALK_IN_CUSTOMER_NAME}</p>
                   </div>
                   <div>
                     <h4 className="text-caption font-semibold text-text-muted uppercase tracking-wider">Status</h4>
@@ -227,7 +227,7 @@ function InvoiceCreateModal({ open, onClose, onCreated }) {
             <option value="">Choose sale transaction...</option>
             {sales.map((sale) => (
               <option key={sale.id} value={sale.id}>
-                {sale.invoiceNumber || sale.id} • {sale.customerName || sale.customer?.name || WALK_IN_CUSTOMER_NAME} • {new Date(sale.createdAt).toLocaleString()}
+                {sale.invoiceNumber || sale.id} • {sale.Customer?.name || sale.customer?.name || sale.customerName || WALK_IN_CUSTOMER_NAME} • {new Date(sale.createdAt).toLocaleString()}
               </option>
             ))}
           </select>
@@ -350,8 +350,7 @@ export default function Invoices() {
     doc.setTextColor(0, 0, 0);
     doc.text('BILL TO:', margin, clientY);
     doc.setFont(undefined, 'normal');
-    const customer = inv.customer || {};
-    doc.text(customer.name || inv.customerName || WALK_IN_CUSTOMER_NAME, margin, clientY + 14);
+    doc.text(inv.Customer?.name || inv.customer?.name || inv.customerName || WALK_IN_CUSTOMER_NAME, margin, clientY + 14);
 
     const items = inv.items || [];
     const tableBody = items.map((item, index) => [

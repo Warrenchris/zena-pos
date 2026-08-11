@@ -6,6 +6,7 @@ const { parseDate } = require('../utils/dateUtils');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
+const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 // Get all customers with pagination and search
 exports.getAllCustomers = async (req, res) => {
@@ -67,7 +68,7 @@ exports.getCustomerById = async (req, res) => {
     const activeSaleCondition = {
       customerId: customer.id,
       shopId,
-      saleStatus: { [Op.ne]: 'cancelled' }
+      ...NON_CANCELLED_SALE_FILTER
     };
 
     // 1. Spending Stats (live aggregate)

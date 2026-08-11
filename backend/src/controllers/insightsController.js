@@ -7,6 +7,7 @@ const sequelize = require('../config/database');
 const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
 const aiClient = require('../utils/aiClient');
+const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
@@ -22,6 +23,7 @@ const calculateTrends = async (shopId) => {
   const salesTrends = await Sale.findAll({
     where: {
       shopId,
+      ...NON_CANCELLED_SALE_FILTER,
       createdAt: {
         [Op.gte]: lastMonth
       }
@@ -354,8 +356,8 @@ const getInsights = async (req, res) => {
     startPrevWeek.setDate(startPrevWeek.getDate() - 7);
 
     const [thisWeekRevenue, prevWeekRevenue] = await Promise.all([
-      Sale.sum('total', { where: { shopId, createdAt: { [Op.gte]: startThisWeek } } }),
-      Sale.sum('total', { where: { shopId, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime()-1)] } } }),
+      Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: startThisWeek } } }),
+      Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime()-1)] } } }),
     ]);
     if (thisWeekRevenue != null && prevWeekRevenue) {
       const change = prevWeekRevenue === 0 ? 0 : ((thisWeekRevenue - prevWeekRevenue) / prevWeekRevenue);
@@ -445,7 +447,7 @@ const getInsights = async (req, res) => {
 
       // Revenue and transactions from Sales
       const salesByMonth = await Sale.findAll({
-        where: { shopId },
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
         attributes: [
           [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
           [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
@@ -485,7 +487,7 @@ const getInsights = async (req, res) => {
 
       // Customers per month (distinct)
       const custByMonth = await Sale.findAll({
-        where: { shopId },
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
         attributes: [
           [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
           [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
@@ -612,7 +614,7 @@ const getMonthlyRevenue = async (req, res) => {
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
     const salesByMonth = await Sale.findAll({
-      where: { shopId, createdAt: { [Op.gte]: twelveMonthsAgo } },
+      where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: twelveMonthsAgo } },
       attributes: [
         [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m-01'), 'month'],
         [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],

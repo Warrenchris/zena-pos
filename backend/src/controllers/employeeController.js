@@ -6,6 +6,7 @@ const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
 const { validateEmployee } = require('../utils/validation');
 const sequelize = require('../config/database');
+const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 // Get all employees
 exports.getAllEmployees = async (req, res) => {
@@ -78,7 +79,7 @@ exports.getEmployeeById = async (req, res) => {
 
     const saleWhere = {
       shopId,
-      saleStatus: { [Op.ne]: 'cancelled' },
+      ...NON_CANCELLED_SALE_FILTER,
       [isUser ? 'userId' : 'employeeId']: targetId
     };
 
@@ -103,6 +104,7 @@ exports.getEmployeeById = async (req, res) => {
     // 2. Paginated Sales History
     const historyWhere = {
       shopId,
+      ...NON_CANCELLED_SALE_FILTER,
       [isUser ? 'userId' : 'employeeId']: targetId
     };
 

@@ -162,7 +162,7 @@ export default function Sales() {
       label: 'Customer',
       render: (val, row) => (
         <span className="text-text-primary font-medium">
-          {val?.name || row?.customerName || WALK_IN_CUSTOMER_NAME}
+          {row?.Customer?.name || row?.customer?.name || val?.name || row?.customerName || WALK_IN_CUSTOMER_NAME}
         </span>
       )
     },
