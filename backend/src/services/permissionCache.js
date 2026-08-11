@@ -67,8 +67,10 @@ async function userHasPermission(userId, role, permissionName) {
 async function invalidateRoleCache(role) {
   const cacheKey = `permissions:role:${role}`;
   try {
-    await redisClient.del(cacheKey);
-    logger.info(`Invalidated permission cache in Redis for role: ${role}`);
+    if (redisClient && redisClient.status === 'ready') {
+      await redisClient.del(cacheKey);
+      logger.info(`Invalidated permission cache in Redis for role: ${role}`);
+    }
   } catch (error) {
     logger.warn(`Redis error invalidating cache for role ${role}:`, error);
   }
@@ -80,16 +82,18 @@ function invalidateUserCache(userId) {
 
 async function invalidateAllPermissionCache() {
   try {
-    let cursor = '0';
-    do {
-      const reply = await redisClient.scan(cursor, 'MATCH', 'permissions:role:*', 'COUNT', 100);
-      cursor = reply[0];
-      const keys = reply[1];
-      if (keys.length > 0) {
-        await redisClient.del(...keys);
-      }
-    } while (cursor !== '0');
-    logger.info('Invalidated all permission caches in Redis');
+    if (redisClient && redisClient.status === 'ready') {
+      let cursor = '0';
+      do {
+        const reply = await redisClient.scan(cursor, 'MATCH', 'permissions:role:*', 'COUNT', 100);
+        cursor = reply[0];
+        const keys = reply[1];
+        if (keys.length > 0) {
+          await redisClient.del(...keys);
+        }
+      } while (cursor !== '0');
+      logger.info('Invalidated all permission caches in Redis');
+    }
   } catch (error) {
     logger.warn('Failed to invalidate all permission caches in Redis:', error);
   }
