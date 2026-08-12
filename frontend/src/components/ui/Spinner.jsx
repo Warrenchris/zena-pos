@@ -27,7 +27,7 @@ export default function Spinner({
   className = '',
 }) {
   return (
-    <div
+    <span
       role="status"
       aria-label={label}
       className={`inline-flex items-center justify-center ${className}`}
@@ -40,6 +40,6 @@ export default function Spinner({
         `}
       />
       <span className="sr-only">{label}</span>
-    </div>
+    </span>
   );
 }

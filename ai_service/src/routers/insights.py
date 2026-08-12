@@ -9,11 +9,11 @@ router = APIRouter()
 
 
 class BusinessData(BaseModel):
-    revenue: List[float]
-    costs: List[float]
-    customer_count: List[int]
-    transaction_count: List[int]
-    average_transaction_value: List[float]
+    revenue: List[float] = []
+    costs: List[float] = []
+    customer_count: List[int] = []
+    transaction_count: List[int] = []
+    average_transaction_value: List[float] = []
 
 
 class BusinessInsight(BaseModel):
