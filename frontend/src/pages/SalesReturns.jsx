@@ -116,6 +116,7 @@ export default function SalesReturns() {
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [managersList, setManagersList] = useState([]);
   const [selectedManagerId, setSelectedManagerId] = useState('');
+  const [managerPassword, setManagerPassword] = useState('');
   const [managerModalError, setManagerModalError] = useState('');
 
   // Priority 3: Non-Returnable & Return Window Admin Override State
@@ -294,7 +295,7 @@ export default function SalesReturns() {
   };
 
   // Internal execution of processRefund call
-  const executeProcessRefund = async (overrideManagerId = null) => {
+  const executeProcessRefund = async (overrideManagerId = null, overrideManagerPassword = null) => {
     const activeItems = Object.values(returnItemsState).filter(item => Number(item.returnQty) > 0);
 
     const payloadItems = activeItems.map(item => ({
@@ -309,6 +310,7 @@ export default function SalesReturns() {
       items: payloadItems,
       refundMethod,
       managerApprovalId: overrideManagerId || undefined,
+      managerPassword: overrideManagerPassword || undefined,
       adminOverride: adminOverrideActive || undefined
     };
 
@@ -320,6 +322,7 @@ export default function SalesReturns() {
       showToast('success', 'Return processed successfully and inventory updated!');
       setShowProcessModal(false);
       setShowManagerModal(false);
+      setManagerPassword('');
       fetchReturns();
     } catch (err) {
       console.error('Error processing refund:', err);
@@ -345,7 +348,11 @@ export default function SalesReturns() {
         setModalError(`Policy Restriction: ${errorMsg}`);
         setShowOverrideOption(true);
       } else {
-        setModalError(errorMsg || 'Failed to process return');
+        if (showManagerModal) {
+          setManagerModalError(errorMsg || 'Manager authorization failed');
+        } else {
+          setModalError(errorMsg || 'Failed to process return');
+        }
       }
     } finally {
       setSubmittingRefund(false);
@@ -374,15 +381,19 @@ export default function SalesReturns() {
     await executeProcessRefund();
   };
 
-  // Priority 2: Confirm Manager Auth in Modal
+  // Priority 2: Confirm Manager Auth in Modal with Credential Check
   const handleConfirmManagerApproval = async (e) => {
     e.preventDefault();
     if (!selectedManagerId) {
-      setManagerModalError('Please select or authenticate a manager.');
+      setManagerModalError('Please select an authorizing manager.');
+      return;
+    }
+    if (!managerPassword) {
+      setManagerModalError('Please enter manager password credentials.');
       return;
     }
     setManagerModalError('');
-    await executeProcessRefund(selectedManagerId);
+    await executeProcessRefund(selectedManagerId, managerPassword);
   };
 
   // Priority 5: View Credit Note
@@ -919,6 +930,20 @@ export default function SalesReturns() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-small font-semibold text-text-primary mb-1.5">
+              Manager Password / Authorization Credential <span className="text-danger">*</span>
+            </label>
+            <input
+              type="password"
+              placeholder="Enter manager account password to authorize..."
+              value={managerPassword}
+              onChange={(e) => setManagerPassword(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30 font-medium"
+              required
+            />
           </div>
 
           <div className="flex gap-3 justify-end pt-3 border-t border-border-default">

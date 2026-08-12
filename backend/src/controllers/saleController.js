@@ -999,6 +999,14 @@ exports.processRefund = async (req, res) => {
       return res.status(400).json({ error: 'No items with quantity > 0 specified for refund' });
     }
 
+    // Extract approval credentials and flags
+    const { managerApprovalId, managerPassword, adminOverride } = req.body;
+
+    // Server-side enforcement: Only admin/manager can pass adminOverride
+    if (adminOverride && !['admin', 'manager'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Admin or Manager role is strictly required to execute policy overrides.' });
+    }
+
     // Validate each item, non-returnable status, and available quantity
     for (const item of itemsToRefund) {
       const saleItem = saleItemsMap.get(item.productId);
@@ -1015,9 +1023,10 @@ exports.processRefund = async (req, res) => {
         });
       }
 
-      // Check Non-Returnable flag on Product
+      // Check Non-Returnable flag on Product (gated server-side by admin/manager role)
       const productRecord = await Product.findOne({ where: { id: item.productId, shopId } });
-      if (productRecord && productRecord.nonReturnable && !adminOverride && req.user.role !== 'admin') {
+      const canBypassNonReturnable = adminOverride && ['admin', 'manager'].includes(req.user.role);
+      if (productRecord && productRecord.nonReturnable && !canBypassNonReturnable && req.user.role !== 'admin') {
         return res.status(400).json({ error: `Product "${productRecord.name}" is marked as non-returnable.` });
       }
     }
@@ -1045,11 +1054,33 @@ exports.processRefund = async (req, res) => {
 
     const totalRefundAmount = parseFloat(calculatedTotalRefund.toFixed(2));
 
-    // Approval Threshold Check
-    if (totalRefundAmount > maxUnapproved && !managerApprovalId && req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        error: `Refund total (${totalRefundAmount} KSh) exceeds unapproved threshold (${maxUnapproved} KSh). Manager approval ID or 2FA override is required.` 
+    // Approval Threshold & Credential Check
+    let verifiedManagerId = null;
+    if (totalRefundAmount > maxUnapproved && req.user.role !== 'admin') {
+      if (!managerApprovalId) {
+        return res.status(403).json({ 
+          error: `Refund total (${totalRefundAmount} KSh) exceeds unapproved threshold (${maxUnapproved} KSh). Manager approval & password credentials are required.` 
+        });
+      }
+
+      const approvingManager = await User.findOne({
+        where: { id: managerApprovalId, shopId, active: true }
       });
+
+      if (!approvingManager || !['manager', 'admin'].includes(approvingManager.role)) {
+        return res.status(403).json({ error: 'Selected approving user is not an active Manager or Admin.' });
+      }
+
+      if (managerPassword) {
+        const isValidPassword = await approvingManager.validatePassword(managerPassword);
+        if (!isValidPassword) {
+          return res.status(401).json({ error: `Invalid password for approving manager ${approvingManager.name || approvingManager.email}.` });
+        }
+      }
+
+      verifiedManagerId = String(approvingManager.id);
+    } else if (managerApprovalId) {
+      verifiedManagerId = String(managerApprovalId);
     }
 
     // Determine refund method
@@ -1088,7 +1119,7 @@ exports.processRefund = async (req, res) => {
           reasonCode,
           reasonNotes,
           disposition,
-          managerApprovalId: managerApprovalId || null,
+          managerApprovalId: verifiedManagerId || managerApprovalId || null,
           refundMethod,
           processedBy,
           refundedBy,
