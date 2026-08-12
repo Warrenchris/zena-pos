@@ -308,7 +308,22 @@ exports.getProfitAndLoss = async (req, res) => {
       attributes: [[sequelize.literal('SUM(SaleItem.quantity * COALESCE(Product.cost, 0))'), 'cogs']],
       raw: true
     });
-    const cogs = Number(cogsRow?.cogs || 0);
+    const grossCogs = Number(cogsRow?.cogs || 0);
+
+    // Subtract cost of restocked returned items from COGS
+    const refundCogsRow = await SaleRefund.findOne({
+      include: [
+        { model: Product, as: 'product', required: true, attributes: [] }
+      ],
+      where: {
+        ...refundWhere,
+        disposition: 'restock'
+      },
+      attributes: [[sequelize.literal('SUM(SaleRefund.quantity * COALESCE(product.cost, 0))'), 'returnedCogs']],
+      raw: true
+    });
+    const returnedCogs = Number(refundCogsRow?.returnedCogs || 0);
+    const cogs = Math.max(0, grossCogs - returnedCogs);
 
     // Operating expenses
     const operatingExpenses = Number(await Expense.sum('amount', { where: expenseWhere }) || 0);
