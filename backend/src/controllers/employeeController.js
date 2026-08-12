@@ -8,7 +8,7 @@ const { validateEmployee } = require('../utils/validation');
 const sequelize = require('../config/database');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
-// Get all employees
+// Get all employees and shop staff
 exports.getAllEmployees = async (req, res) => {
   try {
     // Enforce tenant scope based on authenticated user's shop
@@ -18,8 +18,33 @@ exports.getAllEmployees = async (req, res) => {
       where,
       order: [['createdAt', 'DESC']] 
     });
-    
-    res.json(employees);
+
+    const users = await User.findAll({
+      where,
+      attributes: ['id', 'name', 'email', 'role', 'active', 'shopId'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const empList = employees.map(e => (e.toJSON ? e.toJSON() : e));
+    const userList = users.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      active: u.active,
+      shopId: u.shopId
+    }));
+
+    // Merge & deduplicate by ID
+    const map = new Map();
+    [...empList, ...userList].forEach(item => {
+      if (item && item.id) {
+        map.set(String(item.id), item);
+      }
+    });
+
+    const combinedList = Array.from(map.values());
+    res.json(combinedList);
   } catch (error) {
     console.error('Error fetching employees:', error);
     res.status(500).json({ error: 'Failed to fetch employees' });

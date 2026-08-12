@@ -20,8 +20,8 @@ const checkAdminOrSelf = (req, res, next) => {
   return res.status(403).json({ error: 'Access denied: Admin role required to view other employees' });
 };
 
-// Get all employees (admin only) – tenant scoped
-router.get('/', auth, checkRole(['admin']), getAllEmployees);
+// Get all employees (admin, manager, cashier) – tenant scoped
+router.get('/', auth, checkRole(['admin', 'manager', 'cashier']), getAllEmployees);
 
 // Get employee by ID (admin or self)
 router.get('/:id', auth, checkAdminOrSelf, getEmployeeById);
