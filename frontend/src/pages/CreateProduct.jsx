@@ -118,7 +118,8 @@ export default function CreateProduct() {
         cost: parseFloat(form.cost),
         stockQuantity: parseInt(form.stockQuantity, 10),
         reorderPoint: parseInt(form.reorderPoint, 10),
-        CategoryId: parseInt(form.CategoryId, 10),
+        categoryId: parseInt(form.CategoryId || form.categoryId, 10),
+        CategoryId: parseInt(form.CategoryId || form.categoryId, 10),
         ...(form.expirationDate && form.expirationDate !== 'never' ? { expirationDate: form.expirationDate } : {}),
         ...(form.weightGrams !== '' ? { weightGrams: parseInt(form.weightGrams, 10) } : {})
       }

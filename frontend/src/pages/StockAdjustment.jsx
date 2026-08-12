@@ -105,6 +105,7 @@ export default function StockAdjustment() {
       await api.put(`/api/products/${p.id}`, {
         ...p,
         stockQuantity: newStock,
+        categoryId: p.categoryId || p.CategoryId || p.Category?.id || 1,
         CategoryId: p.categoryId || p.CategoryId || p.Category?.id || 1
       });
 

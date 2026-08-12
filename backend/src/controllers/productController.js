@@ -99,8 +99,9 @@ exports.getAllProducts = async (req, res) => {
       ];
     }
 
-    if (categoryId) {
-      where.CategoryId = parseInt(categoryId, 10);
+    const filterCategoryId = req.query.categoryId || req.query.CategoryId;
+    if (filterCategoryId) {
+      where.categoryId = parseInt(filterCategoryId, 10);
     }
 
     if (minPrice || maxPrice) {
@@ -286,6 +287,7 @@ exports.createProduct = async (req, res) => {
       stockQuantity,
       reorderPoint,
       CategoryId,
+      categoryId,
       expirationDate,
       weightGrams
     } = req.body;
@@ -315,6 +317,9 @@ exports.createProduct = async (req, res) => {
       }
     }
 
+    const targetCategoryId = categoryId || CategoryId;
+    const parsedCategoryId = targetCategoryId ? parseInt(targetCategoryId, 10) : null;
+
     const product = await Product.create({
       name,
       sku: finalSku,
@@ -324,7 +329,8 @@ exports.createProduct = async (req, res) => {
       cost,
       stockQuantity,
       reorderPoint: finalReorderPoint,
-      CategoryId,
+      categoryId: parsedCategoryId,
+      CategoryId: parsedCategoryId,
       expirationDate: expirationDate || null,
       weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
       shopId
@@ -383,9 +389,15 @@ exports.updateProduct = async (req, res) => {
       stockQuantity,
       reorderPoint,
       CategoryId,
+      categoryId,
       expirationDate,
       weightGrams
     } = req.body;
+
+    const targetCategoryId = categoryId || CategoryId;
+    const parsedCategoryId = (targetCategoryId !== undefined && targetCategoryId !== null && targetCategoryId !== '')
+      ? parseInt(targetCategoryId, 10)
+      : (product.categoryId || product.CategoryId);
 
     await product.update({
       name,
@@ -396,7 +408,8 @@ exports.updateProduct = async (req, res) => {
       cost,
       stockQuantity,
       reorderPoint,
-      CategoryId,
+      categoryId: parsedCategoryId,
+      CategoryId: parsedCategoryId,
       expirationDate: expirationDate || null,
       weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : product.weightGrams)
     });

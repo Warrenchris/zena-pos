@@ -46,11 +46,16 @@ const validateProduct = [
     .optional({ checkFalsy: true })
     .isInt({ min: 0 })
     .withMessage('Reorder point must be a positive integer'),
-  body('CategoryId')
-    .notEmpty()
-    .withMessage('Category is required')
-    .isInt()
-    .withMessage('Invalid category'),
+  body().custom((value, { req }) => {
+    const catId = req.body.categoryId || req.body.CategoryId;
+    if (catId === undefined || catId === null || catId === '') {
+      throw new Error('Category is required');
+    }
+    if (isNaN(parseInt(catId, 10)) || parseInt(catId, 10) <= 0) {
+      throw new Error('Invalid category');
+    }
+    return true;
+  }),
   body('expirationDate')
     .optional({ nullable: true })
     .isISO8601()

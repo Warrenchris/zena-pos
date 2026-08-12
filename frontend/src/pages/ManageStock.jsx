@@ -103,6 +103,7 @@ export default function ManageStock() {
       await api.put(`/api/products/${selectedProduct.id}`, {
         ...selectedProduct,
         stockQuantity: newStock,
+        categoryId: selectedProduct.categoryId || selectedProduct.CategoryId || selectedProduct.Category?.id || 1,
         CategoryId: selectedProduct.categoryId || selectedProduct.CategoryId || selectedProduct.Category?.id || 1
       });
 

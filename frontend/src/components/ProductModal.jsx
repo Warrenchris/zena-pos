@@ -30,7 +30,8 @@ export default function ProductModal({ product, categories, onClose }) {
         cost: product.cost || '',
         stockQuantity: product.stockQuantity || '',
         reorderPoint: product.reorderPoint || '',
-        CategoryId: product.CategoryId || ''
+        CategoryId: product.CategoryId || product.categoryId || '',
+        categoryId: product.categoryId || product.CategoryId || ''
       })
     }
   }, [product])
@@ -59,7 +60,7 @@ export default function ProductModal({ product, categories, onClose }) {
     if (!formData.cost || formData.cost < 0) newErrors.cost = 'Valid cost is required'
     if (!formData.stockQuantity || formData.stockQuantity < 0) newErrors.stockQuantity = 'Valid stock quantity is required'
     if (!formData.reorderPoint || formData.reorderPoint < 0) newErrors.reorderPoint = 'Valid reorder point is required'
-    if (!formData.CategoryId) newErrors.CategoryId = 'Category is required'
+    if (!formData.CategoryId && !formData.categoryId) newErrors.CategoryId = 'Category is required'
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -72,13 +73,15 @@ export default function ProductModal({ product, categories, onClose }) {
 
     setLoading(true)
     try {
+      const catId = parseInt(formData.CategoryId || formData.categoryId, 10);
       const productData = {
         ...formData,
         price: parseFloat(formData.price),
         cost: parseFloat(formData.cost),
         stockQuantity: parseInt(formData.stockQuantity),
         reorderPoint: parseInt(formData.reorderPoint),
-        CategoryId: parseInt(formData.CategoryId)
+        categoryId: catId,
+        CategoryId: catId
       }
 
       if (product) {
