@@ -279,6 +279,8 @@ export const salesAPI = {
     api.get(`/api/sales/${saleId}/refunds`),
   getAllReturns: () =>
     api.get('/api/sales/returns/all'),
+  getCreditNote: (saleId) =>
+    api.get(`/api/sales/${saleId}/credit-note`),
 };
 
 // Coupons API
