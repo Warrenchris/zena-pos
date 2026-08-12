@@ -119,3 +119,80 @@ async def detect_anomalies(
 ):
     service = AnomalyDetectionService()
     return service.detect_anomalies(request.daily_data, request.contamination)
+
+
+class ReturnItem(BaseModel):
+    product_id: int
+    product_name: str
+    quantity: int
+    amount: float
+    reason_code: str
+    staff_id: Optional[str] = None
+    staff_name: Optional[str] = None
+
+
+class ReturnAnalysisRequest(BaseModel):
+    returns: List[ReturnItem]
+
+
+@router.post("/return-insights")
+async def analyze_returns(
+    request: ReturnAnalysisRequest,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Analyze sales returns to identify high-return products, staff refund anomalies, and return reason distributions.
+    """
+    try:
+        import pandas as pd
+
+        if not request.returns:
+            return {
+                "high_return_products": [],
+                "staff_refund_anomalies": [],
+                "reason_distribution": {},
+                "insights": ["No returns data recorded for the selected period."]
+            }
+
+        df = pd.DataFrame([r.dict() for r in request.returns])
+
+        # High return products by total quantity & amount
+        prod_summary = df.groupby(['product_id', 'product_name']).agg(
+            total_refunded_qty=('quantity', 'sum'),
+            total_refunded_amount=('amount', 'sum'),
+            return_count=('quantity', 'count')
+        ).reset_index().sort_values(by='total_refunded_amount', ascending=False)
+
+        high_return_products = prod_summary.head(5).to_dict(orient='records')
+
+        # Staff refund volume
+        staff_summary = df.groupby(['staff_id', 'staff_name']).agg(
+            refund_count=('quantity', 'count'),
+            total_amount=('amount', 'sum')
+        ).reset_index().sort_values(by='total_amount', ascending=False)
+
+        staff_refund_anomalies = staff_summary.to_dict(orient='records')
+
+        # Reason distribution
+        reason_dist = df['reason_code'].value_counts().to_dict()
+
+        # Generated AI Insights & Recommendations
+        insights_list = []
+        if not prod_summary.empty:
+            top_prod = prod_summary.iloc[0]
+            insights_list.append(
+                f"Product '{top_prod['product_name']}' has the highest return volume ({top_prod['total_refunded_qty']} units, {top_prod['total_refunded_amount']:.2f} KSh)."
+            )
+
+        if 'DEFECTIVE' in reason_dist and reason_dist['DEFECTIVE'] > 0:
+            insights_list.append(f"{reason_dist['DEFECTIVE']} returns were flagged as DEFECTIVE. Inspect supplier batch quality.")
+
+        return {
+            "high_return_products": high_return_products,
+            "staff_refund_anomalies": staff_refund_anomalies,
+            "reason_distribution": reason_dist,
+            "insights": insights_list
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

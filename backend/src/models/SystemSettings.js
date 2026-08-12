@@ -29,7 +29,7 @@ const SystemSettings = sequelize.define('SystemSettings', {
     allowNull: true,
     validate: {
       isValidEmail(value) {
-        if (value === null || value === '') return; // Allow null/empty
+        if (!value) return; // Allow null/empty/undefined
         if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) {
           throw new Error('Invalid email format');
         }
@@ -212,6 +212,17 @@ const SystemSettings = sequelize.define('SystemSettings', {
   aiDigestFrequency: {
     type: DataTypes.ENUM('none', 'daily', 'weekly'),
     defaultValue: 'weekly',
+    allowNull: false
+  },
+
+  maxUnapprovedRefundAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 5000.00,
+    allowNull: false
+  },
+  returnWindowDays: {
+    type: DataTypes.INTEGER,
+    defaultValue: 30,
     allowNull: false
   },
 

@@ -107,16 +107,16 @@ const analyticsController = {
       // Combined query for both current and previous periods
         const results = await sequelize.query(`
         SELECT 
-          DATE(createdAt) as date,
-          HOUR(createdAt) as hour,
-          COUNT(CASE WHEN createdAt >= ? AND createdAt <= ? THEN 1 END) as current_count,
-          SUM(CASE WHEN createdAt >= ? AND createdAt <= ? THEN total ELSE 0 END) as current_revenue,
-          COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_count,
-          SUM(CASE WHEN createdAt >= ? AND createdAt < ? THEN total ELSE 0 END) as previous_revenue
-        FROM Sales
-        WHERE shopId = ? AND createdAt >= ? AND saleStatus != 'cancelled'
-        GROUP BY DATE(createdAt), HOUR(createdAt)
-        ORDER BY DATE(createdAt), HOUR(createdAt)
+          DATE(s.createdAt) as date,
+          HOUR(s.createdAt) as hour,
+          COUNT(CASE WHEN s.createdAt >= ? AND s.createdAt <= ? THEN 1 END) as current_count,
+          SUM(CASE WHEN s.createdAt >= ? AND s.createdAt <= ? THEN (s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as current_revenue,
+          COUNT(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN 1 END) as previous_count,
+          SUM(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN (s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as previous_revenue
+        FROM Sales s
+        WHERE s.shopId = ? AND s.createdAt >= ? AND s.saleStatus != 'cancelled'
+        GROUP BY DATE(s.createdAt), HOUR(s.createdAt)
+        ORDER BY DATE(s.createdAt), HOUR(s.createdAt)
       `, {
         replacements: [
           startDate, now, startDate, now,

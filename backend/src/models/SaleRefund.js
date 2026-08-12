@@ -36,6 +36,24 @@ const SaleRefund = sequelize.define('SaleRefund', {
     type: DataTypes.TEXT,
     allowNull: true
   },
+  reasonCode: {
+    type: DataTypes.ENUM('DEFECTIVE', 'WRONG_ITEM', 'EXPIRED', 'CHANGED_MIND', 'OTHER'),
+    allowNull: false,
+    defaultValue: 'OTHER'
+  },
+  reasonNotes: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  disposition: {
+    type: DataTypes.ENUM('restock', 'damaged_writeoff', 'return_to_supplier'),
+    allowNull: false,
+    defaultValue: 'restock'
+  },
+  managerApprovalId: {
+    type: DataTypes.STRING(36),
+    allowNull: true
+  },
   refundMethod: {
     type: DataTypes.ENUM('cash', 'card', 'mobile_money', 'store_credit'),
     allowNull: false,

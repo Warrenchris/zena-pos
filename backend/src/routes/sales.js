@@ -340,4 +340,9 @@ router.get('/:saleId/refunds',
   saleController.getSaleRefunds
 );
 
+// GET /api/sales/:saleId/credit-note - Get credit note document data
+router.get('/:saleId/credit-note',
+  saleController.getCreditNote
+);
+
 module.exports = router;

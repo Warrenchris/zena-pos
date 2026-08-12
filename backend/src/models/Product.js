@@ -55,6 +55,10 @@ const Product = sequelize.define('Product', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
+  nonReturnable: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
   shopId: {
     type: DataTypes.INTEGER,
     allowNull: false,

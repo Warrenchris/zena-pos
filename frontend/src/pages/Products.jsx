@@ -14,7 +14,6 @@ import {
   Bars4Icon,
   CubeIcon,
   XMarkIcon,
-  FunnelIcon,
   TagIcon,
   ArrowPathIcon,
   CheckCircleIcon,
@@ -38,11 +37,12 @@ function ProductsContent() {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(24); // Default to 24 items per page so all 13+ load on initial view
   const [showProductModal, setShowProductModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+  const [viewMode, setViewMode] = useState('list'); // 'grid' | 'list'
   const [sortConfig, setSortConfig] = useState({ field: 'createdAt', direction: 'desc' });
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [filters, setFilters] = useState({
@@ -67,6 +67,7 @@ function ProductsContent() {
         setLocalLoading(prev => ({ ...prev, filter: true }));
         await dispatch(fetchProducts({ 
           page: currentPage, 
+          pageSize: pageSize,
           search: searchTerm || undefined,
           categoryId: filters.categoryId || undefined,
           availability: filters.availability !== 'all' ? filters.availability : undefined,
@@ -87,7 +88,7 @@ function ProductsContent() {
     };
 
     loadProducts();
-  }, [dispatch, currentPage, searchTerm, filters]);
+  }, [dispatch, currentPage, pageSize, searchTerm, filters]);
 
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
@@ -245,6 +246,8 @@ function ProductsContent() {
     }
   };
 
+  const totalCount = pagination?.total ?? products.length;
+
   return (
     <div className="space-y-6 pt-2 pb-12 px-1">
       <LoadingOverlay 
@@ -263,7 +266,7 @@ function ProductsContent() {
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary tracking-tight">Products</h1>
                 <span className="px-2.5 py-0.5 text-caption font-semibold rounded-full bg-primary/10 text-primary border border-primary/20">
-                  {pagination?.total || sortedAndFilteredProducts.length}
+                  {totalCount}
                 </span>
               </div>
               <p className="text-small text-text-secondary mt-1 flex items-center gap-2">
@@ -654,6 +657,75 @@ function ProductsContent() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Pagination Controls Footer */}
+            {pagination && (pagination.totalPages > 1 || totalCount > 12) && (
+              <div className="px-6 py-4 bg-surface-2/40 border-t border-border-default flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-small text-text-secondary">
+                  Showing <span className="font-bold text-text-primary">{products.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</span> to{' '}
+                  <span className="font-bold text-text-primary">
+                    {Math.min(currentPage * pageSize, totalCount)}
+                  </span> of <span className="font-bold text-text-primary">{totalCount}</span> products
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Page Size Selector */}
+                  <div className="flex items-center gap-2 text-caption text-text-muted">
+                    <span>Show:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      disabled={loading}
+                      className="px-2.5 py-1 rounded-xl bg-surface text-text-primary border border-border-default text-caption font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors"
+                    >
+                      <option value={12}>12 per page</option>
+                      <option value={24}>24 per page</option>
+                      <option value={50}>50 per page</option>
+                      <option value={100}>100 per page</option>
+                    </select>
+                  </div>
+
+                  {/* Pagination Page Buttons */}
+                  {pagination.totalPages > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1 || loading}
+                        className="px-3 py-1 rounded-xl bg-surface text-text-primary border border-border-default hover:bg-surface-2 disabled:opacity-40 text-caption font-semibold transition-colors"
+                      >
+                        Prev
+                      </button>
+
+                      {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(page => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          disabled={loading}
+                          className={`w-8 h-8 rounded-xl text-caption font-bold transition-all ${
+                            currentPage === page
+                              ? 'bg-primary text-white shadow-2xs'
+                              : 'bg-surface text-text-secondary hover:text-text-primary hover:bg-surface-2 border border-border-default'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, pagination.totalPages))}
+                        disabled={currentPage >= pagination.totalPages || loading}
+                        className="px-3 py-1 rounded-xl bg-surface text-text-primary border border-border-default hover:bg-surface-2 disabled:opacity-40 text-caption font-semibold transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

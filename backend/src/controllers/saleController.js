@@ -10,6 +10,8 @@ const Employee = require('../models/Employee');
 const UuidHelper = require('../utils/uuidHelper');
 const User = require('../models/User');
 const SaleRefund = require('../models/SaleRefund');
+const SalePayment = require('../models/SalePayment');
+const SystemSettings = require('../models/SystemSettings');
 const { parseDate } = require('../utils/dateUtils');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 
@@ -938,7 +940,7 @@ exports.getMySales = async (req, res) => {
 
 exports.processRefund = async (req, res) => {
   const { saleId } = req.params;
-  const { items } = req.body;
+  const { items, managerApprovalId, adminOverride } = req.body;
   const refundedBy = String(req.user.id);
   const shopId = req.shopId || req.user.shopId;
 
@@ -958,6 +960,19 @@ exports.processRefund = async (req, res) => {
 
     if (sale.shopId !== shopId) {
       return res.status(403).json({ error: 'Access denied: cross-shop refund' });
+    }
+
+    // Fetch system settings for return policy & approval thresholds
+    const systemSettings = await SystemSettings.findOne({ where: { shopId } });
+    const returnWindowDays = systemSettings?.returnWindowDays !== undefined ? systemSettings.returnWindowDays : 30;
+    const maxUnapproved = parseFloat(systemSettings?.maxUnapprovedRefundAmount !== undefined ? systemSettings.maxUnapprovedRefundAmount : 5000);
+
+    // Return Window Eligibility Check
+    const daysSinceSale = (new Date() - new Date(sale.createdAt)) / (1000 * 60 * 60 * 24);
+    if (daysSinceSale > returnWindowDays && !adminOverride && req.user.role !== 'admin') {
+      return res.status(400).json({ 
+        error: `Return window expired. Sales older than ${returnWindowDays} days require administrator override.` 
+      });
     }
 
     const saleItems = await SaleItem.findAll({
@@ -984,7 +999,7 @@ exports.processRefund = async (req, res) => {
       return res.status(400).json({ error: 'No items with quantity > 0 specified for refund' });
     }
 
-    // Validate each item
+    // Validate each item, non-returnable status, and available quantity
     for (const item of itemsToRefund) {
       const saleItem = saleItemsMap.get(item.productId);
       if (!saleItem) {
@@ -999,6 +1014,42 @@ exports.processRefund = async (req, res) => {
           error: `Cannot refund ${item.quantity} units of product ${item.productId}. Only ${availableQty} units available for refund.` 
         });
       }
+
+      // Check Non-Returnable flag on Product
+      const productRecord = await Product.findOne({ where: { id: item.productId, shopId } });
+      if (productRecord && productRecord.nonReturnable && !adminOverride && req.user.role !== 'admin') {
+        return res.status(400).json({ error: `Product "${productRecord.name}" is marked as non-returnable.` });
+      }
+    }
+
+    // Calculate total net refund amount across all requested items (net price accounting for discounts)
+    let calculatedTotalRefund = 0;
+    const itemsWithNetPrice = itemsToRefund.map(item => {
+      const saleItem = saleItemsMap.get(item.productId);
+      const lineQuantity = saleItem.quantity || 1;
+      const lineSubtotal = parseFloat(saleItem.subtotal || (parseFloat(saleItem.unitPrice || saleItem.price || saleItem.originalPrice || 0) * lineQuantity));
+      const lineDiscount = parseFloat(saleItem.discount || 0);
+      
+      const netLineAmount = Math.max(0, lineSubtotal - lineDiscount);
+      const netUnitPrice = netLineAmount / lineQuantity;
+
+      const lineRefundAmount = parseFloat((item.quantity * netUnitPrice).toFixed(2));
+      calculatedTotalRefund += lineRefundAmount;
+
+      return {
+        ...item,
+        netUnitPrice,
+        lineRefundAmount
+      };
+    });
+
+    const totalRefundAmount = parseFloat(calculatedTotalRefund.toFixed(2));
+
+    // Approval Threshold Check
+    if (totalRefundAmount > maxUnapproved && !managerApprovalId && req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        error: `Refund total (${totalRefundAmount} KSh) exceeds unapproved threshold (${maxUnapproved} KSh). Manager approval ID or 2FA override is required.` 
+      });
     }
 
     // Determine refund method
@@ -1014,43 +1065,88 @@ exports.processRefund = async (req, res) => {
     try {
       const createdRefunds = [];
       
-      for (const item of itemsToRefund) {
-        const saleItem = saleItemsMap.get(item.productId);
-        const originalUnitPrice = parseFloat(saleItem.price || saleItem.unitPrice || saleItem.originalPrice || 0);
-        const lineRefundAmount = item.quantity * originalUnitPrice;
+      for (const item of itemsWithNetPrice) {
+        const disposition = ['restock', 'damaged_writeoff', 'return_to_supplier'].includes(item.disposition)
+          ? item.disposition
+          : 'restock';
+
+        const validReasonCodes = ['DEFECTIVE', 'WRONG_ITEM', 'EXPIRED', 'CHANGED_MIND', 'OTHER'];
+        const reasonCode = validReasonCodes.includes(item.reasonCode)
+          ? item.reasonCode
+          : (validReasonCodes.includes(item.reason) ? item.reason : 'OTHER');
+        
+        const reasonNotes = item.reasonNotes || item.reason || 'Customer Return';
 
         // a. Insert row into SaleRefunds
         const refundRow = await SaleRefund.create({
           saleId: parseInt(saleId, 10),
           productId: item.productId,
           quantity: item.quantity,
-          amount: lineRefundAmount,
-          refundAmount: lineRefundAmount,
-          reason: item.reason || 'Customer Return',
+          amount: item.lineRefundAmount,
+          refundAmount: item.lineRefundAmount,
+          reason: reasonNotes,
+          reasonCode,
+          reasonNotes,
+          disposition,
+          managerApprovalId: managerApprovalId || null,
           refundMethod,
           processedBy,
           refundedBy,
           status: 'processed',
           shopId,
-          refundedAt: new Date()
+          refundedAt: new Date(),
+          metadata: {
+            disposition,
+            isWriteOff: disposition === 'damaged_writeoff'
+          }
         }, { transaction: t });
 
         createdRefunds.push(refundRow);
 
-        // b. Increment stockQuantity in Products
-        const product = await Product.findOne({
-          where: { id: item.productId, shopId },
-          lock: t.LOCK.UPDATE,
-          transaction: t
-        });
+        // b. Update inventory ONLY if disposition is 'restock'
+        if (disposition === 'restock') {
+          const product = await Product.findOne({
+            where: { id: item.productId, shopId },
+            lock: t.LOCK.UPDATE,
+            transaction: t
+          });
 
-        if (product) {
-          await product.increment('stockQuantity', { by: item.quantity, transaction: t });
+          if (product) {
+            await product.increment('stockQuantity', { by: item.quantity, transaction: t });
+          }
+        } else if (disposition === 'damaged_writeoff') {
+          // Log damaged write-off loss in ActivityLogs
+          await logActivity({
+            shopId,
+            performedBy: req.user.id,
+            performedByType: req.user.isEmployee ? 'employee' : 'user',
+            action: 'inventory_writeoff',
+            entity: 'product',
+            entityId: item.productId,
+            details: `Wrote off ${item.quantity} units of product ${item.productId} as damaged/defective from refund #${refundRow.id}`
+          }, t);
         }
       }
 
-      // c. Determine if all items in the sale are fully refunded
-      // Calculate total items refunded (including these new ones)
+      // c. Negative payment ledger entry in SalePayment to record cash/method reversal
+      await SalePayment.create({
+        saleId: parseInt(saleId, 10),
+        amount: -totalRefundAmount,
+        paymentMethod: refundMethod,
+        paymentReference: `REFUND-${saleId}-${Date.now()}`,
+        paymentProvider: 'System Refund Reversal',
+        status: 'completed',
+        processedBy,
+        shopId,
+        paidAt: new Date(),
+        metadata: {
+          isRefundReversal: true,
+          refundedBy,
+          managerApprovalId: managerApprovalId || null
+        }
+      }, { transaction: t });
+
+      // d. Determine if all items in the sale are fully refunded
       const updatedRefundedMap = new Map(previouslyRefundedMap);
       itemsToRefund.forEach(item => {
         const qty = updatedRefundedMap.get(item.productId) || 0;
@@ -1073,11 +1169,10 @@ exports.processRefund = async (req, res) => {
 
       // e. Decrement customer totalPurchases and loyaltyPoints if sale was for a registered customer
       if (sale.customerId) {
-        const totalRefundedAmount = createdRefunds.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
-        const pointsToDeduct = Math.floor(totalRefundedAmount);
+        const pointsToDeduct = Math.floor(totalRefundAmount);
         const customerRecord = await Customer.findOne({ where: { id: sale.customerId, shopId }, transaction: t });
         if (customerRecord) {
-          const newTotalPurchases = Math.max(0, parseFloat(customerRecord.totalPurchases || 0) - totalRefundedAmount);
+          const newTotalPurchases = Math.max(0, parseFloat(customerRecord.totalPurchases || 0) - totalRefundAmount);
           const newLoyaltyPoints = Math.max(0, (customerRecord.loyaltyPoints || 0) - pointsToDeduct);
           await customerRecord.update({
             totalPurchases: newTotalPurchases,
@@ -1086,7 +1181,7 @@ exports.processRefund = async (req, res) => {
         }
       }
 
-      // d. Log activity
+      // f. Log activity
       await logActivity({
         shopId,
         performedBy: req.user.id,
@@ -1094,18 +1189,19 @@ exports.processRefund = async (req, res) => {
         action: 'refund',
         entity: 'sale',
         entityId: parseInt(saleId, 10),
-        details: `Processed ${allFullyRefunded ? 'full' : 'partial'} refund for sale ${sale.invoiceNumber}`
+        details: `Processed ${allFullyRefunded ? 'full' : 'partial'} refund for sale ${sale.invoiceNumber} (Total: ${totalRefundAmount} KSh)`
       }, t);
 
       await t.commit();
 
       res.json({
         refunds: createdRefunds,
-        saleStatus
+        saleStatus,
+        totalRefundAmount
       });
     } catch (error) {
       await t.rollback();
-      throw error; // Let the outer catch handle it
+      throw error;
     }
   } catch (error) {
     console.error('Error processing refund:', error);
@@ -1276,4 +1372,76 @@ exports.getAllReturns = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch sales returns' });
   }
 };
+
+exports.getCreditNote = async (req, res) => {
+  const { saleId } = req.params;
+  const shopId = req.shopId || req.user.shopId;
+
+  try {
+    const sale = await Sale.findOne({
+      where: { id: saleId, shopId },
+      include: [
+        { model: Customer },
+        { model: User, attributes: ['id', 'name', 'email'] }
+      ]
+    });
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+
+    const refunds = await SaleRefund.findAll({
+      where: { saleId, shopId, status: 'processed' },
+      include: [
+        { model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'barcode'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    if (refunds.length === 0) {
+      return res.status(404).json({ error: 'No processed refunds found for this sale' });
+    }
+
+    const settings = await SystemSettings.findOne({ where: { shopId } });
+    const totalRefundedAmount = refunds.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+
+    const creditNote = {
+      creditNoteNumber: `CN-${sale.invoiceNumber || sale.id}`,
+      originalInvoiceNumber: sale.invoiceNumber,
+      saleId: sale.id,
+      issuedAt: refunds[0]?.refundedAt || refunds[0]?.createdAt || new Date(),
+      customer: sale.Customer ? {
+        name: sale.Customer.name,
+        email: sale.Customer.email,
+        phone: sale.Customer.phone
+      } : { name: sale.customerName || 'Walk-in Customer' },
+      items: refunds.map(r => ({
+        refundId: r.id,
+        productId: r.productId,
+        productName: r.product?.name || 'Unknown Product',
+        sku: r.product?.sku || 'N/A',
+        quantity: r.quantity,
+        amount: parseFloat(r.amount),
+        disposition: r.disposition || 'restock',
+        reasonCode: r.reasonCode || 'OTHER',
+        reasonNotes: r.reasonNotes || r.reason || ''
+      })),
+      totalRefundAmount: parseFloat(totalRefundedAmount.toFixed(2)),
+      paymentMethod: refunds[0]?.refundMethod || sale.paymentMethod,
+      shop: {
+        systemName: settings?.systemName || 'Zana POS',
+        contactEmail: settings?.contactEmail,
+        contactPhone: settings?.contactPhone,
+        receiptHeader: settings?.receiptHeader,
+        receiptFooter: settings?.receiptFooter
+      }
+    };
+
+    res.json(creditNote);
+  } catch (error) {
+    console.error('Error fetching credit note:', error);
+    res.status(500).json({ error: 'Failed to generate credit note' });
+  }
+};
+
 

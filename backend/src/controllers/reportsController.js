@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Employee = require('../models/Employee');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
+const SaleRefund = require('../models/SaleRefund');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 // GET /api/reports/sales-summary?range=daily|monthly&startDate=&endDate=
@@ -254,12 +255,14 @@ exports.getSalesSummary = async (req, res) => {
   }
 };
 
-// GET /api/reports/profit-loss?startDate=&endDate=
+// GET /api/reports/profit-loss?startDate=&endDate=&shopId=
 exports.getProfitAndLoss = async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
-    const where = { shopId: req.user.shopId, ...NON_CANCELLED_SALE_FILTER };
-    const expenseWhere = { shopId: req.user.shopId };
+    const { startDate, endDate, shopId: queryShopId } = req.query;
+    const targetShopId = queryShopId ? parseInt(queryShopId, 10) : (req.shopId || req.user?.shopId);
+
+    const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
+    const expenseWhere = { shopId: targetShopId };
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
       const e = endDate ? new Date(endDate) : new Date();
@@ -289,7 +292,12 @@ exports.getProfitAndLoss = async (req, res) => {
       revenuePreDiscount = Number(row?.amount || 0);
     }
     const totalDiscount = Number(discountSum || 0);
-    const revenue = Math.max(0, revenuePreDiscount - totalDiscount);
+    const refundWhere = { shopId: targetShopId, status: 'processed' };
+    if (where.createdAt) {
+      refundWhere.createdAt = where.createdAt;
+    }
+    const totalRefunds = Number(await SaleRefund.sum('amount', { where: refundWhere }) || 0);
+    const revenue = Math.max(0, revenuePreDiscount - totalDiscount - totalRefunds);
 
     // COGS from items (quantity * Product.cost)
     const cogsRow = await SaleItem.findOne({
