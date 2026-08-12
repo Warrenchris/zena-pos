@@ -274,19 +274,18 @@ router.get('/:saleId/payments',
   saleController.getSalePayments
 );
 
-// Get specific sale - Permission check is handled in controller
+// Get specific sale - Scoped to shop for cashiers/employees
 router.get('/:id',
   async (req, res, next) => {
-    // Admin and managers can view all sales
+    // Admin and managers can view sales
     if (req.user.role === 'admin' || req.user.role === 'manager') {
       return next();
     }
-    // Cashiers and employees can only view their own sales
+    // Cashiers and employees can view sales belonging to their assigned shop
     if (req.user.role === 'cashier' || req.user.role === 'employee') {
       const sale = await Sale.findOne({
         where: {
           id: req.params.id,
-          employeeId: req.user.id,
           shopId: req.user.shopId
         }
       });
@@ -331,7 +330,7 @@ router.patch('/:id/payment-status',
 
 // POST /api/sales/:saleId/refund - Process itemized refund
 router.post('/:saleId/refund',
-  checkPermission('process_refunds'),
+  checkRole(['admin', 'manager', 'cashier']),
   saleController.processRefund
 );
 
