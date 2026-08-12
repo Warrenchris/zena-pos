@@ -4,10 +4,10 @@ const controller = require('../controllers/shopController');
 
 const router = express.Router();
 
-router.use(auth, checkRole(['admin']));
+router.use(auth);
 
 router.get('/me', controller.getMine);
-router.put('/me', controller.updateMine);
+router.put('/me', checkRole(['admin', 'manager']), controller.updateMine);
 
 module.exports = router;
 

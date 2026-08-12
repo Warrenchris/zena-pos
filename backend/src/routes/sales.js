@@ -232,7 +232,7 @@ const validatePaymentStatus = [
 
 // Basic routes with role-based access
 router.get('/',
-  checkRole(['admin', 'manager']),
+  checkRole(['admin', 'manager', 'cashier']),
   saleController.getAllSales
 );
 
