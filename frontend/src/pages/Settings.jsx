@@ -241,7 +241,7 @@ const Settings = () => {
     <div className="space-y-6">
       {/* Business Logo Upload */}
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Business Logo
         </label>
         <div className="flex items-center space-x-4">
@@ -250,21 +250,21 @@ const Settings = () => {
               <img
                 src={formData.businessLogo}
                 alt="Business Logo Preview"
-                className="h-20 w-20 object-contain rounded-lg border border-zana-borderTint bg-black/40 p-1"
+                className="h-20 w-20 object-contain rounded-xl border border-border-default bg-surface-2 p-1"
               />
               <button
                 type="button"
                 onClick={() => handleInputChange('businessLogo', null)}
-                className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 focus:outline-none"
+                className="absolute -top-2 -right-2 bg-danger text-white rounded-full p-1 hover:bg-danger/90 focus:outline-none shadow-sm"
                 title="Remove logo"
               >
                 <XMarkIcon className="h-4 w-4" />
               </button>
             </div>
           ) : (
-            <div className="h-20 w-20 rounded-lg border-2 border-dashed border-zana-borderTint bg-black/20 flex flex-col items-center justify-center text-white/50">
-              <PhotoIcon className="h-8 w-8 text-white/40 mb-1" />
-              <span className="text-[10px]">No Logo</span>
+            <div className="h-20 w-20 rounded-xl border-2 border-dashed border-border-default bg-surface-2/50 flex flex-col items-center justify-center text-text-muted">
+              <PhotoIcon className="h-8 w-8 text-text-muted mb-1" />
+              <span className="text-[10px] font-medium">No Logo</span>
             </div>
           )}
 
@@ -278,14 +278,14 @@ const Settings = () => {
             />
             <label
               htmlFor="businessLogoInput"
-              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border text-black bg-zana-yellow border-zana-yellow hover:bg-zana-yellow/90 cursor-pointer transition-colors ${
+              className={`inline-flex items-center px-4 py-2 text-small font-semibold rounded-xl text-white bg-primary hover:bg-primary-hover active:bg-primary-active cursor-pointer transition-all shadow-2xs ${
                 logoUploading ? 'opacity-50 cursor-wait' : ''
               }`}
             >
-              <PhotoIcon className="mr-2 h-5 w-5" />
+              <PhotoIcon className="mr-2 h-4 w-4" />
               {logoUploading ? 'Uploading Logo...' : 'Upload Logo Image'}
             </label>
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-caption text-text-muted mt-1.5">
               Supports PNG, JPEG, WEBP, or SVG (Max size: 2MB).
             </p>
           </div>
@@ -293,131 +293,131 @@ const Settings = () => {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           System Name
         </label>
         <input
           type="text"
           value={formData.systemName || ''}
           onChange={(e) => handleInputChange('systemName', e.target.value)}
-          className={`w-full px-3 py-2 bg-black/40 border rounded-md text-white focus:outline-none focus:ring-2 ${
+          className={`w-full px-3.5 py-2.5 rounded-xl border bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 transition-all ${
             getError('systemName') 
-              ? 'border-red-500/50 focus:ring-red-500' 
-              : 'border-zana-borderTint focus:ring-zana-yellow'
+              ? 'border-danger/50 focus:ring-danger/30' 
+              : 'border-border-default focus:ring-primary/30 focus:border-primary'
           }`}
           placeholder="Enter system name"
         />
         {getError('systemName') && (
-          <p className="mt-1 text-sm text-red-400">{getError('systemName')}</p>
+          <p className="mt-1 text-caption text-danger">{getError('systemName')}</p>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-small font-semibold text-text-primary mb-1.5">
             KRA PIN
           </label>
           <input
             type="text"
             value={formData.kraPin || ''}
             onChange={(e) => handleInputChange('kraPin', e.target.value)}
-            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
             placeholder="e.g. A012345678Z"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-small font-semibold text-text-primary mb-1.5">
             Business Registration Number
           </label>
           <input
             type="text"
             value={formData.registrationNumber || ''}
             onChange={(e) => handleInputChange('registrationNumber', e.target.value)}
-            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
             placeholder="e.g. CPR/2023/12345"
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Contact Email
         </label>
         <input
           type="email"
           value={formData.contactEmail || ''}
           onChange={(e) => handleInputChange('contactEmail', e.target.value)}
-          className={`w-full px-3 py-2 bg-black/40 border rounded-md text-white focus:outline-none focus:ring-2 ${
+          className={`w-full px-3.5 py-2.5 rounded-xl border bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 transition-all ${
             getError('contactEmail') 
-              ? 'border-red-500/50 focus:ring-red-500' 
-              : 'border-zana-borderTint focus:ring-zana-yellow'
+              ? 'border-danger/50 focus:ring-danger/30' 
+              : 'border-border-default focus:ring-primary/30 focus:border-primary'
           }`}
           placeholder="Enter contact email"
         />
         {getError('contactEmail') && (
-          <p className="mt-1 text-sm text-red-400">{getError('contactEmail')}</p>
+          <p className="mt-1 text-caption text-danger">{getError('contactEmail')}</p>
         )}
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Contact Phone
         </label>
         <input
           type="tel"
           value={formData.contactPhone || ''}
           onChange={(e) => handleInputChange('contactPhone', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           placeholder="Enter contact phone"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Timezone
         </label>
         <select
           value={formData.timezone || 'Africa/Nairobi'}
           onChange={(e) => handleInputChange('timezone', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="Africa/Nairobi" className="bg-brand-black text-white">Africa/Nairobi</option>
-          <option value="Africa/Lagos" className="bg-brand-black text-white">Africa/Lagos</option>
-          <option value="Africa/Johannesburg" className="bg-brand-black text-white">Africa/Johannesburg</option>
-          <option value="Africa/Cairo" className="bg-brand-black text-white">Africa/Cairo</option>
-          <option value="UTC" className="bg-brand-black text-white">UTC</option>
+          <option value="Africa/Nairobi" className="bg-surface text-text-primary">Africa/Nairobi</option>
+          <option value="Africa/Lagos" className="bg-surface text-text-primary">Africa/Lagos</option>
+          <option value="Africa/Johannesburg" className="bg-surface text-text-primary">Africa/Johannesburg</option>
+          <option value="Africa/Cairo" className="bg-surface text-text-primary">Africa/Cairo</option>
+          <option value="UTC" className="bg-surface text-text-primary">UTC</option>
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Language
         </label>
         <select
           value={formData.language || 'en'}
           onChange={(e) => handleInputChange('language', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="en" className="bg-brand-black text-white">English</option>
-          <option value="sw" className="bg-brand-black text-white">Swahili</option>
-          <option value="fr" className="bg-brand-black text-white">French</option>
-          <option value="ar" className="bg-brand-black text-white">Arabic</option>
+          <option value="en" className="bg-surface text-text-primary">English</option>
+          <option value="sw" className="bg-surface text-text-primary">Swahili</option>
+          <option value="fr" className="bg-surface text-text-primary">French</option>
+          <option value="ar" className="bg-surface text-text-primary">Arabic</option>
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Theme
         </label>
         <select
           value={formData.theme || 'dark'}
           onChange={(e) => handleInputChange('theme', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="light" className="bg-brand-black text-white">Light</option>
-          <option value="dark" className="bg-brand-black text-white">Dark</option>
-          <option value="system" className="bg-brand-black text-white">System</option>
+          <option value="light" className="bg-surface text-text-primary">Light</option>
+          <option value="dark" className="bg-surface text-text-primary">Dark</option>
+          <option value="system" className="bg-surface text-text-primary">System</option>
         </select>
       </div>
     </div>
@@ -426,53 +426,53 @@ const Settings = () => {
   const renderCurrencySettings = () => (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Default Currency
         </label>
         <select
           value={formData.defaultCurrency || 'KES'}
           onChange={(e) => handleInputChange('defaultCurrency', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="KES">Kenyan Shilling (KES)</option>
-          <option value="USD">US Dollar (USD)</option>
-          <option value="NGN">Nigerian Naira (NGN)</option>
-          <option value="ZAR">South African Rand (ZAR)</option>
-          <option value="GHS">Ghanaian Cedi (GHS)</option>
-          <option value="TZS">Tanzanian Shilling (TZS)</option>
-          <option value="UGX">Ugandan Shilling (UGX)</option>
+          <option value="KES" className="bg-surface text-text-primary">Kenyan Shilling (KES)</option>
+          <option value="USD" className="bg-surface text-text-primary">US Dollar (USD)</option>
+          <option value="NGN" className="bg-surface text-text-primary">Nigerian Naira (NGN)</option>
+          <option value="ZAR" className="bg-surface text-text-primary">South African Rand (ZAR)</option>
+          <option value="GHS" className="bg-surface text-text-primary">Ghanaian Cedi (GHS)</option>
+          <option value="TZS" className="bg-surface text-text-primary">Tanzanian Shilling (TZS)</option>
+          <option value="UGX" className="bg-surface text-text-primary">Ugandan Shilling (UGX)</option>
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Currency Symbol
         </label>
         <input
           type="text"
           value={formData.currencySymbol || ''}
           onChange={(e) => handleInputChange('currencySymbol', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           placeholder="e.g., KSh, $, ₦"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Currency Position
         </label>
         <select
           value={formData.currencyPosition || 'before'}
           onChange={(e) => handleInputChange('currencyPosition', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="before">Before amount (KSh 100)</option>
-          <option value="after">After amount (100 KSh)</option>
+          <option value="before" className="bg-surface text-text-primary">Before amount (KSh 100)</option>
+          <option value="after" className="bg-surface text-text-primary">After amount (100 KSh)</option>
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Decimal Places
         </label>
         <input
@@ -481,13 +481,13 @@ const Settings = () => {
           max="4"
           value={formData.decimalPlaces || 2}
           onChange={(e) => handleInputChange('decimalPlaces', parseInt(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         />
       </div>
 
-      <div className="bg-blue-50 p-4 rounded-md">
-        <h4 className="text-sm font-medium text-blue-900 mb-2">Preview</h4>
-        <p className="text-blue-700">
+      <div className="p-4 rounded-2xl border border-primary/20 bg-primary/5">
+        <h4 className="text-small font-semibold text-primary mb-1">Preview</h4>
+        <p className="text-h3 font-bold text-text-primary">
           {formatCurrency(1234.56, {
             currencySymbol: formData.currencySymbol || 'KSh',
             currencyPosition: formData.currencyPosition || 'before',
@@ -499,11 +499,11 @@ const Settings = () => {
   );
 
   const renderNotificationSettings = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Enable Notifications</h4>
-          <p className="text-sm text-gray-500">Show system notifications</p>
+          <h4 className="text-small font-semibold text-text-primary">Enable Notifications</h4>
+          <p className="text-caption text-text-muted mt-0.5">Show system notifications</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -512,14 +512,14 @@ const Settings = () => {
             onChange={(e) => handleInputChange('enableNotifications', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Sound Alerts</h4>
-          <p className="text-sm text-gray-500">Play sound for notifications</p>
+          <h4 className="text-small font-semibold text-text-primary">Sound Alerts</h4>
+          <p className="text-caption text-text-muted mt-0.5">Play sound for notifications</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -528,14 +528,14 @@ const Settings = () => {
             onChange={(e) => handleInputChange('enableSoundAlerts', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Email Alerts</h4>
-          <p className="text-sm text-gray-500">Send email notifications</p>
+          <h4 className="text-small font-semibold text-text-primary">Email Alerts</h4>
+          <p className="text-caption text-text-muted mt-0.5">Send email notifications</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -544,14 +544,14 @@ const Settings = () => {
             onChange={(e) => handleInputChange('enableEmailAlerts', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Success Toasts</h4>
-          <p className="text-sm text-gray-500">Show success messages</p>
+          <h4 className="text-small font-semibold text-text-primary">Success Toasts</h4>
+          <p className="text-caption text-text-muted mt-0.5">Show success messages</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -560,14 +560,14 @@ const Settings = () => {
             onChange={(e) => handleInputChange('enableSuccessToasts', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Error Toasts</h4>
-          <p className="text-sm text-gray-500">Show error messages</p>
+          <h4 className="text-small font-semibold text-text-primary">Error Toasts</h4>
+          <p className="text-caption text-text-muted mt-0.5">Show error messages</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -576,24 +576,24 @@ const Settings = () => {
             onChange={(e) => handleInputChange('enableErrorToasts', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
 
-      <div className="pt-4 border-t border-zana-borderTint">
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+      <div className="pt-4 border-t border-border-default">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           AI Insights Digest Frequency
         </label>
         <select
           value={formData.aiDigestFrequency || 'weekly'}
           onChange={(e) => handleInputChange('aiDigestFrequency', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="none" className="bg-brand-black text-white">Disabled (None)</option>
-          <option value="daily" className="bg-brand-black text-white">Daily Summary Email</option>
-          <option value="weekly" className="bg-brand-black text-white">Weekly Summary Email</option>
+          <option value="none" className="bg-surface text-text-primary">Disabled (None)</option>
+          <option value="daily" className="bg-surface text-text-primary">Daily Summary Email</option>
+          <option value="weekly" className="bg-surface text-text-primary">Weekly Summary Email</option>
         </select>
-        <p className="text-xs text-white/50 mt-1">
+        <p className="text-caption text-text-muted mt-1">
           Frequency of automated AI inventory and sales digest reports sent to admin email.
         </p>
       </div>
@@ -603,7 +603,7 @@ const Settings = () => {
   const renderInventorySettings = () => (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Global Low-Stock Threshold
         </label>
         <input
@@ -612,44 +612,44 @@ const Settings = () => {
           max="10000"
           value={formData.lowStockThreshold !== undefined && formData.lowStockThreshold !== null ? formData.lowStockThreshold : 10}
           onChange={(e) => handleInputChange('lowStockThreshold', parseInt(e.target.value, 10) || 0)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           placeholder="e.g. 10"
         />
-        <p className="text-xs text-white/50 mt-1">
+        <p className="text-caption text-text-muted mt-1">
           Default stock reorder threshold used when a product's individual reorder point is unconfigured.
         </p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Auto SKU Prefix
         </label>
         <input
           type="text"
           value={formData.skuPrefix || 'SKU'}
           onChange={(e) => handleInputChange('skuPrefix', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           placeholder="e.g. SKU, PROD, ITEM"
         />
-        <p className="text-xs text-white/50 mt-1">
+        <p className="text-caption text-text-muted mt-1">
           Prefix used when automatically generating product SKUs during product creation.
         </p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Auto Barcode Standard
         </label>
         <select
           value={formData.barcodeFormat || 'EAN13'}
           onChange={(e) => handleInputChange('barcodeFormat', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="EAN13" className="bg-brand-black text-white">EAN-13 (13 Digits with Check-Digit)</option>
-          <option value="UPC" className="bg-brand-black text-white">UPC-A (12 Digits with Check-Digit)</option>
-          <option value="CODE128" className="bg-brand-black text-white">CODE128 (Alpha-Numeric)</option>
+          <option value="EAN13" className="bg-surface text-text-primary">EAN-13 (13 Digits with Check-Digit)</option>
+          <option value="UPC" className="bg-surface text-text-primary">UPC-A (12 Digits with Check-Digit)</option>
+          <option value="CODE128" className="bg-surface text-text-primary">CODE128 (Alpha-Numeric)</option>
         </select>
-        <p className="text-xs text-white/50 mt-1">
+        <p className="text-caption text-text-muted mt-1">
           Standard used to generate barcode values when a product barcode is left blank.
         </p>
       </div>
@@ -659,24 +659,24 @@ const Settings = () => {
   const renderSecuritySettings = () => (
     <div className="space-y-8">
       {/* Change Password Form */}
-      <div className="p-5 bg-black/40 border border-zana-borderTint rounded-lg space-y-4">
-        <div className="flex items-center space-x-2 text-zana-yellow">
+      <div className="p-5 bg-surface-2/40 border border-border-default rounded-2xl space-y-4 shadow-2xs">
+        <div className="flex items-center space-x-2 text-primary font-semibold">
           <KeyIcon className="h-5 w-5" />
-          <h3 className="text-md font-semibold">Change Account Password</h3>
+          <h3 className="text-small font-bold text-text-primary">Change Account Password</h3>
         </div>
 
         {passwordStatus && (
           <div
-            className={`p-3 rounded-md text-sm flex items-center ${
+            className={`p-3.5 rounded-xl text-small flex items-center ${
               passwordStatus.type === 'success'
-                ? 'bg-green-950/40 border border-green-500/50 text-green-300'
-                : 'bg-red-950/40 border border-red-500/50 text-red-300'
+                ? 'bg-success-muted border border-success-border text-success-text'
+                : 'bg-danger-muted border border-danger-border text-danger-text'
             }`}
           >
             {passwordStatus.type === 'success' ? (
-              <CheckIcon className="h-5 w-5 mr-2 shrink-0 text-green-400" />
+              <CheckIcon className="h-5 w-5 mr-2 shrink-0 text-success" />
             ) : (
-              <ExclamationTriangleIcon className="h-5 w-5 mr-2 shrink-0 text-red-400" />
+              <ExclamationTriangleIcon className="h-5 w-5 mr-2 shrink-0 text-danger" />
             )}
             <span>{passwordStatus.message}</span>
           </div>
@@ -684,40 +684,40 @@ const Settings = () => {
 
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
+            <label className="block text-small font-semibold text-text-primary mb-1">
               Current Password
             </label>
             <input
               type="password"
               value={passwordForm.currentPassword}
               onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               placeholder="Enter current password"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
+            <label className="block text-small font-semibold text-text-primary mb-1">
               New Password
             </label>
             <input
               type="password"
               value={passwordForm.newPassword}
               onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               placeholder="Enter new password"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
+            <label className="block text-small font-semibold text-text-primary mb-1">
               Confirm New Password
             </label>
             <input
               type="password"
               value={passwordForm.confirmPassword}
               onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               placeholder="Confirm new password"
             />
           </div>
@@ -725,7 +725,7 @@ const Settings = () => {
           <button
             type="submit"
             disabled={passwordLoading}
-            className={`px-4 py-2 text-sm font-medium text-black bg-zana-yellow rounded-md hover:bg-zana-yellow/90 focus:outline-none ${
+            className={`h-9 px-4 inline-flex items-center justify-center rounded-xl text-small font-semibold text-white bg-primary hover:bg-primary-hover active:bg-primary-active transition-all shadow-2xs ${
               passwordLoading ? 'opacity-50 cursor-wait' : ''
             }`}
           >
@@ -734,11 +734,11 @@ const Settings = () => {
         </form>
       </div>
 
-      <div className="pt-4 border-t border-zana-borderTint space-y-6">
-        <h3 className="text-md font-semibold text-white">System Security Policies</h3>
+      <div className="pt-4 border-t border-border-default space-y-4">
+        <h3 className="text-small font-bold text-text-primary">System Security Policies</h3>
         
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-small font-semibold text-text-primary mb-1.5">
             Password Minimum Length
           </label>
           <input
@@ -747,14 +747,14 @@ const Settings = () => {
             max="20"
             value={formData.passwordMinLength || 8}
             onChange={(e) => handleInputChange('passwordMinLength', parseInt(e.target.value))}
-            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
           <div>
-            <h4 className="text-sm font-medium text-white">Require Special Characters</h4>
-            <p className="text-sm text-white/60">Force special characters in passwords</p>
+            <h4 className="text-small font-semibold text-text-primary">Require Special Characters</h4>
+            <p className="text-caption text-text-muted mt-0.5">Force special characters in passwords</p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
@@ -763,12 +763,12 @@ const Settings = () => {
               onChange={(e) => handleInputChange('requireSpecialChars', e.target.checked)}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-zana-yellow"></div>
+            <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
           </label>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-small font-semibold text-text-primary mb-1.5">
             Session Timeout (minutes)
           </label>
           <input
@@ -777,14 +777,14 @@ const Settings = () => {
             max="1440"
             value={formData.sessionTimeout || 480}
             onChange={(e) => handleInputChange('sessionTimeout', parseInt(e.target.value))}
-            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
           <div>
-            <h4 className="text-sm font-medium text-white">Two-Factor Authentication</h4>
-            <p className="text-sm text-white/60">Enable 2FA for enhanced security</p>
+            <h4 className="text-small font-semibold text-text-primary">Two-Factor Authentication</h4>
+            <p className="text-caption text-text-muted mt-0.5">Enable 2FA for enhanced security</p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
@@ -793,12 +793,12 @@ const Settings = () => {
               onChange={(e) => handleInputChange('enableTwoFactor', e.target.checked)}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-zana-yellow"></div>
+            <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
           </label>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-small font-semibold text-text-primary mb-1.5">
             Max Login Attempts
           </label>
           <input
@@ -807,7 +807,7 @@ const Settings = () => {
             max="10"
             value={formData.maxLoginAttempts || 5}
             onChange={(e) => handleInputChange('maxLoginAttempts', parseInt(e.target.value))}
-            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           />
         </div>
       </div>
@@ -816,10 +816,10 @@ const Settings = () => {
 
   const renderBackupSettings = () => (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Auto Backup</h4>
-          <p className="text-sm text-gray-500">Automatically backup data</p>
+          <h4 className="text-small font-semibold text-text-primary">Auto Backup</h4>
+          <p className="text-caption text-text-muted mt-0.5">Automatically backup data</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -828,27 +828,27 @@ const Settings = () => {
             onChange={(e) => handleInputChange('autoBackupEnabled', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Backup Frequency
         </label>
         <select
           value={formData.backupFrequency || 'daily'}
           onChange={(e) => handleInputChange('backupFrequency', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
+          <option value="daily" className="bg-surface text-text-primary">Daily</option>
+          <option value="weekly" className="bg-surface text-text-primary">Weekly</option>
+          <option value="monthly" className="bg-surface text-text-primary">Monthly</option>
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Backup Retention (days)
         </label>
         <input
@@ -857,18 +857,18 @@ const Settings = () => {
           max="365"
           value={formData.backupRetentionDays || 30}
           onChange={(e) => handleInputChange('backupRetentionDays', parseInt(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         />
       </div>
     </div>
   );
 
   const renderUserManagementSettings = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Allow User Registration</h4>
-          <p className="text-sm text-gray-500">Allow new users to register</p>
+          <h4 className="text-small font-semibold text-text-primary">Allow User Registration</h4>
+          <p className="text-caption text-text-muted mt-0.5">Allow new users to register</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -877,14 +877,14 @@ const Settings = () => {
             onChange={(e) => handleInputChange('allowUserRegistration', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">Require Email Verification</h4>
-          <p className="text-sm text-gray-500">Verify email addresses for new users</p>
+          <h4 className="text-small font-semibold text-text-primary">Require Email Verification</h4>
+          <p className="text-caption text-text-muted mt-0.5">Verify email addresses for new users</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -893,7 +893,7 @@ const Settings = () => {
             onChange={(e) => handleInputChange('requireEmailVerification', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
     </div>
@@ -902,7 +902,7 @@ const Settings = () => {
   const renderPosSettings = () => (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Default Tax / VAT Rate (%)
         </label>
         <input
@@ -912,10 +912,10 @@ const Settings = () => {
           max="100"
           value={formData.taxRate !== undefined && formData.taxRate !== null ? formData.taxRate : 0}
           onChange={(e) => handleInputChange('taxRate', parseFloat(e.target.value) || 0)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           placeholder="e.g. 16.00"
         />
-        <p className="text-xs text-white/50 mt-1">
+        <p className="text-caption text-text-muted mt-1">
           This tax rate will be automatically applied to net order subtotals in the POS checkout modal.
         </p>
       </div>
@@ -925,35 +925,35 @@ const Settings = () => {
   const renderReceiptSettings = () => (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Receipt Header Text
         </label>
         <textarea
           rows={3}
           value={formData.receiptHeader || ''}
           onChange={(e) => handleInputChange('receiptHeader', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           placeholder="Welcome to Zana POS! Thank you for shopping with us."
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Receipt Footer Text
         </label>
         <textarea
           rows={3}
           value={formData.receiptFooter || ''}
           onChange={(e) => handleInputChange('receiptFooter', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           placeholder="Goods once sold are non-refundable. Please come again!"
         />
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-sm font-medium text-white">Show Business Logo on Receipt</h4>
-          <p className="text-sm text-white/60">Display uploaded shop logo at the top of receipts</p>
+          <h4 className="text-small font-semibold text-text-primary">Show Business Logo on Receipt</h4>
+          <p className="text-caption text-text-muted mt-0.5">Display uploaded shop logo at the top of receipts</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -962,34 +962,34 @@ const Settings = () => {
             onChange={(e) => handleInputChange('showLogoOnReceipt', e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-zana-yellow"></div>
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
           Printer Type
         </label>
         <select
           value={formData.printerType || 'browser'}
           onChange={(e) => handleInputChange('printerType', e.target.value)}
-          className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         >
-          <option value="browser" className="bg-brand-black text-white">Browser Print Dialog</option>
-          <option value="thermal" className="bg-brand-black text-white">Thermal POS Printer (ESC/POS)</option>
+          <option value="browser" className="bg-surface text-text-primary">Browser Print Dialog</option>
+          <option value="thermal" className="bg-surface text-text-primary">Thermal POS Printer (ESC/POS)</option>
         </select>
       </div>
 
       {formData.printerType === 'thermal' && (
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-small font-semibold text-text-primary mb-1.5">
             Printer IP Address / Port
           </label>
           <input
             type="text"
             value={formData.printerIP || ''}
             onChange={(e) => handleInputChange('printerIP', e.target.value)}
-            className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
             placeholder="e.g. 192.168.1.100:9100"
           />
         </div>
@@ -1010,118 +1010,118 @@ const Settings = () => {
     return (
       <div className="space-y-8">
         <div>
-          <h3 className="text-md font-semibold text-zana-yellow mb-4">Enabled Payment Methods</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-black/40 border border-zana-borderTint rounded-md">
+          <h3 className="text-small font-bold text-text-primary mb-4">Enabled Payment Methods</h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3.5 bg-surface-2/40 border border-border-default rounded-xl">
               <div>
-                <h4 className="text-sm font-medium text-white">Cash Payments</h4>
-                <p className="text-xs text-white/60">Allow cash checkout at POS</p>
+                <h4 className="text-small font-semibold text-text-primary">Cash Payments</h4>
+                <p className="text-caption text-text-muted mt-0.5">Allow cash checkout at POS</p>
               </div>
               <input
                 type="checkbox"
                 checked={enabledMethods.cash !== false}
                 onChange={(e) => handleMethodToggle('cash', e.target.checked)}
-                className="h-5 w-5 text-zana-yellow focus:ring-zana-yellow border-gray-600 rounded bg-gray-800"
+                className="h-5 w-5 text-primary focus:ring-primary/30 border-border-default rounded-lg bg-surface cursor-pointer"
               />
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-black/40 border border-zana-borderTint rounded-md">
+            <div className="flex items-center justify-between p-3.5 bg-surface-2/40 border border-border-default rounded-xl">
               <div>
-                <h4 className="text-sm font-medium text-white">Mobile Money (M-Pesa)</h4>
-                <p className="text-xs text-white/60">Allow STK push and M-Pesa mobile money checkout</p>
+                <h4 className="text-small font-semibold text-text-primary">Mobile Money (M-Pesa)</h4>
+                <p className="text-caption text-text-muted mt-0.5">Allow STK push and M-Pesa mobile money checkout</p>
               </div>
               <input
                 type="checkbox"
                 checked={enabledMethods.mobile !== false}
                 onChange={(e) => handleMethodToggle('mobile', e.target.checked)}
-                className="h-5 w-5 text-zana-yellow focus:ring-zana-yellow border-gray-600 rounded bg-gray-800"
+                className="h-5 w-5 text-primary focus:ring-primary/30 border-border-default rounded-lg bg-surface cursor-pointer"
               />
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-black/40 border border-zana-borderTint rounded-md">
+            <div className="flex items-center justify-between p-3.5 bg-surface-2/40 border border-border-default rounded-xl">
               <div>
-                <h4 className="text-sm font-medium text-white">Card / Bank Transfer</h4>
-                <p className="text-xs text-white/60">Allow debit/credit card and bank transfer checkout</p>
+                <h4 className="text-small font-semibold text-text-primary">Card / Bank Transfer</h4>
+                <p className="text-caption text-text-muted mt-0.5">Allow debit/credit card and bank transfer checkout</p>
               </div>
               <input
                 type="checkbox"
                 checked={enabledMethods.bank === true || enabledMethods.card === true}
                 onChange={(e) => handleMethodToggle('bank', e.target.checked)}
-                className="h-5 w-5 text-zana-yellow focus:ring-zana-yellow border-gray-600 rounded bg-gray-800"
+                className="h-5 w-5 text-primary focus:ring-primary/30 border-border-default rounded-lg bg-surface cursor-pointer"
               />
             </div>
           </div>
         </div>
 
-        <div className="pt-6 border-t border-zana-borderTint space-y-4">
-          <h3 className="text-md font-semibold text-zana-yellow mb-2">M-Pesa Daraja API Credentials</h3>
-          <p className="text-xs text-white/60 mb-4">
+        <div className="pt-6 border-t border-border-default space-y-4">
+          <h3 className="text-small font-bold text-text-primary mb-1">M-Pesa Daraja API Credentials</h3>
+          <p className="text-caption text-text-muted mb-4">
             Enter your Safaricom Daraja API details. Secrets will be encrypted at rest.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-small font-semibold text-text-primary mb-1.5">
                 Paybill Number
               </label>
               <input
                 type="text"
                 value={formData.paybillNumber || ''}
                 onChange={(e) => handleInputChange('paybillNumber', e.target.value)}
-                className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                 placeholder="e.g. 174379"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-small font-semibold text-text-primary mb-1.5">
                 Till Number
               </label>
               <input
                 type="text"
                 value={formData.tillNumber || ''}
                 onChange={(e) => handleInputChange('tillNumber', e.target.value)}
-                className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                 placeholder="e.g. 888999"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-small font-semibold text-text-primary mb-1.5">
               Consumer Key
             </label>
             <input
               type="password"
               value={formData.consumerKey || ''}
               onChange={(e) => handleInputChange('consumerKey', e.target.value)}
-              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               placeholder="Enter Consumer Key"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-small font-semibold text-text-primary mb-1.5">
               Consumer Secret
             </label>
             <input
               type="password"
               value={formData.consumerSecret || ''}
               onChange={(e) => handleInputChange('consumerSecret', e.target.value)}
-              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               placeholder="Enter Consumer Secret"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-small font-semibold text-text-primary mb-1.5">
               Online Passkey
             </label>
             <input
               type="password"
               value={formData.passkey || ''}
               onChange={(e) => handleInputChange('passkey', e.target.value)}
-              className="w-full px-3 py-2 bg-black/40 border border-zana-borderTint rounded-md text-white focus:outline-none focus:ring-2 focus:ring-zana-yellow"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               placeholder="Enter Passkey"
             />
           </div>
@@ -1161,127 +1161,115 @@ const Settings = () => {
 
   if (loading && !settings) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-brand-black text-white">
+      <div className="p-12 flex items-center justify-center bg-surface text-text-primary rounded-2xl border border-border-default">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-zana-yellow mx-auto"></div>
-          <p className="mt-4 text-white/70">Loading settings...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-small text-text-muted">Loading settings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-brand-black text-white min-h-screen">
+    <div className="space-y-6 pb-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-zana-yellow">Settings</h1>
-        <p className="mt-2 text-white/70">
-          Manage your system configuration and preferences
+      <div>
+        <h1 className="text-h1 font-bold text-text-primary tracking-tight">System Settings</h1>
+        <p className="mt-1 text-small text-text-secondary">
+          Manage system configurations, POS options, notifications, and security preferences.
         </p>
       </div>
 
       {/* Status Messages */}
       {saveStatus === 'success' && (
-        <div className="mb-6 bg-black/40 border border-green-500/30 rounded-md p-4">
-          <div className="flex">
-            <CheckIcon className="h-5 w-5 text-green-400" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-green-300">
-                Settings saved successfully!
-              </p>
-            </div>
-          </div>
+        <div className="p-4 bg-success-muted border border-success-border rounded-2xl flex items-center gap-3 text-success-text text-small shadow-2xs">
+          <CheckIcon className="h-5 w-5 shrink-0 text-success" />
+          <span className="font-semibold">Settings saved successfully!</span>
         </div>
       )}
 
       {saveStatus === 'error' && (
-        <div className="mb-6 bg-black/40 border border-red-500/30 rounded-md p-4">
-          <div className="flex">
-            <XMarkIcon className="h-5 w-5 text-red-400" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-red-300">
-                Failed to save settings. Please try again.
-              </p>
-            </div>
-          </div>
+        <div className="p-4 bg-danger-muted border border-danger-border rounded-2xl flex items-center gap-3 text-danger-text text-small shadow-2xs">
+          <XMarkIcon className="h-5 w-5 shrink-0 text-danger" />
+          <span className="font-semibold">Failed to save settings. Please try again.</span>
         </div>
       )}
 
       {error && (
-        <div className="mb-6 bg-black/40 border border-red-500/30 rounded-md p-4">
-          <div className="flex">
-            <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-red-300">
-                {error}
-              </p>
-            </div>
-          </div>
+        <div className="p-4 bg-danger-muted border border-danger-border rounded-2xl flex items-center gap-3 text-danger-text text-small shadow-2xs">
+          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-danger" />
+          <span>{error}</span>
         </div>
       )}
 
-      <div className="bg-brand-black shadow-zana border border-zana-borderTint rounded-lg">
-        <div className="flex">
-          {/* Sidebar */}
-          <div className="w-64 bg-black rounded-l-lg border-r border-zana-borderTint">
-            <nav className="p-4 space-y-2">
+      <div className="bg-surface border border-border-default rounded-2xl shadow-floating overflow-hidden">
+        <div className="flex flex-col lg:flex-row min-h-[600px]">
+          {/* Sidebar Tabs */}
+          <div className="w-full lg:w-64 bg-surface-2/40 border-b lg:border-b-0 lg:border-r border-border-default shrink-0 p-3">
+            <nav className="space-y-1 flex lg:flex-col overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 scrollbar-none">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors border ${
-                      activeTab === tab.id
-                        ? 'bg-zana-yellow text-black border-zana-yellow'
-                        : 'text-zana-yellow border-zana-borderTint hover:bg-zana-yellow/10'
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-small rounded-xl transition-all duration-150 whitespace-nowrap lg:whitespace-normal ${
+                      isActive
+                        ? 'bg-primary text-white font-semibold shadow-2xs'
+                        : 'text-text-secondary hover:text-text-primary hover:bg-surface font-medium'
                     }`}
                   >
-                    <Icon className="mr-3 h-5 w-5" />
-                    {tab.name}
+                    <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-text-muted'}`} />
+                    <span>{tab.name}</span>
                   </button>
                 );
               })}
             </nav>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1 p-6">
-            <div className="mb-6">
-              <h2 className="text-lg font-medium text-zana-yellow capitalize">
-                {tabs.find(tab => tab.id === activeTab)?.name} Settings
-              </h2>
-              <p className="text-sm text-white/70 mt-1">
-                Configure your {tabs.find(tab => tab.id === activeTab)?.name.toLowerCase()} preferences
-              </p>
+          {/* Main Content Pane */}
+          <div className="flex-1 p-6 sm:p-8 flex flex-col justify-between">
+            <div className="space-y-6">
+              <div className="border-b border-border-default pb-4">
+                <h2 className="text-h2 font-semibold text-text-primary">
+                  {tabs.find(tab => tab.id === activeTab)?.name} Settings
+                </h2>
+                <p className="text-small text-text-muted mt-0.5">
+                  Configure your {tabs.find(tab => tab.id === activeTab)?.name.toLowerCase()} preferences
+                </p>
+              </div>
+
+              {renderTabContent()}
             </div>
 
-            {renderTabContent()}
-
-            {/* Action Buttons */}
-            <div className="mt-8 flex justify-between">
+            {/* Action Footer Buttons */}
+            <div className="mt-8 pt-6 border-t border-border-default flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <button
+                type="button"
                 onClick={() => setShowResetConfirm(true)}
-                className="px-4 py-2 text-sm font-medium text-red-400 bg-black/40 border border-red-500/30 rounded-md hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                className="h-10 px-4 inline-flex items-center justify-center gap-2 rounded-xl text-small font-semibold text-danger bg-danger-muted border border-danger-border hover:bg-danger/10 transition-all shadow-2xs"
               >
                 Reset to Defaults
               </button>
 
-              <div className="flex space-x-3">
+              <div className="flex items-center gap-3 self-end sm:self-auto">
                 <button
+                  type="button"
                   onClick={() => {
                     setFormData(settings);
                     setHasChanges(false);
                   }}
                   disabled={!hasChanges}
-                  className="px-4 py-2 text-sm font-medium text-white bg-black/40 border border-zana-borderTint rounded-md hover:bg-zana-yellow/10 focus:outline-none focus:ring-2 focus:ring-zana-yellow disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-10 px-4 inline-flex items-center justify-center gap-2 rounded-xl text-small font-semibold text-text-primary bg-surface border border-border-default hover:bg-surface-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleSave}
                   disabled={!hasChanges || saveStatus === 'saving'}
-                  className="px-4 py-2 text-sm font-medium text-black bg-zana-yellow border border-zana-yellow rounded-md hover:bg-zana-yellow/90 focus:outline-none focus:ring-2 focus:ring-zana-yellow disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-10 px-5 inline-flex items-center justify-center gap-2 rounded-xl text-small font-semibold text-white bg-primary hover:bg-primary-hover active:bg-primary-active transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -1293,28 +1281,32 @@ const Settings = () => {
 
       {/* Reset Confirmation Modal */}
       {showResetConfirm && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-zana rounded-md bg-brand-black border-zana-borderTint">
-            <div className="mt-3 text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-500/10 border border-red-500/30">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-400" />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+          <div className="relative mx-auto p-6 border w-full max-w-md shadow-modal rounded-2xl bg-surface border-border-default">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-2xl bg-danger-muted border border-danger-border">
+                <ExclamationTriangleIcon className="h-6 w-6 text-danger" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mt-4">
-                <span className="text-white">Reset Settings</span>
+              <h3 className="text-h3 font-semibold text-text-primary mt-4">
+                Reset Settings
               </h3>
-              <div className="mt-2 px-7 py-3">
-                <p className="text-sm text-white/70">Are you sure you want to reset all settings to their default values? This action cannot be undone.</p>
+              <div className="mt-2 px-2 py-1">
+                <p className="text-small text-text-secondary">
+                  Are you sure you want to reset all settings to their default values? This action cannot be undone.
+                </p>
               </div>
-              <div className="flex justify-center space-x-4 mt-4">
+              <div className="flex items-center justify-center gap-3 mt-6">
                 <button
+                  type="button"
                   onClick={() => setShowResetConfirm(false)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-black/40 border border-zana-borderTint rounded-md hover:bg-zana-yellow/10"
+                  className="h-10 px-4 inline-flex items-center justify-center rounded-xl text-small font-semibold text-text-primary bg-surface border border-border-default hover:bg-surface-2 transition-all shadow-2xs"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleReset}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600/80 border border-red-500/30 rounded-md hover:bg-red-600"
+                  className="h-10 px-4 inline-flex items-center justify-center rounded-xl text-small font-semibold text-white bg-danger hover:bg-danger/90 transition-all shadow-sm"
                 >
                   Reset Settings
                 </button>
@@ -1328,5 +1320,6 @@ const Settings = () => {
 };
 
 export default Settings;
+
 
 

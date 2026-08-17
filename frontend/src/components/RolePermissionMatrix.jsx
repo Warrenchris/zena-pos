@@ -109,9 +109,9 @@ export default function RolePermissionMatrix() {
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-white/70">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-zana-yellow mx-auto mb-3"></div>
-        <p className="text-sm">Loading role permission matrix...</p>
+      <div className="p-8 text-center text-text-muted">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
+        <p className="text-small font-medium">Loading role permission matrix...</p>
       </div>
     );
   }
@@ -120,11 +120,11 @@ export default function RolePermissionMatrix() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <ShieldCheckIcon className="h-6 w-6 text-zana-yellow" />
+          <h3 className="text-h3 font-bold text-text-primary flex items-center gap-2">
+            <ShieldCheckIcon className="h-5 w-5 text-primary" />
             Role & Permission Matrix
           </h3>
-          <p className="text-xs text-white/60 mt-1">
+          <p className="text-caption text-text-muted mt-0.5">
             Configure system permissions across employee roles. Changes take effect immediately.
           </p>
         </div>
@@ -134,9 +134,9 @@ export default function RolePermissionMatrix() {
             type="button"
             onClick={fetchMatrix}
             disabled={saving}
-            className="px-3 py-2 text-sm font-medium text-white/80 hover:text-white bg-black/40 border border-zana-borderTint rounded-md flex items-center gap-1 hover:bg-black/60"
+            className="h-9 px-3.5 text-small font-semibold text-text-primary bg-surface border border-border-default rounded-xl hover:bg-surface-2 flex items-center gap-1.5 transition-all shadow-2xs"
           >
-            <ArrowPathIcon className="h-4 w-4" />
+            <ArrowPathIcon className="h-4 w-4 text-text-muted" />
             Reset Matrix
           </button>
 
@@ -144,44 +144,44 @@ export default function RolePermissionMatrix() {
             type="button"
             onClick={handleSave}
             disabled={saving || diffCount === 0}
-            className={`px-4 py-2 text-sm font-semibold rounded-md text-black bg-zana-yellow hover:bg-zana-yellow/90 flex items-center gap-2 transition-opacity ${
+            className={`h-9 px-4 text-small font-semibold rounded-xl text-white bg-primary hover:bg-primary-hover active:bg-primary-active flex items-center gap-2 transition-all shadow-sm ${
               diffCount === 0 ? 'opacity-50 cursor-not-allowed' : ''
             } ${saving ? 'opacity-50 cursor-wait' : ''}`}
           >
-            <CheckIcon className="h-4 w-4 text-black" />
+            <CheckIcon className="h-4 w-4 text-white" />
             {saving ? 'Saving...' : `Save ${diffCount > 0 ? `(${diffCount} Change${diffCount > 1 ? 's' : ''})` : ''}`}
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-950/40 border border-red-500/50 rounded-md text-red-300 text-sm flex items-center gap-2">
-          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-red-400" />
+        <div className="p-4 bg-danger-muted border border-danger-border rounded-xl text-danger-text text-small flex items-center gap-2.5">
+          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-danger" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="p-4 bg-green-950/40 border border-green-500/50 rounded-md text-green-300 text-sm flex items-center gap-2">
-          <CheckIcon className="h-5 w-5 shrink-0 text-green-400" />
+        <div className="p-4 bg-success-muted border border-success-border rounded-xl text-success-text text-small flex items-center gap-3">
+          <CheckIcon className="h-5 w-5 shrink-0 text-success" />
           <span>{success}</span>
         </div>
       )}
 
       {/* Permission Grid */}
-      <div className="overflow-x-auto border border-zana-borderTint rounded-lg bg-black/40">
-        <table className="w-full text-left text-sm text-white">
-          <thead className="bg-black/60 text-xs uppercase text-zana-yellow font-semibold border-b border-zana-borderTint">
+      <div className="overflow-x-auto border border-border-default rounded-2xl bg-surface shadow-sm">
+        <table className="w-full text-left text-small text-text-primary">
+          <thead className="bg-surface-2 text-caption uppercase text-text-secondary font-semibold border-b border-border-default">
             <tr>
               <th scope="col" className="px-6 py-4">Permission Name & Description</th>
               {roles.map(role => (
                 <th key={role} scope="col" className="px-6 py-4 text-center capitalize min-w-[120px]">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  <span className={`px-3 py-1 rounded-full text-caption font-bold ${
                     role === 'admin'
-                      ? 'bg-purple-900/60 text-purple-300 border border-purple-500/30'
+                      ? 'bg-primary/10 text-primary border border-primary/20'
                       : role === 'manager'
-                      ? 'bg-blue-900/60 text-blue-300 border border-blue-500/30'
-                      : 'bg-gray-800 text-gray-300 border border-gray-600/30'
+                      ? 'bg-info-muted text-info-text border border-info-border'
+                      : 'bg-surface-3 text-text-secondary border border-border-default'
                   }`}>
                     {role}
                   </span>
@@ -189,12 +189,12 @@ export default function RolePermissionMatrix() {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-zana-borderTint/50">
+          <tbody className="divide-y divide-border-default">
             {permissions.map(perm => (
-              <tr key={perm.id} className="hover:bg-white/5 transition-colors">
+              <tr key={perm.id} className="hover:bg-surface-2/50 transition-colors">
                 <td className="px-6 py-4">
-                  <div className="font-mono text-sm text-zana-yellow font-medium">{perm.name}</div>
-                  <div className="text-xs text-white/50">{perm.description}</div>
+                  <div className="font-mono text-small text-primary font-semibold">{perm.name}</div>
+                  <div className="text-caption text-text-muted mt-0.5">{perm.description}</div>
                 </td>
 
                 {roles.map(role => {
@@ -209,7 +209,7 @@ export default function RolePermissionMatrix() {
                         disabled={isProtected}
                         onChange={() => handleToggle(role, perm.name)}
                         title={isProtected ? 'Protected system setting permission' : ''}
-                        className={`h-5 w-5 rounded border-gray-600 bg-gray-800 text-zana-yellow focus:ring-zana-yellow cursor-pointer ${
+                        className={`h-5 w-5 rounded-lg border-border-default text-primary focus:ring-primary/30 bg-surface cursor-pointer ${
                           isProtected ? 'opacity-40 cursor-not-allowed' : ''
                         }`}
                       />

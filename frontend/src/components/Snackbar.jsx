@@ -100,8 +100,8 @@ function Snackbar({ type = 'info', message, action, onClose }) {
   return (
     <div 
       className={`
-        ${bgByType[type]} ${textByType[type]} border border-zana-borderTint ring-1 ring-[rgba(255,214,0,0.2)]
-        px-4 py-3 rounded-xl shadow-zana
+        ${bgByType[type]} ${textByType[type]} border border-border-default ring-1 ring-primary/20
+        px-4 py-3 rounded-xl shadow-floating
         flex items-center justify-between gap-4
         animate-slideUp
         min-h-[52px] w-full
