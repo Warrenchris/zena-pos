@@ -82,14 +82,13 @@ export default function FinancialAnalysis() {
         shopName: shopResp?.name || 'Your shop',
         totalRevenue: finalRevenue,
         totalCosts: finalExpenses,
-        monthsTracked: revenueResp?.dates?.length ?? 1,
+        monthsTracked: revenueResp?.dates?.length ?? (finalRevenue > 0 ? 1 : 0),
       });
 
-      const hasRealData = finalRevenue > 0;
-      let fmPayload;
+      const hasRealData = finalRevenue > 0 || (shopResp?.financials && shopResp.financials.revenue > 0);
 
       if (hasRealData) {
-        fmPayload = {
+        const fmPayload = shopResp?.financials || {
           revenue: finalRevenue,
           costs: finalCogs,
           expenses: finalExpenses,
@@ -98,25 +97,25 @@ export default function FinancialAnalysis() {
           date: new Date().toISOString(),
         };
         setIsUsingDemoData(false);
-      } else {
-        fmPayload = shopResp?.financials || {
-          revenue: 100000,
-          costs: 60000,
-          expenses: 15000,
-          assets: shopResp?.assets || 120000,
-          liabilities: shopResp?.liabilities || 30000,
-          date: new Date().toISOString(),
-        };
-        setIsUsingDemoData(true);
-        setAiError('Using estimated figures — connect shop financials for accurate analysis');
-      }
 
-      const fm = await aiService.analyzeFinancial(fmPayload).then((r) => r.data).catch((err) => {
-        setIsUsingDemoData(true);
-        setAiError(err.response?.data?.error || err.message);
-        return null;
-      });
-      setMetrics(fm);
+        const fm = await aiService.analyzeFinancial(fmPayload).then((r) => r.data).catch((err) => {
+          setAiError(err.response?.data?.error || err.message);
+          return null;
+        });
+        setMetrics(fm);
+      } else {
+        // Brand new shop or zero sales recorded yet
+        setIsUsingDemoData(false);
+        setAiError('No sales or expense transactions recorded yet. Ratios will calculate automatically once POS sales are completed.');
+        setMetrics({
+          gross_profit_margin: null,
+          net_profit_margin: null,
+          current_ratio: (shopResp?.assets && shopResp?.liabilities && shopResp.liabilities > 0)
+            ? (shopResp.assets / shopResp.liabilities)
+            : null,
+          inventory_turnover: null,
+        });
+      }
 
       const insightsData = await api.get('/api/insights').then((r) => r.data).catch(() => null);
       const rawInsights = insightsData?.recommendations || [];
@@ -170,7 +169,7 @@ export default function FinancialAnalysis() {
       />
 
       <DemoDataBanner
-        message={isUsingDemoData ? 'Some figures are estimated because live financial or AI data is limited.' : null}
+        message={isUsingDemoData ? 'Some figures are estimated because live financial data is limited.' : null}
         error={aiError}
       />
 
@@ -196,12 +195,20 @@ export default function FinancialAnalysis() {
             <div className="lg:col-span-2 bg-surface border border-border-default rounded-2xl shadow-floating p-6 text-text-primary">
               <h2 className="text-lg font-bold text-primary mb-4">Key Financial Ratios</h2>
               {!metrics && (
-                <p className="text-sm text-text-muted">Financial metrics unavailable — check AI service health.</p>
+                <p className="text-sm text-text-muted">No financial metrics recorded yet. Complete sales in POS to calculate live ratios.</p>
               )}
               {metrics && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard label="Gross Profit Margin" value={formatPercent(metrics.gross_profit_margin)} />
-                  <MetricCard label="Net Profit Margin" value={formatPercent(metrics.net_profit_margin)} />
+                  <MetricCard
+                    label="Gross Profit Margin"
+                    value={metrics.gross_profit_margin != null ? formatPercent(metrics.gross_profit_margin) : "N/A"}
+                    hint={metrics.gross_profit_margin != null ? "Gross margin ratio" : "No sales recorded yet"}
+                  />
+                  <MetricCard
+                    label="Net Profit Margin"
+                    value={metrics.net_profit_margin != null ? formatPercent(metrics.net_profit_margin) : "N/A"}
+                    hint={metrics.net_profit_margin != null ? "Net margin ratio" : "No sales recorded yet"}
+                  />
                   <MetricCard
                     label="Current Ratio"
                     value={metrics.current_ratio != null ? metrics.current_ratio.toFixed(2) : "N/A"}
