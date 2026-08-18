@@ -38,6 +38,7 @@ const aiRateLimiter = rateLimit({
   keyGenerator: (req) => req.shopId || ipKeyGenerator(req),
 });
 
+const HEALTH_TTL = 30000; // 30 seconds – re-probe inline if cached result is stale
 let lastHealth = { ok: null, timestamp: 0, details: null };
 let probeIntervalMs = 5000;
 let probeTimer = null;
