@@ -1,0 +1,92 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [master, main, develop]
+    paths:
+      - 'backend/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [master, main, develop]
+    paths:
+      - 'backend/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  backend-ci:
+    name: Backend Test & Docker Validation
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: zana_pos_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot" --health-interval=10s --health-timeout=5s --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check dependency integrity
+        run: node scripts/check-dependencies.js
+
+      - name: Run backend tests
+        env:
+          NODE_ENV: test
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_PASS: root
+          TEST_DB_NAME: zana_pos_test
+          JWT_PRIVATE_KEY: "test-private-key"
+          JWT_PUBLIC_KEY: "test-public-key"
+          ENCRYPTION_SECRET: "e7b4198c61fa2d75a02482310bf8b975e5330e2fbd08544c4897f1f415ef414a"
+        run: npm test
+
+      - name: Build backend Docker image
+        run: docker build -t zana-backend-ci .
+
+      - name: Verify dependencies resolve in Docker image
+        run: |
+          docker run --rm --entrypoint node zana-backend-ci scripts/check-dependencies.js
+
+      - name: Verify startup validation in Docker container
+        run: |
+          docker run --rm \
+            -e JWT_PRIVATE_KEY="test-private-key" \
+            -e JWT_PUBLIC_KEY="test-public-key" \
+            -e DB_NAME=test \
+            -e DB_USER=test \
+            -e DB_PASS=test \
+            -e DB_HOST=127.0.0.1 \
+            -e NODE_ENV=test \
+            --entrypoint node \
+            zana-backend-ci \
+            -e "require('./src/utils/startupValidation').validateStartup(); console.log('startup validation ok')"
