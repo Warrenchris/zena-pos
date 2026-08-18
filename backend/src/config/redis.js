@@ -4,12 +4,16 @@ const logger = require('../utils/logger');
 let redisClient;
 
 if (process.env.REDIS_URL) {
-  redisClient = new Redis(process.env.REDIS_URL, {
+  const redisOptions = {
     tls: process.env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
     retryStrategy: (times) => Math.min(times * 100, 3000),
     maxRetriesPerRequest: 3,
     connectTimeout: 10000,
-  });
+  };
+  if (process.env.REDIS_PASSWORD) {
+    redisOptions.password = process.env.REDIS_PASSWORD;
+  }
+  redisClient = new Redis(process.env.REDIS_URL, redisOptions);
 } else {
   const redisHost = process.env.REDIS_HOST || 'redis';
   const redisPort = process.env.REDIS_PORT ? Number(process.env.REDIS_PORT) : 6379;

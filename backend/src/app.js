@@ -63,6 +63,7 @@ const purchaseOrderRoutes = require('./routes/purchaseOrders');
 const permissionRoutes = require('./routes/permissions');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Import request logger middleware
 const requestLogger = require('./middleware/requestLogger');
