@@ -59,6 +59,8 @@ jobs:
       - name: Run backend tests
         env:
           NODE_ENV: test
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
           DB_USER: root

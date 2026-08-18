@@ -6,7 +6,10 @@ let redisClient;
 if (process.env.REDIS_URL) {
   const redisOptions = {
     tls: process.env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
-    retryStrategy: (times) => Math.min(times * 100, 3000),
+    retryStrategy: (times) => {
+      if (process.env.NODE_ENV === 'test' && times > 5) return null;
+      return Math.min(times * 100, 3000);
+    },
     maxRetriesPerRequest: 3,
     connectTimeout: 10000,
   };
@@ -24,7 +27,10 @@ if (process.env.REDIS_URL) {
     port: redisPort,
     password: process.env.REDIS_PASSWORD || undefined,
     tls: isTls ? {} : undefined,
-    retryStrategy: (times) => Math.min(times * 100, 3000),
+    retryStrategy: (times) => {
+      if (process.env.NODE_ENV === 'test' && times > 5) return null;
+      return Math.min(times * 100, 3000);
+    },
     maxRetriesPerRequest: 3,
     connectTimeout: 10000,
   });
