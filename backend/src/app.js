@@ -66,6 +66,18 @@ const permissionRoutes = require('./routes/permissions');
 const app = express();
 app.set('trust proxy', 1);
 
+// Force HTTPS in production. Render (and most PaaS) terminate TLS at the edge and
+// forward over HTTP internally, so we rely on X-Forwarded-Proto rather than req.secure.
+// No-op in development so local HTTP workflows are unaffected.
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] && req.headers['x-forwarded-proto'] !== 'https') {
+      return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
+    }
+    next();
+  });
+}
+
 // Import request logger middleware
 const requestLogger = require('./middleware/requestLogger');
 

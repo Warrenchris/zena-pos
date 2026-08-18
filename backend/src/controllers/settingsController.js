@@ -69,7 +69,12 @@ exports.updateSettings = async (req, res) => {
 
     // 3. Clean and validate update data
     const updateData = req.body;
-    console.log('Settings update request for shop', shopId, ':', updateData);
+    const SECRET_LOG_FIELDS = ['consumerKey', 'consumerSecret', 'passkey'];
+    const redactedForLog = { ...updateData };
+    SECRET_LOG_FIELDS.forEach((field) => {
+      if (redactedForLog[field] !== undefined) redactedForLog[field] = '[REDACTED]';
+    });
+    console.log('Settings update request for shop', shopId, ':', redactedForLog);
 
     // Process and clean update data
     const cleanData = {};

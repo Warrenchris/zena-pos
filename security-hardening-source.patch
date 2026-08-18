@@ -1,0 +1,108 @@
+diff --git a/backend/.env.example b/backend/.env.example
+index 032a484..ba3d737 100644
+--- a/backend/.env.example
++++ b/backend/.env.example
+@@ -110,4 +110,5 @@ SMTP_FROM=noreply@example.com
+ 
+ # Encryption Secret
+ # 32-byte secret key used to encrypt sensitive credentials stored at rest
+-ENCRYPTION_SECRET=e7b4198c61fa2d75a02482310bf8b975e5330e2fbd08544c4897f1f415ef414a
++# Generate your own with: openssl rand -hex 32
++ENCRYPTION_SECRET=your_32_byte_hex_encryption_secret_here
+diff --git a/backend/src/app.js b/backend/src/app.js
+index 5ddbad8..0fa35fb 100644
+--- a/backend/src/app.js
++++ b/backend/src/app.js
+@@ -66,6 +66,18 @@ const permissionRoutes = require('./routes/permissions');
+ const app = express();
+ app.set('trust proxy', 1);
+ 
++// Force HTTPS in production. Render (and most PaaS) terminate TLS at the edge and
++// forward over HTTP internally, so we rely on X-Forwarded-Proto rather than req.secure.
++// No-op in development so local HTTP workflows are unaffected.
++if (process.env.NODE_ENV === 'production') {
++  app.use((req, res, next) => {
++    if (req.headers['x-forwarded-proto'] && req.headers['x-forwarded-proto'] !== 'https') {
++      return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
++    }
++    next();
++  });
++}
++
+ // Import request logger middleware
+ const requestLogger = require('./middleware/requestLogger');
+ 
+diff --git a/backend/src/controllers/settingsController.js b/backend/src/controllers/settingsController.js
+index ccf85bf..653ed2a 100644
+--- a/backend/src/controllers/settingsController.js
++++ b/backend/src/controllers/settingsController.js
+@@ -69,7 +69,12 @@ exports.updateSettings = async (req, res) => {
+ 
+     // 3. Clean and validate update data
+     const updateData = req.body;
+-    console.log('Settings update request for shop', shopId, ':', updateData);
++    const SECRET_LOG_FIELDS = ['consumerKey', 'consumerSecret', 'passkey'];
++    const redactedForLog = { ...updateData };
++    SECRET_LOG_FIELDS.forEach((field) => {
++      if (redactedForLog[field] !== undefined) redactedForLog[field] = '[REDACTED]';
++    });
++    console.log('Settings update request for shop', shopId, ':', redactedForLog);
+ 
+     // Process and clean update data
+     const cleanData = {};
+diff --git a/backend/src/routes/auth.js b/backend/src/routes/auth.js
+index 6f9a5d9..4bc11be 100644
+--- a/backend/src/routes/auth.js
++++ b/backend/src/routes/auth.js
+@@ -1,11 +1,28 @@
+ const express = require('express');
++const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+ const { body } = require('express-validator');
+ const authController = require('../controllers/authController');
+ const { auth } = require('../middleware/auth');
+ const router = express.Router();
+ 
++// Stricter limiter for credential/reset endpoints to slow down brute-force and
++// credential-stuffing attempts. Keyed by IP + email so a single IP can't lock out
++// unrelated accounts. Uses ipKeyGenerator to correctly normalize IPv6 addresses
++// (otherwise an attacker could vary the IPv6 suffix to bypass the limit entirely).
++// Deliberately NOT applied to /profile or /change-password, which are hit by
++// already-authenticated users during normal use.
++const authLimiter = rateLimit({
++  windowMs: 15 * 60 * 1000,
++  max: 10,
++  standardHeaders: true,
++  legacyHeaders: false,
++  message: { error: 'Too many attempts. Please try again in a few minutes.' },
++  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${(req.body && req.body.email) || ''}`,
++});
++
+ router.post(
+   '/register',
++  authLimiter,
+   [
+     body('name').trim().notEmpty().withMessage('Name is required'),
+     body('email').isEmail().withMessage('Please enter a valid email'),
+@@ -24,6 +41,7 @@ router.post(
+ 
+ router.post(
+   '/login',
++  authLimiter,
+   [
+     body('email').isEmail().withMessage('Please enter a valid email'),
+     body('password').notEmpty().withMessage('Password is required')
+@@ -33,12 +51,14 @@ router.post(
+ 
+ router.post(
+   '/forgot-password',
++  authLimiter,
+   [body('email').isEmail().withMessage('Please enter a valid email')],
+   authController.forgotPassword
+ );
+ 
+ router.post(
+   '/reset-password',
++  authLimiter,
+   [
+     body('token').notEmpty().withMessage('Token is required'),
+     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
