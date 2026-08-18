@@ -5,9 +5,8 @@ const path = require('path');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
 
-// Load private key for signing from environment variables
-// Note: The old key pair has been compromised. All existing tokens signed with the old key are now invalid. Users will need to log in again.
-const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+// Helper to retrieve private key dynamically
+const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const Shop = require('../models/Shop');
 const logger = require('../utils/logger');
 
@@ -50,7 +49,7 @@ exports.register = async (req, res) => {
         shopId: createdShop?.id,
         isEmployee: false
       },
-      privateKey,
+      getPrivateKey(),
       { 
         algorithm: 'RS256',
         expiresIn: process.env.JWT_EXPIRES_IN || '24h'
@@ -131,7 +130,7 @@ exports.login = async (req, res) => {
             shopId: user.shopId,
             isEmployee: !!user.isEmployee
           },
-          privateKey,
+          getPrivateKey(),
           { 
             algorithm: 'RS256',
             expiresIn: process.env.JWT_EXPIRES_IN || '24h'
@@ -171,7 +170,7 @@ exports.forgotPassword = async (req, res) => {
     // Create a short-lived token (in real life email it)
     const token = jwt.sign(
       { id: user.id },
-      privateKey,
+      getPrivateKey(),
       { 
         algorithm: 'RS256',
         expiresIn: '15m'
@@ -188,7 +187,7 @@ exports.forgotPassword = async (req, res) => {
 exports.resetPassword = async (req, res) => {
   try {
     const { token, password } = req.body;
-    const decoded = jwt.verify(token, privateKey, { algorithms: ['RS256'] });
+    const decoded = jwt.verify(token, getPrivateKey(), { algorithms: ['RS256'] });
     const user = await User.findByPk(decoded.id);
     if (!user) return res.status(400).json({ error: 'Invalid token' });
     user.password = password;

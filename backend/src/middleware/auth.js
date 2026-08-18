@@ -2,9 +2,6 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 
-// Load public key for verification from environment variables
-const publicKey = (process.env.JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n');
-
 const auth = (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -12,6 +9,7 @@ const auth = (req, res, next) => {
       return res.status(401).json({ error: 'Authorization token required.' });
     }
 
+    const publicKey = (process.env.JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n');
     const decoded = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
     req.user = decoded;
     req.shopId = decoded.shopId;
