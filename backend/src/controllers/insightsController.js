@@ -11,7 +11,7 @@ const aiClient = require('../utils/aiClient');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 /**
  * Calculate trends from sales and inventory data
@@ -436,7 +436,7 @@ const getInsights = async (req, res) => {
     // Try augmenting with AI-driven insights
     let aiRecs = [];
     try {
-      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      const aiServiceUrl = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
       // Build simple monthly aggregates for the last 6 months
       const months = [];

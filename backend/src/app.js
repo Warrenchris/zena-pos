@@ -12,15 +12,16 @@ if (!process.env.JWT_PRIVATE_KEY || !process.env.JWT_PUBLIC_KEY) {
   throw new Error('FATAL ERROR: JWT_PRIVATE_KEY and JWT_PUBLIC_KEY environment variables must be defined.');
 }
 
-// Ensure AI_SERVICE_BASE_URL is defined and is a valid URL
-const aiServiceBaseUrl = process.env.AI_SERVICE_BASE_URL;
-if (!aiServiceBaseUrl) {
-  throw new Error('FATAL ERROR: AI_SERVICE_BASE_URL environment variable must be defined and non-empty.');
-}
-try {
-  new URL(aiServiceBaseUrl);
-} catch (err) {
-  throw new Error(`FATAL ERROR: AI_SERVICE_BASE_URL "${aiServiceBaseUrl}" is not a valid URL: ${err.message}`);
+// Check AI Service URL configuration
+const aiServiceUrl = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL;
+if (!aiServiceUrl) {
+  logger.warn('[app] Neither AI_SERVICE_BASE_URL nor AI_SERVICE_URL is defined. Downstream AI features will use fallbacks.');
+} else {
+  try {
+    new URL(aiServiceUrl);
+  } catch (err) {
+    logger.warn(`[app] Configured AI service URL "${aiServiceUrl}" is invalid: ${err.message}`);
+  }
 }
 
 // Create logs directory if it doesn't exist

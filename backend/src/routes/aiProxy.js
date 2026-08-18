@@ -9,7 +9,7 @@ const router = express.Router();
 const { auth, checkRole } = require('../middleware/auth');
 require('dotenv').config();
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 const forecastCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
