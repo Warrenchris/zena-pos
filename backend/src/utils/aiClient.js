@@ -63,15 +63,18 @@ const getAuthHeader = (userId, shopId = 1, existingHeaders = {}, isPublic = fals
   return {};
 };
 
-const handleAiError = (error, url) => {
+const handleAiError = (error, url, isPublic = false) => {
   const status = error.response?.status;
   const responseData = error.response?.data;
 
-  console.error(`[aiClient] Error requesting AI service endpoint ${url}:`, {
-    message: error.message,
-    status,
-    responseData
-  });
+  // Don't spam full error logs if a background health probe failed due to connection refused
+  if (!isPublic) {
+    console.error(`[aiClient] Error requesting AI service endpoint ${url}:`, {
+      message: error.message,
+      status,
+      responseData
+    });
+  }
 
   if (status === 401) {
     const newError = new Error('AI service authentication failed — check server configuration');
@@ -107,7 +110,7 @@ const aiClient = {
       const response = await axios.post(url, data, mergedConfig);
       return response;
     } catch (error) {
-      handleAiError(error, url);
+      handleAiError(error, url, isPublic);
     }
   },
 
@@ -133,7 +136,7 @@ const aiClient = {
       const response = await axios.get(url, mergedConfig);
       return response;
     } catch (error) {
-      handleAiError(error, url);
+      handleAiError(error, url, isPublic);
     }
   },
 
@@ -161,7 +164,7 @@ const aiClient = {
       const response = await axios(mergedConfig);
       return response;
     } catch (error) {
-      handleAiError(error, url);
+      handleAiError(error, url, isPublic);
     }
   }
 };

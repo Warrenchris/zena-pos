@@ -39,22 +39,34 @@ const aiRateLimiter = rateLimit({
 });
 
 let lastHealth = { ok: null, timestamp: 0, details: null };
-const HEALTH_TTL = 5000;
+let probeIntervalMs = 5000;
+let probeTimer = null;
+let consecutiveFailures = 0;
 
 async function probeHealth() {
   try {
-    const resp = await aiClient.get('/openapi.json', { timeout: 3000, isPublic: true });
+    await aiClient.get('/openapi.json', { timeout: 3000, isPublic: true });
     lastHealth = { ok: true, timestamp: Date.now(), details: { upstream: AI_SERVICE_URL } };
+    consecutiveFailures = 0;
+    probeIntervalMs = 5000;
   } catch (err) {
+    consecutiveFailures++;
+    probeIntervalMs = Math.min(5000 * Math.pow(2, Math.min(consecutiveFailures - 1, 4)), 60000);
     lastHealth = { ok: false, timestamp: Date.now(), details: { error: err.message, upstream: AI_SERVICE_URL } };
+  } finally {
+    scheduleNextProbe();
   }
 }
 
-setInterval(() => {
-  probeHealth().catch((err) => {
-    console.error('[aiProxy] Health probe failed:', err.message);
-  });
-}, HEALTH_TTL).unref?.();
+function scheduleNextProbe() {
+  if (probeTimer) clearTimeout(probeTimer);
+  probeTimer = setTimeout(() => {
+    probeHealth().catch(() => {});
+  }, probeIntervalMs);
+  if (probeTimer.unref) probeTimer.unref();
+}
+
+scheduleNextProbe();
 
 router.get('/status', async (req, res) => {
   try {

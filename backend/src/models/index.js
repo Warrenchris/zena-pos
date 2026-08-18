@@ -107,10 +107,6 @@ Invoice.hasMany(InvoiceItem, { foreignKey: 'invoiceId', as: 'items' });
 InvoiceItem.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
 InvoiceItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 
-// Auto sync tables if missing
-Purchase.sync();
-PurchaseOrder.sync();
-
 // Export models and sequelize instance
 module.exports = {
   sequelize,

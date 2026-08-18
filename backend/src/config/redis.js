@@ -1,25 +1,37 @@
 const Redis = require('ioredis');
 const logger = require('../utils/logger');
 
-const redisHost = process.env.REDIS_HOST || 'redis';
-const redisPort = process.env.REDIS_PORT ? Number(process.env.REDIS_PORT) : 6379;
+let redisClient;
 
-const redisClient = new Redis({
-  host: redisHost,
-  port: redisPort,
-  retryStrategy(times) {
-    // Graceful retry strategy: retry every 2 seconds maximum
-    const delay = Math.min(times * 100, 2000);
-    return delay;
-  }
-});
+if (process.env.REDIS_URL) {
+  redisClient = new Redis(process.env.REDIS_URL, {
+    tls: process.env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
+    retryStrategy: (times) => Math.min(times * 100, 3000),
+    maxRetriesPerRequest: 3,
+    connectTimeout: 10000,
+  });
+} else {
+  const redisHost = process.env.REDIS_HOST || 'redis';
+  const redisPort = process.env.REDIS_PORT ? Number(process.env.REDIS_PORT) : 6379;
+  const isTls = process.env.REDIS_TLS === 'true' || redisPort !== 6379;
+
+  redisClient = new Redis({
+    host: redisHost,
+    port: redisPort,
+    password: process.env.REDIS_PASSWORD || undefined,
+    tls: isTls ? {} : undefined,
+    retryStrategy: (times) => Math.min(times * 100, 3000),
+    maxRetriesPerRequest: 3,
+    connectTimeout: 10000,
+  });
+}
 
 redisClient.on('connect', () => {
-  logger.info(`Redis connection established successfully at ${redisHost}:${redisPort}`);
+  logger.info('Redis connection established successfully');
 });
 
 redisClient.on('error', (error) => {
-  logger.error('Redis error occurred:', error);
+  logger.error('Redis error occurred:', error.message);
 });
 
 module.exports = redisClient;

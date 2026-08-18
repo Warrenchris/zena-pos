@@ -103,7 +103,10 @@ const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+// Root healthcheck route for load balancers / Render
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'OK', message: 'Zana Backend API is running' });
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
