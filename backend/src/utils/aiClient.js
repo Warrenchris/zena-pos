@@ -3,7 +3,6 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const AI_SERVICE_BASE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
-const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
 const normalizeUrl = (base, path) => {
   if (path.startsWith('http://') || path.startsWith('https://')) {
@@ -43,6 +42,7 @@ const getAuthHeader = (userId, shopId = 1, existingHeaders = {}, isPublic = fals
   }
 
   // 2. Otherwise, generate a JWT token dynamically using the private key
+  const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
   if (privateKey) {
     if (!userId) {
       throw new Error('[aiClient] Cannot sign dynamic JWT token: userId is missing or invalid.');
