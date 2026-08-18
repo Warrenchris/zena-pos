@@ -7,10 +7,14 @@ from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import os
+import logging
 from dotenv import load_dotenv
 from pathlib import Path
 
 load_dotenv()
+
+# Logger setup
+logger = logging.getLogger(__name__)
 
 # Security scheme for Bearer token
 security = HTTPBearer()
@@ -20,13 +24,20 @@ JWT_PUBLIC_KEY_PATH = os.getenv("JWT_PUBLIC_KEY_PATH", "./jwt_public_key.pem")
 JWT_ALGORITHM = "RS256"
 
 def load_public_key():
-    """Load RSA public key from file"""
-    key_path = Path(JWT_PUBLIC_KEY_PATH)
-    if not key_path.exists():
-        raise ValueError(f"Public key not found at {JWT_PUBLIC_KEY_PATH}")
-    
-    with open(key_path, 'r') as f:
-        return f.read()
+    """Load RSA public key from file, returning None if not found or unreadable"""
+    try:
+        key_path = Path(JWT_PUBLIC_KEY_PATH)
+        if not key_path.exists():
+            logger.warning(
+                f"JWT public key not found at '{JWT_PUBLIC_KEY_PATH}'. "
+                "Requests requiring auth will fail until a valid key is configured."
+            )
+            return None
+        with open(key_path, 'r') as f:
+            return f.read()
+    except Exception as e:
+        logger.warning(f"Failed to read JWT public key at '{JWT_PUBLIC_KEY_PATH}': {e}")
+        return None
 
 PUBLIC_KEY = load_public_key()
 
@@ -47,7 +58,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
     if not PUBLIC_KEY:
         raise HTTPException(
             status_code=500,
-            detail="JWT public key not configured"
+            detail=f"JWT public key not configured or missing at '{JWT_PUBLIC_KEY_PATH}'"
         )
     
     token = credentials.credentials

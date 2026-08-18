@@ -21,6 +21,9 @@ jobs:
       run:
         working-directory: ai_service
 
+    env:
+      JWT_PUBLIC_KEY_PATH: ./test_jwt_public_key.pem
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,6 +39,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest
+
+      - name: Generate throwaway RSA keypair for CI
+        run: |
+          openssl genrsa -out test_jwt_private_key.pem 2048
+          openssl rsa -in test_jwt_private_key.pem -pubout -out test_jwt_public_key.pem
 
       - name: Syntax and import verification
         run: |
