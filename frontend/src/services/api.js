@@ -4,7 +4,10 @@ import { logger, loggerInterceptor } from '../utils/logger';
 // Safely read Vite / Node env var without throwing in browser (where
 // `process` is undefined). In tests/process envs this will pick up
 // process.env.VITE_API_URL; otherwise fall back to localhost.
-const baseURL = (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) || 'http://localhost:3000';
+const rawUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
+  || (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL)
+  || 'http://localhost:3000';
+const baseURL = rawUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
 logger.info('🚀 API Service initialized with baseURL:', baseURL);
 
