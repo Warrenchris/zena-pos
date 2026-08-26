@@ -1,6 +1,6 @@
 const request = require('supertest');
 const app = require('../../src/app');
-const { Sale, Product, Expense, SaleItem, Shop } = require('../../src/models');
+const { Sale, Product, Expense, SaleItem, SalePayment, SaleRefund, Invoice, Shop } = require('../../src/models');
 const sequelize = require('../../src/config/database');
 
 describe('Insights Controller', () => {
@@ -22,10 +22,13 @@ describe('Insights Controller', () => {
   });
 
   beforeEach(async () => {
-    await SaleItem.destroy({ where: { shopId: 1 } });
-    await Sale.destroy({ where: { shopId: 1 } });
-    await Expense.destroy({ where: { shopId: 1 } });
-    await Product.destroy({ where: { shopId: 1 } });
+    await Invoice.destroy({ where: { shopId: 1 } }).catch(() => {});
+    await SaleRefund.destroy({ where: { shopId: 1 } }).catch(() => {});
+    await SalePayment.destroy({ where: { shopId: 1 } }).catch(() => {});
+    await SaleItem.destroy({ where: { shopId: 1 } }).catch(() => {});
+    await Sale.destroy({ where: { shopId: 1 } }).catch(() => {});
+    await Expense.destroy({ where: { shopId: 1 } }).catch(() => {});
+    await Product.destroy({ where: { shopId: 1 } }).catch(() => {});
 
     await Shop.findOrCreate({
       where: { id: 1 },
