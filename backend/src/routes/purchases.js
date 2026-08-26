@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { Purchase, Product, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { auth } = require('../middleware/auth');
+
+// All routes require authentication + shop context (tenant isolation)
+router.use(auth);
 
 // Helper to generate reference numbers
 const generateRefNo = async () => {
@@ -10,12 +14,13 @@ const generateRefNo = async () => {
   return `PUR-2026-${timestamp}${random}`;
 };
 
-// GET /api/purchases — List all purchases
+// GET /api/purchases — List all purchases for the authenticated user's shop
 router.get('/', async (req, res) => {
   try {
+    const shopId = req.shopId || req.user.shopId;
     const { search, status, paymentStatus } = req.query;
 
-    const whereClause = {};
+    const whereClause = { shopId };
     if (status && status !== 'ALL') {
       whereClause.status = status;
     }
@@ -29,63 +34,10 @@ router.get('/', async (req, res) => {
       ];
     }
 
-    let purchases = await Purchase.findAll({
+    const purchases = await Purchase.findAll({
       where: whereClause,
       order: [['createdAt', 'DESC']]
     });
-
-    // If database is empty, seed demo purchases for initial immediate view
-    if (purchases.length === 0 && !search && !status && !paymentStatus) {
-      const demoPurchases = [
-        {
-          referenceNo: 'PUR-2026-8801',
-          supplierName: 'Kenyan Beverages Distributors Ltd',
-          supplierContact: '+254711223344',
-          purchaseDate: new Date(Date.now() - 86400000 * 2),
-          status: 'RECEIVED',
-          paymentStatus: 'PAID',
-          paymentMethod: 'M-PESA',
-          totalAmount: 45600.00,
-          notes: 'Regular weekly soft drinks restock',
-          items: [
-            { productId: 1, productName: 'Coca-Cola Soda 1.25L', sku: 'CC-1250ML', quantity: 120, unitCost: 280, totalCost: 33600 },
-            { productId: 2, productName: 'Safari Lager Beer 500ml', sku: 'SL-500ML', quantity: 60, unitCost: 200, totalCost: 12000 }
-          ]
-        },
-        {
-          referenceNo: 'PUR-2026-8802',
-          supplierName: 'Highland Grain Millers',
-          supplierContact: '+254733445566',
-          purchaseDate: new Date(Date.now() - 86400000 * 5),
-          status: 'RECEIVED',
-          paymentStatus: 'PAID',
-          paymentMethod: 'BANK TRANSFER',
-          totalAmount: 78000.00,
-          notes: 'Maize flour 2kg & Wheat flour bundles',
-          items: [
-            { productId: 3, productName: 'Ungamill Premium Maize Flour 2kg', sku: 'UM-2KG', quantity: 300, unitCost: 260, totalCost: 78000 }
-          ]
-        },
-        {
-          referenceNo: 'PUR-2026-8803',
-          supplierName: 'Eldoret Dairy Co-operative',
-          supplierContact: '+254722889900',
-          purchaseDate: new Date(Date.now() - 86400000 * 1),
-          status: 'PENDING',
-          paymentStatus: 'UNPAID',
-          paymentMethod: 'CREDIT',
-          totalAmount: 18500.00,
-          notes: 'Fresh Milk & Fresh Yoghurt crates awaiting delivery',
-          items: [
-            { productId: 4, productName: 'Fresh Whole Milk 500ml', sku: 'FM-500ML', quantity: 200, unitCost: 65, totalCost: 13000 },
-            { productId: 5, productName: 'Strawberry Yoghurt 250ml', sku: 'SY-250ML', quantity: 50, unitCost: 110, totalCost: 5500 }
-          ]
-        }
-      ];
-
-      await Purchase.bulkCreate(demoPurchases);
-      purchases = await Purchase.findAll({ order: [['createdAt', 'DESC']] });
-    }
 
     res.json(purchases);
   } catch (error) {
@@ -94,10 +46,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/purchases/:id — Fetch single purchase
+// GET /api/purchases/:id — Fetch single purchase (scoped to the caller's shop)
 router.get('/:id', async (req, res) => {
   try {
-    const purchase = await Purchase.findByPk(req.params.id);
+    const shopId = req.shopId || req.user.shopId;
+    const purchase = await Purchase.findOne({ where: { id: req.params.id, shopId } });
     if (!purchase) {
       return res.status(404).json({ error: 'Purchase record not found' });
     }
@@ -112,6 +65,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
+    const shopId = req.shopId || req.user.shopId;
     const {
       referenceNo: customRef,
       supplierName,
@@ -154,7 +108,7 @@ router.post('/', async (req, res) => {
       }
 
       if (item.productId) {
-        const product = await Product.findByPk(item.productId, { transaction });
+        const product = await Product.findOne({ where: { id: item.productId, shopId }, transaction });
         if (!product) {
           await transaction.rollback();
           return res.status(404).json({ error: `Product ID ${item.productId} not found in inventory` });
@@ -176,14 +130,15 @@ router.post('/', async (req, res) => {
 
     const referenceNo = customRef ? customRef.trim() : await generateRefNo();
 
-    // Check duplicate reference number
-    const existingRef = await Purchase.findOne({ where: { referenceNo }, transaction });
+    // Check duplicate reference number (within this shop)
+    const existingRef = await Purchase.findOne({ where: { referenceNo, shopId }, transaction });
     if (existingRef) {
       await transaction.rollback();
       return res.status(409).json({ error: `Purchase reference '${referenceNo}' already exists` });
     }
 
     const purchase = await Purchase.create({
+      shopId,
       referenceNo,
       supplierName: supplierName.trim(),
       supplierContact: supplierContact ? supplierContact.trim() : null,
@@ -200,7 +155,7 @@ router.post('/', async (req, res) => {
     if (status === 'RECEIVED') {
       for (const item of validatedItems) {
         if (item.productId) {
-          const product = await Product.findByPk(item.productId, { transaction });
+          const product = await Product.findOne({ where: { id: item.productId, shopId }, transaction });
           if (product) {
             await product.increment('stockQuantity', { by: item.quantity, transaction });
           }
@@ -226,7 +181,8 @@ router.post('/', async (req, res) => {
 // DELETE /api/purchases/:id — Delete purchase
 router.delete('/:id', async (req, res) => {
   try {
-    const purchase = await Purchase.findByPk(req.params.id);
+    const shopId = req.shopId || req.user.shopId;
+    const purchase = await Purchase.findOne({ where: { id: req.params.id, shopId } });
     if (!purchase) {
       return res.status(404).json({ error: 'Purchase not found' });
     }

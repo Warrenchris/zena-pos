@@ -45,6 +45,7 @@ const safeLazy = (importFunc) => {
 };
 
 const Login = safeLazy(() => import('./pages/Login'));
+const ResetPassword = safeLazy(() => import('./pages/ResetPassword'));
 const Signup = safeLazy(() => import('./pages/Signup'));
 const ToastExample = safeLazy(() => import('./pages/ToastExample'));
 const Products = safeLazy(() => import('./pages/Products'));
@@ -96,6 +97,10 @@ export const routes = [
       {
         path: 'login',
         element: <Login />
+      },
+      {
+        path: 'reset-password',
+        element: <ResetPassword />
       },
       {
         path: 'signup',

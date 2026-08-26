@@ -9,9 +9,9 @@ import {
   XMarkIcon,
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
-import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { formatDateLong, formatDateShort, formatDateTime } from '../utils/formatters';
 import Spinner from '../components/ui/Spinner';
 import { useCurrency } from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
@@ -69,7 +69,7 @@ const InvoiceDetailDrawer = ({ invoice, isOpen, onClose, onDownload, onPrint }) 
                 <div>
                   <h2 className="text-h3 font-bold text-text-primary tracking-tight">Invoice #{invoice.invoiceNumber}</h2>
                   <p className="text-caption text-text-muted mt-0.5">
-                    Issued on {invoice.dateIssued ? format(new Date(invoice.dateIssued), 'PPP') : 'N/A'}
+                    Issued on {invoice.dateIssued ? formatDateLong(invoice.dateIssued) : 'N/A'}
                   </p>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -227,7 +227,7 @@ function InvoiceCreateModal({ open, onClose, onCreated }) {
             <option value="">Choose sale transaction...</option>
             {sales.map((sale) => (
               <option key={sale.id} value={sale.id}>
-                {sale.invoiceNumber || sale.id} • {sale.Customer?.name || sale.customer?.name || sale.customerName || WALK_IN_CUSTOMER_NAME} • {new Date(sale.createdAt).toLocaleString()}
+                {sale.invoiceNumber || sale.id} • {sale.Customer?.name || sale.customer?.name || sale.customerName || WALK_IN_CUSTOMER_NAME} • {formatDateTime(sale.createdAt)}
               </option>
             ))}
           </select>
@@ -323,7 +323,7 @@ export default function Invoices() {
       doc.text(`INVOICE: ${inv.invoiceNumber || ''}`, metaX + 10, y + 18);
       doc.setFont(undefined, 'normal');
       doc.setFontSize(8);
-      doc.text(`Date: ${inv.dateIssued ? format(new Date(inv.dateIssued), 'dd MMM yyyy') : ''}`, metaX + 10, y + 32);
+      doc.text(`Date: ${inv.dateIssued ? formatDateShort(inv.dateIssued) : ''}`, metaX + 10, y + 32);
 
       doc.setStrokeColor(120, 68, 33);
       doc.setLineWidth(1.5);
@@ -519,7 +519,7 @@ export default function Invoices() {
     {
       key: 'dateIssued',
       label: 'Date',
-      render: (val) => <span className="text-text-secondary text-small">{val ? format(new Date(val), 'PP') : '-'}</span>
+      render: (val) => <span className="text-text-secondary text-small">{val ? formatDateShort(val) : '-'}</span>
     },
     {
       key: 'status',

@@ -20,7 +20,7 @@ const auth = (req, res, next) => {
     }
 
     // For routes that require shop context, ensure shopId exists
-    const shopRequiredPaths = ['/api/sales', '/api/products', '/api/customers', '/api/employees'];
+    const shopRequiredPaths = ['/api/sales', '/api/products', '/api/customers', '/api/employees', '/api/purchases', '/api/purchase-orders'];
     if (shopRequiredPaths.some(path => req.path.startsWith(path)) && !req.shopId) {
       return res.status(403).json({ error: 'Shop context required for this operation.' });
     }

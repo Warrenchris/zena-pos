@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { format, subDays, startOfDay, endOfDay } from 'date-fns';
+import { subDays, startOfDay, endOfDay } from 'date-fns';
 import { Menu } from '@headlessui/react';
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, FunnelIcon, EyeIcon, ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -8,6 +8,7 @@ import { cashierAPI } from '../services/cashierAPI';
 import useCurrency from '../hooks/useCurrency';
 import api from '../services/api';
 import SaleDetailModal from '../components/SaleDetailModal';
+import { formatDateTime } from '../utils/formatters';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 
 const SaleDetails = ({ sale, onClose }) => {
@@ -295,7 +296,7 @@ const MySales = () => {
                       className="cursor-pointer hover:bg-surface-2/60 transition-colors duration-150 group"
                     >
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-text-secondary">
-                        {format(new Date(sale.createdAt), 'MMM dd, yyyy HH:mm')}
+                        {formatDateTime(sale.createdAt)}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-text-primary group-hover:text-primary transition-colors">
                         {sale.invoiceNumber}

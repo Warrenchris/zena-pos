@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
+const emailService = require('../services/emailService');
 
 // Helper to retrieve private key dynamically
 const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
@@ -52,7 +53,7 @@ exports.register = async (req, res) => {
       getPrivateKey(),
       { 
         algorithm: 'RS256',
-        expiresIn: process.env.JWT_EXPIRES_IN || '24h'
+        expiresIn: process.env.JWT_EXPIRES_IN || '2h'
       }
     );
 
@@ -133,7 +134,7 @@ exports.login = async (req, res) => {
           getPrivateKey(),
           { 
             algorithm: 'RS256',
-            expiresIn: process.env.JWT_EXPIRES_IN || '24h'
+            expiresIn: process.env.JWT_EXPIRES_IN || '2h'
           }
         );
 
@@ -167,7 +168,7 @@ exports.forgotPassword = async (req, res) => {
       // Hide user existence
       return res.json({ message: 'If the email exists, a reset link has been sent.' });
     }
-    // Create a short-lived token (in real life email it)
+    // Create a short-lived token
     const token = jwt.sign(
       { id: user.id },
       getPrivateKey(),
@@ -176,7 +177,17 @@ exports.forgotPassword = async (req, res) => {
         expiresIn: '15m'
       }
     );
-    logger.info('Password reset token (dev only):', token);
+
+    const resetBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${resetBaseUrl}/reset-password?token=${token}`;
+
+    try {
+      await emailService.sendPasswordReset({ to: user.email, resetUrl });
+    } catch (emailError) {
+      // Never leak whether the email actually sent; log server-side only, and never log the token itself.
+      logger.error('Failed to send password reset email:', emailError.message);
+    }
+
     return res.json({ message: 'If the email exists, a reset link has been sent.' });
   } catch (error) {
     return res.status(500).json({ error: 'Server error' });

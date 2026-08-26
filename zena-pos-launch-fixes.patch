@@ -1,0 +1,1182 @@
+diff --git a/backend/.env.example b/backend/.env.example
+index ba3d737..92344ad 100644
+--- a/backend/.env.example
++++ b/backend/.env.example
+@@ -40,7 +40,7 @@ REDIS_TLS=false
+ 
+ # JWT Authentication Configuration (RS256 Asymmetric Keypair)
+ # Token expiration duration (e.g. 24h, 7d)
+-JWT_EXPIRES_IN=24h
++JWT_EXPIRES_IN=2h
+ # RSA Private Key string used by backend to sign tokens
+ JWT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+ # RSA Public Key string used by backend/middleware to verify tokens
+diff --git a/backend/migrations/20260825000000-create-purchases-and-purchase-orders.js b/backend/migrations/20260825000000-create-purchases-and-purchase-orders.js
+new file mode 100644
+index 0000000..054757d
+--- /dev/null
++++ b/backend/migrations/20260825000000-create-purchases-and-purchase-orders.js
+@@ -0,0 +1,77 @@
++'use strict';
++
++module.exports = {
++  up: async (queryInterface, Sequelize) => {
++    // 1. Create Purchases table
++    try {
++      await queryInterface.createTable('Purchases', {
++        id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
++        referenceNo: { type: Sequelize.STRING, allowNull: false },
++        supplierName: { type: Sequelize.STRING, allowNull: false },
++        supplierContact: { type: Sequelize.STRING, allowNull: true },
++        purchaseDate: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') },
++        status: { type: Sequelize.ENUM('RECEIVED', 'PENDING', 'CANCELLED'), defaultValue: 'RECEIVED' },
++        paymentStatus: { type: Sequelize.ENUM('PAID', 'PARTIAL', 'UNPAID'), defaultValue: 'PAID' },
++        paymentMethod: { type: Sequelize.STRING, defaultValue: 'CASH' },
++        totalAmount: { type: Sequelize.DECIMAL(10, 2), allowNull: false, defaultValue: 0.00 },
++        notes: { type: Sequelize.TEXT, allowNull: true },
++        items: { type: Sequelize.JSON, allowNull: false },
++        shopId: {
++          type: Sequelize.INTEGER,
++          allowNull: false,
++          references: { model: 'Shops', key: 'id' },
++          onUpdate: 'CASCADE',
++          onDelete: 'CASCADE'
++        },
++        createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') },
++        updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') }
++      }, { engine: 'InnoDB' });
++    } catch (err) {
++      if (!err.message || !err.message.includes('already exists')) throw err;
++      console.log('Table Purchases already exists, skipping');
++    }
++
++    // referenceNo must be unique per shop, not globally, so two different shops
++    // can both use e.g. "PUR-2026-0001" without colliding.
++    try { await queryInterface.addIndex('Purchases', ['shopId', 'referenceNo'], { unique: true, name: 'purchases_shop_reference_unique' }); } catch (e) {}
++    try { await queryInterface.addIndex('Purchases', ['shopId']); } catch (e) {}
++
++    // 2. Create PurchaseOrders table
++    try {
++      await queryInterface.createTable('PurchaseOrders', {
++        id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
++        poNumber: { type: Sequelize.STRING, allowNull: false },
++        supplierName: { type: Sequelize.STRING, allowNull: false },
++        supplierEmail: { type: Sequelize.STRING, allowNull: true },
++        supplierPhone: { type: Sequelize.STRING, allowNull: true },
++        orderDate: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') },
++        expectedDeliveryDate: { type: Sequelize.DATE, allowNull: true },
++        status: { type: Sequelize.ENUM('DRAFT', 'ORDERED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'), defaultValue: 'ORDERED' },
++        totalAmount: { type: Sequelize.DECIMAL(10, 2), allowNull: false, defaultValue: 0.00 },
++        notes: { type: Sequelize.TEXT, allowNull: true },
++        items: { type: Sequelize.JSON, allowNull: false },
++        shopId: {
++          type: Sequelize.INTEGER,
++          allowNull: false,
++          references: { model: 'Shops', key: 'id' },
++          onUpdate: 'CASCADE',
++          onDelete: 'CASCADE'
++        },
++        createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') },
++        updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') }
++      }, { engine: 'InnoDB' });
++    } catch (err) {
++      if (!err.message || !err.message.includes('already exists')) throw err;
++      console.log('Table PurchaseOrders already exists, skipping');
++    }
++
++    // poNumber must be unique per shop, not globally, for the same reason as above.
++    try { await queryInterface.addIndex('PurchaseOrders', ['shopId', 'poNumber'], { unique: true, name: 'purchase_orders_shop_ponumber_unique' }); } catch (e) {}
++    try { await queryInterface.addIndex('PurchaseOrders', ['shopId']); } catch (e) {}
++  },
++
++  down: async (queryInterface, Sequelize) => {
++    await queryInterface.dropTable('PurchaseOrders');
++    await queryInterface.dropTable('Purchases');
++  }
++};
+diff --git a/backend/migrations/20260825010000-add-nonreturnable-to-products.js b/backend/migrations/20260825010000-add-nonreturnable-to-products.js
+new file mode 100644
+index 0000000..718400d
+--- /dev/null
++++ b/backend/migrations/20260825010000-add-nonreturnable-to-products.js
+@@ -0,0 +1,37 @@
++'use strict';
++
++/** @type {import('sequelize-cli').Migration} */
++module.exports = {
++  async up(queryInterface, Sequelize) {
++    try {
++      const tableDescription = await queryInterface.describeTable('Products');
++
++      if (!tableDescription.nonReturnable) {
++        await queryInterface.addColumn('Products', 'nonReturnable', {
++          type: Sequelize.BOOLEAN,
++          allowNull: false,
++          defaultValue: false
++        });
++        console.log('Added column nonReturnable to Products');
++      } else {
++        console.log('Column nonReturnable already exists in Products, skipping');
++      }
++    } catch (err) {
++      console.error('Failed executing migration 20260825010000-add-nonreturnable-to-products:', err);
++      throw err;
++    }
++  },
++
++  async down(queryInterface) {
++    try {
++      const tableDescription = await queryInterface.describeTable('Products');
++
++      if (tableDescription.nonReturnable) {
++        await queryInterface.removeColumn('Products', 'nonReturnable');
++        console.log('Removed column nonReturnable from Products');
++      }
++    } catch (err) {
++      console.error('Failed reverting migration 20260825010000-add-nonreturnable-to-products:', err);
++    }
++  }
++};
+diff --git a/backend/migrations/20260825020000-fix-settings-invoice-refund-schema-drift.js b/backend/migrations/20260825020000-fix-settings-invoice-refund-schema-drift.js
+new file mode 100644
+index 0000000..78af360
+--- /dev/null
++++ b/backend/migrations/20260825020000-fix-settings-invoice-refund-schema-drift.js
+@@ -0,0 +1,142 @@
++'use strict';
++
++/** @type {import('sequelize-cli').Migration} */
++module.exports = {
++  async up(queryInterface, Sequelize) {
++    // --- SystemSettings: refund/return policy fields ---
++    try {
++      const settingsDesc = await queryInterface.describeTable('SystemSettings');
++
++      if (!settingsDesc.maxUnapprovedRefundAmount) {
++        await queryInterface.addColumn('SystemSettings', 'maxUnapprovedRefundAmount', {
++          type: Sequelize.DECIMAL(10, 2),
++          allowNull: false,
++          defaultValue: 5000.00
++        });
++        console.log('Added column maxUnapprovedRefundAmount to SystemSettings');
++      } else {
++        console.log('Column maxUnapprovedRefundAmount already exists in SystemSettings, skipping');
++      }
++
++      if (!settingsDesc.returnWindowDays) {
++        await queryInterface.addColumn('SystemSettings', 'returnWindowDays', {
++          type: Sequelize.INTEGER,
++          allowNull: false,
++          defaultValue: 30
++        });
++        console.log('Added column returnWindowDays to SystemSettings');
++      } else {
++        console.log('Column returnWindowDays already exists in SystemSettings, skipping');
++      }
++    } catch (err) {
++      console.error('Failed executing SystemSettings portion of migration:', err);
++      throw err;
++    }
++
++    // --- Invoices: link to originating Sale + payment date ---
++    try {
++      const invoiceDesc = await queryInterface.describeTable('Invoices');
++
++      if (!invoiceDesc.saleId) {
++        await queryInterface.addColumn('Invoices', 'saleId', {
++          type: Sequelize.INTEGER,
++          allowNull: true
++        });
++        console.log('Added column saleId to Invoices');
++      } else {
++        console.log('Column saleId already exists in Invoices, skipping');
++      }
++
++      if (!invoiceDesc.paymentDate) {
++        await queryInterface.addColumn('Invoices', 'paymentDate', {
++          type: Sequelize.DATE,
++          allowNull: true
++        });
++        console.log('Added column paymentDate to Invoices');
++      } else {
++        console.log('Column paymentDate already exists in Invoices, skipping');
++      }
++    } catch (err) {
++      console.error('Failed executing Invoices portion of migration:', err);
++      throw err;
++    }
++
++    // --- SaleRefunds: reason/disposition/manager-approval fields ---
++    try {
++      const refundDesc = await queryInterface.describeTable('SaleRefunds');
++
++      if (!refundDesc.reasonCode) {
++        await queryInterface.addColumn('SaleRefunds', 'reasonCode', {
++          type: Sequelize.ENUM('DEFECTIVE', 'WRONG_ITEM', 'EXPIRED', 'CHANGED_MIND', 'OTHER'),
++          allowNull: false,
++          defaultValue: 'OTHER'
++        });
++        console.log('Added column reasonCode to SaleRefunds');
++      } else {
++        console.log('Column reasonCode already exists in SaleRefunds, skipping');
++      }
++
++      if (!refundDesc.reasonNotes) {
++        await queryInterface.addColumn('SaleRefunds', 'reasonNotes', {
++          type: Sequelize.TEXT,
++          allowNull: true
++        });
++        console.log('Added column reasonNotes to SaleRefunds');
++      } else {
++        console.log('Column reasonNotes already exists in SaleRefunds, skipping');
++      }
++
++      if (!refundDesc.disposition) {
++        await queryInterface.addColumn('SaleRefunds', 'disposition', {
++          type: Sequelize.ENUM('restock', 'damaged_writeoff', 'return_to_supplier'),
++          allowNull: false,
++          defaultValue: 'restock'
++        });
++        console.log('Added column disposition to SaleRefunds');
++      } else {
++        console.log('Column disposition already exists in SaleRefunds, skipping');
++      }
++
++      if (!refundDesc.managerApprovalId) {
++        await queryInterface.addColumn('SaleRefunds', 'managerApprovalId', {
++          type: Sequelize.STRING(36),
++          allowNull: true
++        });
++        console.log('Added column managerApprovalId to SaleRefunds');
++      } else {
++        console.log('Column managerApprovalId already exists in SaleRefunds, skipping');
++      }
++    } catch (err) {
++      console.error('Failed executing SaleRefunds portion of migration:', err);
++      throw err;
++    }
++  },
++
++  async down(queryInterface) {
++    try {
++      const settingsDesc = await queryInterface.describeTable('SystemSettings');
++      if (settingsDesc.maxUnapprovedRefundAmount) await queryInterface.removeColumn('SystemSettings', 'maxUnapprovedRefundAmount');
++      if (settingsDesc.returnWindowDays) await queryInterface.removeColumn('SystemSettings', 'returnWindowDays');
++    } catch (err) {
++      console.error('Failed reverting SystemSettings portion:', err);
++    }
++
++    try {
++      const invoiceDesc = await queryInterface.describeTable('Invoices');
++      if (invoiceDesc.saleId) await queryInterface.removeColumn('Invoices', 'saleId');
++      if (invoiceDesc.paymentDate) await queryInterface.removeColumn('Invoices', 'paymentDate');
++    } catch (err) {
++      console.error('Failed reverting Invoices portion:', err);
++    }
++
++    try {
++      const refundDesc = await queryInterface.describeTable('SaleRefunds');
++      if (refundDesc.reasonCode) await queryInterface.removeColumn('SaleRefunds', 'reasonCode');
++      if (refundDesc.reasonNotes) await queryInterface.removeColumn('SaleRefunds', 'reasonNotes');
++      if (refundDesc.disposition) await queryInterface.removeColumn('SaleRefunds', 'disposition');
++      if (refundDesc.managerApprovalId) await queryInterface.removeColumn('SaleRefunds', 'managerApprovalId');
++    } catch (err) {
++      console.error('Failed reverting SaleRefunds portion:', err);
++    }
++  }
++};
+diff --git a/backend/src/controllers/authController.js b/backend/src/controllers/authController.js
+index c6ef81b..b7865d9 100644
+--- a/backend/src/controllers/authController.js
++++ b/backend/src/controllers/authController.js
+@@ -4,6 +4,7 @@ const fs = require('fs');
+ const path = require('path');
+ const User = require('../models/User');
+ const Employee = require('../models/Employee');
++const emailService = require('../services/emailService');
+ 
+ // Helper to retrieve private key dynamically
+ const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+@@ -52,7 +53,7 @@ exports.register = async (req, res) => {
+       getPrivateKey(),
+       { 
+         algorithm: 'RS256',
+-        expiresIn: process.env.JWT_EXPIRES_IN || '24h'
++        expiresIn: process.env.JWT_EXPIRES_IN || '2h'
+       }
+     );
+ 
+@@ -133,7 +134,7 @@ exports.login = async (req, res) => {
+           getPrivateKey(),
+           { 
+             algorithm: 'RS256',
+-            expiresIn: process.env.JWT_EXPIRES_IN || '24h'
++            expiresIn: process.env.JWT_EXPIRES_IN || '2h'
+           }
+         );
+ 
+@@ -167,7 +168,7 @@ exports.forgotPassword = async (req, res) => {
+       // Hide user existence
+       return res.json({ message: 'If the email exists, a reset link has been sent.' });
+     }
+-    // Create a short-lived token (in real life email it)
++    // Create a short-lived token
+     const token = jwt.sign(
+       { id: user.id },
+       getPrivateKey(),
+@@ -176,7 +177,17 @@ exports.forgotPassword = async (req, res) => {
+         expiresIn: '15m'
+       }
+     );
+-    logger.info('Password reset token (dev only):', token);
++
++    const resetBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
++    const resetUrl = `${resetBaseUrl}/reset-password?token=${token}`;
++
++    try {
++      await emailService.sendPasswordReset({ to: user.email, resetUrl });
++    } catch (emailError) {
++      // Never leak whether the email actually sent; log server-side only, and never log the token itself.
++      logger.error('Failed to send password reset email:', emailError.message);
++    }
++
+     return res.json({ message: 'If the email exists, a reset link has been sent.' });
+   } catch (error) {
+     return res.status(500).json({ error: 'Server error' });
+diff --git a/backend/src/middleware/auth.js b/backend/src/middleware/auth.js
+index 399d260..3b475d8 100644
+--- a/backend/src/middleware/auth.js
++++ b/backend/src/middleware/auth.js
+@@ -20,7 +20,7 @@ const auth = (req, res, next) => {
+     }
+ 
+     // For routes that require shop context, ensure shopId exists
+-    const shopRequiredPaths = ['/api/sales', '/api/products', '/api/customers', '/api/employees'];
++    const shopRequiredPaths = ['/api/sales', '/api/products', '/api/customers', '/api/employees', '/api/purchases', '/api/purchase-orders'];
+     if (shopRequiredPaths.some(path => req.path.startsWith(path)) && !req.shopId) {
+       return res.status(403).json({ error: 'Shop context required for this operation.' });
+     }
+diff --git a/backend/src/routes/purchaseOrders.js b/backend/src/routes/purchaseOrders.js
+index c0d9ac2..017bf68 100644
+--- a/backend/src/routes/purchaseOrders.js
++++ b/backend/src/routes/purchaseOrders.js
+@@ -2,6 +2,10 @@ const express = require('express');
+ const router = express.Router();
+ const { PurchaseOrder, Purchase, Product, sequelize } = require('../models');
+ const { Op } = require('sequelize');
++const { auth } = require('../middleware/auth');
++
++// All routes require authentication + shop context (tenant isolation)
++router.use(auth);
+ 
+ // Helper to generate PO numbers
+ const generatePoNumber = async () => {
+@@ -10,12 +14,13 @@ const generatePoNumber = async () => {
+   return `PO-2026-${timestamp}${random}`;
+ };
+ 
+-// GET /api/purchase-orders — List all POs
++// GET /api/purchase-orders — List all POs for the authenticated user's shop
+ router.get('/', async (req, res) => {
+   try {
++    const shopId = req.shopId || req.user.shopId;
+     const { search, status } = req.query;
+ 
+-    const whereClause = {};
++    const whereClause = { shopId };
+     if (status && status !== 'ALL') {
+       whereClause.status = status;
+     }
+@@ -26,64 +31,11 @@ router.get('/', async (req, res) => {
+       ];
+     }
+ 
+-    let orders = await PurchaseOrder.findAll({
++    const orders = await PurchaseOrder.findAll({
+       where: whereClause,
+       order: [['createdAt', 'DESC']]
+     });
+ 
+-    // Seed initial demo purchase orders if empty
+-    if (orders.length === 0 && !search && !status) {
+-      const demoOrders = [
+-        {
+-          poNumber: 'PO-2026-9011',
+-          supplierName: 'Kenyan Beverages Distributors Ltd',
+-          supplierEmail: 'orders@kenyanbeverages.co.ke',
+-          supplierPhone: '+254711223344',
+-          orderDate: new Date(Date.now() - 86400000 * 3),
+-          expectedDeliveryDate: new Date(Date.now() + 86400000 * 2),
+-          status: 'ORDERED',
+-          totalAmount: 52000.00,
+-          notes: 'Monthly soda & juice inventory replenishment',
+-          items: [
+-            { productId: 1, productName: 'Coca-Cola Soda 1.25L', sku: 'CC-1250ML', quantityOrdered: 150, quantityReceived: 0, unitCost: 280, subtotal: 42000 },
+-            { productId: 2, productName: 'Safari Lager Beer 500ml', sku: 'SL-500ML', quantityOrdered: 50, quantityReceived: 0, unitCost: 200, subtotal: 10000 }
+-          ]
+-        },
+-        {
+-          poNumber: 'PO-2026-9012',
+-          supplierName: 'Eldoret Dairy Co-operative',
+-          supplierEmail: 'supply@eldoretdairy.co.ke',
+-          supplierPhone: '+254722889900',
+-          orderDate: new Date(Date.now() - 86400000 * 1),
+-          expectedDeliveryDate: new Date(Date.now() + 86400000 * 1),
+-          status: 'ORDERED',
+-          totalAmount: 24000.00,
+-          notes: 'Fresh milk supply for Westlands branch',
+-          items: [
+-            { productId: 4, productName: 'Fresh Whole Milk 500ml', sku: 'FM-500ML', quantityOrdered: 300, quantityReceived: 0, unitCost: 65, subtotal: 19500 },
+-            { productId: 5, productName: 'Strawberry Yoghurt 250ml', sku: 'SY-250ML', quantityOrdered: 41, quantityReceived: 0, unitCost: 110, subtotal: 4510 }
+-          ]
+-        },
+-        {
+-          poNumber: 'PO-2026-9010',
+-          supplierName: 'Highland Grain Millers',
+-          supplierEmail: 'sales@highlandgrain.co.ke',
+-          supplierPhone: '+254733445566',
+-          orderDate: new Date(Date.now() - 86400000 * 10),
+-          expectedDeliveryDate: new Date(Date.now() - 86400000 * 5),
+-          status: 'RECEIVED',
+-          totalAmount: 78000.00,
+-          notes: 'Flour crates delivered and verified',
+-          items: [
+-            { productId: 3, productName: 'Ungamill Premium Maize Flour 2kg', sku: 'UM-2KG', quantityOrdered: 300, quantityReceived: 300, unitCost: 260, subtotal: 78000 }
+-          ]
+-        }
+-      ];
+-
+-      await PurchaseOrder.bulkCreate(demoOrders);
+-      orders = await PurchaseOrder.findAll({ order: [['createdAt', 'DESC']] });
+-    }
+-
+     res.json(orders);
+   } catch (error) {
+     console.error('Error fetching purchase orders:', error);
+@@ -91,10 +43,11 @@ router.get('/', async (req, res) => {
+   }
+ });
+ 
+-// GET /api/purchase-orders/:id — Fetch single PO
++// GET /api/purchase-orders/:id — Fetch single PO (scoped to the caller's shop)
+ router.get('/:id', async (req, res) => {
+   try {
+-    const order = await PurchaseOrder.findByPk(req.params.id);
++    const shopId = req.shopId || req.user.shopId;
++    const order = await PurchaseOrder.findOne({ where: { id: req.params.id, shopId } });
+     if (!order) {
+       return res.status(404).json({ error: 'Purchase Order not found' });
+     }
+@@ -109,6 +62,7 @@ router.get('/:id', async (req, res) => {
+ router.post('/', async (req, res) => {
+   const transaction = await sequelize.transaction();
+   try {
++    const shopId = req.shopId || req.user.shopId;
+     const {
+       poNumber: customPo,
+       supplierName,
+@@ -151,7 +105,7 @@ router.post('/', async (req, res) => {
+       }
+ 
+       if (item.productId) {
+-        const product = await Product.findByPk(item.productId, { transaction });
++        const product = await Product.findOne({ where: { id: item.productId, shopId }, transaction });
+         if (!product) {
+           await transaction.rollback();
+           return res.status(404).json({ error: `Product ID ${item.productId} not found in inventory` });
+@@ -172,14 +126,15 @@ router.post('/', async (req, res) => {
+     const totalAmount = validatedItems.reduce((sum, item) => sum + item.subtotal, 0);
+     const poNumber = customPo ? customPo.trim() : await generatePoNumber();
+ 
+-    // Check duplicate PO number
+-    const existingPo = await PurchaseOrder.findOne({ where: { poNumber }, transaction });
++    // Check duplicate PO number (within this shop)
++    const existingPo = await PurchaseOrder.findOne({ where: { poNumber, shopId }, transaction });
+     if (existingPo) {
+       await transaction.rollback();
+       return res.status(409).json({ error: `Purchase Order number '${poNumber}' already exists` });
+     }
+ 
+     const po = await PurchaseOrder.create({
++      shopId,
+       poNumber,
+       supplierName: supplierName.trim(),
+       supplierEmail: supplierEmail ? supplierEmail.trim() : null,
+@@ -211,8 +166,9 @@ router.post('/', async (req, res) => {
+ router.patch('/:id/status', async (req, res) => {
+   const transaction = await sequelize.transaction();
+   try {
++    const shopId = req.shopId || req.user.shopId;
+     const { status, receivedItems } = req.body;
+-    const po = await PurchaseOrder.findByPk(req.params.id, { transaction });
++    const po = await PurchaseOrder.findOne({ where: { id: req.params.id, shopId }, transaction });
+ 
+     if (!po) {
+       await transaction.rollback();
+@@ -289,7 +245,7 @@ router.patch('/:id/status', async (req, res) => {
+     // Atomically increment stock for newly received delta quantities & log purchase
+     if (stockDeltas.length > 0) {
+       for (const sd of stockDeltas) {
+-        const product = await Product.findByPk(sd.productId, { transaction });
++        const product = await Product.findOne({ where: { id: sd.productId, shopId }, transaction });
+         if (product) {
+           await product.increment('stockQuantity', { by: sd.delta, transaction });
+         }
+@@ -298,6 +254,7 @@ router.patch('/:id/status', async (req, res) => {
+       // Create linked Purchase log for the newly received items
+       const purchaseRef = `PUR-${po.poNumber.replace('PO-', '')}-${Date.now().toString().slice(-4)}`;
+       await Purchase.create({
++        shopId,
+         referenceNo: purchaseRef,
+         supplierName: po.supplierName,
+         supplierContact: po.supplierPhone || po.supplierEmail,
+@@ -331,7 +288,8 @@ router.patch('/:id/status', async (req, res) => {
+ // DELETE /api/purchase-orders/:id — Delete PO
+ router.delete('/:id', async (req, res) => {
+   try {
+-    const po = await PurchaseOrder.findByPk(req.params.id);
++    const shopId = req.shopId || req.user.shopId;
++    const po = await PurchaseOrder.findOne({ where: { id: req.params.id, shopId } });
+     if (!po) {
+       return res.status(404).json({ error: 'Purchase Order not found' });
+     }
+diff --git a/backend/src/routes/purchases.js b/backend/src/routes/purchases.js
+index e7ad752..61186a4 100644
+--- a/backend/src/routes/purchases.js
++++ b/backend/src/routes/purchases.js
+@@ -2,6 +2,10 @@ const express = require('express');
+ const router = express.Router();
+ const { Purchase, Product, sequelize } = require('../models');
+ const { Op } = require('sequelize');
++const { auth } = require('../middleware/auth');
++
++// All routes require authentication + shop context (tenant isolation)
++router.use(auth);
+ 
+ // Helper to generate reference numbers
+ const generateRefNo = async () => {
+@@ -10,12 +14,13 @@ const generateRefNo = async () => {
+   return `PUR-2026-${timestamp}${random}`;
+ };
+ 
+-// GET /api/purchases — List all purchases
++// GET /api/purchases — List all purchases for the authenticated user's shop
+ router.get('/', async (req, res) => {
+   try {
++    const shopId = req.shopId || req.user.shopId;
+     const { search, status, paymentStatus } = req.query;
+ 
+-    const whereClause = {};
++    const whereClause = { shopId };
+     if (status && status !== 'ALL') {
+       whereClause.status = status;
+     }
+@@ -29,64 +34,11 @@ router.get('/', async (req, res) => {
+       ];
+     }
+ 
+-    let purchases = await Purchase.findAll({
++    const purchases = await Purchase.findAll({
+       where: whereClause,
+       order: [['createdAt', 'DESC']]
+     });
+ 
+-    // If database is empty, seed demo purchases for initial immediate view
+-    if (purchases.length === 0 && !search && !status && !paymentStatus) {
+-      const demoPurchases = [
+-        {
+-          referenceNo: 'PUR-2026-8801',
+-          supplierName: 'Kenyan Beverages Distributors Ltd',
+-          supplierContact: '+254711223344',
+-          purchaseDate: new Date(Date.now() - 86400000 * 2),
+-          status: 'RECEIVED',
+-          paymentStatus: 'PAID',
+-          paymentMethod: 'M-PESA',
+-          totalAmount: 45600.00,
+-          notes: 'Regular weekly soft drinks restock',
+-          items: [
+-            { productId: 1, productName: 'Coca-Cola Soda 1.25L', sku: 'CC-1250ML', quantity: 120, unitCost: 280, totalCost: 33600 },
+-            { productId: 2, productName: 'Safari Lager Beer 500ml', sku: 'SL-500ML', quantity: 60, unitCost: 200, totalCost: 12000 }
+-          ]
+-        },
+-        {
+-          referenceNo: 'PUR-2026-8802',
+-          supplierName: 'Highland Grain Millers',
+-          supplierContact: '+254733445566',
+-          purchaseDate: new Date(Date.now() - 86400000 * 5),
+-          status: 'RECEIVED',
+-          paymentStatus: 'PAID',
+-          paymentMethod: 'BANK TRANSFER',
+-          totalAmount: 78000.00,
+-          notes: 'Maize flour 2kg & Wheat flour bundles',
+-          items: [
+-            { productId: 3, productName: 'Ungamill Premium Maize Flour 2kg', sku: 'UM-2KG', quantity: 300, unitCost: 260, totalCost: 78000 }
+-          ]
+-        },
+-        {
+-          referenceNo: 'PUR-2026-8803',
+-          supplierName: 'Eldoret Dairy Co-operative',
+-          supplierContact: '+254722889900',
+-          purchaseDate: new Date(Date.now() - 86400000 * 1),
+-          status: 'PENDING',
+-          paymentStatus: 'UNPAID',
+-          paymentMethod: 'CREDIT',
+-          totalAmount: 18500.00,
+-          notes: 'Fresh Milk & Fresh Yoghurt crates awaiting delivery',
+-          items: [
+-            { productId: 4, productName: 'Fresh Whole Milk 500ml', sku: 'FM-500ML', quantity: 200, unitCost: 65, totalCost: 13000 },
+-            { productId: 5, productName: 'Strawberry Yoghurt 250ml', sku: 'SY-250ML', quantity: 50, unitCost: 110, totalCost: 5500 }
+-          ]
+-        }
+-      ];
+-
+-      await Purchase.bulkCreate(demoPurchases);
+-      purchases = await Purchase.findAll({ order: [['createdAt', 'DESC']] });
+-    }
+-
+     res.json(purchases);
+   } catch (error) {
+     console.error('Error fetching purchases:', error);
+@@ -94,10 +46,11 @@ router.get('/', async (req, res) => {
+   }
+ });
+ 
+-// GET /api/purchases/:id — Fetch single purchase
++// GET /api/purchases/:id — Fetch single purchase (scoped to the caller's shop)
+ router.get('/:id', async (req, res) => {
+   try {
+-    const purchase = await Purchase.findByPk(req.params.id);
++    const shopId = req.shopId || req.user.shopId;
++    const purchase = await Purchase.findOne({ where: { id: req.params.id, shopId } });
+     if (!purchase) {
+       return res.status(404).json({ error: 'Purchase record not found' });
+     }
+@@ -112,6 +65,7 @@ router.get('/:id', async (req, res) => {
+ router.post('/', async (req, res) => {
+   const transaction = await sequelize.transaction();
+   try {
++    const shopId = req.shopId || req.user.shopId;
+     const {
+       referenceNo: customRef,
+       supplierName,
+@@ -154,7 +108,7 @@ router.post('/', async (req, res) => {
+       }
+ 
+       if (item.productId) {
+-        const product = await Product.findByPk(item.productId, { transaction });
++        const product = await Product.findOne({ where: { id: item.productId, shopId }, transaction });
+         if (!product) {
+           await transaction.rollback();
+           return res.status(404).json({ error: `Product ID ${item.productId} not found in inventory` });
+@@ -176,14 +130,15 @@ router.post('/', async (req, res) => {
+ 
+     const referenceNo = customRef ? customRef.trim() : await generateRefNo();
+ 
+-    // Check duplicate reference number
+-    const existingRef = await Purchase.findOne({ where: { referenceNo }, transaction });
++    // Check duplicate reference number (within this shop)
++    const existingRef = await Purchase.findOne({ where: { referenceNo, shopId }, transaction });
+     if (existingRef) {
+       await transaction.rollback();
+       return res.status(409).json({ error: `Purchase reference '${referenceNo}' already exists` });
+     }
+ 
+     const purchase = await Purchase.create({
++      shopId,
+       referenceNo,
+       supplierName: supplierName.trim(),
+       supplierContact: supplierContact ? supplierContact.trim() : null,
+@@ -200,7 +155,7 @@ router.post('/', async (req, res) => {
+     if (status === 'RECEIVED') {
+       for (const item of validatedItems) {
+         if (item.productId) {
+-          const product = await Product.findByPk(item.productId, { transaction });
++          const product = await Product.findOne({ where: { id: item.productId, shopId }, transaction });
+           if (product) {
+             await product.increment('stockQuantity', { by: item.quantity, transaction });
+           }
+@@ -226,7 +181,8 @@ router.post('/', async (req, res) => {
+ // DELETE /api/purchases/:id — Delete purchase
+ router.delete('/:id', async (req, res) => {
+   try {
+-    const purchase = await Purchase.findByPk(req.params.id);
++    const shopId = req.shopId || req.user.shopId;
++    const purchase = await Purchase.findOne({ where: { id: req.params.id, shopId } });
+     if (!purchase) {
+       return res.status(404).json({ error: 'Purchase not found' });
+     }
+diff --git a/backend/src/seeders/seed.js b/backend/src/seeders/seed.js
+index c374cf1..3a90cd2 100644
+--- a/backend/src/seeders/seed.js
++++ b/backend/src/seeders/seed.js
+@@ -1,3 +1,4 @@
++const bcrypt = require('bcryptjs');
+ const { User, Category, Product, Customer, Sale, SaleItem, Expense, Shop, Employee } = require('../models');
+ 
+ const seedDatabase = async () => {
+diff --git a/backend/src/services/emailService.js b/backend/src/services/emailService.js
+index 3d4c001..3bd7aa8 100644
+--- a/backend/src/services/emailService.js
++++ b/backend/src/services/emailService.js
+@@ -1,41 +1,56 @@
+ const nodemailer = require('nodemailer');
+ const logger = require('../utils/logger');
+ 
+-// Create reusable transporter object using SMTP transport
+-const transporter = nodemailer.createTransport({
+-  host: process.env.SMTP_HOST,
+-  port: parseInt(process.env.SMTP_PORT),
+-  secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+-  auth: {
+-    user: process.env.SMTP_USER,
+-    pass: process.env.SMTP_PASS
+-  },
+-  // Force IPv4
+-  connection: {
+-    family: 4
+-  }
+-});
++const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT);
++
++// Create reusable transporter object using SMTP transport.
++// Only attempt this if SMTP is actually configured — passing an undefined
++// host/port into nodemailer can throw synchronously during connection setup
++// (outside its normal callback-based error handling), which previously
++// surfaced as an uncaught exception on every server boot when SMTP env vars
++// were unset.
++let transporter = null;
++if (smtpConfigured) {
++  transporter = nodemailer.createTransport({
++    host: process.env.SMTP_HOST,
++    port: parseInt(process.env.SMTP_PORT),
++    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
++    auth: {
++      user: process.env.SMTP_USER,
++      pass: process.env.SMTP_PASS
++    },
++    // Force IPv4
++    connection: {
++      family: 4
++    }
++  });
+ 
+-// Log email configuration (without sensitive data)
+-logger.info('Email Configuration:', {
+-  host: process.env.SMTP_HOST,
+-  port: process.env.SMTP_PORT,
+-  secure: process.env.SMTP_SECURE === 'true',
+-  from: process.env.SMTP_FROM,
+-  company: process.env.COMPANY_NAME
+-});
++  // Log email configuration (without sensitive data)
++  logger.info('Email Configuration:', {
++    host: process.env.SMTP_HOST,
++    port: process.env.SMTP_PORT,
++    secure: process.env.SMTP_SECURE === 'true',
++    from: process.env.SMTP_FROM,
++    company: process.env.COMPANY_NAME
++  });
+ 
+-// Verify connection configuration
+-transporter.verify(function(error, success) {
+-  if (error) {
+-    logger.error('Error verifying email configuration:', error);
+-  } else {
+-    logger.info('Email server is ready to send messages');
+-  }
+-});
++  // Verify connection configuration
++  transporter.verify(function(error, success) {
++    if (error) {
++      logger.error('Error verifying email configuration:', error);
++    } else {
++      logger.info('Email server is ready to send messages');
++    }
++  });
++} else {
++  logger.warn('SMTP_HOST/SMTP_PORT not configured — email sending (invoices, password reset) is disabled.');
++}
+ 
+ const emailService = {
+   async sendInvoice({ to, invoiceNumber, pdf }) {
++    if (!transporter) {
++      throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
++    }
+     try {
+       const info = await transporter.sendMail({
+         from: '"' + process.env.COMPANY_NAME + '" <' + process.env.SMTP_FROM + '>',
+@@ -63,6 +78,33 @@ const emailService = {
+       logger.error('Error sending email:', error);
+       throw error;
+     }
++  },
++
++  async sendPasswordReset({ to, resetUrl }) {
++    if (!transporter) {
++      throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
++    }
++    try {
++      const info = await transporter.sendMail({
++        from: '"' + process.env.COMPANY_NAME + '" <' + process.env.SMTP_FROM + '>',
++        to: to,
++        subject: 'Reset your ' + process.env.COMPANY_NAME + ' password',
++        html:
++          '<h2>Password Reset Request</h2>' +
++          '<p>We received a request to reset your password. This link expires in 15 minutes.</p>' +
++          '<p><a href="' + resetUrl + '">Reset your password</a></p>' +
++          '<p>If you did not request this, you can safely ignore this email.</p>' +
++          '<br>' +
++          '<p>Best regards,</p>' +
++          '<p>' + process.env.COMPANY_NAME + '</p>'
++      });
++
++      logger.info('Password reset email sent:', info.messageId);
++      return info;
++    } catch (error) {
++      logger.error('Error sending password reset email:', error);
++      throw error;
++    }
+   }
+ };
+ 
+diff --git a/frontend/src/components/SaleDetailModal.jsx b/frontend/src/components/SaleDetailModal.jsx
+index 8d2c9b0..e8c975d 100644
+--- a/frontend/src/components/SaleDetailModal.jsx
++++ b/frontend/src/components/SaleDetailModal.jsx
+@@ -10,7 +10,7 @@ import {
+   ArrowUturnLeftIcon
+ } from '@heroicons/react/24/outline';
+ import useCurrency from '../hooks/useCurrency';
+-import { format } from 'date-fns';
++import { formatDateTime } from '../utils/formatters';
+ import { usePermissions } from '../hooks/usePermissions';
+ import api from '../services/api';
+ import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
+@@ -130,7 +130,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) =>
+       isOpen={isOpen}
+       onClose={onClose}
+       title={`Sale #${sale.invoiceNumber || sale.id}`}
+-      description={sale.createdAt ? format(new Date(sale.createdAt), 'MMM dd, yyyy • hh:mm a') : ''}
++      description={sale.createdAt ? formatDateTime(sale.createdAt) : ''}
+     >
+       <div className="space-y-6">
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+diff --git a/frontend/src/pages/Invoices.jsx b/frontend/src/pages/Invoices.jsx
+index 30aa7b1..775e501 100644
+--- a/frontend/src/pages/Invoices.jsx
++++ b/frontend/src/pages/Invoices.jsx
+@@ -9,9 +9,9 @@ import {
+   XMarkIcon,
+   DocumentTextIcon
+ } from '@heroicons/react/24/outline';
+-import { format } from 'date-fns';
+ import jsPDF from 'jspdf';
+ import 'jspdf-autotable';
++import { formatDateLong, formatDateShort, formatDateTime } from '../utils/formatters';
+ import Spinner from '../components/ui/Spinner';
+ import { useCurrency } from '../hooks/useCurrency';
+ import { useToast } from '../components/Toast';
+@@ -69,7 +69,7 @@ const InvoiceDetailDrawer = ({ invoice, isOpen, onClose, onDownload, onPrint })
+                 <div>
+                   <h2 className="text-h3 font-bold text-text-primary tracking-tight">Invoice #{invoice.invoiceNumber}</h2>
+                   <p className="text-caption text-text-muted mt-0.5">
+-                    Issued on {invoice.dateIssued ? format(new Date(invoice.dateIssued), 'PPP') : 'N/A'}
++                    Issued on {invoice.dateIssued ? formatDateLong(invoice.dateIssued) : 'N/A'}
+                   </p>
+                 </div>
+                 <div className="flex items-center space-x-2">
+@@ -227,7 +227,7 @@ function InvoiceCreateModal({ open, onClose, onCreated }) {
+             <option value="">Choose sale transaction...</option>
+             {sales.map((sale) => (
+               <option key={sale.id} value={sale.id}>
+-                {sale.invoiceNumber || sale.id} • {sale.Customer?.name || sale.customer?.name || sale.customerName || WALK_IN_CUSTOMER_NAME} • {new Date(sale.createdAt).toLocaleString()}
++                {sale.invoiceNumber || sale.id} • {sale.Customer?.name || sale.customer?.name || sale.customerName || WALK_IN_CUSTOMER_NAME} • {formatDateTime(sale.createdAt)}
+               </option>
+             ))}
+           </select>
+@@ -323,7 +323,7 @@ export default function Invoices() {
+       doc.text(`INVOICE: ${inv.invoiceNumber || ''}`, metaX + 10, y + 18);
+       doc.setFont(undefined, 'normal');
+       doc.setFontSize(8);
+-      doc.text(`Date: ${inv.dateIssued ? format(new Date(inv.dateIssued), 'dd MMM yyyy') : ''}`, metaX + 10, y + 32);
++      doc.text(`Date: ${inv.dateIssued ? formatDateShort(inv.dateIssued) : ''}`, metaX + 10, y + 32);
+ 
+       doc.setStrokeColor(120, 68, 33);
+       doc.setLineWidth(1.5);
+@@ -519,7 +519,7 @@ export default function Invoices() {
+     {
+       key: 'dateIssued',
+       label: 'Date',
+-      render: (val) => <span className="text-text-secondary text-small">{val ? format(new Date(val), 'PP') : '-'}</span>
++      render: (val) => <span className="text-text-secondary text-small">{val ? formatDateShort(val) : '-'}</span>
+     },
+     {
+       key: 'status',
+diff --git a/frontend/src/pages/MySales.jsx b/frontend/src/pages/MySales.jsx
+index 2fbe2e5..eb3a2d8 100644
+--- a/frontend/src/pages/MySales.jsx
++++ b/frontend/src/pages/MySales.jsx
+@@ -1,6 +1,6 @@
+ import React, { useState, useEffect } from 'react';
+ import { useSelector } from 'react-redux';
+-import { format, subDays, startOfDay, endOfDay } from 'date-fns';
++import { subDays, startOfDay, endOfDay } from 'date-fns';
+ import { Menu } from '@headlessui/react';
+ import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, FunnelIcon, EyeIcon, ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+@@ -8,6 +8,7 @@ import { cashierAPI } from '../services/cashierAPI';
+ import useCurrency from '../hooks/useCurrency';
+ import api from '../services/api';
+ import SaleDetailModal from '../components/SaleDetailModal';
++import { formatDateTime } from '../utils/formatters';
+ import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
+ 
+ const SaleDetails = ({ sale, onClose }) => {
+@@ -295,7 +296,7 @@ const MySales = () => {
+                       className="cursor-pointer hover:bg-surface-2/60 transition-colors duration-150 group"
+                     >
+                       <td className="px-4 py-4 whitespace-nowrap text-sm text-text-secondary">
+-                        {format(new Date(sale.createdAt), 'MMM dd, yyyy HH:mm')}
++                        {formatDateTime(sale.createdAt)}
+                       </td>
+                       <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-text-primary group-hover:text-primary transition-colors">
+                         {sale.invoiceNumber}
+diff --git a/frontend/src/pages/ResetPassword.jsx b/frontend/src/pages/ResetPassword.jsx
+new file mode 100644
+index 0000000..aa64b0b
+--- /dev/null
++++ b/frontend/src/pages/ResetPassword.jsx
+@@ -0,0 +1,128 @@
++import { useState } from 'react'
++import { useNavigate, useSearchParams } from 'react-router-dom'
++import { authAPI } from '../services/api'
++import Input from '../components/ui/Input'
++import Button from '../components/ui/Button'
++
++export default function ResetPassword() {
++  const navigate = useNavigate()
++  const [searchParams] = useSearchParams()
++  const token = searchParams.get('token') || ''
++
++  const [password, setPassword] = useState('')
++  const [confirmPassword, setConfirmPassword] = useState('')
++  const [loading, setLoading] = useState(false)
++  const [error, setError] = useState(null)
++  const [success, setSuccess] = useState(false)
++
++  const handleSubmit = async (e) => {
++    e.preventDefault()
++    setError(null)
++
++    if (!token) {
++      setError('This reset link is missing its token. Please request a new one.')
++      return
++    }
++    if (password.length < 8) {
++      setError('Password must be at least 8 characters.')
++      return
++    }
++    if (password !== confirmPassword) {
++      setError('Passwords do not match.')
++      return
++    }
++
++    setLoading(true)
++    try {
++      await authAPI.resetPassword({ token, password })
++      setSuccess(true)
++      setTimeout(() => navigate('/login'), 2500)
++    } catch (err) {
++      setError(
++        err?.response?.data?.error ||
++        'This reset link is invalid or has expired. Please request a new one.'
++      )
++    } finally {
++      setLoading(false)
++    }
++  }
++
++  return (
++    <div className="min-h-screen bg-app flex items-center justify-center p-8">
++      <div className="max-w-md w-full space-y-8">
++        <div className="text-center">
++          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-6 shadow-glow">
++            <img src="/react.svg" alt="Zana POS" className="w-8 h-8" />
++          </div>
++          <h2 className="text-h2 font-bold text-text-primary">Set a new password</h2>
++          <p className="mt-2 text-body text-text-secondary">
++            Choose a new password for your account.
++          </p>
++        </div>
++
++        {!token && (
++          <div role="alert" className="rounded-lg bg-danger/10 border border-danger/30 p-4 text-danger text-small font-medium">
++            This reset link is missing its token. Please request a new one from the login page.
++          </div>
++        )}
++
++        {success ? (
++          <div role="status" className="rounded-lg bg-primary/10 border border-primary/30 p-4 text-primary text-small font-medium text-center">
++            Password updated successfully. Redirecting you to sign in&hellip;
++          </div>
++        ) : (
++          <form className="space-y-4" onSubmit={handleSubmit}>
++            <Input
++              id="password"
++              name="password"
++              type="password"
++              label="New password"
++              autoComplete="new-password"
++              required
++              placeholder="At least 8 characters"
++              value={password}
++              onChange={(e) => setPassword(e.target.value)}
++            />
++
++            <Input
++              id="confirmPassword"
++              name="confirmPassword"
++              type="password"
++              label="Confirm new password"
++              autoComplete="new-password"
++              required
++              placeholder="Re-enter your new password"
++              value={confirmPassword}
++              onChange={(e) => setConfirmPassword(e.target.value)}
++            />
++
++            {error && (
++              <div role="alert" className="rounded-lg bg-danger/10 border border-danger/30 p-4 text-danger text-small font-medium">
++                {error}
++              </div>
++            )}
++
++            <Button
++              type="submit"
++              variant="primary"
++              size="lg"
++              fullWidth
++              loading={loading}
++              disabled={!token}
++            >
++              Reset password
++            </Button>
++
++            <button
++              type="button"
++              onClick={() => navigate('/login')}
++              className="w-full text-center text-small text-text-muted hover:text-text-primary transition-colors focus:outline-none focus-visible:underline"
++            >
++              Back to sign in
++            </button>
++          </form>
++        )}
++      </div>
++    </div>
++  )
++}
+diff --git a/frontend/src/router.config.jsx b/frontend/src/router.config.jsx
+index 603c590..38e4f8b 100644
+--- a/frontend/src/router.config.jsx
++++ b/frontend/src/router.config.jsx
+@@ -45,6 +45,7 @@ const safeLazy = (importFunc) => {
+ };
+ 
+ const Login = safeLazy(() => import('./pages/Login'));
++const ResetPassword = safeLazy(() => import('./pages/ResetPassword'));
+ const Signup = safeLazy(() => import('./pages/Signup'));
+ const ToastExample = safeLazy(() => import('./pages/ToastExample'));
+ const Products = safeLazy(() => import('./pages/Products'));
+@@ -97,6 +98,10 @@ export const routes = [
+         path: 'login',
+         element: <Login />
+       },
++      {
++        path: 'reset-password',
++        element: <ResetPassword />
++      },
+       {
+         path: 'signup',
+         element: <Signup />
+diff --git a/frontend/src/utils/formatters.js b/frontend/src/utils/formatters.js
+index 3ba528d..cd4b201 100644
+--- a/frontend/src/utils/formatters.js
++++ b/frontend/src/utils/formatters.js
+@@ -1,5 +1,13 @@
+ import { formatAmount } from './currencyFormatters';
+ 
++// Zana POS is built for Kenyan businesses. Receipts, sales lists, and
++// reports must always show Africa/Nairobi time regardless of the device's
++// own system timezone (a shop owner checking the dashboard while traveling
++// abroad, or a misconfigured device clock, would otherwise see shifted
++// times/dates). This only affects display — timestamps are still stored
++// and transmitted exactly as before.
++const SHOP_TIMEZONE = 'Africa/Nairobi';
++
+ // Wrapper for backward compatibility
+ export const formatCurrency = (amount, settings = null) => {
+   if (settings?.currency) {
+@@ -9,15 +17,61 @@ export const formatCurrency = (amount, settings = null) => {
+ }
+ 
+ export const formatDate = (dateString) => {
++  if (!dateString) return '';
+   return new Date(dateString).toLocaleDateString('en-US', {
+     month: 'short',
+     day: 'numeric',
+     hour: '2-digit',
+-    minute: '2-digit'
++    minute: '2-digit',
++    timeZone: SHOP_TIMEZONE
+   })
+ }
+ 
++// Full date + time, e.g. "Aug 26, 2026 • 09:52 AM" — for receipts and
++// anywhere the full sale date/time needs to be unambiguous.
++export const formatDateTime = (dateString) => {
++  if (!dateString) return '';
++  const datePart = new Date(dateString).toLocaleDateString('en-US', {
++    year: 'numeric',
++    month: 'short',
++    day: '2-digit',
++    timeZone: SHOP_TIMEZONE
++  });
++  const timePart = new Date(dateString).toLocaleTimeString('en-US', {
++    hour: '2-digit',
++    minute: '2-digit',
++    hour12: true,
++    timeZone: SHOP_TIMEZONE
++  });
++  return `${datePart} • ${timePart}`;
++}
++
++// Long date, e.g. "August 26, 2026" — for invoice "Issued on" style text.
++export const formatDateLong = (dateString) => {
++  if (!dateString) return '';
++  return new Date(dateString).toLocaleDateString('en-US', {
++    year: 'numeric',
++    month: 'long',
++    day: 'numeric',
++    timeZone: SHOP_TIMEZONE
++  });
++}
++
++// Short date, e.g. "Aug 26, 2026" — for tables and compact lists.
++export const formatDateShort = (dateString) => {
++  if (!dateString) return '';
++  return new Date(dateString).toLocaleDateString('en-US', {
++    year: 'numeric',
++    month: 'short',
++    day: 'numeric',
++    timeZone: SHOP_TIMEZONE
++  });
++}
++
+ export default {
+   formatCurrency,
+   formatDate,
++  formatDateTime,
++  formatDateLong,
++  formatDateShort,
+ }
+\ No newline at end of file

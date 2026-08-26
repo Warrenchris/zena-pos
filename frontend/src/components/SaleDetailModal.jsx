@@ -10,7 +10,7 @@ import {
   ArrowUturnLeftIcon
 } from '@heroicons/react/24/outline';
 import useCurrency from '../hooks/useCurrency';
-import { format } from 'date-fns';
+import { formatDateTime } from '../utils/formatters';
 import { usePermissions } from '../hooks/usePermissions';
 import api from '../services/api';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
@@ -130,7 +130,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
       isOpen={isOpen}
       onClose={onClose}
       title={`Sale #${sale.invoiceNumber || sale.id}`}
-      description={sale.createdAt ? format(new Date(sale.createdAt), 'MMM dd, yyyy • hh:mm a') : ''}
+      description={sale.createdAt ? formatDateTime(sale.createdAt) : ''}
     >
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

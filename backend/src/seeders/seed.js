@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const { User, Category, Product, Customer, Sale, SaleItem, Expense, Shop, Employee } = require('../models');
 
 const seedDatabase = async () => {

@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { PurchaseOrder, Purchase, Product, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { auth } = require('../middleware/auth');
+
+// All routes require authentication + shop context (tenant isolation)
+router.use(auth);
 
 // Helper to generate PO numbers
 const generatePoNumber = async () => {
@@ -10,12 +14,13 @@ const generatePoNumber = async () => {
   return `PO-2026-${timestamp}${random}`;
 };
 
-// GET /api/purchase-orders — List all POs
+// GET /api/purchase-orders — List all POs for the authenticated user's shop
 router.get('/', async (req, res) => {
   try {
+    const shopId = req.shopId || req.user.shopId;
     const { search, status } = req.query;
 
-    const whereClause = {};
+    const whereClause = { shopId };
     if (status && status !== 'ALL') {
       whereClause.status = status;
     }
@@ -26,63 +31,10 @@ router.get('/', async (req, res) => {
       ];
     }
 
-    let orders = await PurchaseOrder.findAll({
+    const orders = await PurchaseOrder.findAll({
       where: whereClause,
       order: [['createdAt', 'DESC']]
     });
-
-    // Seed initial demo purchase orders if empty
-    if (orders.length === 0 && !search && !status) {
-      const demoOrders = [
-        {
-          poNumber: 'PO-2026-9011',
-          supplierName: 'Kenyan Beverages Distributors Ltd',
-          supplierEmail: 'orders@kenyanbeverages.co.ke',
-          supplierPhone: '+254711223344',
-          orderDate: new Date(Date.now() - 86400000 * 3),
-          expectedDeliveryDate: new Date(Date.now() + 86400000 * 2),
-          status: 'ORDERED',
-          totalAmount: 52000.00,
-          notes: 'Monthly soda & juice inventory replenishment',
-          items: [
-            { productId: 1, productName: 'Coca-Cola Soda 1.25L', sku: 'CC-1250ML', quantityOrdered: 150, quantityReceived: 0, unitCost: 280, subtotal: 42000 },
-            { productId: 2, productName: 'Safari Lager Beer 500ml', sku: 'SL-500ML', quantityOrdered: 50, quantityReceived: 0, unitCost: 200, subtotal: 10000 }
-          ]
-        },
-        {
-          poNumber: 'PO-2026-9012',
-          supplierName: 'Eldoret Dairy Co-operative',
-          supplierEmail: 'supply@eldoretdairy.co.ke',
-          supplierPhone: '+254722889900',
-          orderDate: new Date(Date.now() - 86400000 * 1),
-          expectedDeliveryDate: new Date(Date.now() + 86400000 * 1),
-          status: 'ORDERED',
-          totalAmount: 24000.00,
-          notes: 'Fresh milk supply for Westlands branch',
-          items: [
-            { productId: 4, productName: 'Fresh Whole Milk 500ml', sku: 'FM-500ML', quantityOrdered: 300, quantityReceived: 0, unitCost: 65, subtotal: 19500 },
-            { productId: 5, productName: 'Strawberry Yoghurt 250ml', sku: 'SY-250ML', quantityOrdered: 41, quantityReceived: 0, unitCost: 110, subtotal: 4510 }
-          ]
-        },
-        {
-          poNumber: 'PO-2026-9010',
-          supplierName: 'Highland Grain Millers',
-          supplierEmail: 'sales@highlandgrain.co.ke',
-          supplierPhone: '+254733445566',
-          orderDate: new Date(Date.now() - 86400000 * 10),
-          expectedDeliveryDate: new Date(Date.now() - 86400000 * 5),
-          status: 'RECEIVED',
-          totalAmount: 78000.00,
-          notes: 'Flour crates delivered and verified',
-          items: [
-            { productId: 3, productName: 'Ungamill Premium Maize Flour 2kg', sku: 'UM-2KG', quantityOrdered: 300, quantityReceived: 300, unitCost: 260, subtotal: 78000 }
-          ]
-        }
-      ];
-
-      await PurchaseOrder.bulkCreate(demoOrders);
-      orders = await PurchaseOrder.findAll({ order: [['createdAt', 'DESC']] });
-    }
 
     res.json(orders);
   } catch (error) {
@@ -91,10 +43,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/purchase-orders/:id — Fetch single PO
+// GET /api/purchase-orders/:id — Fetch single PO (scoped to the caller's shop)
 router.get('/:id', async (req, res) => {
   try {
-    const order = await PurchaseOrder.findByPk(req.params.id);
+    const shopId = req.shopId || req.user.shopId;
+    const order = await PurchaseOrder.findOne({ where: { id: req.params.id, shopId } });
     if (!order) {
       return res.status(404).json({ error: 'Purchase Order not found' });
     }
@@ -109,6 +62,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
+    const shopId = req.shopId || req.user.shopId;
     const {
       poNumber: customPo,
       supplierName,
@@ -151,7 +105,7 @@ router.post('/', async (req, res) => {
       }
 
       if (item.productId) {
-        const product = await Product.findByPk(item.productId, { transaction });
+        const product = await Product.findOne({ where: { id: item.productId, shopId }, transaction });
         if (!product) {
           await transaction.rollback();
           return res.status(404).json({ error: `Product ID ${item.productId} not found in inventory` });
@@ -172,14 +126,15 @@ router.post('/', async (req, res) => {
     const totalAmount = validatedItems.reduce((sum, item) => sum + item.subtotal, 0);
     const poNumber = customPo ? customPo.trim() : await generatePoNumber();
 
-    // Check duplicate PO number
-    const existingPo = await PurchaseOrder.findOne({ where: { poNumber }, transaction });
+    // Check duplicate PO number (within this shop)
+    const existingPo = await PurchaseOrder.findOne({ where: { poNumber, shopId }, transaction });
     if (existingPo) {
       await transaction.rollback();
       return res.status(409).json({ error: `Purchase Order number '${poNumber}' already exists` });
     }
 
     const po = await PurchaseOrder.create({
+      shopId,
       poNumber,
       supplierName: supplierName.trim(),
       supplierEmail: supplierEmail ? supplierEmail.trim() : null,
@@ -211,8 +166,9 @@ router.post('/', async (req, res) => {
 router.patch('/:id/status', async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
+    const shopId = req.shopId || req.user.shopId;
     const { status, receivedItems } = req.body;
-    const po = await PurchaseOrder.findByPk(req.params.id, { transaction });
+    const po = await PurchaseOrder.findOne({ where: { id: req.params.id, shopId }, transaction });
 
     if (!po) {
       await transaction.rollback();
@@ -289,7 +245,7 @@ router.patch('/:id/status', async (req, res) => {
     // Atomically increment stock for newly received delta quantities & log purchase
     if (stockDeltas.length > 0) {
       for (const sd of stockDeltas) {
-        const product = await Product.findByPk(sd.productId, { transaction });
+        const product = await Product.findOne({ where: { id: sd.productId, shopId }, transaction });
         if (product) {
           await product.increment('stockQuantity', { by: sd.delta, transaction });
         }
@@ -298,6 +254,7 @@ router.patch('/:id/status', async (req, res) => {
       // Create linked Purchase log for the newly received items
       const purchaseRef = `PUR-${po.poNumber.replace('PO-', '')}-${Date.now().toString().slice(-4)}`;
       await Purchase.create({
+        shopId,
         referenceNo: purchaseRef,
         supplierName: po.supplierName,
         supplierContact: po.supplierPhone || po.supplierEmail,
@@ -331,7 +288,8 @@ router.patch('/:id/status', async (req, res) => {
 // DELETE /api/purchase-orders/:id — Delete PO
 router.delete('/:id', async (req, res) => {
   try {
-    const po = await PurchaseOrder.findByPk(req.params.id);
+    const shopId = req.shopId || req.user.shopId;
+    const po = await PurchaseOrder.findOne({ where: { id: req.params.id, shopId } });
     if (!po) {
       return res.status(404).json({ error: 'Purchase Order not found' });
     }
