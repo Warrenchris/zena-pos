@@ -74,7 +74,12 @@ function stopProbe() {
   }
 }
 
-scheduleNextProbe();
+// Don't start the background probe in test environments — the timer fires
+// after Jest tears down the module registry, causing "import after teardown".
+if (process.env.NODE_ENV !== 'test') {
+  scheduleNextProbe();
+}
+
 
 router.get('/status', async (req, res) => {
   try {
