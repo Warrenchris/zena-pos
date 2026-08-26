@@ -67,6 +67,13 @@ function scheduleNextProbe() {
   if (probeTimer.unref) probeTimer.unref();
 }
 
+function stopProbe() {
+  if (probeTimer) {
+    clearTimeout(probeTimer);
+    probeTimer = null;
+  }
+}
+
 scheduleNextProbe();
 
 router.get('/status', async (req, res) => {
@@ -185,3 +192,4 @@ router.use(async (req, res, next) => {
 
 module.exports = router;
 module.exports.forecastCache = forecastCache;
+module.exports.stopProbe = stopProbe;

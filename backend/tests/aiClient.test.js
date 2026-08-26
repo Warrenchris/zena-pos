@@ -1,7 +1,15 @@
 const axios = require('axios');
-const aiClient = require('../src/utils/aiClient');
 
 jest.mock('axios');
+
+// Mock jsonwebtoken so RS256 tests don't need a real RSA key pair in CI.
+jest.mock('jsonwebtoken', () => ({
+  sign: jest.fn(() => 'eyJmYWtlSldU.payload.signature'),
+  verify: jest.requireActual('jsonwebtoken').verify,
+  decode: jest.requireActual('jsonwebtoken').decode,
+}));
+
+const aiClient = require('../src/utils/aiClient');
 
 describe('aiClient', () => {
   let prevApiKey;
@@ -37,8 +45,9 @@ describe('aiClient', () => {
 
   it('should fallback to signing a dynamic JWT if AI_SERVICE_API_KEY is not defined', async () => {
     delete process.env.AI_SERVICE_API_KEY;
-    process.env.JWT_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCf7lejizsO/JnL\n-----END PRIVATE KEY-----';
-    
+    // Value doesn't matter — jwt.sign is mocked to return a fake token.
+    process.env.JWT_PRIVATE_KEY = 'mock-private-key';
+
     axios.post.mockResolvedValue({ data: { success: true } });
 
     await aiClient.post('/api/test', { data: 123 }, { shopId: 5, userId: 101 });
@@ -67,8 +76,8 @@ describe('aiClient', () => {
 
   it('should throw an error if userId is missing when signing a dynamic JWT', async () => {
     delete process.env.AI_SERVICE_API_KEY;
-    process.env.JWT_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCf7lejizsO/JnL\n-----END PRIVATE KEY-----';
-    
+    process.env.JWT_PRIVATE_KEY = 'mock-private-key';
+
     await expect(aiClient.post('/api/test', {})).rejects.toThrow(
       '[aiClient] Cannot sign dynamic JWT token: userId is missing or invalid.'
     );
