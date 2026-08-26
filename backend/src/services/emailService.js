@@ -19,10 +19,8 @@ if (smtpConfigured) {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
     },
-    // Force IPv4
-    connection: {
-      family: 4
-    }
+    // Force IPv4 — top-level option passed directly to net.connect()
+    family: 4
   });
 
   // Log email configuration (without sensitive data)
