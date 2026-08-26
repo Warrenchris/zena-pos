@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../../src/app');
 const sequelize = require('../../src/config/database');
-const { Shop, Sale, Expense } = require('../../src/models');
+const { Shop, Sale, SaleItem, SalePayment, SaleRefund, Expense } = require('../../src/models');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -28,11 +28,14 @@ function tokenFor(user) {
 describe('Multi-tenant isolation', () => {
   let shop1;
   let shop2;
-  const shopAToken = tokenFor({ id: 101, role: 'admin', shopId: 1 });
-  const shopBToken = tokenFor({ id: 202, role: 'admin', shopId: 2 });
+  let shopAToken;
+  let shopBToken;
 
   beforeAll(async () => {
     await sequelize.authenticate();
+
+    shopAToken = tokenFor({ id: 101, role: 'admin', shopId: 1 });
+    shopBToken = tokenFor({ id: 202, role: 'admin', shopId: 2 });
 
     [shop1] = await Shop.findOrCreate({
       where: { id: 1 },
@@ -52,8 +55,14 @@ describe('Multi-tenant isolation', () => {
   }, 30000);
 
   afterEach(async () => {
-    await Sale.destroy({ where: { shopId: { [Op.in]: [shop1.id, shop2.id] } } });
-    await Expense.destroy({ where: { shopId: { [Op.in]: [shop1.id, shop2.id] } } });
+    if (shop1 && shop2) {
+      const shopIds = [shop1.id, shop2.id];
+      await SaleRefund.destroy({ where: { shopId: { [Op.in]: shopIds } } }).catch(() => {});
+      await SalePayment.destroy({ where: { shopId: { [Op.in]: shopIds } } }).catch(() => {});
+      await SaleItem.destroy({ where: { shopId: { [Op.in]: shopIds } } }).catch(() => {});
+      await Sale.destroy({ where: { shopId: { [Op.in]: shopIds } } }).catch(() => {});
+      await Expense.destroy({ where: { shopId: { [Op.in]: shopIds } } }).catch(() => {});
+    }
   });
 
   test('Employees list is scoped by shopId', async () => {

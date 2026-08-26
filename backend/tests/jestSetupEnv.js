@@ -23,7 +23,7 @@ if (!hasRealKey) {
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
 
-  // Store as single-line escaped strings, matching how the app reads them.
-  process.env.JWT_PRIVATE_KEY = privateKey.replace(/\n/g, '\\n');
-  process.env.JWT_PUBLIC_KEY  = publicKey.replace(/\n/g, '\\n');
+  process.env.JWT_PRIVATE_KEY = privateKey;
+  process.env.JWT_PUBLIC_KEY  = publicKey;
 }
+
