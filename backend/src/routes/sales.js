@@ -38,11 +38,16 @@ const validateSale = [
     .isFloat({ min: 0 })
     .withMessage('Discount must be a positive number'),
   body('items.*.discountType')
-    .optional()
+    // IMPORTANT: express-validator's default .optional() only skips a field
+    // when it is `undefined` — it still validates explicit `null`, and the
+    // frontend always sends `discountType: item.discountType || null` for
+    // items with no discount. Without { values: 'falsy' } here, every plain
+    // no-discount sale fails this .isIn() check and the whole endpoint 400s.
+    .optional({ values: 'falsy' })
     .isIn(['percentage', 'fixed'])
     .withMessage('Discount type must be percentage or fixed'),
   body('items.*.discountValue')
-    .optional()
+    .optional({ values: 'falsy' })
     .isFloat({ min: 0 })
     .withMessage('Discount value must be a positive number'),
   body('items.*.taxRate')
@@ -154,11 +159,14 @@ const validateSale = [
     .isFloat({ min: 0 })
     .withMessage('Discount must be a positive number'),
   body('discountType')
-    .optional()
+    // Same explicit-null issue as items.*.discountType above — the frontend
+    // always sends this as null (not omitted) when no cart-level discount
+    // is applied.
+    .optional({ values: 'falsy' })
     .isIn(['percentage', 'fixed'])
     .withMessage('Discount type must be percentage or fixed'),
   body('discountValue')
-    .optional()
+    .optional({ values: 'falsy' })
     .isFloat({ min: 0 })
     .withMessage('Discount value must be a positive number'),
   body('total')

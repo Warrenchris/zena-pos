@@ -14,6 +14,7 @@ const SalePayment = require('../models/SalePayment');
 const SystemSettings = require('../models/SystemSettings');
 const { parseDate } = require('../utils/dateUtils');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
+const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 
 // Get all sales with pagination
 exports.getAllSales = async (req, res) => {
@@ -277,7 +278,8 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
     discountType,
     discountValue,
     discountReason,
-    discountApprovedBy,
+    managerApprovalId,
+    managerPassword,
     tax = 0,
     notes,
     total: frontendTotal,
@@ -293,6 +295,21 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
     err.statusCode = 400;
     throw err;
   }
+
+  // Server-side discount authorization check. The client (DiscountModal.jsx)
+  // already gates this in the UI, but that is only a UX convenience — it does
+  // not stop a request built by hand or a compromised client from submitting
+  // an above-threshold discount with a fabricated approver. Re-check here
+  // against the real, hashed credential, exactly like the refund flow does.
+  const verifiedApproverName = await verifyDiscountApprovalIfNeeded({
+    shopId,
+    cartDiscountType: discountType,
+    cartDiscountValue: discountValue,
+    items,
+    managerApprovalId,
+    managerPassword
+  });
+  const cartDiscountNeedsApproval = discountRequiresApproval(discountType, discountValue);
 
   // Idempotency check: if sale with this idempotencyKey already exists, return it immediately
   if (idempotencyKey) {
@@ -369,7 +386,12 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
         discountType: item.discountType || null,
         discountValue: item.discountValue ? parseFloat(item.discountValue) : null,
         discountReason: item.discountReason || null,
-        discountApprovedBy: item.discountApprovedBy || null
+        // Never trust a client-supplied approver name — only record the name
+        // we ourselves just verified above, and only for items whose discount
+        // actually required approval.
+        discountApprovedBy: discountRequiresApproval(item.discountType, item.discountValue)
+          ? verifiedApproverName
+          : null
       });
     }
 
@@ -448,7 +470,8 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
       paymentNotes,
       metadata: {
         discountReason: discountReason || null,
-        discountApprovedBy: discountApprovedBy || null,
+        discountApprovedBy: cartDiscountNeedsApproval ? verifiedApproverName : null,
+        managerApprovalId: verifiedApproverName ? managerApprovalId : null,
         ...(saleData.metadata || {})
       }
     }, { transaction: t });

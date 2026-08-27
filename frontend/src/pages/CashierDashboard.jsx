@@ -467,7 +467,8 @@ export default function CashierDashboard() {
             discountType: discountData.discountType,
             discountValue: discountData.discountValue,
             discountReason: discountData.discountReason,
-            discountApprovedBy: discountData.discountApprovedBy
+            managerApprovalId: discountData.managerApprovalId || null,
+            managerPassword: discountData.managerPassword || null
           };
         }
         return item;
@@ -503,7 +504,8 @@ export default function CashierDashboard() {
         delete copy.discountType;
         delete copy.discountValue;
         delete copy.discountReason;
-        delete copy.discountApprovedBy;
+        delete copy.managerApprovalId;
+        delete copy.managerPassword;
         return copy;
       }
       return item;
@@ -1020,9 +1022,21 @@ export default function CashierDashboard() {
 
     const idempotencyKey = generateUUID();
 
+    // A single manager credential authorizes every discount in this sale —
+    // pulled from whichever discount (cart-level takes priority, else the
+    // first item that needed approval) actually required it. We do not send
+    // a password per line item; one verified approval covers the whole sale.
+    const approvalSource = (cartManualDiscount && cartManualDiscount.managerApprovalId)
+      ? cartManualDiscount
+      : currentSale.items.find(item => item.managerApprovalId);
+    const managerApprovalId = approvalSource ? approvalSource.managerApprovalId : null;
+    const managerPassword = approvalSource ? approvalSource.managerPassword : null;
+
     // Prepare sale data with discount metadata and client idempotency key
     const saleData = {
       idempotencyKey,
+      managerApprovalId,
+      managerPassword,
       items: currentSale.items.map(item => ({
         productId: item.id,
         quantity: item.quantity,
@@ -1030,8 +1044,7 @@ export default function CashierDashboard() {
         discount: item.discount || 0,
         discountType: item.discountType || null,
         discountValue: item.discountValue || null,
-        discountReason: item.discountReason || null,
-        discountApprovedBy: item.discountApprovedBy || null
+        discountReason: item.discountReason || null
       })),
       totalAmount: currentSale.total,
       total: currentSale.total,
@@ -1039,7 +1052,6 @@ export default function CashierDashboard() {
       discountType: (cartManualDiscount ? cartManualDiscount.discountType : (appliedCoupon ? appliedCoupon.discountType : null)),
       discountValue: (cartManualDiscount ? cartManualDiscount.discountValue : (appliedCoupon ? appliedCoupon.discountValue : null)),
       discountReason: (cartManualDiscount ? cartManualDiscount.discountReason : (appliedCoupon ? `Coupon: ${appliedCoupon.code}` : null)),
-      discountApprovedBy: (cartManualDiscount ? cartManualDiscount.discountApprovedBy : null),
       paymentMethod: currentSale.paymentMethod,
       paymentAmount: parseFloat(currentSale.paymentAmount),
       // Send customer object as expected by the backend
