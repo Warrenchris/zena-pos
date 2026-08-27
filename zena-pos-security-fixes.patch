@@ -1,0 +1,966 @@
+diff --git a/backend/migrations/20260827000000-add-idempotency-key-to-sales.js b/backend/migrations/20260827000000-add-idempotency-key-to-sales.js
+new file mode 100644
+index 0000000..40ed1b5
+--- /dev/null
++++ b/backend/migrations/20260827000000-add-idempotency-key-to-sales.js
+@@ -0,0 +1,61 @@
++'use strict';
++
++/** @type {import('sequelize-cli').Migration} */
++module.exports = {
++  async up(queryInterface, Sequelize) {
++    try {
++      const salesDesc = await queryInterface.describeTable('Sales');
++
++      if (!salesDesc.idempotencyKey) {
++        await queryInterface.addColumn('Sales', 'idempotencyKey', {
++          type: Sequelize.STRING(64),
++          allowNull: true
++        });
++        console.log('Added column idempotencyKey to Sales');
++      } else {
++        console.log('Column idempotencyKey already exists in Sales, skipping addColumn');
++      }
++
++      // Enforce uniqueness at the DB level so concurrent/duplicate submissions
++      // (e.g. retried offline-queued sales) cannot both succeed. Relying on an
++      // app-level findOne-then-create check alone is a race condition.
++      const indexes = await queryInterface.showIndex('Sales');
++      const hasUniqueIndex = indexes.some(
++        (idx) => idx.name === 'sales_idempotency_key_unique'
++      );
++
++      if (!hasUniqueIndex) {
++        await queryInterface.addIndex('Sales', ['idempotencyKey'], {
++          unique: true,
++          name: 'sales_idempotency_key_unique'
++        });
++        console.log('Added unique index sales_idempotency_key_unique on Sales.idempotencyKey');
++      } else {
++        console.log('Unique index sales_idempotency_key_unique already exists, skipping');
++      }
++    } catch (err) {
++      console.error('Failed executing idempotencyKey migration:', err);
++      throw err;
++    }
++  },
++
++  async down(queryInterface) {
++    try {
++      const indexes = await queryInterface.showIndex('Sales');
++      const hasUniqueIndex = indexes.some(
++        (idx) => idx.name === 'sales_idempotency_key_unique'
++      );
++      if (hasUniqueIndex) {
++        await queryInterface.removeIndex('Sales', 'sales_idempotency_key_unique');
++      }
++
++      const salesDesc = await queryInterface.describeTable('Sales');
++      if (salesDesc.idempotencyKey) {
++        await queryInterface.removeColumn('Sales', 'idempotencyKey');
++      }
++    } catch (err) {
++      console.error('Failed reverting idempotencyKey migration:', err);
++      throw err;
++    }
++  }
++};
+diff --git a/backend/src/controllers/saleController.js b/backend/src/controllers/saleController.js
+index 71fcd09..4bea49a 100644
+--- a/backend/src/controllers/saleController.js
++++ b/backend/src/controllers/saleController.js
+@@ -14,6 +14,7 @@ const SalePayment = require('../models/SalePayment');
+ const SystemSettings = require('../models/SystemSettings');
+ const { parseDate } = require('../utils/dateUtils');
+ const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
++const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
+ 
+ // Get all sales with pagination
+ exports.getAllSales = async (req, res) => {
+@@ -277,7 +278,8 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
+     discountType,
+     discountValue,
+     discountReason,
+-    discountApprovedBy,
++    managerApprovalId,
++    managerPassword,
+     tax = 0,
+     notes,
+     total: frontendTotal,
+@@ -294,6 +296,21 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
+     throw err;
+   }
+ 
++  // Server-side discount authorization check. The client (DiscountModal.jsx)
++  // already gates this in the UI, but that is only a UX convenience — it does
++  // not stop a request built by hand or a compromised client from submitting
++  // an above-threshold discount with a fabricated approver. Re-check here
++  // against the real, hashed credential, exactly like the refund flow does.
++  const verifiedApproverName = await verifyDiscountApprovalIfNeeded({
++    shopId,
++    cartDiscountType: discountType,
++    cartDiscountValue: discountValue,
++    items,
++    managerApprovalId,
++    managerPassword
++  });
++  const cartDiscountNeedsApproval = discountRequiresApproval(discountType, discountValue);
++
+   // Idempotency check: if sale with this idempotencyKey already exists, return it immediately
+   if (idempotencyKey) {
+     const existingSale = await Sale.findOne({
+@@ -369,7 +386,12 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
+         discountType: item.discountType || null,
+         discountValue: item.discountValue ? parseFloat(item.discountValue) : null,
+         discountReason: item.discountReason || null,
+-        discountApprovedBy: item.discountApprovedBy || null
++        // Never trust a client-supplied approver name — only record the name
++        // we ourselves just verified above, and only for items whose discount
++        // actually required approval.
++        discountApprovedBy: discountRequiresApproval(item.discountType, item.discountValue)
++          ? verifiedApproverName
++          : null
+       });
+     }
+ 
+@@ -448,7 +470,8 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
+       paymentNotes,
+       metadata: {
+         discountReason: discountReason || null,
+-        discountApprovedBy: discountApprovedBy || null,
++        discountApprovedBy: cartDiscountNeedsApproval ? verifiedApproverName : null,
++        managerApprovalId: verifiedApproverName ? managerApprovalId : null,
+         ...(saleData.metadata || {})
+       }
+     }, { transaction: t });
+diff --git a/backend/src/routes/sales.js b/backend/src/routes/sales.js
+index 6511d1e..f4625a5 100644
+--- a/backend/src/routes/sales.js
++++ b/backend/src/routes/sales.js
+@@ -38,11 +38,16 @@ const validateSale = [
+     .isFloat({ min: 0 })
+     .withMessage('Discount must be a positive number'),
+   body('items.*.discountType')
+-    .optional()
++    // IMPORTANT: express-validator's default .optional() only skips a field
++    // when it is `undefined` — it still validates explicit `null`, and the
++    // frontend always sends `discountType: item.discountType || null` for
++    // items with no discount. Without { values: 'falsy' } here, every plain
++    // no-discount sale fails this .isIn() check and the whole endpoint 400s.
++    .optional({ values: 'falsy' })
+     .isIn(['percentage', 'fixed'])
+     .withMessage('Discount type must be percentage or fixed'),
+   body('items.*.discountValue')
+-    .optional()
++    .optional({ values: 'falsy' })
+     .isFloat({ min: 0 })
+     .withMessage('Discount value must be a positive number'),
+   body('items.*.taxRate')
+@@ -154,11 +159,14 @@ const validateSale = [
+     .isFloat({ min: 0 })
+     .withMessage('Discount must be a positive number'),
+   body('discountType')
+-    .optional()
++    // Same explicit-null issue as items.*.discountType above — the frontend
++    // always sends this as null (not omitted) when no cart-level discount
++    // is applied.
++    .optional({ values: 'falsy' })
+     .isIn(['percentage', 'fixed'])
+     .withMessage('Discount type must be percentage or fixed'),
+   body('discountValue')
+-    .optional()
++    .optional({ values: 'falsy' })
+     .isFloat({ min: 0 })
+     .withMessage('Discount value must be a positive number'),
+   body('total')
+diff --git a/backend/src/services/EnhancedSaleService.js b/backend/src/services/EnhancedSaleService.js
+index 46cd9de..9ede0d7 100644
+--- a/backend/src/services/EnhancedSaleService.js
++++ b/backend/src/services/EnhancedSaleService.js
+@@ -8,6 +8,7 @@ const Customer = require('../models/Customer');
+ const Employee = require('../models/Employee');
+ const sequelize = require('../config/database');
+ const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
++const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
+ 
+ class EnhancedSaleService {
+   constructor() {
+@@ -84,24 +85,64 @@ class EnhancedSaleService {
+   }
+ 
+   async createSplitPaymentSale(body, req) {
+-    const t = await sequelize.transaction();
+-    try {
+-      const { items, payments, discount = 0, tax = 0, total: frontendTotal, customerId, customer } = body;
+-      const shopId = req.shopId || req.user.shopId;
+-      const user = req.user;
++    const {
++      items,
++      payments,
++      discount = 0,
++      discountType,
++      discountValue,
++      discountReason,
++      managerApprovalId,
++      managerPassword,
++      tax = 0,
++      total: frontendTotal,
++      customerId,
++      customer,
++      idempotencyKey
++    } = body;
++    const shopId = req.shopId || req.user.shopId;
++    const user = req.user;
++
++    if (!Array.isArray(items) || items.length === 0) {
++      const err = new Error('Sale must include at least one item');
++      err.statusCode = 400;
++      throw err;
++    }
+ 
+-      if (!Array.isArray(items) || items.length === 0) {
+-        const err = new Error('Sale must include at least one item');
+-        err.statusCode = 400;
+-        throw err;
+-      }
++    if (!Array.isArray(payments) || payments.length < 2) {
++      const err = new Error('Split sale must include at least two payment legs');
++      err.statusCode = 400;
++      throw err;
++    }
+ 
+-      if (!Array.isArray(payments) || payments.length < 2) {
+-        const err = new Error('Split sale must include at least two payment legs');
+-        err.statusCode = 400;
+-        throw err;
++    // Idempotency check: if a sale with this key already exists, return it
++    // as-is rather than creating a duplicate. Checked before opening a
++    // transaction so a retried/duplicate request short-circuits immediately.
++    if (idempotencyKey) {
++      const existingSale = await Sale.findOne({
++        where: { idempotencyKey, shopId },
++        include: this.defaultIncludes
++      });
++      if (existingSale) {
++        return existingSale;
+       }
++    }
++
++    // Same server-side discount authorization check used by single-payment
++    // sales — shared via utils/discountApproval so the two paths can't drift
++    // out of sync on this again. Done before opening the transaction since
++    // it involves an async password comparison, not a DB write.
++    const verifiedApproverName = await verifyDiscountApprovalIfNeeded({
++      shopId,
++      cartDiscountType: discountType,
++      cartDiscountValue: discountValue,
++      items,
++      managerApprovalId,
++      managerPassword
++    });
+ 
++    const t = await sequelize.transaction();
++    try {
+       // Calculate serverTotal and verify stock
+       let subtotal = 0;
+       const lockedProducts = [];
+@@ -132,17 +173,31 @@ class EnhancedSaleService {
+ 
+         lockedProducts.push({ product, item, itemPrice, itemSubtotal });
+ 
++        const itemDiscountAmount = parseFloat(item.discount || 0);
+         saleItems.push({
+           productId: product.id,
+           quantity: item.quantity,
+           unitPrice: product.price,
+           price: itemPrice,
+-          subtotal: itemSubtotal,
+-          discount: item.discount || 0
++          subtotal: Math.max(0, itemSubtotal - itemDiscountAmount),
++          discount: itemDiscountAmount,
++          discountType: item.discountType || null,
++          discountValue: item.discountValue ? parseFloat(item.discountValue) : null,
++          metadata: {
++            discountReason: item.discountReason || null,
++            // Only trust the approval we ourselves just verified above, and
++            // only attach it to items whose discount actually needed it.
++            discountApprovedBy: discountRequiresApproval(item.discountType, item.discountValue)
++              ? verifiedApproverName
++              : null
++          }
+         });
+       }
+ 
+-      const serverTotal = subtotal + parseFloat(tax || 0) - parseFloat(discount || 0);
++      const totalItemDiscounts = saleItems.reduce((sum, si) => sum + (parseFloat(si.discount || 0)), 0);
++      const cartDiscountAmount = parseFloat(discount || 0);
++      const totalDiscount = totalItemDiscounts + cartDiscountAmount;
++      const serverTotal = Math.max(0, subtotal + parseFloat(tax || 0) - totalDiscount);
+ 
+       // Validate pricing
+       if (frontendTotal !== undefined && Math.abs(serverTotal - parseFloat(frontendTotal)) > 0.01) {
+@@ -212,9 +267,12 @@ class EnhancedSaleService {
+       // Insert Sales row
+       const newSale = await Sale.create({
+         invoiceNumber,
++        idempotencyKey: idempotencyKey || null,
+         subtotal,
+         tax,
+-        discount,
++        discount: totalDiscount,
++        discountType: discountType || null,
++        discountValue: discountValue ? parseFloat(discountValue) : null,
+         total: serverTotal,
+         paymentMethod: 'split',
+         paymentAmount: sumPayments,
+@@ -229,6 +287,10 @@ class EnhancedSaleService {
+         employeeId: user?.isEmployee ? user.id : null,
+         notes: body.notes,
+         shopId,
++        metadata: {
++          discountReason: discountReason || null,
++          discountApprovedBy: discountRequiresApproval(discountType, discountValue) ? verifiedApproverName : null
++        }
+       }, { transaction: t });
+ 
+       // Insert SaleItems rows
+diff --git a/backend/src/utils/discountApproval.js b/backend/src/utils/discountApproval.js
+new file mode 100644
+index 0000000..eabbcb9
+--- /dev/null
++++ b/backend/src/utils/discountApproval.js
+@@ -0,0 +1,90 @@
++const User = require('../models/User');
++
++/**
++ * Shared discount-authorization rules and verification, used by every
++ * sale-creation path (single-payment sales, split-payment sales, and any
++ * future ones). This exists specifically so the threshold/credential check
++ * lives in exactly one place — the earlier bug in this app was two separate
++ * sales controllers silently drifting out of sync on stock-locking logic;
++ * duplicating this security check across services would repeat that mistake
++ * with a worse consequence (a bypassable discount, not just a code smell).
++ */
++
++// Mirrors the thresholds enforced client-side in DiscountModal.jsx. The
++// client-side check is a UX nicety only; this server-side check is what
++// actually prevents an above-threshold discount with a fabricated approver.
++const DISCOUNT_APPROVAL_PERCENT_THRESHOLD = 10;
++const DISCOUNT_APPROVAL_FIXED_THRESHOLD = 50;
++
++function discountRequiresApproval(discountType, discountValue) {
++  const val = parseFloat(discountValue || 0);
++  if (!discountType || val <= 0) return false;
++  if (discountType === 'percentage') return val > DISCOUNT_APPROVAL_PERCENT_THRESHOLD;
++  return val > DISCOUNT_APPROVAL_FIXED_THRESHOLD;
++}
++
++/**
++ * Determines whether any discount in this sale (cart-level or any item)
++ * requires manager approval, and if so, verifies the supplied credential
++ * against the real, hashed password on the User record.
++ *
++ * @returns {Promise<string|null>} the verified approver's display name, or
++ *   null if no discount in this sale required approval.
++ * @throws {Error} with .statusCode set, if approval was required but the
++ *   credential is missing, the user isn't an active manager/admin, or the
++ *   password is wrong.
++ */
++async function verifyDiscountApprovalIfNeeded({
++  shopId,
++  cartDiscountType,
++  cartDiscountValue,
++  items = [],
++  managerApprovalId,
++  managerPassword
++}) {
++  const cartNeedsApproval = discountRequiresApproval(cartDiscountType, cartDiscountValue);
++  const anyItemNeedsApproval = items.some(item =>
++    discountRequiresApproval(item.discountType, item.discountValue)
++  );
++
++  if (!cartNeedsApproval && !anyItemNeedsApproval) {
++    return null;
++  }
++
++  if (!managerApprovalId) {
++    const err = new Error('This discount exceeds the unapproved threshold and requires manager approval.');
++    err.statusCode = 403;
++    throw err;
++  }
++  if (!managerPassword || typeof managerPassword !== 'string' || managerPassword.trim() === '') {
++    const err = new Error('Manager password credential is required to authorize this discount.');
++    err.statusCode = 401;
++    throw err;
++  }
++
++  const approvingManager = await User.findOne({
++    where: { id: managerApprovalId, shopId, active: true }
++  });
++
++  if (!approvingManager || !['manager', 'admin'].includes(approvingManager.role)) {
++    const err = new Error('Selected approving user is not an active Manager or Admin.');
++    err.statusCode = 403;
++    throw err;
++  }
++
++  const isValidPassword = await approvingManager.validatePassword(managerPassword);
++  if (!isValidPassword) {
++    const err = new Error(`Invalid password for approving manager ${approvingManager.name || approvingManager.email}.`);
++    err.statusCode = 401;
++    throw err;
++  }
++
++  return approvingManager.name || approvingManager.email;
++}
++
++module.exports = {
++  DISCOUNT_APPROVAL_PERCENT_THRESHOLD,
++  DISCOUNT_APPROVAL_FIXED_THRESHOLD,
++  discountRequiresApproval,
++  verifyDiscountApprovalIfNeeded
++};
+diff --git a/frontend/src/components/PaymentModal.jsx b/frontend/src/components/PaymentModal.jsx
+index b47ac74..e284150 100644
+--- a/frontend/src/components/PaymentModal.jsx
++++ b/frontend/src/components/PaymentModal.jsx
+@@ -9,6 +9,7 @@ import {
+ import { withTrustedClick } from '../utils/securityUtils';
+ import useCurrency from '../hooks/useCurrency';
+ import api from '../services/api';
++import { generateUUID } from '../utils/uuid';
+ import Button from './ui/Button';
+ import Badge from './ui/Badge';
+ import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
+@@ -186,13 +187,35 @@ export default function PaymentModal({
+     }
+ 
+     try {
++      // A single manager credential authorizes every discount in this sale —
++      // pulled from whichever discount (cart-level takes priority, else the
++      // first item that needed approval) actually required it. Mirrors the
++      // same aggregation used for single-payment sales in CashierDashboard.jsx.
++      const cartDiscount = currentSale.manualDiscount || null;
++      const approvalSource = (cartDiscount && cartDiscount.managerApprovalId)
++        ? cartDiscount
++        : currentSale.items.find(item => item.managerApprovalId);
++      const managerApprovalId = approvalSource ? approvalSource.managerApprovalId : null;
++      const managerPassword = approvalSource ? approvalSource.managerPassword : null;
++
+       const saleData = {
++        idempotencyKey: generateUUID(),
++        managerApprovalId,
++        managerPassword,
+         items: currentSale.items.map(item => ({
+           productId: item.id,
+           quantity: item.quantity,
+-          price: item.price
++          price: item.price,
++          discount: item.discount || 0,
++          discountType: item.discountType || null,
++          discountValue: item.discountValue || null,
++          discountReason: item.discountReason || null
+         })),
+         total: parseFloat(currentSale.total),
++        discount: cartDiscount ? cartDiscount.discountAmount : 0,
++        discountType: cartDiscount ? cartDiscount.discountType : null,
++        discountValue: cartDiscount ? cartDiscount.discountValue : null,
++        discountReason: cartDiscount ? cartDiscount.discountReason : null,
+         customerId: currentSale.customerId || null,
+         customer: currentSale.customer,
+         notes: currentSale.notes,
+diff --git a/frontend/src/components/SaleCompleteModal.jsx b/frontend/src/components/SaleCompleteModal.jsx
+index 3945907..521de01 100644
+--- a/frontend/src/components/SaleCompleteModal.jsx
++++ b/frontend/src/components/SaleCompleteModal.jsx
+@@ -58,13 +58,45 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
+ 
+   return (
+     <div
+-      className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 animate-fadeIn"
++      className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 animate-fadeIn no-print"
+       onClick={onClose}
+     >
+       <div
+         className="bg-surface border border-border-default rounded-3xl shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[95vh] overflow-y-auto"
+         onClick={(e) => e.stopPropagation()}
+       >
++        {/* Print-only receipt. Hidden on screen (see .print-only in index.css);
++            this is the ONLY element visible when window.print() runs — the
++            @media print rule hides everything else in the document by id,
++            so the sidebar/header/product grid behind this modal never print. */}
++        <div id="pos-receipt-print-area" className="print-only">
++          <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#000', padding: '12px' }}>
++            <p style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>RECEIPT</p>
++            <p style={{ textAlign: 'center' }}>Invoice #{invoiceNumber}</p>
++            <p>------------------------------</p>
++            <p>Customer: {customer?.name || 'Walk-in Customer'}</p>
++            <p>Payment: {isSplit ? 'Split Tender' : paymentMethod}</p>
++            <p>------------------------------</p>
++            {items.map((item, index) => (
++              <p key={item.id || index}>
++                {item.name} x{item.quantity} — {formatCurrency(parseFloat(item.price || 0) * item.quantity)}
++              </p>
++            ))}
++            <p>------------------------------</p>
++            <p>Subtotal: {formatCurrency(subtotal)}</p>
++            {subtotal !== total && <p>Discount: -{formatCurrency(subtotal - total)}</p>}
++            <p style={{ fontWeight: 'bold' }}>Total: {formatCurrency(total)}</p>
++            {isCash && (
++              <>
++                <p>Amount Received: {formatCurrency(parseFloat(paymentAmount || 0))}</p>
++                {change > 0 && <p>Change Due: {formatCurrency(change)}</p>}
++              </>
++            )}
++            {notes && <p>Notes: {notes}</p>}
++            <p style={{ textAlign: 'center', marginTop: '8px' }}>Thank you for your business!</p>
++          </div>
++        </div>
++
+         {/* Success Header */}
+         <div className="text-center space-y-2 pb-3 border-b border-border-default">
+           <div className="mx-auto w-14 h-14 rounded-full bg-success/15 flex items-center justify-center">
+diff --git a/frontend/src/components/SaleDetailModal.jsx b/frontend/src/components/SaleDetailModal.jsx
+index e8c975d..d67c2b1 100644
+--- a/frontend/src/components/SaleDetailModal.jsx
++++ b/frontend/src/components/SaleDetailModal.jsx
+@@ -253,6 +253,16 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) =>
+               <span>-{formatCurrency(totalDiscount)}</span>
+             </div>
+           )}
++          {totalDiscount > 0 && (sale.metadata?.discountReason || sale.metadata?.discountApprovedBy) && (
++            <div className="text-caption text-text-muted pl-1 -mt-1 space-y-0.5">
++              {sale.metadata?.discountReason && (
++                <div>Reason: <span className="text-text-secondary">{sale.metadata.discountReason}</span></div>
++              )}
++              {sale.metadata?.discountApprovedBy && (
++                <div>Approved by: <span className="text-text-secondary">{sale.metadata.discountApprovedBy}</span></div>
++              )}
++            </div>
++          )}
+           {tax > 0 && (
+             <div className="flex justify-between text-text-secondary">
+               <span>Tax</span>
+diff --git a/frontend/src/components/pos/DiscountModal.jsx b/frontend/src/components/pos/DiscountModal.jsx
+index c61d556..62bc947 100644
+--- a/frontend/src/components/pos/DiscountModal.jsx
++++ b/frontend/src/components/pos/DiscountModal.jsx
+@@ -8,7 +8,7 @@ import {
+ import useCurrency from '../../hooks/useCurrency';
+ import Button from '../ui/Button';
+ import Badge from '../ui/Badge';
+-import api from '../../services/api';
++import { employeesAPI } from '../../services/api';
+ 
+ const COMMON_REASONS = [
+   'Customer Courtesy',
+@@ -41,10 +41,15 @@ export default function DiscountModal({
+   const [reason, setReason] = useState('');
+   const [customReason, setCustomReason] = useState('');
+   
+-  // Manager Approval State
+-  const [managerPin, setManagerPin] = useState('');
+-  const [pinError, setPinError] = useState('');
+-  const [verifyingPin, setVerifyingPin] = useState(false);
++  // Manager Approval State — mirrors the refund flow's credential pattern
++  // (select a real manager/admin account, verify their actual password
++  // server-side). There is no PIN system anywhere in this app; a bare PIN
++  // field with no backend to check it against is not real authorization.
++  const [managersList, setManagersList] = useState([]);
++  const [selectedManagerId, setSelectedManagerId] = useState('');
++  const [managerPassword, setManagerPassword] = useState('');
++  const [approvalError, setApprovalError] = useState('');
++  const [verifyingApproval, setVerifyingApproval] = useState(false);
+ 
+   useEffect(() => {
+     if (isOpen) {
+@@ -58,8 +63,21 @@ export default function DiscountModal({
+         setReason('');
+         setCustomReason('');
+       }
+-      setManagerPin('');
+-      setPinError('');
++      setManagerPassword('');
++      setApprovalError('');
++
++      employeesAPI.getAll()
++        .then((res) => {
++          const list = Array.isArray(res.data) ? res.data : (res.data?.employees || []);
++          const managers = list.filter((e) => e.role === 'manager' || e.role === 'admin');
++          setManagersList(managers);
++          if (managers.length > 0) {
++            setSelectedManagerId(String(managers[0].id));
++          }
++        })
++        .catch((err) => {
++          console.error('Failed to fetch managers:', err);
++        });
+     }
+   }, [isOpen, existingDiscount]);
+ 
+@@ -85,49 +103,39 @@ export default function DiscountModal({
+     const finalReasonText = reason === 'Other' ? (customReason || 'Other') : (reason || 'Discretionary Discount');
+ 
+     if (requiresManagerApproval) {
+-      if (!managerPin.trim()) {
+-        setPinError('Manager PIN is required for discounts above 10%');
++      if (!selectedManagerId) {
++        setApprovalError('Select the approving manager.');
+         return;
+       }
+-      setVerifyingPin(true);
+-      setPinError('');
+-      try {
+-        // Quick PIN/credential verification
+-        const res = await api.post('/api/auth/verify-manager-pin', { pin: managerPin.trim() });
+-        const approvedBy = res.data?.managerName || 'Manager';
+-
+-        onApplyDiscount({
+-          discountType,
+-          discountValue: numVal,
+-          discountAmount: calculatedDiscount,
+-          discountReason: finalReasonText,
+-          discountApprovedBy: approvedBy
+-        });
+-        onClose();
+-      } catch (err) {
+-        // Fallback for dev: if mock/endpoint returns 404 or 401, check standard pin '1234' or '0000' or manager role
+-        if (managerPin === '1234' || managerPin === '0000' || err.response?.status === 404) {
+-          onApplyDiscount({
+-            discountType,
+-            discountValue: numVal,
+-            discountAmount: calculatedDiscount,
+-            discountReason: finalReasonText,
+-            discountApprovedBy: 'Manager'
+-          });
+-          onClose();
+-        } else {
+-          setPinError(err.response?.data?.error || 'Invalid manager PIN. Approval failed.');
+-        }
+-      } finally {
+-        setVerifyingPin(false);
++      if (!managerPassword.trim()) {
++        setApprovalError('Manager password is required for discounts above the threshold.');
++        return;
+       }
++
++      // We do NOT verify the credential here and trust the result — the
++      // credential is submitted with the sale itself and re-checked
++      // server-side (Sale.create rejects the sale if it doesn't validate).
++      // This is only a local completeness check before submitting.
++      setVerifyingApproval(true);
++      setApprovalError('');
++      onApplyDiscount({
++        discountType,
++        discountValue: numVal,
++        discountAmount: calculatedDiscount,
++        discountReason: finalReasonText,
++        managerApprovalId: selectedManagerId,
++        managerPassword: managerPassword
++      });
++      setVerifyingApproval(false);
++      onClose();
+     } else {
+       onApplyDiscount({
+         discountType,
+         discountValue: numVal,
+         discountAmount: calculatedDiscount,
+         discountReason: finalReasonText,
+-        discountApprovedBy: null
++        managerApprovalId: null,
++        managerPassword: null
+       });
+       onClose();
+     }
+@@ -278,24 +286,42 @@ export default function DiscountModal({
+           <div className="p-3.5 bg-warning/10 border border-warning/30 rounded-2xl space-y-2 animate-fadeIn">
+             <div className="flex items-center space-x-2 text-warning">
+               <LockClosedIcon className="h-5 w-5 shrink-0" />
+-              <p className="text-caption font-bold">Manager PIN Required</p>
++              <p className="text-caption font-bold">Manager Approval Required</p>
+             </div>
+             <p className="text-[11px] text-text-muted">
+-              Discounts above 10% require manager credential authorization.
++              Discounts above 10% / {getCurrencyMetadata()?.symbol || 'KSh'}50 require a manager or
++              admin to authorize with their own password.
+             </p>
++
++            <select
++              value={selectedManagerId}
++              onChange={(e) => {
++                setSelectedManagerId(e.target.value);
++                setApprovalError('');
++              }}
++              className="w-full px-3 py-2 bg-surface border border-border-default text-text-primary rounded-xl text-small focus:ring-2 focus:ring-warning/40"
++            >
++              {managersList.length === 0 && <option value="">No managers found</option>}
++              {managersList.map((m) => (
++                <option key={m.id} value={m.id}>
++                  {m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim() || m.email}
++                </option>
++              ))}
++            </select>
++
+             <input
+               type="password"
+-              placeholder="Enter Manager PIN / Password"
+-              value={managerPin}
++              placeholder="Manager's password"
++              value={managerPassword}
+               onChange={(e) => {
+-                setManagerPin(e.target.value);
+-                setPinError('');
++                setManagerPassword(e.target.value);
++                setApprovalError('');
+               }}
+               className="w-full px-3 py-2 bg-surface border border-border-default text-text-primary rounded-xl text-small tracking-widest font-mono focus:ring-2 focus:ring-warning/40"
+-              maxLength={20}
++              maxLength={100}
+             />
+-            {pinError && (
+-              <p className="text-[11px] text-danger font-semibold">⚠️ {pinError}</p>
++            {approvalError && (
++              <p className="text-[11px] text-danger font-semibold">⚠️ {approvalError}</p>
+             )}
+           </div>
+         )}
+@@ -331,8 +357,8 @@ export default function DiscountModal({
+             size="md"
+             className="flex-1 font-bold"
+             onClick={handleApply}
+-            disabled={numVal <= 0 || (requiresManagerApproval && !managerPin.trim())}
+-            loading={verifyingPin}
++            disabled={numVal <= 0 || (requiresManagerApproval && (!selectedManagerId || !managerPassword.trim()))}
++            loading={verifyingApproval}
+           >
+             Apply Discount
+           </Button>
+diff --git a/frontend/src/hooks/useKeyboardShortcuts.js b/frontend/src/hooks/useKeyboardShortcuts.js
+index 5a4cb73..6521379 100644
+--- a/frontend/src/hooks/useKeyboardShortcuts.js
++++ b/frontend/src/hooks/useKeyboardShortcuts.js
+@@ -17,47 +17,60 @@ export function useKeyboardShortcuts({
+     if (!isActive) return;
+ 
+     const handleKeyDown = (e) => {
+-      // Don't intercept if an input is active (except for specific modifier combos like Ctrl+Enter or Ctrl+/)
+       const targetTag = e.target?.tagName?.toLowerCase();
+-      const isInputFocused = targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select';
++      const isInputFocused =
++        targetTag === 'input' ||
++        targetTag === 'textarea' ||
++        targetTag === 'select' ||
++        e.target?.isContentEditable;
+ 
+-      // 1. Focus Search Input: Ctrl+/ or Cmd+/
++      // Ctrl+/ (Cmd+/) always works, including while typing — it's how a
++      // cashier gets back to search from wherever they are. It doesn't
++      // collide with any native input-editing behavior.
+       if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+         e.preventDefault();
+         onFocusSearch?.();
+         return;
+       }
+ 
+-      // 2. Proceed to Payment: F2 or Ctrl+Enter / Cmd+Enter
++      // Every other shortcut below must NOT fire while the cashier is typing
++      // in a field — Ctrl+Backspace is "delete previous word" in native text
++      // inputs, and Ctrl+Enter is a common in-field submit convention. Firing
++      // "Cancel Sale" or "Proceed to Payment" underneath a keystroke the
++      // cashier meant for the text field they're in is exactly the bug this
++      // guard exists to prevent.
++      if (isInputFocused) return;
++
++      // Proceed to Payment: F2 or Ctrl+Enter / Cmd+Enter
+       if (e.key === 'F2' || ((e.ctrlKey || e.metaKey) && e.key === 'Enter')) {
+         e.preventDefault();
+         onProceedToPayment?.();
+         return;
+       }
+ 
+-      // 3. Hold Current Cart: F3
++      // Hold Current Cart: F3
+       if (e.key === 'F3') {
+         e.preventDefault();
+         onHoldCart?.();
+         return;
+       }
+ 
+-      // 4. Open Held Carts: F4
++      // Open Held Carts: F4
+       if (e.key === 'F4') {
+         e.preventDefault();
+         onOpenHeldCarts?.();
+         return;
+       }
+ 
+-      // 5. Cancel Sale: F9 or Ctrl+Backspace / Cmd+Backspace
++      // Cancel Sale: F9 or Ctrl+Backspace / Cmd+Backspace
+       if (e.key === 'F9' || ((e.ctrlKey || e.metaKey) && e.key === 'Backspace')) {
+         e.preventDefault();
+         onCancelSale?.();
+         return;
+       }
+ 
+-      // 6. Toggle Keyboard Shortcuts Help: '?' (when not typing in an input)
+-      if (e.key === '?' && !isInputFocused) {
++      // Toggle Keyboard Shortcuts Help: '?'
++      if (e.key === '?') {
+         e.preventDefault();
+         onToggleHelp?.();
+         return;
+diff --git a/frontend/src/hooks/usePendingSales.js b/frontend/src/hooks/usePendingSales.js
+index 59edb93..e3dbf58 100644
+--- a/frontend/src/hooks/usePendingSales.js
++++ b/frontend/src/hooks/usePendingSales.js
+@@ -1,19 +1,6 @@
+ import { useState, useEffect, useCallback, useRef } from 'react';
+ import api from '../services/api';
+-
+-/**
+- * Generates a standard v4 UUID for sale idempotency
+- */
+-function generateUUID() {
+-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+-    return crypto.randomUUID();
+-  }
+-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+-    const r = (Math.random() * 16) | 0;
+-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+-    return v.toString(16);
+-  });
+-}
++import { generateUUID } from '../utils/uuid';
+ 
+ /**
+  * usePendingSales
+diff --git a/frontend/src/index.css b/frontend/src/index.css
+index ea45dfc..3592ff2 100644
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -375,6 +375,11 @@
+   }
+ }
+ 
++/* Default: print-only content is invisible on screen */
++.print-only {
++  display: none;
++}
++
+ @media print {
+   html, body {
+     background: #FFFFFF !important;
+@@ -383,6 +388,25 @@
+   button, .no-print {
+     display: none !important;
+   }
++
++  /* Receipt print isolation: hide the entire app (sidebar, header, product
++     grid, modal chrome, etc.) and reveal only the printable receipt area.
++     Without this, window.print() on the Sale Complete screen prints the
++     whole app behind the modal, not just the receipt. */
++  body:has(#pos-receipt-print-area) * {
++    visibility: hidden;
++  }
++  #pos-receipt-print-area,
++  #pos-receipt-print-area * {
++    visibility: visible;
++  }
++  #pos-receipt-print-area {
++    display: block !important;
++    position: absolute;
++    top: 0;
++    left: 0;
++    width: 100%;
++  }
+ }
+ 
+ @media (prefers-reduced-motion: reduce) {
+diff --git a/frontend/src/pages/CashierDashboard.jsx b/frontend/src/pages/CashierDashboard.jsx
+index b84e17f..a85c149 100644
+--- a/frontend/src/pages/CashierDashboard.jsx
++++ b/frontend/src/pages/CashierDashboard.jsx
+@@ -467,7 +467,8 @@ export default function CashierDashboard() {
+             discountType: discountData.discountType,
+             discountValue: discountData.discountValue,
+             discountReason: discountData.discountReason,
+-            discountApprovedBy: discountData.discountApprovedBy
++            managerApprovalId: discountData.managerApprovalId || null,
++            managerPassword: discountData.managerPassword || null
+           };
+         }
+         return item;
+@@ -503,7 +504,8 @@ export default function CashierDashboard() {
+         delete copy.discountType;
+         delete copy.discountValue;
+         delete copy.discountReason;
+-        delete copy.discountApprovedBy;
++        delete copy.managerApprovalId;
++        delete copy.managerPassword;
+         return copy;
+       }
+       return item;
+@@ -1020,9 +1022,21 @@ export default function CashierDashboard() {
+ 
+     const idempotencyKey = generateUUID();
+ 
++    // A single manager credential authorizes every discount in this sale —
++    // pulled from whichever discount (cart-level takes priority, else the
++    // first item that needed approval) actually required it. We do not send
++    // a password per line item; one verified approval covers the whole sale.
++    const approvalSource = (cartManualDiscount && cartManualDiscount.managerApprovalId)
++      ? cartManualDiscount
++      : currentSale.items.find(item => item.managerApprovalId);
++    const managerApprovalId = approvalSource ? approvalSource.managerApprovalId : null;
++    const managerPassword = approvalSource ? approvalSource.managerPassword : null;
++
+     // Prepare sale data with discount metadata and client idempotency key
+     const saleData = {
+       idempotencyKey,
++      managerApprovalId,
++      managerPassword,
+       items: currentSale.items.map(item => ({
+         productId: item.id,
+         quantity: item.quantity,
+@@ -1030,8 +1044,7 @@ export default function CashierDashboard() {
+         discount: item.discount || 0,
+         discountType: item.discountType || null,
+         discountValue: item.discountValue || null,
+-        discountReason: item.discountReason || null,
+-        discountApprovedBy: item.discountApprovedBy || null
++        discountReason: item.discountReason || null
+       })),
+       totalAmount: currentSale.total,
+       total: currentSale.total,
+@@ -1039,7 +1052,6 @@ export default function CashierDashboard() {
+       discountType: (cartManualDiscount ? cartManualDiscount.discountType : (appliedCoupon ? appliedCoupon.discountType : null)),
+       discountValue: (cartManualDiscount ? cartManualDiscount.discountValue : (appliedCoupon ? appliedCoupon.discountValue : null)),
+       discountReason: (cartManualDiscount ? cartManualDiscount.discountReason : (appliedCoupon ? `Coupon: ${appliedCoupon.code}` : null)),
+-      discountApprovedBy: (cartManualDiscount ? cartManualDiscount.discountApprovedBy : null),
+       paymentMethod: currentSale.paymentMethod,
+       paymentAmount: parseFloat(currentSale.paymentAmount),
+       // Send customer object as expected by the backend
+diff --git a/frontend/src/utils/uuid.js b/frontend/src/utils/uuid.js
+new file mode 100644
+index 0000000..3091404
+--- /dev/null
++++ b/frontend/src/utils/uuid.js
+@@ -0,0 +1,18 @@
++/**
++ * Generates a standard v4 UUID, used as a client-side idempotency key for
++ * sale submissions. Extracted as a standalone util (rather than living only
++ * inside usePendingSales.js) so any payment flow — single-payment or
++ * split-tender — can generate one without pulling in the offline-queue hook.
++ */
++export function generateUUID() {
++  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
++    return crypto.randomUUID();
++  }
++  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
++    const r = (Math.random() * 16) | 0;
++    const v = c === 'x' ? r : (r & 0x3) | 0x8;
++    return v.toString(16);
++  });
++}
++
++export default generateUUID;

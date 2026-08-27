@@ -8,7 +8,7 @@ import {
 import useCurrency from '../../hooks/useCurrency';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
-import api from '../../services/api';
+import { employeesAPI } from '../../services/api';
 
 const COMMON_REASONS = [
   'Customer Courtesy',
@@ -41,10 +41,15 @@ export default function DiscountModal({
   const [reason, setReason] = useState('');
   const [customReason, setCustomReason] = useState('');
   
-  // Manager Approval State
-  const [managerPin, setManagerPin] = useState('');
-  const [pinError, setPinError] = useState('');
-  const [verifyingPin, setVerifyingPin] = useState(false);
+  // Manager Approval State — mirrors the refund flow's credential pattern
+  // (select a real manager/admin account, verify their actual password
+  // server-side). There is no PIN system anywhere in this app; a bare PIN
+  // field with no backend to check it against is not real authorization.
+  const [managersList, setManagersList] = useState([]);
+  const [selectedManagerId, setSelectedManagerId] = useState('');
+  const [managerPassword, setManagerPassword] = useState('');
+  const [approvalError, setApprovalError] = useState('');
+  const [verifyingApproval, setVerifyingApproval] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -58,8 +63,21 @@ export default function DiscountModal({
         setReason('');
         setCustomReason('');
       }
-      setManagerPin('');
-      setPinError('');
+      setManagerPassword('');
+      setApprovalError('');
+
+      employeesAPI.getAll()
+        .then((res) => {
+          const list = Array.isArray(res.data) ? res.data : (res.data?.employees || []);
+          const managers = list.filter((e) => e.role === 'manager' || e.role === 'admin');
+          setManagersList(managers);
+          if (managers.length > 0) {
+            setSelectedManagerId(String(managers[0].id));
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to fetch managers:', err);
+        });
     }
   }, [isOpen, existingDiscount]);
 
@@ -85,49 +103,39 @@ export default function DiscountModal({
     const finalReasonText = reason === 'Other' ? (customReason || 'Other') : (reason || 'Discretionary Discount');
 
     if (requiresManagerApproval) {
-      if (!managerPin.trim()) {
-        setPinError('Manager PIN is required for discounts above 10%');
+      if (!selectedManagerId) {
+        setApprovalError('Select the approving manager.');
         return;
       }
-      setVerifyingPin(true);
-      setPinError('');
-      try {
-        // Quick PIN/credential verification
-        const res = await api.post('/api/auth/verify-manager-pin', { pin: managerPin.trim() });
-        const approvedBy = res.data?.managerName || 'Manager';
-
-        onApplyDiscount({
-          discountType,
-          discountValue: numVal,
-          discountAmount: calculatedDiscount,
-          discountReason: finalReasonText,
-          discountApprovedBy: approvedBy
-        });
-        onClose();
-      } catch (err) {
-        // Fallback for dev: if mock/endpoint returns 404 or 401, check standard pin '1234' or '0000' or manager role
-        if (managerPin === '1234' || managerPin === '0000' || err.response?.status === 404) {
-          onApplyDiscount({
-            discountType,
-            discountValue: numVal,
-            discountAmount: calculatedDiscount,
-            discountReason: finalReasonText,
-            discountApprovedBy: 'Manager'
-          });
-          onClose();
-        } else {
-          setPinError(err.response?.data?.error || 'Invalid manager PIN. Approval failed.');
-        }
-      } finally {
-        setVerifyingPin(false);
+      if (!managerPassword.trim()) {
+        setApprovalError('Manager password is required for discounts above the threshold.');
+        return;
       }
+
+      // We do NOT verify the credential here and trust the result — the
+      // credential is submitted with the sale itself and re-checked
+      // server-side (Sale.create rejects the sale if it doesn't validate).
+      // This is only a local completeness check before submitting.
+      setVerifyingApproval(true);
+      setApprovalError('');
+      onApplyDiscount({
+        discountType,
+        discountValue: numVal,
+        discountAmount: calculatedDiscount,
+        discountReason: finalReasonText,
+        managerApprovalId: selectedManagerId,
+        managerPassword: managerPassword
+      });
+      setVerifyingApproval(false);
+      onClose();
     } else {
       onApplyDiscount({
         discountType,
         discountValue: numVal,
         discountAmount: calculatedDiscount,
         discountReason: finalReasonText,
-        discountApprovedBy: null
+        managerApprovalId: null,
+        managerPassword: null
       });
       onClose();
     }
@@ -278,24 +286,42 @@ export default function DiscountModal({
           <div className="p-3.5 bg-warning/10 border border-warning/30 rounded-2xl space-y-2 animate-fadeIn">
             <div className="flex items-center space-x-2 text-warning">
               <LockClosedIcon className="h-5 w-5 shrink-0" />
-              <p className="text-caption font-bold">Manager PIN Required</p>
+              <p className="text-caption font-bold">Manager Approval Required</p>
             </div>
             <p className="text-[11px] text-text-muted">
-              Discounts above 10% require manager credential authorization.
+              Discounts above 10% / {getCurrencyMetadata()?.symbol || 'KSh'}50 require a manager or
+              admin to authorize with their own password.
             </p>
+
+            <select
+              value={selectedManagerId}
+              onChange={(e) => {
+                setSelectedManagerId(e.target.value);
+                setApprovalError('');
+              }}
+              className="w-full px-3 py-2 bg-surface border border-border-default text-text-primary rounded-xl text-small focus:ring-2 focus:ring-warning/40"
+            >
+              {managersList.length === 0 && <option value="">No managers found</option>}
+              {managersList.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim() || m.email}
+                </option>
+              ))}
+            </select>
+
             <input
               type="password"
-              placeholder="Enter Manager PIN / Password"
-              value={managerPin}
+              placeholder="Manager's password"
+              value={managerPassword}
               onChange={(e) => {
-                setManagerPin(e.target.value);
-                setPinError('');
+                setManagerPassword(e.target.value);
+                setApprovalError('');
               }}
               className="w-full px-3 py-2 bg-surface border border-border-default text-text-primary rounded-xl text-small tracking-widest font-mono focus:ring-2 focus:ring-warning/40"
-              maxLength={20}
+              maxLength={100}
             />
-            {pinError && (
-              <p className="text-[11px] text-danger font-semibold">⚠️ {pinError}</p>
+            {approvalError && (
+              <p className="text-[11px] text-danger font-semibold">⚠️ {approvalError}</p>
             )}
           </div>
         )}
@@ -331,8 +357,8 @@ export default function DiscountModal({
             size="md"
             className="flex-1 font-bold"
             onClick={handleApply}
-            disabled={numVal <= 0 || (requiresManagerApproval && !managerPin.trim())}
-            loading={verifyingPin}
+            disabled={numVal <= 0 || (requiresManagerApproval && (!selectedManagerId || !managerPassword.trim()))}
+            loading={verifyingApproval}
           >
             Apply Discount
           </Button>

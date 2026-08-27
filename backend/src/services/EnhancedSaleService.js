@@ -8,6 +8,7 @@ const Customer = require('../models/Customer');
 const Employee = require('../models/Employee');
 const sequelize = require('../config/database');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
+const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 
 class EnhancedSaleService {
   constructor() {
@@ -84,24 +85,64 @@ class EnhancedSaleService {
   }
 
   async createSplitPaymentSale(body, req) {
+    const {
+      items,
+      payments,
+      discount = 0,
+      discountType,
+      discountValue,
+      discountReason,
+      managerApprovalId,
+      managerPassword,
+      tax = 0,
+      total: frontendTotal,
+      customerId,
+      customer,
+      idempotencyKey
+    } = body;
+    const shopId = req.shopId || req.user.shopId;
+    const user = req.user;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      const err = new Error('Sale must include at least one item');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (!Array.isArray(payments) || payments.length < 2) {
+      const err = new Error('Split sale must include at least two payment legs');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Idempotency check: if a sale with this key already exists, return it
+    // as-is rather than creating a duplicate. Checked before opening a
+    // transaction so a retried/duplicate request short-circuits immediately.
+    if (idempotencyKey) {
+      const existingSale = await Sale.findOne({
+        where: { idempotencyKey, shopId },
+        include: this.defaultIncludes
+      });
+      if (existingSale) {
+        return existingSale;
+      }
+    }
+
+    // Same server-side discount authorization check used by single-payment
+    // sales — shared via utils/discountApproval so the two paths can't drift
+    // out of sync on this again. Done before opening the transaction since
+    // it involves an async password comparison, not a DB write.
+    const verifiedApproverName = await verifyDiscountApprovalIfNeeded({
+      shopId,
+      cartDiscountType: discountType,
+      cartDiscountValue: discountValue,
+      items,
+      managerApprovalId,
+      managerPassword
+    });
+
     const t = await sequelize.transaction();
     try {
-      const { items, payments, discount = 0, tax = 0, total: frontendTotal, customerId, customer } = body;
-      const shopId = req.shopId || req.user.shopId;
-      const user = req.user;
-
-      if (!Array.isArray(items) || items.length === 0) {
-        const err = new Error('Sale must include at least one item');
-        err.statusCode = 400;
-        throw err;
-      }
-
-      if (!Array.isArray(payments) || payments.length < 2) {
-        const err = new Error('Split sale must include at least two payment legs');
-        err.statusCode = 400;
-        throw err;
-      }
-
       // Calculate serverTotal and verify stock
       let subtotal = 0;
       const lockedProducts = [];
@@ -132,17 +173,31 @@ class EnhancedSaleService {
 
         lockedProducts.push({ product, item, itemPrice, itemSubtotal });
 
+        const itemDiscountAmount = parseFloat(item.discount || 0);
         saleItems.push({
           productId: product.id,
           quantity: item.quantity,
           unitPrice: product.price,
           price: itemPrice,
-          subtotal: itemSubtotal,
-          discount: item.discount || 0
+          subtotal: Math.max(0, itemSubtotal - itemDiscountAmount),
+          discount: itemDiscountAmount,
+          discountType: item.discountType || null,
+          discountValue: item.discountValue ? parseFloat(item.discountValue) : null,
+          metadata: {
+            discountReason: item.discountReason || null,
+            // Only trust the approval we ourselves just verified above, and
+            // only attach it to items whose discount actually needed it.
+            discountApprovedBy: discountRequiresApproval(item.discountType, item.discountValue)
+              ? verifiedApproverName
+              : null
+          }
         });
       }
 
-      const serverTotal = subtotal + parseFloat(tax || 0) - parseFloat(discount || 0);
+      const totalItemDiscounts = saleItems.reduce((sum, si) => sum + (parseFloat(si.discount || 0)), 0);
+      const cartDiscountAmount = parseFloat(discount || 0);
+      const totalDiscount = totalItemDiscounts + cartDiscountAmount;
+      const serverTotal = Math.max(0, subtotal + parseFloat(tax || 0) - totalDiscount);
 
       // Validate pricing
       if (frontendTotal !== undefined && Math.abs(serverTotal - parseFloat(frontendTotal)) > 0.01) {
@@ -212,9 +267,12 @@ class EnhancedSaleService {
       // Insert Sales row
       const newSale = await Sale.create({
         invoiceNumber,
+        idempotencyKey: idempotencyKey || null,
         subtotal,
         tax,
-        discount,
+        discount: totalDiscount,
+        discountType: discountType || null,
+        discountValue: discountValue ? parseFloat(discountValue) : null,
         total: serverTotal,
         paymentMethod: 'split',
         paymentAmount: sumPayments,
@@ -229,6 +287,10 @@ class EnhancedSaleService {
         employeeId: user?.isEmployee ? user.id : null,
         notes: body.notes,
         shopId,
+        metadata: {
+          discountReason: discountReason || null,
+          discountApprovedBy: discountRequiresApproval(discountType, discountValue) ? verifiedApproverName : null
+        }
       }, { transaction: t });
 
       // Insert SaleItems rows

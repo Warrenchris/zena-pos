@@ -375,6 +375,11 @@
   }
 }
 
+/* Default: print-only content is invisible on screen */
+.print-only {
+  display: none;
+}
+
 @media print {
   html, body {
     background: #FFFFFF !important;
@@ -382,6 +387,25 @@
   }
   button, .no-print {
     display: none !important;
+  }
+
+  /* Receipt print isolation: hide the entire app (sidebar, header, product
+     grid, modal chrome, etc.) and reveal only the printable receipt area.
+     Without this, window.print() on the Sale Complete screen prints the
+     whole app behind the modal, not just the receipt. */
+  body:has(#pos-receipt-print-area) * {
+    visibility: hidden;
+  }
+  #pos-receipt-print-area,
+  #pos-receipt-print-area * {
+    visibility: visible;
+  }
+  #pos-receipt-print-area {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
   }
 }
 

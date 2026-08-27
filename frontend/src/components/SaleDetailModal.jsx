@@ -253,6 +253,16 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
               <span>-{formatCurrency(totalDiscount)}</span>
             </div>
           )}
+          {totalDiscount > 0 && (sale.metadata?.discountReason || sale.metadata?.discountApprovedBy) && (
+            <div className="text-caption text-text-muted pl-1 -mt-1 space-y-0.5">
+              {sale.metadata?.discountReason && (
+                <div>Reason: <span className="text-text-secondary">{sale.metadata.discountReason}</span></div>
+              )}
+              {sale.metadata?.discountApprovedBy && (
+                <div>Approved by: <span className="text-text-secondary">{sale.metadata.discountApprovedBy}</span></div>
+              )}
+            </div>
+          )}
           {tax > 0 && (
             <div className="flex justify-between text-text-secondary">
               <span>Tax</span>

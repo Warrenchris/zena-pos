@@ -58,13 +58,45 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
 
   return (
     <div
-      className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 animate-fadeIn no-print"
       onClick={onClose}
     >
       <div
         className="bg-surface border border-border-default rounded-3xl shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[95vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Print-only receipt. Hidden on screen (see .print-only in index.css);
+            this is the ONLY element visible when window.print() runs — the
+            @media print rule hides everything else in the document by id,
+            so the sidebar/header/product grid behind this modal never print. */}
+        <div id="pos-receipt-print-area" className="print-only">
+          <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#000', padding: '12px' }}>
+            <p style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>RECEIPT</p>
+            <p style={{ textAlign: 'center' }}>Invoice #{invoiceNumber}</p>
+            <p>------------------------------</p>
+            <p>Customer: {customer?.name || 'Walk-in Customer'}</p>
+            <p>Payment: {isSplit ? 'Split Tender' : paymentMethod}</p>
+            <p>------------------------------</p>
+            {items.map((item, index) => (
+              <p key={item.id || index}>
+                {item.name} x{item.quantity} — {formatCurrency(parseFloat(item.price || 0) * item.quantity)}
+              </p>
+            ))}
+            <p>------------------------------</p>
+            <p>Subtotal: {formatCurrency(subtotal)}</p>
+            {subtotal !== total && <p>Discount: -{formatCurrency(subtotal - total)}</p>}
+            <p style={{ fontWeight: 'bold' }}>Total: {formatCurrency(total)}</p>
+            {isCash && (
+              <>
+                <p>Amount Received: {formatCurrency(parseFloat(paymentAmount || 0))}</p>
+                {change > 0 && <p>Change Due: {formatCurrency(change)}</p>}
+              </>
+            )}
+            {notes && <p>Notes: {notes}</p>}
+            <p style={{ textAlign: 'center', marginTop: '8px' }}>Thank you for your business!</p>
+          </div>
+        </div>
+
         {/* Success Header */}
         <div className="text-center space-y-2 pb-3 border-b border-border-default">
           <div className="mx-auto w-14 h-14 rounded-full bg-success/15 flex items-center justify-center">

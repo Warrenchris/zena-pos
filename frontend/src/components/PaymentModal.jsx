@@ -9,6 +9,7 @@ import {
 import { withTrustedClick } from '../utils/securityUtils';
 import useCurrency from '../hooks/useCurrency';
 import api from '../services/api';
+import { generateUUID } from '../utils/uuid';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
@@ -186,13 +187,35 @@ export default function PaymentModal({
     }
 
     try {
+      // A single manager credential authorizes every discount in this sale —
+      // pulled from whichever discount (cart-level takes priority, else the
+      // first item that needed approval) actually required it. Mirrors the
+      // same aggregation used for single-payment sales in CashierDashboard.jsx.
+      const cartDiscount = currentSale.manualDiscount || null;
+      const approvalSource = (cartDiscount && cartDiscount.managerApprovalId)
+        ? cartDiscount
+        : currentSale.items.find(item => item.managerApprovalId);
+      const managerApprovalId = approvalSource ? approvalSource.managerApprovalId : null;
+      const managerPassword = approvalSource ? approvalSource.managerPassword : null;
+
       const saleData = {
+        idempotencyKey: generateUUID(),
+        managerApprovalId,
+        managerPassword,
         items: currentSale.items.map(item => ({
           productId: item.id,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          discount: item.discount || 0,
+          discountType: item.discountType || null,
+          discountValue: item.discountValue || null,
+          discountReason: item.discountReason || null
         })),
         total: parseFloat(currentSale.total),
+        discount: cartDiscount ? cartDiscount.discountAmount : 0,
+        discountType: cartDiscount ? cartDiscount.discountType : null,
+        discountValue: cartDiscount ? cartDiscount.discountValue : null,
+        discountReason: cartDiscount ? cartDiscount.discountReason : null,
         customerId: currentSale.customerId || null,
         customer: currentSale.customer,
         notes: currentSale.notes,
