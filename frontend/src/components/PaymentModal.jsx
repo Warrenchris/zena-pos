@@ -236,6 +236,11 @@ export default function PaymentModal({
   };
 
   const handleMpesaPay = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setLocalError('Network connection is required for M-Pesa. Please switch to Cash or wait for connection.');
+      return;
+    }
+
     if (!mpesaPhone) {
       setLocalError('Please enter a valid phone number.');
       return;
@@ -318,6 +323,11 @@ export default function PaymentModal({
   };
 
   const handleCardPay = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setLocalError('Network connection is required for Card payments. Please switch to Cash or wait for connection.');
+      return;
+    }
+
     setPaymentStatus('initiating');
     setLocalError(null);
     setPaymentError(null);

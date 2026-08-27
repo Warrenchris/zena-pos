@@ -511,3 +511,40 @@ exports.updateStock = async (req, res) => {
     res.status(500).json({ error: 'Failed to update stock' });
   }
 };
+
+// Batch fetch products by IDs (for fast cart revalidation)
+exports.getProductsBatch = async (req, res) => {
+  try {
+    const shopId = req.user?.shopId || req.shopId;
+    const { ids } = req.query;
+    
+    let idArray = [];
+    if (typeof ids === 'string') {
+      idArray = ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id) && id > 0);
+    } else if (Array.isArray(ids)) {
+      idArray = ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id) && id > 0);
+    }
+
+    if (idArray.length === 0) {
+      return res.json([]);
+    }
+
+    if (idArray.length > 100) {
+      return res.status(400).json({ error: 'Batch query limited to 100 products max' });
+    }
+
+    const products = await Product.findAll({
+      where: {
+        id: { [Op.in]: idArray },
+        active: true,
+        shopId
+      },
+      attributes: ['id', 'name', 'sku', 'price', 'stockQuantity', 'active']
+    });
+
+    res.json(products);
+  } catch (error) {
+    logger.error('Error in getProductsBatch:', error);
+    res.status(500).json({ error: 'Failed to batch fetch products' });
+  }
+};

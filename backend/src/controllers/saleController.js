@@ -274,19 +274,59 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
     paymentMethod,
     paymentAmount,
     discount = 0,
+    discountType,
+    discountValue,
+    discountReason,
+    discountApprovedBy,
     tax = 0,
     notes,
     total: frontendTotal,
     change: frontendChange,
     paymentReference,
     paymentProvider,
-    paymentNotes
+    paymentNotes,
+    idempotencyKey
   } = saleData;
 
   if (!Array.isArray(items) || items.length === 0) {
     const err = new Error('Sale must include at least one item');
     err.statusCode = 400;
     throw err;
+  }
+
+  // Idempotency check: if sale with this idempotencyKey already exists, return it immediately
+  if (idempotencyKey) {
+    const existingSale = await Sale.findOne({
+      where: {
+        idempotencyKey,
+        shopId
+      },
+      attributes: {
+        exclude: ['UserId', 'CustomerId']
+      },
+      include: [
+        {
+          model: SaleItem,
+          include: [{
+            model: Product,
+            attributes: ['id', 'name', 'sku', 'price']
+          }]
+        },
+        {
+          model: Customer,
+          attributes: ['id', 'name', 'email', 'phone', 'location', 'loyaltyPoints']
+        },
+        {
+          model: Employee,
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          as: 'Employee'
+        }
+      ]
+    });
+
+    if (existingSale) {
+      return existingSale;
+    }
   }
 
   const saleResult = await sequelize.transaction(async (t) => {
@@ -324,12 +364,19 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
         quantity: item.quantity,
         unitPrice: product.price,
         price: itemPrice,
-        subtotal: itemSubtotal,
-        discount: item.discount || 0
+        subtotal: Math.max(0, itemSubtotal - (parseFloat(item.discount || 0))),
+        discount: parseFloat(item.discount || 0),
+        discountType: item.discountType || null,
+        discountValue: item.discountValue ? parseFloat(item.discountValue) : null,
+        discountReason: item.discountReason || null,
+        discountApprovedBy: item.discountApprovedBy || null
       });
     }
 
-    const serverTotal = subtotal + parseFloat(tax || 0) - parseFloat(discount || 0);
+    const totalItemDiscounts = saleItems.reduce((sum, si) => sum + (parseFloat(si.discount || 0)), 0);
+    const cartDiscountAmount = parseFloat(discount || 0);
+    const totalDiscount = totalItemDiscounts + cartDiscountAmount;
+    const serverTotal = Math.max(0, subtotal + parseFloat(tax || 0) - totalDiscount);
 
     if (frontendTotal !== undefined && Math.abs(serverTotal - parseFloat(frontendTotal)) > 0.01) {
       const err = new Error('Price mismatch. Please refresh and retry.');
@@ -376,9 +423,12 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
 
     const sale = await Sale.create({
       invoiceNumber,
+      idempotencyKey: idempotencyKey || null,
       subtotal,
       tax,
-      discount,
+      discount: totalDiscount,
+      discountType: discountType || null,
+      discountValue: discountValue ? parseFloat(discountValue) : null,
       total,
       paymentMethod,
       paymentAmount: paymentAmount ? parseFloat(paymentAmount) : null,
@@ -395,12 +445,28 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
       shopId,
       paymentReference,
       paymentProvider,
-      paymentNotes
+      paymentNotes,
+      metadata: {
+        discountReason: discountReason || null,
+        discountApprovedBy: discountApprovedBy || null,
+        ...(saleData.metadata || {})
+      }
     }, { transaction: t });
 
     await Promise.all(saleItems.map(item =>
       SaleItem.create({
-        ...item,
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        price: item.price,
+        subtotal: item.subtotal,
+        discount: item.discount,
+        discountType: item.discountType,
+        discountValue: item.discountValue,
+        metadata: {
+          discountReason: item.discountReason,
+          discountApprovedBy: item.discountApprovedBy
+        },
         saleId: sale.id,
         shopId
       }, { transaction: t })

@@ -18,17 +18,26 @@ import {
   ShoppingBagIcon,
   ChevronDownIcon,
   CurrencyDollarIcon,
-  XMarkIcon
+  XMarkIcon,
+  QuestionMarkCircleIcon,
+  CommandLineIcon,
+  TagIcon,
+  CloudArrowUpIcon
 } from '@heroicons/react/24/outline';
 import api, { couponsAPI } from '../services/api';
 import cashierAPI from '../services/cashierAPI';
 import CustomerModal from '../components/CustomerModal';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import PaymentModal from '../components/PaymentModal';
+import SaleCompleteModal from '../components/SaleCompleteModal';
+import KeyboardShortcutsPopover from '../components/pos/KeyboardShortcutsPopover';
+import DiscountModal from '../components/pos/DiscountModal';
 import { useToast } from '../components/Toast';
 import { notifySaleComplete, notifyError as notifyErrorUtil } from '../utils/notifications';
 import MetricCard from '../components/pos/MetricCard';
 import { usePersistedCart } from '../hooks/usePersistedCart';
+import { usePendingSales } from '../hooks/usePendingSales';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
@@ -43,6 +52,14 @@ export default function CashierDashboard() {
   
   // Persisted cart state hook
   const { currentSale, setCurrentSale, pendingCart, setPendingCart, clearPersistedCart } = usePersistedCart(user?.id);
+
+  // Offline pending sales queue hook (Fix 7)
+  const { queueSale, pendingCount, isSyncing, flushPendingSales, generateUUID } = usePendingSales(user?.id, {
+    showToast,
+    onSaleSynced: () => {
+      fetchCashierStats();
+    }
+  });
 
   // Sales workflow state
   const [salesMode, setSalesMode] = useState('idle'); // 'idle', 'customer-info', 'product-selection', 'payment'
@@ -63,8 +80,53 @@ export default function CashierDashboard() {
 
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [completedSale, setCompletedSale] = useState(null);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showShortcutHint, setShowShortcutHint] = useState(() => {
+    try {
+      return localStorage.getItem('zena_pos_dismiss_shortcut_hint') !== 'true';
+    } catch {
+      return true;
+    }
+  });
 
-  const isModalOpen = showPaymentModal || showCustomerModal || showHeldCartsDrawer || showHoldPrompt;
+  // Manual Discount states (Fix 8)
+  const [cartManualDiscount, setCartManualDiscount] = useState(null);
+  const [discountModalState, setDiscountModalState] = useState({
+    isOpen: false,
+    target: 'cart',
+    item: null,
+    baseAmount: 0,
+    existingDiscount: null
+  });
+
+  const isModalOpen = showPaymentModal || showCustomerModal || showHeldCartsDrawer || showHoldPrompt || !!completedSale || showShortcutsModal || discountModalState.isOpen;
+
+  useKeyboardShortcuts({
+    isActive: salesMode === 'product-selection' && !isModalOpen && !completedSale,
+    onProceedToPayment: () => {
+      if (currentSale.items.length > 0) {
+        handleProceedToPayment();
+      }
+    },
+    onHoldCart: () => {
+      if (currentSale.items.length > 0) {
+        setHoldLabel(`Customer ${heldCarts.length + 1}`);
+        setShowHoldPrompt(true);
+      }
+    },
+    onOpenHeldCarts: () => setShowHeldCartsDrawer(true),
+    onCancelSale: () => {
+      if (salesMode === 'product-selection') {
+        cancelSale();
+      }
+    },
+    onFocusSearch: () => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select?.();
+    },
+    onToggleHelp: () => setShowShortcutsModal(prev => !prev)
+  });
 
   const onScanBarcode = async (scannedBarcode) => {
     setBarcodeError('');
@@ -102,30 +164,68 @@ export default function CashierDashboard() {
     }
   }, [token, navigate]);
 
-  // Revalidate prices of cart items against server
+  // Revalidate prices of cart items against server using a single batch request
   const revalidateCartPrices = useCallback(async (items) => {
-    const updatedItems = [];
-    let priceChanged = false;
-    for (const item of items) {
-      try {
-        const response = await api.get(`/api/products/${item.id}`);
-        const freshProduct = response.data;
-        const freshPrice = typeof freshProduct.price === 'number' ? freshProduct.price : parseFloat(freshProduct.price || 0);
-        const oldPrice = typeof item.price === 'number' ? item.price : parseFloat(item.price || 0);
-        if (Math.abs(freshPrice - oldPrice) > 0.001) {
-          priceChanged = true;
-        }
-        updatedItems.push({
-          ...item,
-          price: freshPrice,
-          subtotal: item.quantity * freshPrice,
-          stockQuantity: freshProduct.stockQuantity
-        });
-      } catch (err) {
-        updatedItems.push(item);
-      }
+    if (!Array.isArray(items) || items.length === 0) {
+      return { updatedItems: [], priceChanged: false };
     }
-    return { updatedItems, priceChanged };
+
+    try {
+      const ids = items.map(item => item.id || item.productId).filter(Boolean).join(',');
+      const response = await api.get('/api/products/batch', { params: { ids } });
+      const freshProducts = response.data || [];
+      const productMap = new Map(freshProducts.map(p => [p.id, p]));
+
+      let priceChanged = false;
+      const updatedItems = items.map(item => {
+        const itemId = item.id || item.productId;
+        const freshProduct = productMap.get(itemId);
+
+        if (freshProduct) {
+          const freshPrice = typeof freshProduct.price === 'number' ? freshProduct.price : parseFloat(freshProduct.price || 0);
+          const oldPrice = typeof item.price === 'number' ? item.price : parseFloat(item.price || 0);
+          if (Math.abs(freshPrice - oldPrice) > 0.001) {
+            priceChanged = true;
+          }
+          return {
+            ...item,
+            price: freshPrice,
+            subtotal: item.quantity * freshPrice,
+            stockQuantity: freshProduct.stockQuantity
+          };
+        }
+        return item;
+      });
+
+      return { updatedItems, priceChanged };
+    } catch (error) {
+      console.warn('Batch price revalidation failed, falling back to parallel fetch:', error);
+      // Parallel fallback with Promise.all
+      let priceChanged = false;
+      const updatedItems = await Promise.all(
+        items.map(async (item) => {
+          try {
+            const itemId = item.id || item.productId;
+            const res = await api.get(`/api/products/${itemId}`);
+            const freshProduct = res.data;
+            const freshPrice = typeof freshProduct.price === 'number' ? freshProduct.price : parseFloat(freshProduct.price || 0);
+            const oldPrice = typeof item.price === 'number' ? item.price : parseFloat(item.price || 0);
+            if (Math.abs(freshPrice - oldPrice) > 0.001) {
+              priceChanged = true;
+            }
+            return {
+              ...item,
+              price: freshPrice,
+              subtotal: item.quantity * freshPrice,
+              stockQuantity: freshProduct.stockQuantity
+            };
+          } catch {
+            return item;
+          }
+        })
+      );
+      return { updatedItems, priceChanged };
+    }
   }, []);
 
   // Restore cart action
@@ -296,36 +396,177 @@ export default function CashierDashboard() {
   const [couponError, setCouponError] = useState('');
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
-  // Apply Coupon handler
+  // Recalculate cart totals considering item discounts, cart manual discount, or coupon (one-or-the-other)
+  const computeCartTotals = useCallback((items, manualDiscount = cartManualDiscount, coupon = appliedCoupon) => {
+    const activeItems = items.filter(item => !pendingRemovals[item.id]);
+    const grossSubtotal = activeItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+    const itemDiscountsTotal = activeItems.reduce((sum, item) => sum + (parseFloat(item.discount || 0)), 0);
+    const netSubtotal = Math.max(0, grossSubtotal - itemDiscountsTotal);
+
+    let cartDiscountAmount = 0;
+    if (manualDiscount) {
+      if (manualDiscount.discountType === 'percentage') {
+        cartDiscountAmount = Math.min(netSubtotal, (netSubtotal * parseFloat(manualDiscount.discountValue || 0)) / 100);
+      } else {
+        cartDiscountAmount = Math.min(netSubtotal, parseFloat(manualDiscount.discountValue || 0));
+      }
+    }
+
+    let couponDiscountAmount = 0;
+    if (coupon) {
+      couponDiscountAmount = parseFloat(coupon.discountAmount || 0);
+    }
+
+    const total = Math.max(0, netSubtotal - cartDiscountAmount - couponDiscountAmount);
+    return { grossSubtotal, itemDiscountsTotal, netSubtotal, cartDiscountAmount, couponDiscountAmount, total };
+  }, [pendingRemovals, cartManualDiscount, appliedCoupon]);
+
+  // Open line-item discount modal
+  const handleOpenItemDiscount = (item) => {
+    const itemBaseAmount = parseFloat(item.price || 0) * item.quantity;
+    setDiscountModalState({
+      isOpen: true,
+      target: 'item',
+      item,
+      baseAmount: itemBaseAmount,
+      existingDiscount: item.discount ? {
+        discountType: item.discountType,
+        discountValue: item.discountValue,
+        discountReason: item.discountReason
+      } : null
+    });
+  };
+
+  // Open cart-level manual discount modal (enforces one-or-the-other with coupons)
+  const handleOpenCartDiscount = () => {
+    if (appliedCoupon) {
+      const confirmReplace = window.confirm(`A coupon '${appliedCoupon.code}' is applied. Applying a manual discount will replace it. Proceed?`);
+      if (!confirmReplace) return;
+    }
+    const grossSubtotal = currentSale.items
+      .filter(item => !pendingRemovals[item.id])
+      .reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity) - (parseFloat(item.discount || 0)), 0);
+
+    setDiscountModalState({
+      isOpen: true,
+      target: 'cart',
+      item: null,
+      baseAmount: grossSubtotal,
+      existingDiscount: cartManualDiscount
+    });
+  };
+
+  // Apply discount from modal
+  const handleApplyDiscount = (discountData) => {
+    if (discountModalState.target === 'item') {
+      const updatedItems = currentSale.items.map(item => {
+        if (item.id === discountModalState.item?.id) {
+          return {
+            ...item,
+            discount: discountData.discountAmount,
+            discountType: discountData.discountType,
+            discountValue: discountData.discountValue,
+            discountReason: discountData.discountReason,
+            discountApprovedBy: discountData.discountApprovedBy
+          };
+        }
+        return item;
+      });
+      const totals = computeCartTotals(updatedItems, cartManualDiscount, appliedCoupon);
+      setCurrentSale(prev => ({
+        ...prev,
+        items: updatedItems,
+        total: totals.total
+      }));
+      showToast(`Discount applied to ${discountModalState.item?.name}`, 'success');
+    } else {
+      // Cart-level discount: clear coupon (one-or-the-other policy)
+      setAppliedCoupon(null);
+      setCartManualDiscount(discountData);
+      const totals = computeCartTotals(currentSale.items, discountData, null);
+      setCurrentSale(prev => ({
+        ...prev,
+        total: totals.total,
+        manualDiscount: discountData,
+        appliedCoupon: null
+      }));
+      showToast(`Cart discount of ${formatCurrency(discountData.discountAmount)} applied!`, 'success');
+    }
+  };
+
+  // Remove line-item discount
+  const handleRemoveItemDiscount = (itemId) => {
+    const updatedItems = currentSale.items.map(item => {
+      if (item.id === itemId) {
+        const copy = { ...item };
+        delete copy.discount;
+        delete copy.discountType;
+        delete copy.discountValue;
+        delete copy.discountReason;
+        delete copy.discountApprovedBy;
+        return copy;
+      }
+      return item;
+    });
+    const totals = computeCartTotals(updatedItems, cartManualDiscount, appliedCoupon);
+    setCurrentSale(prev => ({
+      ...prev,
+      items: updatedItems,
+      total: totals.total
+    }));
+    showToast('Item discount removed.', 'info');
+  };
+
+  // Remove cart-level manual discount
+  const handleRemoveCartDiscount = () => {
+    setCartManualDiscount(null);
+    const totals = computeCartTotals(currentSale.items, null, appliedCoupon);
+    setCurrentSale(prev => ({
+      ...prev,
+      total: totals.total,
+      manualDiscount: null
+    }));
+    showToast('Cart discount removed.', 'info');
+  };
+
+  // Apply Coupon handler (enforces one-or-the-other with manual discount)
   const handleApplyCoupon = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!couponCode.trim()) return;
+
+    if (cartManualDiscount) {
+      const confirmReplace = window.confirm('A manual discount is currently applied. Applying a coupon will replace it. Proceed?');
+      if (!confirmReplace) return;
+      setCartManualDiscount(null);
+    }
 
     setValidatingCoupon(true);
     setCouponError('');
     try {
       const subtotal = currentSale.items
         .filter(item => !pendingRemovals[item.id])
-        .reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+        .reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity) - (parseFloat(item.discount || 0)), 0);
 
       const res = await couponsAPI.validate(couponCode.trim(), subtotal);
       if (res.data && res.data.valid) {
         const { coupon, discountAmount } = res.data;
         const calcDiscount = parseFloat(discountAmount || 0);
-        setAppliedCoupon({
+        const newCouponObj = {
           code: coupon.code,
           title: coupon.title,
           discountAmount: calcDiscount,
           discountType: coupon.discountType,
           discountValue: coupon.discountValue
-        });
+        };
+        setAppliedCoupon(newCouponObj);
 
-        // Recalculate total with coupon discount
-        const newTotal = Math.max(0, subtotal - calcDiscount);
+        // Recalculate total with coupon discount (and no cart manual discount)
+        const totals = computeCartTotals(currentSale.items, null, newCouponObj);
         setCurrentSale(prev => ({
           ...prev,
-          total: newTotal,
-          appliedCoupon: coupon.code
+          total: totals.total,
+          appliedCoupon: coupon.code,
+          manualDiscount: null
         }));
 
         setCouponCode('');
@@ -342,15 +583,12 @@ export default function CashierDashboard() {
 
   // Remove Coupon handler
   const handleRemoveCoupon = () => {
-    const subtotal = currentSale.items
-      .filter(item => !pendingRemovals[item.id])
-      .reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
-
     setAppliedCoupon(null);
     setCouponError('');
+    const totals = computeCartTotals(currentSale.items, cartManualDiscount, null);
     setCurrentSale(prev => ({
       ...prev,
-      total: subtotal,
+      total: totals.total,
       appliedCoupon: null
     }));
     showToast('Coupon removed.', 'info');
@@ -490,8 +728,13 @@ export default function CashierDashboard() {
 
   // Sales workflow functions
   const startNewSale = () => {
-    setSalesMode('customer-info');
-    setShowCustomerModal(true);
+    setCurrentSale(prev => ({
+      ...prev,
+      customer: { name: WALK_IN_CUSTOMER_NAME, location: '', phone: '', email: '' },
+      customerId: null
+    }));
+    setSalesMode('product-selection');
+    setShowCustomerModal(false);
   };
 
   const handleCustomerInfoSubmit = (customerData) => {
@@ -550,7 +793,7 @@ export default function CashierDashboard() {
             ...item,
             quantity: item.quantity + 1,
             price: productPrice,
-            subtotal: (item.quantity + 1) * productPrice
+            subtotal: ((item.quantity + 1) * productPrice) - (parseFloat(item.discount || 0))
           }
           : item
       );
@@ -563,12 +806,12 @@ export default function CashierDashboard() {
       }];
     }
 
-    const newTotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const totals = computeCartTotals(updatedItems);
 
     setCurrentSale(prev => ({
       ...prev,
       items: updatedItems,
-      total: newTotal
+      total: totals.total
     }));
 
     showToast(`Added ${product.name} to cart`, 'success');
@@ -582,12 +825,11 @@ export default function CashierDashboard() {
 
     setCurrentSale(prev => {
       const updatedItems = prev.items.filter(i => i.id !== itemId);
-      const remainingItems = updatedItems.filter(i => !pendingRemovals[i.id]);
-      const newTotal = remainingItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+      const totals = computeCartTotals(updatedItems);
       return {
         ...prev,
         items: updatedItems,
-        total: newTotal
+        total: totals.total
       };
     });
 
@@ -610,12 +852,11 @@ export default function CashierDashboard() {
       const copy = { ...prev };
       delete copy[itemId];
 
-      const remainingItems = currentSale.items.filter(i => !copy[i.id]);
-      const newTotal = remainingItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+      const totals = computeCartTotals(currentSale.items);
 
       setCurrentSale(sale => ({
         ...sale,
-        total: newTotal
+        total: totals.total
       }));
 
       return copy;
@@ -640,11 +881,10 @@ export default function CashierDashboard() {
       [itemId]: { item, removedAt: Date.now() }
     }));
 
-    const remainingItems = currentSale.items.filter(i => i.id !== itemId && !pendingRemovals[i.id]);
-    const newTotal = remainingItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+    const totals = computeCartTotals(currentSale.items);
     setCurrentSale(prev => ({
       ...prev,
-      total: newTotal
+      total: totals.total
     }));
 
     setUndoToast({
@@ -693,12 +933,12 @@ export default function CashierDashboard() {
         }
       });
       const activeItems = currentSale.items.filter(item => !pendingRemovals[item.id]);
-      const activeTotal = activeItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+      const totals = computeCartTotals(activeItems);
 
       setCurrentSale(prev => ({
         ...prev,
         items: activeItems,
-        total: activeTotal
+        total: totals.total
       }));
       setPendingRemovals({});
       setUndoToast(null);
@@ -716,7 +956,9 @@ export default function CashierDashboard() {
     });
     removalTimeoutsRef.current = {};
 
-    setCurrentSale(prev => ({ ...prev, items: [], total: 0 }));
+    setCartManualDiscount(null);
+    setAppliedCoupon(null);
+    setCurrentSale(prev => ({ ...prev, items: [], total: 0, appliedCoupon: null, manualDiscount: null }));
     setPendingRemovals({});
     setUndoToast(null);
     clearPersistedCart();
@@ -735,15 +977,15 @@ export default function CashierDashboard() {
 
     const updatedItems = currentSale.items.map(item =>
       item.id === itemId
-        ? { ...item, quantity: newQuantity, subtotal: newQuantity * item.price }
+        ? { ...item, quantity: newQuantity, subtotal: (newQuantity * item.price) - (parseFloat(item.discount || 0)) }
         : item
     );
 
-    const newTotal = updatedItems.filter(i => !pendingRemovals[i.id]).reduce((sum, item) => sum + item.subtotal, 0);
+    const totals = computeCartTotals(updatedItems);
     setCurrentSale(prev => ({
       ...prev,
       items: updatedItems,
-      total: newTotal
+      total: totals.total
     }));
   };
 
@@ -756,6 +998,8 @@ export default function CashierDashboard() {
       });
       removalTimeoutsRef.current = {};
 
+      setCartManualDiscount(null);
+      setAppliedCoupon(null);
       setCurrentSale({
         customer: { name: '', location: '', phone: '', email: '' },
         customerId: null,
@@ -773,49 +1017,91 @@ export default function CashierDashboard() {
   const handlePayment = async () => {
     setProcessingPayment(true);
     setPaymentError(null);
-    try {
-      // Prepare sale data
-      const saleData = {
-        items: currentSale.items.map(item => ({
-          productId: item.id,
-          quantity: item.quantity,
-          price: item.price
-        })),
-        totalAmount: currentSale.total,
-        paymentMethod: currentSale.paymentMethod,
-        paymentAmount: parseFloat(currentSale.paymentAmount),
-        // Send customer object as expected by the backend
-        customer: {
-          name: currentSale.customer.name,
-          phone: currentSale.customer.phone,
-          email: currentSale.customer.email,
-          location: currentSale.customer.location
-        },
-        customerId: currentSale.customerId || null,
-        notes: currentSale.notes
-      };
 
+    const idempotencyKey = generateUUID();
+
+    // Prepare sale data with discount metadata and client idempotency key
+    const saleData = {
+      idempotencyKey,
+      items: currentSale.items.map(item => ({
+        productId: item.id,
+        quantity: item.quantity,
+        price: item.price,
+        discount: item.discount || 0,
+        discountType: item.discountType || null,
+        discountValue: item.discountValue || null,
+        discountReason: item.discountReason || null,
+        discountApprovedBy: item.discountApprovedBy || null
+      })),
+      totalAmount: currentSale.total,
+      total: currentSale.total,
+      discount: (cartManualDiscount ? cartManualDiscount.discountAmount : (appliedCoupon ? appliedCoupon.discountAmount : 0)),
+      discountType: (cartManualDiscount ? cartManualDiscount.discountType : (appliedCoupon ? appliedCoupon.discountType : null)),
+      discountValue: (cartManualDiscount ? cartManualDiscount.discountValue : (appliedCoupon ? appliedCoupon.discountValue : null)),
+      discountReason: (cartManualDiscount ? cartManualDiscount.discountReason : (appliedCoupon ? `Coupon: ${appliedCoupon.code}` : null)),
+      discountApprovedBy: (cartManualDiscount ? cartManualDiscount.discountApprovedBy : null),
+      paymentMethod: currentSale.paymentMethod,
+      paymentAmount: parseFloat(currentSale.paymentAmount),
+      // Send customer object as expected by the backend
+      customer: {
+        name: currentSale.customer.name,
+        phone: currentSale.customer.phone,
+        email: currentSale.customer.email,
+        location: currentSale.customer.location
+      },
+      customerId: currentSale.customerId || null,
+      notes: currentSale.notes
+    };
+
+    try {
       // Call API
       const response = await api.post('/api/sales', saleData);
 
-      // Success
-      notifySaleComplete(response.data.id);
-      setSalesMode('idle');
-      setCurrentSale({
-        customer: { name: '', location: '', phone: '', email: '' },
-        customerId: null,
-        items: [],
-        total: 0,
-        paymentMethod: 'cash',
-        paymentAmount: '',
-        notes: ''
+      // Success — snapshot sale data for receipt screen before resetting
+      const changeDue = Math.max(0, parseFloat(currentSale.paymentAmount) - currentSale.total);
+      setCompletedSale({
+        serverData: response.data,
+        items: [...currentSale.items],
+        customer: { ...currentSale.customer },
+        total: currentSale.total,
+        paymentMethod: currentSale.paymentMethod,
+        paymentAmount: parseFloat(currentSale.paymentAmount),
+        change: changeDue,
+        notes: currentSale.notes
       });
+      notifySaleComplete(response.data);
       setShowPaymentModal(false);
       fetchCashierStats(); // Refresh stats
+      // NOTE: Do NOT reset salesMode or currentSale here — the SaleCompleteModal handles that via handleCompletedSaleNewSale
 
     } catch (err) {
       console.error('Payment failed:', err);
-      setPaymentError(err.response?.data?.message || 'Payment failed. Please try again.');
+      const isNetworkIssue = (typeof navigator !== 'undefined' && !navigator.onLine) || !err.response || err.code === 'ERR_NETWORK' || err.message?.includes('Network Error');
+
+      // Offline resilience: queue cash sales locally with idempotency key
+      if (currentSale.paymentMethod === 'cash' && isNetworkIssue) {
+        queueSale(saleData);
+        const changeDue = Math.max(0, parseFloat(currentSale.paymentAmount) - currentSale.total);
+        setCompletedSale({
+          serverData: {
+            id: `offline-${Date.now()}`,
+            invoiceNumber: `OFFLINE-${Date.now().toString().slice(-4)}`
+          },
+          items: [...currentSale.items],
+          customer: { ...currentSale.customer },
+          total: currentSale.total,
+          paymentMethod: 'cash',
+          paymentAmount: parseFloat(currentSale.paymentAmount),
+          change: changeDue,
+          notes: currentSale.notes,
+          isOffline: true
+        });
+        showToast('Offline mode: Cash sale saved locally. Will auto-sync when reconnected.', 'warning');
+        setShowPaymentModal(false);
+        return;
+      }
+
+      setPaymentError(err.response?.data?.message || err.response?.data?.error || 'Payment failed. Please try again.');
       notifyErrorUtil('Payment failed');
     } finally {
       setProcessingPayment(false);
@@ -823,8 +1109,28 @@ export default function CashierDashboard() {
   };
 
   const handlePaymentSuccess = (completeSale) => {
-    notifySaleComplete(completeSale.id);
+    // Snapshot sale data for receipt screen
+    setCompletedSale({
+      serverData: completeSale,
+      items: [...currentSale.items],
+      customer: { ...currentSale.customer },
+      total: currentSale.total,
+      paymentMethod: currentSale.paymentMethod,
+      paymentAmount: parseFloat(currentSale.paymentAmount || currentSale.total),
+      change: parseFloat(completeSale?.change || 0),
+      notes: currentSale.notes
+    });
+    notifySaleComplete(completeSale);
+    setShowPaymentModal(false);
+    fetchCashierStats();
+    // NOTE: Do NOT reset salesMode or currentSale here — SaleCompleteModal handles that
+  };
+
+  // Called when cashier clicks "New Sale" on the receipt/confirmation screen
+  const handleCompletedSaleNewSale = () => {
     setSalesMode('idle');
+    setCartManualDiscount(null);
+    setAppliedCoupon(null);
     setCurrentSale({
       customer: { name: '', location: '', phone: '', email: '' },
       customerId: null,
@@ -832,10 +1138,12 @@ export default function CashierDashboard() {
       total: 0,
       paymentMethod: 'cash',
       paymentAmount: '',
-      notes: ''
+      notes: '',
+      appliedCoupon: null,
+      manualDiscount: null
     });
-    setShowPaymentModal(false);
-    fetchCashierStats();
+    setCompletedSale(null);
+    clearPersistedCart();
   };
 
   const handleBarcodeScan = () => {
@@ -903,6 +1211,34 @@ export default function CashierDashboard() {
             </div>
           </div>
         )}
+
+        {/* Offline Sales Queue Banner (Fix 7) */}
+        {pendingCount > 0 && (
+          <div className="bg-warning/10 border border-warning/30 rounded-2xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slideIn">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">📡</span>
+              <div>
+                <p className="text-small font-bold text-text-primary">
+                  Offline Sales Queue: {pendingCount} sale(s) waiting to sync
+                </p>
+                <p className="text-caption text-text-secondary">
+                  Completed offline with idempotency keys. Will upload automatically when online.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={CloudArrowUpIcon}
+              onClick={flushPendingSales}
+              loading={isSyncing}
+              disabled={typeof navigator !== 'undefined' && !navigator.onLine}
+            >
+              Sync Now
+            </Button>
+          </div>
+        )}
+
         {/* Page content wrapper */}
         <div className="flex-1 overflow-hidden">
           {/* Sales Mode Content */}
@@ -1033,18 +1369,29 @@ export default function CashierDashboard() {
           )}
 
           {salesMode === 'product-selection' && (
-            <div className="flex flex-col xl:flex-row gap-4 sm:gap-6 w-full">
+            <div className="flex flex-col md:flex-row gap-4 sm:gap-6 w-full md:h-[calc(100vh-7rem)] md:max-h-[calc(100vh-7rem)]">
               {/* POS Terminal - Main Area */}
-              <div className="flex-1 flex flex-col space-y-4 min-w-0">
+              <div className="flex-1 flex flex-col space-y-4 min-w-0 md:h-full md:overflow-hidden">
                 {/* Sale Header */}
                 <div className="bg-surface border border-border-default rounded-2xl p-4 sm:p-5 shadow-floating">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center space-x-4 min-w-0">
                       <div className="w-3 h-3 rounded-full bg-success animate-pulse shrink-0"></div>
                       <div className="min-w-0">
-                        <p className="text-caption font-semibold text-text-muted uppercase tracking-wider">Current Sale</p>
-                        <h2 className="text-h2 font-bold text-text-primary truncate">{currentSale.customer.name}</h2>
-                        {currentSale.customer.location && (
+                        <div className="flex items-center space-x-2">
+                          <p className="text-caption font-semibold text-text-muted uppercase tracking-wider">Current Sale</p>
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomerModal(true)}
+                            className="text-caption text-primary font-semibold hover:underline flex items-center space-x-1"
+                            title="Set or change customer info"
+                          >
+                            <span>✏️</span>
+                            <span>{currentSale.customer?.name === WALK_IN_CUSTOMER_NAME ? 'Add Customer' : 'Change'}</span>
+                          </button>
+                        </div>
+                        <h2 className="text-h2 font-bold text-text-primary truncate">{currentSale.customer?.name || WALK_IN_CUSTOMER_NAME}</h2>
+                        {currentSale.customer?.location && (
                           <p className="text-caption text-text-secondary truncate">📍 {currentSale.customer.location}</p>
                         )}
                       </div>
@@ -1057,6 +1404,17 @@ export default function CashierDashboard() {
                       </div>
                     </div>
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowShortcutsModal(true)}
+                          className="flex items-center space-x-1.5 shrink-0 text-text-muted hover:text-text-primary"
+                          title="Keyboard Shortcuts (Press ?)"
+                        >
+                          <CommandLineIcon className="h-4 w-4" />
+                          <span className="hidden sm:inline">Shortcuts</span>
+                          <kbd className="text-[10px] font-mono px-1 py-0.5 bg-surface-2 rounded border border-border-default">?</kbd>
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -1089,6 +1447,32 @@ export default function CashierDashboard() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Dismissible Keyboard Shortcuts Hint Bar */}
+                  {showShortcutHint && (
+                    <div className="bg-primary/5 border border-primary/20 rounded-xl px-3 py-1.5 flex items-center justify-between text-caption text-text-secondary animate-fadeIn">
+                      <div className="flex items-center space-x-2.5 overflow-x-auto scrollbar-hide py-0.5">
+                        <span className="font-semibold text-primary">⚡ Shortcuts:</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">F2</kbd> Pay</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">F3</kbd> Hold</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">F4</kbd> Held Carts</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">F9</kbd> Cancel</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">Ctrl+/</kbd> Search</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">?</kbd> Help</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowShortcutHint(false);
+                          try { localStorage.setItem('zena_pos_dismiss_shortcut_hint', 'true'); } catch {}
+                        }}
+                        className="text-text-muted hover:text-text-primary ml-2 p-0.5"
+                        title="Dismiss shortcuts hint"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
 
                   {/* Search and Filters - Clean Design */}
                   <div className="p-4 sm:p-5 space-y-3 bg-surface-2/30 border-b border-border-default rounded-b-2xl">
@@ -1232,7 +1616,7 @@ export default function CashierDashboard() {
                 </div>
 
                 {/* Cart Panel Sidebar */}
-                <div className="w-full lg:w-96 bg-surface border border-border-default rounded-2xl flex flex-col h-full shadow-floating overflow-hidden">
+                <div className={`w-full md:w-80 lg:w-96 bg-surface border border-border-default rounded-2xl flex flex-col md:h-full shadow-floating overflow-hidden shrink-0 ${showCart ? 'flex' : 'hidden md:flex'}`}>
                   {/* Cart Header */}
                   <div className="p-4 border-b border-border-default bg-surface-2/30 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
@@ -1267,6 +1651,7 @@ export default function CashierDashboard() {
                     ) : (
                       currentSale.items.map((item) => {
                         const isPending = !!pendingRemovals[item.id];
+                        const itemSubtotal = (parseFloat(item.price || 0) * item.quantity) - (parseFloat(item.discount || 0));
                         return (
                           <div
                             key={item.id}
@@ -1274,7 +1659,28 @@ export default function CashierDashboard() {
                           >
                             <div className="flex-1 min-w-0">
                               <h5 className="font-semibold text-small text-text-primary truncate">{item.name}</h5>
-                              <p className="text-caption text-text-muted">{formatCurrency(parseFloat(item.price || 0))} / ea</p>
+                              <div className="flex items-center space-x-2 mt-0.5">
+                                <p className="text-caption text-text-muted">{formatCurrency(parseFloat(item.price || 0))} / ea</p>
+                                {item.discount > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenItemDiscount(item)}
+                                    className="text-[11px] font-semibold text-success bg-success/15 px-1.5 py-0.5 rounded-md hover:bg-success/25 transition-colors flex items-center space-x-1"
+                                    title="Edit item discount"
+                                  >
+                                    <span>🏷️ -{formatCurrency(item.discount)}</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenItemDiscount(item)}
+                                    className="text-[11px] text-text-muted hover:text-primary hover:underline transition-colors"
+                                    title="Add discount to this line item"
+                                  >
+                                    + Discount
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             <div className="flex items-center gap-1.5">
@@ -1356,10 +1762,33 @@ export default function CashierDashboard() {
                   {/* Total and Checkout */}
                   {currentSale.items.length > 0 && (
                     <div className="p-4 border-t border-border-default bg-surface-2/30 space-y-3">
-                      {/* Coupon / Voucher Code Input */}
-                      <div className="space-y-1">
-                        {appliedCoupon ? (
-                          <div className="flex items-center justify-between p-2 bg-success/10 border border-success/30 rounded-xl text-caption">
+                      {/* Manual Cart Discount & Coupon Section */}
+                      <div className="space-y-2">
+                        {/* Active Cart Manual Discount Banner */}
+                        {cartManualDiscount ? (
+                          <div className="flex items-center justify-between p-2.5 bg-primary/10 border border-primary/30 rounded-xl text-caption">
+                            <div className="flex items-center space-x-2 truncate">
+                              <span className="text-base">🏷️</span>
+                              <div className="min-w-0">
+                                <p className="font-bold text-primary truncate">
+                                  Cart Discount ({cartManualDiscount.discountType === 'percentage' ? `${cartManualDiscount.discountValue}%` : formatCurrency(cartManualDiscount.discountValue)})
+                                </p>
+                                <p className="text-text-muted text-[10px] truncate">
+                                  {cartManualDiscount.discountReason || 'Manual Discount'} • Saved {formatCurrency(cartManualDiscount.discountAmount)}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleRemoveCartDiscount}
+                              className="p-1 text-danger hover:bg-danger/10 rounded-lg transition-colors shrink-0"
+                              title="Remove cart discount"
+                            >
+                              <XMarkIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : appliedCoupon ? (
+                          <div className="flex items-center justify-between p-2.5 bg-success/10 border border-success/30 rounded-xl text-caption">
                             <div className="flex items-center space-x-2 truncate">
                               <span className="text-base">🎟️</span>
                               <div className="min-w-0">
@@ -1377,39 +1806,68 @@ export default function CashierDashboard() {
                             </button>
                           </div>
                         ) : (
-                          <form onSubmit={handleApplyCoupon} className="flex gap-1.5 items-center">
-                            <input
-                              type="text"
-                              placeholder="Voucher / Promo Code"
-                              value={couponCode}
-                              onChange={(e) => {
-                                setCouponCode(e.target.value);
-                                setCouponError('');
-                              }}
-                              className="flex-1 px-3 py-1.5 bg-surface border border-border-default text-text-primary rounded-xl text-caption uppercase focus:ring-2 focus:ring-primary/30"
-                            />
-                            <Button type="submit" variant="outline" size="sm" loading={validatingCoupon} disabled={!couponCode.trim()}>
-                              Apply
-                            </Button>
-                          </form>
+                          <div className="space-y-1.5">
+                            <form onSubmit={handleApplyCoupon} className="flex gap-1.5 items-center">
+                              <input
+                                type="text"
+                                placeholder="Voucher / Promo Code"
+                                value={couponCode}
+                                onChange={(e) => {
+                                  setCouponCode(e.target.value);
+                                  setCouponError('');
+                                }}
+                                className="flex-1 px-3 py-1.5 bg-surface border border-border-default text-text-primary rounded-xl text-caption uppercase focus:ring-2 focus:ring-primary/30"
+                              />
+                              <Button type="submit" variant="outline" size="sm" loading={validatingCoupon} disabled={!couponCode.trim()}>
+                                Apply
+                              </Button>
+                            </form>
+                            <button
+                              type="button"
+                              onClick={handleOpenCartDiscount}
+                              className="w-full text-center text-[11px] text-primary font-semibold hover:underline flex items-center justify-center space-x-1 py-1"
+                            >
+                              <TagIcon className="h-3.5 w-3.5" />
+                              <span>Apply Manual Discount to Cart</span>
+                            </button>
+                          </div>
                         )}
                         {couponError && (
                           <p className="text-[11px] text-danger font-medium mt-0.5">⚠️ {couponError}</p>
                         )}
                       </div>
 
-                      {/* Summary */}
+                      {/* Summary Breakdown */}
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-caption">
-                          <span className="text-text-secondary">Subtotal</span>
+                          <span className="text-text-secondary">Gross Subtotal</span>
                           <span className="text-text-primary font-semibold">
                             {formatCurrency(currentSale.items.filter(item => !pendingRemovals[item.id]).reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0))}
                           </span>
                         </div>
 
+                        {/* Item Discounts Subtotal if any */}
+                        {currentSale.items.some(item => item.discount > 0) && (
+                          <div className="flex justify-between items-center text-caption text-success font-semibold">
+                            <span>Item Discounts</span>
+                            <span>
+                              -{formatCurrency(currentSale.items.filter(item => !pendingRemovals[item.id]).reduce((sum, item) => sum + (parseFloat(item.discount || 0)), 0))}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Cart Manual Discount */}
+                        {cartManualDiscount && (
+                          <div className="flex justify-between items-center text-caption text-success font-semibold">
+                            <span>Cart Discount</span>
+                            <span>-{formatCurrency(cartManualDiscount.discountAmount)}</span>
+                          </div>
+                        )}
+
+                        {/* Coupon Discount */}
                         {appliedCoupon && (
                           <div className="flex justify-between items-center text-caption text-success font-semibold">
-                            <span>Discount ({appliedCoupon.code})</span>
+                            <span>Coupon ({appliedCoupon.code})</span>
                             <span>-{formatCurrency(appliedCoupon.discountAmount)}</span>
                           </div>
                         )}
@@ -1504,7 +1962,7 @@ export default function CashierDashboard() {
       {/* Mobile Cart Toggle Button */}
       {
         salesMode === 'product-selection' && (
-          <div className="lg:hidden fixed bottom-6 right-6 z-40">
+          <div className="md:hidden fixed bottom-6 right-6 z-40">
             <button
               type="button"
               onClick={withTrustedClick(() => setShowCart(!showCart))}
@@ -1526,10 +1984,7 @@ export default function CashierDashboard() {
       {/* Customer Information Modal */}
       <CustomerModal
         isOpen={showCustomerModal}
-        onClose={() => {
-          setShowCustomerModal(false);
-          setSalesMode('idle');
-        }}
+        onClose={() => setShowCustomerModal(false)}
         onSubmit={handleCustomerInfoSubmit}
         onSkip={skipCustomerInfo}
       />
@@ -1545,6 +2000,38 @@ export default function CashierDashboard() {
         processingPayment={processingPayment}
         paymentError={paymentError}
         setPaymentError={setPaymentError}
+      />
+
+      {/* Sale Complete / Receipt Confirmation Modal */}
+      <SaleCompleteModal
+        completedSale={completedSale}
+        onNewSale={handleCompletedSaleNewSale}
+        onClose={handleCompletedSaleNewSale}
+      />
+
+      {/* Keyboard Shortcuts Help Popover */}
+      <KeyboardShortcutsPopover
+        isOpen={showShortcutsModal}
+        onClose={() => setShowShortcutsModal(false)}
+      />
+
+      {/* Manual / Ad-hoc Discount Modal (Fix 8) */}
+      <DiscountModal
+        isOpen={discountModalState.isOpen}
+        onClose={() => setDiscountModalState(prev => ({ ...prev, isOpen: false }))}
+        target={discountModalState.target}
+        item={discountModalState.item}
+        baseAmount={discountModalState.baseAmount}
+        existingDiscount={discountModalState.existingDiscount}
+        userRole={user?.role || 'cashier'}
+        onApplyDiscount={handleApplyDiscount}
+        onRemoveDiscount={() => {
+          if (discountModalState.target === 'item') {
+            handleRemoveItemDiscount(discountModalState.item?.id);
+          } else {
+            handleRemoveCartDiscount();
+          }
+        }}
       />
 
       {/* Held Carts Drawer Overlay */}

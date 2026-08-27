@@ -15,6 +15,11 @@ const Sale = sequelize.define('Sale', {
     unique: true,
     allowNull: true
   },
+  idempotencyKey: {
+    type: DataTypes.STRING(64),
+    unique: true,
+    allowNull: true
+  },
   // Basic sale information
   subtotal: {
     type: DataTypes.DECIMAL(10, 2),

@@ -76,6 +76,7 @@ const validateStockUpdate = [
 ];
 
 // Routes
+router.get('/batch', auth, productController.getProductsBatch);
 router.get('/', auth, productController.getAllProducts);
 router.get('/:id', auth, productController.getProductById);
 router.post('/', 
