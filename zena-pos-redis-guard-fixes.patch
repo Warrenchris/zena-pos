@@ -1,0 +1,48 @@
+diff --git a/backend/src/controllers/productController.js b/backend/src/controllers/productController.js
+index 3983e81..0a68e08 100644
+--- a/backend/src/controllers/productController.js
++++ b/backend/src/controllers/productController.js
+@@ -31,7 +31,7 @@ exports.getAllProducts = async (req, res) => {
+ 
+     if (isDefaultQuery) {
+       try {
+-        const cachedData = await redisClient.get(cacheKey);
++        const cachedData = redisClient.status === 'ready' ? await redisClient.get(cacheKey) : null;
+         if (cachedData) {
+           const cachedResult = JSON.parse(cachedData);
+           const totalPages = Math.ceil(cachedResult.count / numericPageSize) || 1;
+@@ -63,7 +63,9 @@ exports.getAllProducts = async (req, res) => {
+         });
+ 
+         try {
+-          await redisClient.setex(cacheKey, 600, JSON.stringify({ count: allProducts.count, rows: allProducts.rows }));
++          if (redisClient.status === 'ready') {
++            await redisClient.setex(cacheKey, 600, JSON.stringify({ count: allProducts.count, rows: allProducts.rows }));
++          }
+         } catch (err) {
+           logger.warn(`Redis error caching products for shop ${req.user.shopId}:`, err);
+         }
+diff --git a/backend/src/services/permissionCache.js b/backend/src/services/permissionCache.js
+index fd742a6..83db19b 100644
+--- a/backend/src/services/permissionCache.js
++++ b/backend/src/services/permissionCache.js
+@@ -13,7 +13,7 @@ async function getRolePermissions(role) {
+   const cacheKey = `permissions:role:${role}`;
+ 
+   try {
+-    const cachedData = await redisClient.get(cacheKey);
++    const cachedData = redisClient.status === 'ready' ? await redisClient.get(cacheKey) : null;
+     if (cachedData) {
+       logger.debug(`Permission cache HIT for role: ${role}`);
+       return JSON.parse(cachedData);
+@@ -35,7 +35,9 @@ async function getRolePermissions(role) {
+     const permissions = rolePermissions.map(rp => rp.Permission.name);
+ 
+     try {
+-      await redisClient.setex(cacheKey, CACHE_TTL, JSON.stringify(permissions));
++      if (redisClient.status === 'ready') {
++        await redisClient.setex(cacheKey, CACHE_TTL, JSON.stringify(permissions));
++      }
+     } catch (err) {
+       logger.warn(`Redis error saving permissions for role ${role}:`, err);
+     }

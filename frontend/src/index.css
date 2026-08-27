@@ -347,6 +347,34 @@
   font-weight: 600 !important;
 }
 
+/* ── Landing Page Animations ── */
+@keyframes landing-float-0 {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes landing-float-1 {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes landing-float-2 {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes landing-pulse-subtle {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
+}
+
+.landing-float-0 { animation: landing-float-0 4s ease-in-out infinite; }
+.landing-float-1 { animation: landing-float-1 5s ease-in-out infinite 0.5s; }
+.landing-float-2 { animation: landing-float-2 4.5s ease-in-out infinite 1s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-float-0, .landing-float-1, .landing-float-2 {
+    animation: none;
+  }
+}
+
 @media print {
   html, body {
     background: #FFFFFF !important;

@@ -13,7 +13,7 @@ async function getRolePermissions(role) {
   const cacheKey = `permissions:role:${role}`;
 
   try {
-    const cachedData = await redisClient.get(cacheKey);
+    const cachedData = redisClient.status === 'ready' ? await redisClient.get(cacheKey) : null;
     if (cachedData) {
       logger.debug(`Permission cache HIT for role: ${role}`);
       return JSON.parse(cachedData);
@@ -35,7 +35,9 @@ async function getRolePermissions(role) {
     const permissions = rolePermissions.map(rp => rp.Permission.name);
 
     try {
-      await redisClient.setex(cacheKey, CACHE_TTL, JSON.stringify(permissions));
+      if (redisClient.status === 'ready') {
+        await redisClient.setex(cacheKey, CACHE_TTL, JSON.stringify(permissions));
+      }
     } catch (err) {
       logger.warn(`Redis error saving permissions for role ${role}:`, err);
     }

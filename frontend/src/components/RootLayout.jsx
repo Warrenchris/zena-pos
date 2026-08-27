@@ -10,11 +10,10 @@ const LoadingSpinner = () => (
 
 const RootLayout = () => {
   const location = useLocation();
-  const isLoginPage = location.pathname === '/login';
 
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-gray-900">
+      <div className="min-h-screen bg-app text-text-primary transition-colors duration-200">
         <Suspense fallback={<LoadingSpinner />}>
           <Outlet />
         </Suspense>

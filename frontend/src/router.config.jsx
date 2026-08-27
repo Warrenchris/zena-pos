@@ -7,6 +7,8 @@ import DashboardRouter from './components/DashboardRouter';
 import ErrorBoundary from './components/ErrorBoundary';
 import RouteError from './components/RouteError';
 
+import { useSelector } from 'react-redux';
+
 // Safe Lazy Loader with automatic retry and graceful fallback on Vite HMR/Chunk loading errors
 const safeLazy = (importFunc) => {
   return lazy(() =>
@@ -83,6 +85,15 @@ const CategoriesPage = safeLazy(() => import('./pages/Categories'));
 const SubCategories = safeLazy(() => import('./pages/SubCategories'));
 const Pos = safeLazy(() => import('./pages/CashierDashboard'));
 const CreateProduct = safeLazy(() => import('./pages/CreateProduct'));
+const LandingPage = safeLazy(() => import('./components/landing/LandingPage'));
+
+const HomeRoute = () => {
+  const { token, user } = useSelector((state) => state.auth);
+  if (token && user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <LandingPage />;
+};
 
 export const routes = [
   {
@@ -92,7 +103,7 @@ export const routes = [
     children: [
       {
         index: true,
-        element: <Navigate to="/dashboard" replace />
+        element: <HomeRoute />
       },
       {
         path: 'login',

@@ -31,7 +31,7 @@ exports.getAllProducts = async (req, res) => {
 
     if (isDefaultQuery) {
       try {
-        const cachedData = await redisClient.get(cacheKey);
+        const cachedData = redisClient.status === 'ready' ? await redisClient.get(cacheKey) : null;
         if (cachedData) {
           const cachedResult = JSON.parse(cachedData);
           const totalPages = Math.ceil(cachedResult.count / numericPageSize) || 1;
@@ -63,7 +63,9 @@ exports.getAllProducts = async (req, res) => {
         });
 
         try {
-          await redisClient.setex(cacheKey, 600, JSON.stringify({ count: allProducts.count, rows: allProducts.rows }));
+          if (redisClient.status === 'ready') {
+            await redisClient.setex(cacheKey, 600, JSON.stringify({ count: allProducts.count, rows: allProducts.rows }));
+          }
         } catch (err) {
           logger.warn(`Redis error caching products for shop ${req.user.shopId}:`, err);
         }
