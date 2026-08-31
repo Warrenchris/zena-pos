@@ -5,7 +5,12 @@ import {
   CreditCardIcon,
   DevicePhoneMobileIcon,
   ArrowsRightLeftIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  UserIcon,
+  MagnifyingGlassIcon,
+  PencilSquareIcon,
+  UserPlusIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline';
 import { withTrustedClick } from '../utils/securityUtils';
 import useCurrency from '../hooks/useCurrency';
@@ -34,6 +39,101 @@ export default function PaymentModal({
   const [cardRef, setCardRef] = useState(null);
   const [cardUrl, setCardUrl] = useState(null);
   const [localError, setLocalError] = useState(null);
+
+  // Embedded Customer Capture in Checkout
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState([]);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+  const [newCustomerData, setNewCustomerData] = useState({
+    name: currentSale.customer?.name === WALK_IN_CUSTOMER_NAME ? '' : (currentSale.customer?.name || ''),
+    phone: currentSale.customer?.phone || '',
+    email: currentSale.customer?.email || '',
+    location: currentSale.customer?.location || ''
+  });
+
+  // Debounced Customer Search in Checkout
+  useEffect(() => {
+    if (!customerSearchQuery.trim()) {
+      setCustomerSearchResults([]);
+      setIsSearchingCustomer(false);
+      return;
+    }
+
+    setIsSearchingCustomer(true);
+    const handler = setTimeout(async () => {
+      try {
+        const response = await api.get('/api/customers', {
+          params: { search: customerSearchQuery }
+        });
+        const fetched = response.data.customers || response.data || [];
+        setCustomerSearchResults(fetched);
+      } catch (err) {
+        console.error('Customer search error in checkout:', err);
+        setCustomerSearchResults([]);
+      } finally {
+        setIsSearchingCustomer(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [customerSearchQuery]);
+
+  const handleSelectExistingCustomer = (c) => {
+    onUpdateSale(prev => ({
+      ...prev,
+      customerId: c.id,
+      customer: {
+        id: c.id,
+        name: c.name,
+        phone: c.phone || '',
+        email: c.email || '',
+        location: c.location || ''
+      }
+    }));
+    if (c.phone) {
+      setMpesaPhone(c.phone);
+    }
+    setCustomerSearchQuery('');
+    setCustomerSearchResults([]);
+    setIsEditingCustomer(false);
+  };
+
+  const handleSaveNewCustomer = (e) => {
+    if (e) e.preventDefault();
+    const name = newCustomerData.name.trim() || WALK_IN_CUSTOMER_NAME;
+    onUpdateSale(prev => ({
+      ...prev,
+      customerId: null,
+      customer: {
+        name,
+        phone: newCustomerData.phone.trim(),
+        email: newCustomerData.email.trim(),
+        location: newCustomerData.location.trim()
+      }
+    }));
+    if (newCustomerData.phone.trim()) {
+      setMpesaPhone(newCustomerData.phone.trim());
+    }
+    setIsEditingCustomer(false);
+  };
+
+  const handleResetToWalkIn = () => {
+    onUpdateSale(prev => ({
+      ...prev,
+      customerId: null,
+      customer: {
+        name: WALK_IN_CUSTOMER_NAME,
+        phone: '',
+        email: '',
+        location: ''
+      }
+    }));
+    setNewCustomerData({ name: '', phone: '', email: '', location: '' });
+    setCustomerSearchQuery('');
+    setCustomerSearchResults([]);
+    setIsEditingCustomer(false);
+  };
 
   const [splitLegs, setSplitLegs] = useState([
     { paymentMethod: 'cash', amount: '', gatewayRef: null, status: 'confirmed', checkoutRequestId: null, cardRef: null, localError: null },
@@ -476,19 +576,171 @@ export default function PaymentModal({
           </button>
         </div>
 
-        {/* Top Summary Banner: Total Due + Customer Info inline */}
-        <div className="grid grid-cols-2 gap-3 p-3.5 bg-surface-2/40 border border-border-default rounded-2xl">
+        {/* Top Summary Banner: Total Due */}
+        <div className="p-3.5 bg-surface-2/40 border border-border-default rounded-2xl flex items-center justify-between">
           <div>
             <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Total Due</span>
             <p className="text-h2 font-extrabold text-primary leading-tight">{formatCurrency(currentSale.total)}</p>
           </div>
           <div className="text-right">
-            <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Customer</span>
-            <p className="text-small font-bold text-text-primary truncate">{currentSale.customer?.name || WALK_IN_CUSTOMER_NAME}</p>
-            {currentSale.customer?.phone && (
-              <p className="text-caption text-text-muted font-mono">{currentSale.customer?.phone}</p>
+            <span className="text-caption font-semibold text-text-muted uppercase tracking-wider">Items in Order</span>
+            <p className="text-body font-bold text-text-primary">{currentSale.items?.length || 0} product(s)</p>
+          </div>
+        </div>
+
+        {/* Customer Account & Details Section (Captured in Checkout) */}
+        <div className="bg-surface-2/40 border border-border-default rounded-2xl p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <UserIcon className="h-4 w-4 text-text-muted" />
+              <span className="text-caption font-semibold text-text-secondary uppercase tracking-wider">
+                Customer Details
+              </span>
+            </div>
+            {!isEditingCustomer && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCustomerData({
+                    name: currentSale.customer?.name === WALK_IN_CUSTOMER_NAME ? '' : (currentSale.customer?.name || ''),
+                    phone: currentSale.customer?.phone || '',
+                    email: currentSale.customer?.email || '',
+                    location: currentSale.customer?.location || ''
+                  });
+                  setIsEditingCustomer(true);
+                }}
+                className="text-[11px] font-semibold text-primary hover:underline flex items-center space-x-1"
+              >
+                <PencilSquareIcon className="h-3.5 w-3.5" />
+                <span>{currentSale.customer?.name === WALK_IN_CUSTOMER_NAME ? '+ Add / Search Customer' : 'Change'}</span>
+              </button>
             )}
           </div>
+
+          {!isEditingCustomer ? (
+            <div className="flex items-center justify-between bg-surface p-2.5 rounded-xl border border-border-default">
+              <div className="min-w-0">
+                <div className="flex items-center space-x-2">
+                  <span className="text-small font-bold text-text-primary truncate">
+                    {currentSale.customer?.name || WALK_IN_CUSTOMER_NAME}
+                  </span>
+                  {currentSale.customerId ? (
+                    <Badge variant="success" size="sm">Member</Badge>
+                  ) : currentSale.customer?.name !== WALK_IN_CUSTOMER_NAME ? (
+                    <Badge variant="primary" size="sm">New</Badge>
+                  ) : (
+                    <Badge variant="default" size="sm">Walk-in</Badge>
+                  )}
+                </div>
+                {(currentSale.customer?.phone || currentSale.customer?.email || currentSale.customer?.location) && (
+                  <p className="text-caption text-text-muted mt-0.5">
+                    {currentSale.customer?.phone}
+                    {currentSale.customer?.email ? ` • ${currentSale.customer.email}` : ''}
+                    {currentSale.customer?.location ? ` • 📍 ${currentSale.customer.location}` : ''}
+                  </p>
+                )}
+              </div>
+              {currentSale.customer?.name !== WALK_IN_CUSTOMER_NAME && (
+                <button
+                  type="button"
+                  onClick={handleResetToWalkIn}
+                  className="text-caption text-danger hover:underline font-semibold ml-2 shrink-0"
+                >
+                  Reset to Walk-in
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3 pt-1 animate-fadeIn">
+              {/* Search Database */}
+              <div className="relative">
+                <input
+                  type="search"
+                  placeholder="Search existing customer by name, phone, or email..."
+                  value={customerSearchQuery}
+                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-surface text-text-primary border border-border-default rounded-xl text-small focus:ring-2 focus:ring-primary/30"
+                  autoFocus
+                />
+                <MagnifyingGlassIcon className="h-4 w-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+
+                {/* Search Dropdown Results */}
+                {customerSearchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 z-50 max-h-44 overflow-y-auto bg-surface border border-border-default rounded-xl shadow-2xl divide-y divide-border-default mt-1">
+                    {customerSearchResults.map((c) => (
+                      <div
+                        key={c.id}
+                        onClick={() => handleSelectExistingCustomer(c)}
+                        className="p-2.5 hover:bg-surface-2 cursor-pointer transition-colors flex justify-between items-center text-small"
+                      >
+                        <div>
+                          <p className="font-bold text-text-primary">{c.name}</p>
+                          <p className="text-caption text-text-muted">{c.phone || 'No phone'} • {c.email || 'No email'}</p>
+                        </div>
+                        <Badge variant="success" size="sm">Points: {c.loyaltyPoints || 0}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Or Quick Manual Form */}
+              <div className="space-y-2 border-t border-border-default pt-2">
+                <p className="text-[11px] font-semibold text-text-muted uppercase">Or enter new customer info:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Customer Name *"
+                    value={newCustomerData.name}
+                    onChange={(e) => setNewCustomerData(prev => ({ ...prev, name: e.target.value }))}
+                    className="p-2 bg-surface border border-border-default text-text-primary rounded-xl text-small focus:ring-2 focus:ring-primary/30"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Phone Number"
+                    value={newCustomerData.phone}
+                    onChange={(e) => setNewCustomerData(prev => ({ ...prev, phone: e.target.value }))}
+                    className="p-2 bg-surface border border-border-default text-text-primary rounded-xl text-small focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="email"
+                    placeholder="Email Address (optional)"
+                    value={newCustomerData.email}
+                    onChange={(e) => setNewCustomerData(prev => ({ ...prev, email: e.target.value }))}
+                    className="p-2 bg-surface border border-border-default text-text-primary rounded-xl text-small focus:ring-2 focus:ring-primary/30"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Location / Area (optional)"
+                    value={newCustomerData.location}
+                    onChange={(e) => setNewCustomerData(prev => ({ ...prev, location: e.target.value }))}
+                    className="p-2 bg-surface border border-border-default text-text-primary rounded-xl text-small focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditingCustomer(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveNewCustomer}
+                >
+                  Save Customer Details
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Payment Methods Selector */}
