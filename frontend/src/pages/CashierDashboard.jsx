@@ -22,7 +22,18 @@ import {
   QuestionMarkCircleIcon,
   CommandLineIcon,
   TagIcon,
-  CloudArrowUpIcon
+  CloudArrowUpIcon,
+  CameraIcon,
+  MapPinIcon,
+  PauseIcon,
+  BoltIcon,
+  ExclamationTriangleIcon,
+  SparklesIcon,
+  CubeIcon,
+  TicketIcon,
+  InboxIcon,
+  SignalIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import api, { couponsAPI } from '../services/api';
 import cashierAPI from '../services/cashierAPI';
@@ -1200,7 +1211,7 @@ export default function CashierDashboard() {
         {pendingCart && (
           <div className="bg-primary/10 border border-primary/30 rounded-2xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slideIn">
             <div className="flex items-center space-x-3">
-              <span className="text-xl">🛒</span>
+              <ShoppingCartIcon className="h-6 w-6 text-primary shrink-0" />
               <p className="text-small font-medium text-text-primary">
                 You have an unsaved cart from your last session ({pendingCart.items?.length || 0} items).
               </p>
@@ -1228,7 +1239,7 @@ export default function CashierDashboard() {
         {pendingCount > 0 && (
           <div className="bg-warning/10 border border-warning/30 rounded-2xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slideIn">
             <div className="flex items-center space-x-3">
-              <span className="text-2xl">📡</span>
+              <SignalIcon className="h-6 w-6 text-warning shrink-0" />
               <div>
                 <p className="text-small font-bold text-text-primary">
                   Offline Sales Queue: {pendingCount} sale(s) waiting to sync
@@ -1385,86 +1396,90 @@ export default function CashierDashboard() {
               {/* POS Terminal - Main Area */}
               <div className="flex-1 flex flex-col space-y-4 min-w-0 md:h-full md:overflow-hidden">
                 {/* Sale Header */}
-                <div className="bg-surface border border-border-default rounded-2xl p-4 sm:p-5 shadow-floating">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center space-x-4 min-w-0">
-                      <div className="w-3 h-3 rounded-full bg-success animate-pulse shrink-0"></div>
-                      <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <p className="text-caption font-semibold text-text-muted uppercase tracking-wider">Current Sale</p>
+                <div className="bg-surface border border-border-default rounded-2xl p-3.5 sm:p-4 shadow-floating">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    {/* Left: Customer Info & Scanner Status */}
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-success animate-pulse shrink-0"></div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-2 flex-wrap">
+                          <h2 className="text-body font-bold text-text-primary truncate max-w-[180px] sm:max-w-xs">
+                            {currentSale.customer?.name || WALK_IN_CUSTOMER_NAME}
+                          </h2>
                           <button
                             type="button"
                             onClick={() => setShowCustomerModal(true)}
-                            className="text-caption text-primary font-semibold hover:underline flex items-center space-x-1"
+                            className="text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-md transition-colors flex items-center space-x-1 shrink-0 whitespace-nowrap"
                             title="Set or change customer info"
                           >
-                            <span>✏️</span>
+                            <PencilSquareIcon className="h-3 w-3" />
                             <span>{currentSale.customer?.name === WALK_IN_CUSTOMER_NAME ? 'Add Customer' : 'Change'}</span>
                           </button>
                         </div>
-                        <h2 className="text-h2 font-bold text-text-primary truncate">{currentSale.customer?.name || WALK_IN_CUSTOMER_NAME}</h2>
                         {currentSale.customer?.location && (
-                          <p className="text-caption text-text-secondary truncate">📍 {currentSale.customer.location}</p>
+                          <p className="text-caption text-text-secondary truncate flex items-center gap-0.5">
+                            <MapPinIcon className="h-3 w-3 inline text-text-muted" />
+                            {currentSale.customer.location}
+                          </p>
                         )}
                       </div>
+
                       {/* Scanner Status Indicator */}
-                      <div className="flex items-center space-x-2 pl-4 border-l border-border-default shrink-0">
-                        <span className="text-caption font-semibold text-text-muted">📷 Scanner</span>
+                      <div className="flex items-center space-x-1.5 pl-3 border-l border-border-default shrink-0">
+                        <span className="text-caption font-semibold text-text-muted hidden sm:inline flex items-center gap-1">
+                          <CameraIcon className="h-3.5 w-3.5" /> Scanner
+                        </span>
                         <Badge variant={isModalOpen ? 'warning' : 'success'} size="sm">
                           {isModalOpen ? 'Paused' : 'Ready'}
                         </Badge>
                       </div>
                     </div>
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowShortcutsModal(true)}
-                          className="flex items-center space-x-1.5 shrink-0 text-text-muted hover:text-text-primary"
-                          title="Keyboard Shortcuts (Press ?)"
-                        >
-                          <CommandLineIcon className="h-4 w-4" />
-                          <span className="hidden sm:inline">Shortcuts</span>
-                          <kbd className="text-[10px] font-mono px-1 py-0.5 bg-surface-2 rounded border border-border-default">?</kbd>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowHeldCartsDrawer(true)}
-                          className="flex items-center space-x-2 shrink-0"
-                        >
-                          <span>⏸️ Held Carts</span>
-                          {heldCarts.length > 0 && (
-                            <Badge variant="primary" size="sm">{heldCarts.length}</Badge>
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0"
-                          onClick={withTrustedClick(cancelSale)}
-                        >
-                          ✕ Cancel
-                        </Button>
-                        {currentSale.items.length > 0 && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={withTrustedClick(handleProceedToPayment)}
-                          >
-                            ✓ Proceed to Payment
-                          </Button>
+
+                    {/* Right: POS Action Buttons */}
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowShortcutsModal(true)}
+                        className="flex items-center space-x-1 text-text-muted hover:text-text-primary px-2.5"
+                        title="Keyboard Shortcuts (Press ?)"
+                      >
+                        <CommandLineIcon className="h-4 w-4" />
+                        <span className="hidden sm:inline text-caption">Shortcuts</span>
+                        <kbd className="text-[10px] font-mono px-1 py-0.5 bg-surface-2 rounded border border-border-default">?</kbd>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        leftIcon={PauseIcon}
+                        onClick={() => setShowHeldCartsDrawer(true)}
+                        className="px-2.5"
+                      >
+                        <span className="text-caption">Held</span>
+                        {heldCarts.length > 0 && (
+                          <Badge variant="primary" size="sm">{heldCarts.length}</Badge>
                         )}
-                      </div>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        leftIcon={XMarkIcon}
+                        className="text-danger hover:border-danger/40 px-2.5 text-caption"
+                        onClick={withTrustedClick(cancelSale)}
+                      >
+                        Cancel
+                      </Button>
                     </div>
                   </div>
+                </div>
 
                   {/* Dismissible Keyboard Shortcuts Hint Bar */}
                   {showShortcutHint && (
                     <div className="bg-primary/5 border border-primary/20 rounded-xl px-3 py-1.5 flex items-center justify-between text-caption text-text-secondary animate-fadeIn">
                       <div className="flex items-center space-x-2.5 overflow-x-auto scrollbar-hide py-0.5">
-                        <span className="font-semibold text-primary">⚡ Shortcuts:</span>
+                        <span className="font-semibold text-primary flex items-center gap-1">
+                          <BoltIcon className="h-3.5 w-3.5" /> Shortcuts:
+                        </span>
                         <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">F2</kbd> Pay</span>
                         <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">F3</kbd> Hold</span>
                         <span><kbd className="px-1.5 py-0.5 bg-surface rounded border border-border-default text-[10px] font-mono font-bold text-text-primary">F4</kbd> Held Carts</span>
@@ -1481,7 +1496,7 @@ export default function CashierDashboard() {
                         className="text-text-muted hover:text-text-primary ml-2 p-0.5"
                         title="Dismiss shortcuts hint"
                       >
-                        ✕
+                        <XMarkIcon className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   )}
@@ -1531,7 +1546,12 @@ export default function CashierDashboard() {
                         <Button type="submit" variant="primary" size="sm">
                           Add
                         </Button>
-                        {barcodeError && <span className="text-caption text-danger font-medium ml-2">⚠️ {barcodeError}</span>}
+                        {barcodeError && (
+                          <span className="text-caption text-danger font-medium ml-2 flex items-center gap-1">
+                            <ExclamationTriangleIcon className="h-3.5 w-3.5" />
+                            {barcodeError}
+                          </span>
+                        )}
                       </form>
                     )}
 
@@ -1548,7 +1568,7 @@ export default function CashierDashboard() {
                               : 'bg-surface text-text-secondary border-border-default hover:bg-surface-2'
                           }`}
                         >
-                          {category === 'all' ? '🎯 All' : category}
+                          {category === 'all' ? 'All' : category}
                         </button>
                       ))}
                     </div>
@@ -1596,8 +1616,8 @@ export default function CashierDashboard() {
                               >
                                 <div className="space-y-2">
                                   <div className="flex items-start justify-between">
-                                    <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                                      📦
+                                    <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center text-xl group-hover:scale-110 transition-transform text-text-muted">
+                                      <CubeIcon className="h-5 w-5" />
                                     </div>
                                     <Badge variant={product.stockQuantity > 5 ? 'success' : product.stockQuantity > 0 ? 'warning' : 'danger'} size="sm">
                                       {product.stockQuantity > 0 ? `${product.stockQuantity} left` : 'Out of stock'}
@@ -1680,7 +1700,8 @@ export default function CashierDashboard() {
                                     className="text-[11px] font-semibold text-success bg-success/15 px-1.5 py-0.5 rounded-md hover:bg-success/25 transition-colors flex items-center space-x-1"
                                     title="Edit item discount"
                                   >
-                                    <span>🏷️ -{formatCurrency(item.discount)}</span>
+                                    <TagIcon className="h-3 w-3 inline" />
+                                    <span>-{formatCurrency(item.discount)}</span>
                                   </button>
                                 ) : (
                                   <button
@@ -1765,7 +1786,7 @@ export default function CashierDashboard() {
                           className="text-gray-400 hover:text-white p-1"
                           title="Dismiss"
                         >
-                          ✕
+                          <XMarkIcon className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
@@ -1780,7 +1801,7 @@ export default function CashierDashboard() {
                         {cartManualDiscount ? (
                           <div className="flex items-center justify-between p-2.5 bg-primary/10 border border-primary/30 rounded-xl text-caption">
                             <div className="flex items-center space-x-2 truncate">
-                              <span className="text-base">🏷️</span>
+                              <TagIcon className="h-4 w-4 text-primary shrink-0" />
                               <div className="min-w-0">
                                 <p className="font-bold text-primary truncate">
                                   Cart Discount ({cartManualDiscount.discountType === 'percentage' ? `${cartManualDiscount.discountValue}%` : formatCurrency(cartManualDiscount.discountValue)})
@@ -1802,7 +1823,7 @@ export default function CashierDashboard() {
                         ) : appliedCoupon ? (
                           <div className="flex items-center justify-between p-2.5 bg-success/10 border border-success/30 rounded-xl text-caption">
                             <div className="flex items-center space-x-2 truncate">
-                              <span className="text-base">🎟️</span>
+                              <TicketIcon className="h-4 w-4 text-success shrink-0" />
                               <div className="min-w-0">
                                 <p className="font-bold text-success truncate">{appliedCoupon.code}</p>
                                 <p className="text-text-muted text-[10px]">Saved {formatCurrency(appliedCoupon.discountAmount)}</p>
@@ -1845,7 +1866,10 @@ export default function CashierDashboard() {
                           </div>
                         )}
                         {couponError && (
-                          <p className="text-[11px] text-danger font-medium mt-0.5">⚠️ {couponError}</p>
+                          <p className="text-[11px] text-danger font-medium mt-0.5 flex items-center gap-1">
+                            <ExclamationTriangleIcon className="h-3.5 w-3.5 inline" />
+                            {couponError}
+                          </p>
                         )}
                       </div>
 
@@ -1930,22 +1954,24 @@ export default function CashierDashboard() {
                             type="button"
                             variant="outline"
                             size="sm"
+                            leftIcon={PauseIcon}
                             className="flex-1"
                             onClick={() => {
                               setHoldLabel(`Customer ${heldCarts.length + 1}`);
                               setShowHoldPrompt(true);
                             }}
                           >
-                            ⏸️ Hold
+                            Hold
                           </Button>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
+                            leftIcon={TrashIcon}
                             className="flex-1 text-danger hover:border-danger/40"
                             onClick={() => handleClearCart(true)}
                           >
-                            🗑️ Clear
+                            Clear
                           </Button>
                         </div>
                       )}
@@ -2061,7 +2087,7 @@ export default function CashierDashboard() {
             <div className="p-6 border-b border-brand-yellow/20 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <span>⏸️</span> Held Carts
+                  <PauseIcon className="h-5 w-5 text-primary" /> Held Carts
                 </h3>
                 <p className="text-xs text-gray-400 mt-1">Select a held transaction to recall it</p>
               </div>
@@ -2070,7 +2096,7 @@ export default function CashierDashboard() {
                 onClick={() => setShowHeldCartsDrawer(false)}
                 className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-white border border-gray-800 hover:border-gray-600 rounded-xl transition-all"
               >
-                ✕
+                <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
             
@@ -2078,7 +2104,7 @@ export default function CashierDashboard() {
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {heldCarts.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center">
-                  <div className="text-4xl mb-3">📭</div>
+                  <InboxIcon className="h-12 w-12 text-gray-500 mb-2" />
                   <p className="text-gray-300 font-medium">No Held Carts</p>
                   <p className="text-xs text-gray-400 max-w-xs mt-1">Carts parked by any cashier in this shop will appear here.</p>
                 </div>

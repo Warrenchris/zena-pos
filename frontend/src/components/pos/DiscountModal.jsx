@@ -3,7 +3,8 @@ import {
   XMarkIcon,
   TagIcon,
   LockClosedIcon,
-  CheckIcon
+  CheckIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import useCurrency from '../../hooks/useCurrency';
 import Button from '../ui/Button';
@@ -321,7 +322,10 @@ export default function DiscountModal({
               maxLength={100}
             />
             {approvalError && (
-              <p className="text-[11px] text-danger font-semibold">⚠️ {approvalError}</p>
+              <p className="text-[11px] text-danger font-semibold flex items-center gap-1">
+                <ExclamationTriangleIcon className="h-3.5 w-3.5 inline" />
+                {approvalError}
+              </p>
             )}
           </div>
         )}

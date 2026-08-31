@@ -248,8 +248,9 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                       <td className="p-3 font-semibold text-text-primary">
                         <div>{productName}</div>
                         {itemDiscount > 0 && (
-                          <div className="text-[11px] font-semibold text-success mt-0.5">
-                            🏷️ -{formatCurrency(itemDiscount)} discount applied
+                          <div className="text-[11px] font-semibold text-success mt-0.5 flex items-center gap-1">
+                            <TagIcon className="h-3 w-3 inline" />
+                            <span>-{formatCurrency(itemDiscount)} discount applied</span>
                           </div>
                         )}
                       </td>

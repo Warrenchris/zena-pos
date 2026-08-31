@@ -4,7 +4,8 @@ import {
   BanknotesIcon,
   CreditCardIcon,
   DevicePhoneMobileIcon,
-  ArrowsRightLeftIcon
+  ArrowsRightLeftIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { withTrustedClick } from '../utils/securityUtils';
 import useCurrency from '../hooks/useCurrency';
@@ -746,8 +747,9 @@ export default function PaymentModal({
 
         {/* Error Alert */}
         {(paymentError || localError) && (
-          <div className="p-2.5 bg-danger/10 border border-danger/30 rounded-xl text-caption text-danger text-center font-medium">
-            ⚠️ {localError || paymentError}
+          <div className="p-2.5 bg-danger/10 border border-danger/30 rounded-xl text-caption text-danger text-center font-medium flex items-center justify-center gap-1.5">
+            <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+            <span>{localError || paymentError}</span>
           </div>
         )}
 
