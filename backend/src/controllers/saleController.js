@@ -303,6 +303,7 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
   // against the real, hashed credential, exactly like the refund flow does.
   const verifiedApproverName = await verifyDiscountApprovalIfNeeded({
     shopId,
+    user,
     cartDiscountType: discountType,
     cartDiscountValue: discountValue,
     items,

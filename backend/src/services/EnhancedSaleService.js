@@ -134,6 +134,7 @@ class EnhancedSaleService {
     // it involves an async password comparison, not a DB write.
     const verifiedApproverName = await verifyDiscountApprovalIfNeeded({
       shopId,
+      user,
       cartDiscountType: discountType,
       cartDiscountValue: discountValue,
       items,

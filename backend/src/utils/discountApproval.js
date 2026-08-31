@@ -36,6 +36,7 @@ function discountRequiresApproval(discountType, discountValue) {
  */
 async function verifyDiscountApprovalIfNeeded({
   shopId,
+  user,
   cartDiscountType,
   cartDiscountValue,
   items = [],
@@ -49,6 +50,12 @@ async function verifyDiscountApprovalIfNeeded({
 
   if (!cartNeedsApproval && !anyItemNeedsApproval) {
     return null;
+  }
+
+  // If the authenticated user making the request is already an active manager or admin,
+  // their own authenticated session authorizes the discount.
+  if (user && !user.isEmployee && ['manager', 'admin'].includes(user.role)) {
+    return user.name || user.email || 'Admin/Manager';
   }
 
   if (!managerApprovalId) {
