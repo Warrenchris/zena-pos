@@ -1,9 +1,14 @@
 import api from './api';
 
+const normalizeParams = (params) => {
+  if (typeof params === 'string') return { period: params };
+  return params || {};
+};
+
 const analyticsService = {
-  async getVisitorStats(period = 'week') {
+  async getVisitorStats(params = {}) {
     try {
-      const response = await api.get(`/api/analytics/visitors?period=${period}`);
+      const response = await api.get('/api/analytics/visitors', { params: normalizeParams(params) });
       return response.data;
     } catch (error) {
       console.error('Error fetching visitor statistics:', error);
@@ -16,9 +21,9 @@ const analyticsService = {
     }
   },
 
-  async getOrderStats(period = 'week') {
+  async getOrderStats(params = {}) {
     try {
-      const response = await api.get(`/api/analytics/orders?period=${period}`);
+      const response = await api.get('/api/analytics/orders', { params: normalizeParams(params) });
       return response.data;
     } catch (error) {
       console.error('Error fetching order statistics:', error);
@@ -34,9 +39,10 @@ const analyticsService = {
     }
   },
 
-  async getTopProducts(period = 'week', limit = 5) {
+  async getTopProducts(params = {}, limit = 5) {
     try {
-      const response = await api.get(`/api/analytics/top-products?period=${period}&limit=${limit}`);
+      const p = typeof params === 'string' ? { period: params, limit } : { limit, ...params };
+      const response = await api.get('/api/analytics/top-products', { params: p });
       return response.data;
     } catch (error) {
       console.error('Error fetching top products:', error);
@@ -49,9 +55,9 @@ const analyticsService = {
     }
   },
 
-  async getSalesChannels(period = 'week') {
+  async getSalesChannels(params = {}) {
     try {
-      const response = await api.get(`/api/analytics/sales-channels?period=${period}`);
+      const response = await api.get('/api/analytics/sales-channels', { params: normalizeParams(params) });
       return response.data;
     } catch (error) {
       console.error('Error fetching sales channels:', error);
@@ -65,9 +71,9 @@ const analyticsService = {
     }
   },
 
-  async getCustomerLocations(period = 'week') {
+  async getCustomerLocations(params = {}) {
     try {
-      const response = await api.get(`/api/analytics/customer-locations?period=${period}`);
+      const response = await api.get('/api/analytics/customer-locations', { params: normalizeParams(params) });
       return response.data;
     } catch (error) {
       console.error('Error fetching customer locations:', error);

@@ -24,15 +24,25 @@ export default function Reports() {
   const [range, setRange] = useState('monthly')
   const [quick, setQuick] = useState('month') // today | week | month | year | custom
   const [isWithin24Hours, setIsWithin24Hours] = useState(false)
-  // Set default start date to first day of current month
+
+  const formatLocalDate = (d) => {
+    if (!d) return '';
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Set default start date to first day of current month (local time)
   const [startDate, setStartDate] = useState(() => {
     const date = new Date()
     date.setDate(1) // First day of current month
-    return date.toISOString().split('T')[0]
+    return formatLocalDate(date)
   })
-  // Set default end date to today
+  // Set default end date to today (local time)
   const [endDate, setEndDate] = useState(() => {
-    return new Date().toISOString().split('T')[0]
+    return formatLocalDate(new Date())
   })
   const [cashierId, setCashierId] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -62,9 +72,8 @@ export default function Reports() {
   // Update date range when range type changes
   useEffect(() => {
     const now = new Date()
-    const toISO = (d) => d.toISOString().split('T')[0]
     if (quick === 'today') {
-      const today = toISO(now)
+      const today = formatLocalDate(now)
       setStartDate(today)
       setEndDate(today)
       setRange('hourly')
@@ -73,22 +82,22 @@ export default function Reports() {
       const day = now.getDay() || 7
       const start = new Date(now)
       start.setDate(now.getDate() - day + 1)
-      setStartDate(toISO(start))
-      setEndDate(toISO(now))
+      setStartDate(formatLocalDate(start))
+      setEndDate(formatLocalDate(now))
       setRange('daily')
       setIsWithin24Hours(false)
     } else if (quick === 'month') {
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-      setStartDate(toISO(firstDay))
-      setEndDate(toISO(now))
+      setStartDate(formatLocalDate(firstDay))
+      setEndDate(formatLocalDate(now))
       // Use daily granularity within the month so trend has enough points
       setRange('daily')
       setIsWithin24Hours(false)
     } else if (quick === 'year') {
       const firstDay = new Date(now.getFullYear(), 0, 1)
       const lastDay = new Date(now.getFullYear(), 11, 31)
-      setStartDate(toISO(firstDay))
-      setEndDate(toISO(lastDay))
+      setStartDate(formatLocalDate(firstDay))
+      setEndDate(formatLocalDate(lastDay))
       setRange('monthly')
       setIsWithin24Hours(false)
     }
@@ -462,9 +471,8 @@ export default function Reports() {
               endDate={endDate} 
               onChange={([start, end]) => {
                 if (start) {
-                  const toISO = (d) => (typeof d === 'string' ? d : d.toISOString().split('T')[0]);
-                  setStartDate(toISO(start));
-                  setEndDate(toISO(end || start));
+                  setStartDate(formatLocalDate(start));
+                  setEndDate(formatLocalDate(end || start));
                   setQuick('custom');
                 }
               }}

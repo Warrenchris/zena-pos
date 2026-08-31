@@ -12,15 +12,14 @@ import {
 } from 'recharts';
 import Card from '../ui/Card';
 
-const VisitorGraph = () => {
+const VisitorGraph = ({ filter = { period: 'week' } }) => {
   const dispatch = useDispatch();
   const { visitorData, percentageChange, totalVisitors, loading, error } =
     useSelector((state) => state.analytics.visitorStats);
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
 
   useEffect(() => {
-    dispatch(fetchVisitorStats(selectedPeriod));
-  }, [dispatch, selectedPeriod]);
+    dispatch(fetchVisitorStats(filter));
+  }, [dispatch, filter]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -75,15 +74,6 @@ const VisitorGraph = () => {
             )}
           </div>
         </div>
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
-        >
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-        </select>
       </div>
 
       <div className="h-[300px]">

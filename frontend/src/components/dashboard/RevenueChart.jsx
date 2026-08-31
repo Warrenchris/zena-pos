@@ -9,57 +9,36 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import useCurrency from '../../hooks/useCurrency';
-import { Tab } from '@headlessui/react';
 import analyticsService from '../../services/analytics.service';
 import Card from '../ui/Card';
 import Spinner from '../ui/Spinner';
 
-const RevenueChart = () => {
+const RevenueChart = ({ filter = { period: 'week' } }) => {
   const { format } = useCurrency();
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
-  const [revenueData, setRevenueData] = useState({});
+  const [revenueData, setRevenueData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchRevenueData = async () => {
       try {
         setLoading(true);
-        const response = await analyticsService.getOrderStats(selectedPeriod);
-
+        const response = await analyticsService.getOrderStats(filter);
         const data = response.orderData || response.revenueData || [];
 
-        setRevenueData(prevData => ({
-          ...prevData,
-          [selectedPeriod]: data.map(item => ({
-            date: item.date,
-            revenue: item.revenue || 0
-          }))
-        }));
+        setRevenueData(data.map(item => ({
+          date: item.date,
+          revenue: parseFloat(item.revenue || 0)
+        })));
       } catch (error) {
         console.error('Error fetching revenue data:', error);
-        setRevenueData(prevData => ({
-          ...prevData,
-          [selectedPeriod]: []
-        }));
+        setRevenueData([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchRevenueData();
-  }, [selectedPeriod]);
-
-  const periods = {
-    week: revenueData.week || [],
-    month: revenueData.month || [],
-    year: revenueData.year || []
-  };
-
-  const periodLabels = {
-    week: 'Weekly',
-    month: 'Monthly',
-    year: 'Yearly'
-  };
+  }, [filter]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -75,9 +54,8 @@ const RevenueChart = () => {
     return null;
   };
 
-  const currentData = periods[selectedPeriod] || [];
-  const total = currentData.reduce((acc, item) => acc + (item.revenue || 0), 0);
-  const average = currentData.length ? total / currentData.length : 0;
+  const total = revenueData.reduce((acc, item) => acc + (item.revenue || 0), 0);
+  const average = revenueData.length ? total / revenueData.length : 0;
 
   return (
     <Card variant="default" className="p-6">
@@ -98,31 +76,12 @@ const RevenueChart = () => {
         </div>
       </div>
 
-      <Tab.Group>
-        <Tab.List className="mb-6 flex flex-wrap gap-2">
-          {Object.keys(periods).map((period) => (
-            <Tab
-              key={period}
-              className={({ selected }) =>
-                `rounded-full px-3.5 py-1.5 text-small font-medium transition-all duration-150 focus:outline-none ${selected
-                  ? 'bg-primary text-white shadow-sm font-semibold'
-                  : 'bg-surface-2 text-text-secondary hover:bg-surface-3 hover:text-text-primary border border-border-default'
-                }`
-              }
-              onClick={() => setSelectedPeriod(period)}
-            >
-              {periodLabels[period]}
-            </Tab>
-          ))}
-        </Tab.List>
-      </Tab.Group>
-
       <div className="h-[360px]">
         {loading ? (
           <div className="flex h-full w-full items-center justify-center">
             <Spinner size="lg" label="Loading revenue chart..." />
           </div>
-        ) : currentData.length === 0 ? (
+        ) : revenueData.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center text-center text-text-muted">
             <div>
               <p className="text-body font-semibold text-text-primary">No revenue data available</p>
@@ -131,7 +90,7 @@ const RevenueChart = () => {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={currentData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+            <LineChart data={revenueData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="4 4" stroke="#F3F4F6" />
               <XAxis
                 dataKey="date"

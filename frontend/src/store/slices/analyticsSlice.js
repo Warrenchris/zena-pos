@@ -3,9 +3,9 @@ import analyticsService from '../../services/analytics.service';
 
 export const fetchVisitorStats = createAsyncThunk(
   'analytics/fetchVisitorStats',
-  async (period, { rejectWithValue }) => {
+  async (params, { rejectWithValue }) => {
     try {
-      const data = await analyticsService.getVisitorStats(period);
+      const data = await analyticsService.getVisitorStats(params);
       return data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch visitor statistics');
@@ -15,9 +15,9 @@ export const fetchVisitorStats = createAsyncThunk(
 
 export const fetchOrderStats = createAsyncThunk(
   'analytics/fetchOrderStats',
-  async (period, { rejectWithValue }) => {
+  async (params, { rejectWithValue }) => {
     try {
-      const data = await analyticsService.getOrderStats(period);
+      const data = await analyticsService.getOrderStats(params);
       return data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch order statistics');
@@ -27,9 +27,9 @@ export const fetchOrderStats = createAsyncThunk(
 
 export const fetchTopProducts = createAsyncThunk(
   'analytics/fetchTopProducts',
-  async ({ period = 'week', limit = 5 } = {}, { rejectWithValue }) => {
+  async (params = { period: 'week', limit: 5 }, { rejectWithValue }) => {
     try {
-      const data = await analyticsService.getTopProducts(period, limit);
+      const data = await analyticsService.getTopProducts(params);
       return data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch top products');
@@ -39,9 +39,9 @@ export const fetchTopProducts = createAsyncThunk(
 
 export const fetchSalesChannels = createAsyncThunk(
   'analytics/fetchSalesChannels',
-  async (period = 'week', { rejectWithValue }) => {
+  async (params, { rejectWithValue }) => {
     try {
-      const data = await analyticsService.getSalesChannels(period);
+      const data = await analyticsService.getSalesChannels(params);
       return data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch sales channels');
@@ -51,9 +51,9 @@ export const fetchSalesChannels = createAsyncThunk(
 
 export const fetchCustomerLocations = createAsyncThunk(
   'analytics/fetchCustomerLocations',
-  async (period = 'week', { rejectWithValue }) => {
+  async (params, { rejectWithValue }) => {
     try {
-      const data = await analyticsService.getCustomerLocations(period);
+      const data = await analyticsService.getCustomerLocations(params);
       return data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch customer locations');

@@ -13,16 +13,15 @@ import { fetchOrderStats } from '../../store/slices/analyticsSlice';
 import useCurrency from '../../hooks/useCurrency';
 import Card from '../ui/Card';
 
-const OrderTracking = () => {
+const OrderTracking = ({ filter = { period: 'week' } }) => {
   const dispatch = useDispatch();
   const { format } = useCurrency();
   const { orderData, orderPercentageChange, revenuePercentageChange, totalOrders, totalRevenue, loading, error } =
     useSelector((state) => state.analytics.orderStats);
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
 
   useEffect(() => {
-    dispatch(fetchOrderStats(selectedPeriod));
-  }, [dispatch, selectedPeriod]);
+    dispatch(fetchOrderStats(filter));
+  }, [dispatch, filter]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -79,15 +78,6 @@ const OrderTracking = () => {
             </p>
           </div>
         </div>
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
-        >
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-        </select>
       </div>
 
       <div className="h-[300px]">
@@ -130,14 +120,14 @@ const OrderTracking = () => {
               dataKey="orders"
               fill="url(#orderGradientDashboard)"
               radius={[8, 8, 0, 0]}
-              maxBarSize={selectedPeriod === 'month' ? 18 : 28}
+              maxBarSize={filter?.period === 'month' ? 18 : 28}
             />
             <Bar
               yAxisId="right"
               dataKey="revenue"
               fill="url(#orderRevenueGradient)"
               radius={[8, 8, 0, 0]}
-              maxBarSize={selectedPeriod === 'month' ? 18 : 28}
+              maxBarSize={filter?.period === 'month' ? 18 : 28}
             />
           </BarChart>
         </ResponsiveContainer>

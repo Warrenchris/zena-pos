@@ -29,8 +29,26 @@ import { formatCurrency, formatDate } from '../utils/formatters';
 import { fetchSalesStatistics, fetchSales } from '../store/slices/salesSlice';
 import { fetchCustomers } from '../store/slices/customersSlice';
 import { fetchProducts } from '../store/slices/productsSlice';
-import api from '../services/api';
+import api, { employeesAPI } from '../services/api';
 import { notifyLowStock } from '../utils/notifications';
+import DateRangePicker from '../components/DateRangePicker';
+
+function QuickFilter({ label, value, current, setCurrent }) {
+  const isActive = current === value;
+  return (
+    <button
+      type="button"
+      onClick={() => setCurrent(value)}
+      className={`px-3 py-1.5 rounded-lg text-caption font-semibold transition-colors ${
+        isActive
+          ? 'bg-primary/20 text-primary border border-primary/30'
+          : 'text-text-muted hover:text-text-primary hover:bg-surface-2'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
 
 export default function Dashboard() {
   const dispatch = useDispatch();
@@ -43,6 +61,42 @@ export default function Dashboard() {
   const userId = user?.id;
   const userRole = user?.role;
   const userShopId = user?.shopId || user?.shop?.id;
+
+  const formatLocalDate = (d) => {
+    if (!d) return '';
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [period, setPeriod] = useState('week');
+  const [startDate, setStartDate] = useState(() => formatLocalDate(new Date()));
+  const [endDate, setEndDate] = useState(() => formatLocalDate(new Date()));
+  const [employeeId, setEmployeeId] = useState('');
+  const [employees, setEmployees] = useState([]);
+
+  useEffect(() => {
+    const loadEmployees = async () => {
+      try {
+        const res = await employeesAPI.getAll();
+        setEmployees(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error('Failed to load employees for dashboard filter:', err);
+      }
+    };
+    if (userRole === 'admin') {
+      loadEmployees();
+    }
+  }, [userRole]);
+
+  const dashboardFilter = React.useMemo(() => ({
+    period,
+    employeeId: employeeId || undefined,
+    startDate: period === 'custom' ? startDate : undefined,
+    endDate: period === 'custom' ? endDate : undefined
+  }), [period, employeeId, startDate, endDate]);
 
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(true);
@@ -287,6 +341,47 @@ export default function Dashboard() {
         </p>
       </Card>
 
+      {/* Dashboard Filter Bar */}
+      <Card variant="default" className="p-4 !overflow-visible">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default">
+            <QuickFilter label="Today" value="today" current={period} setCurrent={setPeriod} />
+            <QuickFilter label="This Week" value="week" current={period} setCurrent={setPeriod} />
+            <QuickFilter label="Month" value="month" current={period} setCurrent={setPeriod} />
+            <QuickFilter label="Year" value="year" current={period} setCurrent={setPeriod} />
+            <QuickFilter label="Custom" value="custom" current={period} setCurrent={setPeriod} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {period === 'custom' && (
+              <DateRangePicker
+                startDate={startDate}
+                endDate={endDate}
+                onChange={([start, end]) => {
+                  if (start) {
+                    setStartDate(formatLocalDate(start));
+                    setEndDate(formatLocalDate(end || start));
+                  }
+                }}
+              />
+            )}
+
+            <select
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              className="h-10 rounded-xl border border-border-default px-3 bg-surface text-text-primary text-small focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="">All Employees</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {`${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || emp.email || emp.id}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
+
       {/* Loading & error states for the whole dashboard */}
       {isLoading && (
         <Card variant="default" className="p-6">
@@ -308,25 +403,25 @@ export default function Dashboard() {
       )}
 
       {/* Enhanced Stats Grid */}
-      <StatsGrid />
+      <StatsGrid filter={dashboardFilter} />
 
       {/* Revenue and Visitors Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Suspense fallback={<Card variant="default" className="h-[400px] flex items-center justify-center"><Spinner size="lg" label="Loading revenue chart..." /></Card>}>
-          <RevenueChart />
+          <RevenueChart filter={dashboardFilter} />
         </Suspense>
         <Suspense fallback={<Card variant="default" className="h-[400px] flex items-center justify-center"><Spinner size="lg" label="Loading visitor graph..." /></Card>}>
-          <VisitorGraph />
+          <VisitorGraph filter={dashboardFilter} />
         </Suspense>
       </div>
 
       {/* Orders and Platform Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Suspense fallback={<Card variant="default" className="h-[400px] flex items-center justify-center"><Spinner size="lg" label="Loading order tracking..." /></Card>}>
-          <OrderTracking />
+          <OrderTracking filter={dashboardFilter} />
         </Suspense>
         <Suspense fallback={<Card variant="default" className="h-[400px] flex items-center justify-center"><Spinner size="lg" label="Loading selling platform..." /></Card>}>
-          <SellingPlatform />
+          <SellingPlatform filter={dashboardFilter} />
         </Suspense>
       </div>
 
@@ -334,12 +429,12 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
           <Suspense fallback={<Card variant="default" className="h-[400px] flex items-center justify-center"><Spinner size="lg" label="Loading audience location..." /></Card>}>
-            <LocationAudience />
+            <LocationAudience filter={dashboardFilter} />
           </Suspense>
         </div>
         <div className="lg:col-span-2">
           <Suspense fallback={<Card variant="default" className="h-[400px] flex items-center justify-center"><Spinner size="lg" label="Loading top products..." /></Card>}>
-            <TopSellingProducts />
+            <TopSellingProducts filter={dashboardFilter} />
           </Suspense>
         </div>
       </div>

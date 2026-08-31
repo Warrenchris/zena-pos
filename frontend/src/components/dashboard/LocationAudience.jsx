@@ -24,16 +24,15 @@ const COUNTRY_CODES = {
   Zambia: 'ZM'
 };
 
-const LocationAudience = () => {
+const LocationAudience = ({ filter = { period: 'week' } }) => {
   const dispatch = useDispatch();
   const { format } = useCurrency();
   const { locations, totalCustomers, percentageChange, loading, error } =
     useSelector((state) => state.analytics.customerLocations);
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
 
   useEffect(() => {
-    dispatch(fetchCustomerLocations(selectedPeriod));
-  }, [dispatch, selectedPeriod]);
+    dispatch(fetchCustomerLocations(filter));
+  }, [dispatch, filter]);
 
   const parseAddress = (addressStr) => {
     if (!addressStr || addressStr === 'Unknown') {
@@ -159,15 +158,6 @@ const LocationAudience = () => {
             </span>
           </div>
         </div>
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
-        >
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-        </select>
       </div>
 
       <div className="space-y-3">

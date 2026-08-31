@@ -4,16 +4,15 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { fetchSalesChannels } from '../../store/slices/analyticsSlice';
 import useCurrency from '../../hooks/useCurrency';
 
-const SellingPlatform = () => {
+const SellingPlatform = ({ filter = { period: 'week' } }) => {
   const dispatch = useDispatch();
   const { format } = useCurrency();
   const { platforms, totalSales, totalRevenue, salesPercentageChange, loading, error } =
     useSelector((state) => state.analytics.salesChannels);
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
 
   useEffect(() => {
-    dispatch(fetchSalesChannels(selectedPeriod));
-  }, [dispatch, selectedPeriod]);
+    dispatch(fetchSalesChannels(filter));
+  }, [dispatch, filter]);
 
   const COLORS = ['#3b82f6', '#22d3ee', '#a855f7', '#f97316', '#34d399'];
 
@@ -65,15 +64,6 @@ const SellingPlatform = () => {
             </span>
           </div>
         </div>
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
-        >
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-        </select>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

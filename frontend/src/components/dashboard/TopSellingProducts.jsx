@@ -4,18 +4,17 @@ import { HiSortAscending, HiSortDescending } from 'react-icons/hi';
 import { fetchTopProducts } from '../../store/slices/analyticsSlice';
 import useCurrency from '../../hooks/useCurrency';
 
-const TopSellingProducts = () => {
+const TopSellingProducts = ({ filter = { period: 'week' } }) => {
   const dispatch = useDispatch();
   const { format } = useCurrency();
   const { products, salesPercentageChange, totalSales, loading, error } =
     useSelector((state) => state.analytics.topProducts);
   const [sortField, setSortField] = useState('quantity');
   const [sortDirection, setSortDirection] = useState('desc');
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
 
   useEffect(() => {
-    dispatch(fetchTopProducts({ period: selectedPeriod, limit: 5 }));
-  }, [dispatch, selectedPeriod]);
+    dispatch(fetchTopProducts({ limit: 5, ...filter }));
+  }, [dispatch, filter]);
 
   const sortedProducts = [...(products || [])].sort((a, b) => {
     const multiplier = sortDirection === 'asc' ? 1 : -1;
@@ -69,15 +68,6 @@ const TopSellingProducts = () => {
             <h2 className="text-h3 font-semibold text-text-primary tracking-tight">Top Selling Products</h2>
             <div className="text-caption text-text-muted">No sales data available</div>
           </div>
-          <select
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
-          >
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
-          </select>
         </div>
         <div className="flex h-[300px] items-center justify-center text-center text-text-muted">
           <div>
@@ -101,15 +91,6 @@ const TopSellingProducts = () => {
             </span>
           </div>
         </div>
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-lg border border-border-default bg-surface-0 px-3 py-1.5 text-caption font-medium text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors duration-150"
-        >
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-        </select>
       </div>
 
       <table className="min-w-full divide-y divide-border-default/70">

@@ -81,7 +81,7 @@ exports.getSalesSummary = async (req, res) => {
       where,
       attributes: [
         [sequelize.fn('COUNT', sequelize.col('id')), 'totalSales'],
-        [sequelize.fn('SUM', sequelize.col('total')), 'totalRevenue'],
+        [sequelize.literal(`SUM(total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`), 'totalRevenue'],
         [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('customerId'))), 'activeCustomers']
       ]
     });
@@ -96,7 +96,7 @@ exports.getSalesSummary = async (req, res) => {
           attributes: [
             [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), fmt), 'hour'],
             [sequelize.fn('COUNT', sequelize.col('id')), 'sales'],
-            [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+            [sequelize.literal(`SUM(total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`), 'revenue'],
             [sequelize.fn('SUM', sequelize.col('tax')), 'tax'],
             [sequelize.fn('SUM', sequelize.col('discount')), 'discount'],
           ],
@@ -167,7 +167,7 @@ exports.getSalesSummary = async (req, res) => {
         attributes: [
           [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), fmt), 'period'],
           [sequelize.fn('COUNT', sequelize.col('id')), 'sales'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+          [sequelize.literal(`SUM(total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`), 'revenue'],
           [sequelize.fn('SUM', sequelize.col('tax')), 'tax'],
           [sequelize.fn('SUM', sequelize.col('discount')), 'discount'],
         ],
@@ -185,7 +185,7 @@ exports.getSalesSummary = async (req, res) => {
         attributes: [
           'paymentMethod',
           [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'total']
+          [sequelize.literal(`SUM(total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`), 'total']
         ],
         group: ['paymentMethod'],
       })
@@ -400,8 +400,8 @@ exports.getEmployeeSales = async (req, res) => {
       attributes: [
         [sequelize.literal('COALESCE(CAST(userId AS CHAR), employeeId)'), 'performerId'],
         [sequelize.fn('COUNT', sequelize.col('Sale.id')), 'totalSales'],
-        [sequelize.fn('SUM', sequelize.col('total')), 'totalRevenue'],
-        [sequelize.fn('AVG', sequelize.col('total')), 'averageSaleValue']
+        [sequelize.literal(`SUM(total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`), 'totalRevenue'],
+        [sequelize.literal(`AVG(total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`), 'averageSaleValue']
       ],
       group: [sequelize.literal('COALESCE(CAST(userId AS CHAR), employeeId)')],
       order: [[sequelize.literal('totalRevenue'), 'DESC']],

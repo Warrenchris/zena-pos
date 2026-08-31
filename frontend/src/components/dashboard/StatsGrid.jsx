@@ -46,25 +46,45 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
   );
 };
 
-const StatsGrid = () => {
+const StatsGrid = ({ filter = { period: 'week' } }) => {
   const { format } = useCurrency();
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Dynamic comparison label based on period
+  const getTrendLabel = (period) => {
+    switch (period) {
+      case 'today':
+        return 'vs yesterday';
+      case 'week':
+        return 'vs last week';
+      case 'month':
+        return 'vs last month';
+      case 'year':
+        return 'vs last year';
+      case 'custom':
+      default:
+        return 'vs prior period';
+    }
+  };
+
   useEffect(() => {
     const loadStats = async () => {
       try {
+        setLoading(true);
         const [orderStats, visitorStats] = await Promise.all([
-          analyticsService.getOrderStats('month'),
-          analyticsService.getVisitorStats('month')
+          analyticsService.getOrderStats(filter),
+          analyticsService.getVisitorStats(filter)
         ]);
+
+        const trendLabel = getTrendLabel(filter.period);
 
         const formattedStats = [
           {
             title: 'Total Revenue',
             value: format(orderStats?.totalRevenue || 0),
             percentage: orderStats?.revenuePercentageChange || 0,
-            trend: 'Compared to last month',
+            trend: trendLabel,
             data: (orderStats?.orderData || []).map(h => ({
               name: h.date,
               value: parseFloat(h?.revenue || 0)
@@ -75,7 +95,7 @@ const StatsGrid = () => {
             title: 'Total Orders',
             value: (orderStats?.totalOrders || 0).toLocaleString(),
             percentage: orderStats?.orderPercentageChange || 0,
-            trend: 'Compared to last month',
+            trend: trendLabel,
             data: (orderStats?.orderData || []).map(h => ({
               name: h.date,
               value: parseInt(h?.orders || 0)
@@ -86,7 +106,7 @@ const StatsGrid = () => {
             title: 'Total Visitors',
             value: (visitorStats?.totalVisitors || 0).toLocaleString(),
             percentage: visitorStats?.percentageChange || 0,
-            trend: 'Compared to last month',
+            trend: trendLabel,
             data: (visitorStats?.visitorData || []).map(h => ({
               name: h.date,
               value: parseInt(h?.visitors || 0)
@@ -99,7 +119,7 @@ const StatsGrid = () => {
               ? `${((orderStats.totalOrders / visitorStats.totalVisitors) * 100).toFixed(1)}%`
               : '0.0%',
             percentage: visitorStats?.percentageChange || 0,
-            trend: 'Compared to last month',
+            trend: trendLabel,
             data: (visitorStats?.visitorData || []).map(h => ({ value: h?.visitors || 0 })),
             color: '#8B5CF6'
           }
@@ -120,7 +140,7 @@ const StatsGrid = () => {
     };
 
     loadStats();
-  }, [format]);
+  }, [format, filter]);
 
   if (loading) {
     return (

@@ -4,25 +4,82 @@ const sequelize = require('../config/database');
 const { getCachedAnalytics, setCachedAnalytics } = require('../utils/analyticsCache');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
-// Helper function to calculate start date
-function calculateStartDate(now, period) {
-  switch (period) {
-    case 'month':
-      return new Date(now.getFullYear(), now.getMonth(), 1);
-    case 'year':
-      return new Date(now.getFullYear(), 0, 1);
-    case 'week':
-    default:
-      const startDate = new Date(now);
-      startDate.setDate(now.getDate() - 7);
-      return startDate;
+// Helper function to calculate start and end dates with previous period comparison
+function resolveDateRange(period, startDateParam, endDateParam) {
+  const now = new Date();
+  let startDate;
+  let endDate = new Date(now);
+  let previousStartDate;
+  let previousEndDate;
+
+  if (period === 'today') {
+    // Africa/Nairobi day boundary
+    startDate = new Date(now);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+
+    previousStartDate = new Date(startDate);
+    previousStartDate.setDate(previousStartDate.getDate() - 1);
+    previousStartDate.setHours(0, 0, 0, 0);
+
+    previousEndDate = new Date(startDate);
+    previousEndDate.setMilliseconds(-1);
+  } else if (period === 'custom' && (startDateParam || endDateParam)) {
+    startDate = startDateParam ? new Date(startDateParam) : new Date(now);
+    if (startDateParam) startDate.setHours(0, 0, 0, 0);
+
+    endDate = endDateParam ? new Date(endDateParam) : new Date(startDate);
+    if (endDateParam) endDate.setHours(23, 59, 59, 999);
+
+    const duration = endDate.getTime() - startDate.getTime();
+    previousStartDate = new Date(startDate.getTime() - duration - 1);
+    previousEndDate = new Date(startDate.getTime() - 1);
+  } else if (period === 'month') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = now;
+
+    previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
+    previousEndDate = startDate;
+  } else if (period === 'year') {
+    startDate = new Date(now.getFullYear(), 0, 1);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = now;
+
+    previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
+    previousEndDate = startDate;
+  } else if (period === 'week') {
+    // Current calendar week (Monday to today) - matches Reports "This Week"
+    const day = now.getDay() || 7;
+    startDate = new Date(now);
+    startDate.setDate(now.getDate() - day + 1);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = now;
+
+    previousStartDate = new Date(startDate);
+    previousStartDate.setDate(previousStartDate.getDate() - 7);
+    previousStartDate.setHours(0, 0, 0, 0);
+
+    previousEndDate = new Date(startDate);
+    previousEndDate.setMilliseconds(-1);
+  } else {
+    // Default fallback
+    startDate = new Date(now);
+    startDate.setDate(now.getDate() - 7);
+    endDate = now;
+
+    previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
+    previousEndDate = startDate;
   }
+
+  return { startDate, endDate, previousStartDate, previousEndDate };
 }
 
 // Helper function to calculate growth
 function calculateGrowth(currentTotal, previousTotal) {
   return previousTotal === 0 
-    ? 100 
+    ? (currentTotal > 0 ? 100 : 0) 
     : ((currentTotal - previousTotal) / previousTotal) * 100;
 }
 
@@ -30,31 +87,42 @@ const analyticsController = {
   // Get visitor statistics - OPTIMIZED with combined query and caching
   async getVisitors(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { period = 'week', employeeId, startDate: qStart, endDate: qEnd } = req.query;
       const shopId = req.user.shopId;
 
+      const cacheParams = { period, employeeId, startDate: qStart, endDate: qEnd };
       // Check cache first
-      const cached = getCachedAnalytics(shopId, 'visitors', { period });
+      const cached = getCachedAnalytics(shopId, 'visitors', cacheParams);
       if (cached) {
         return res.json(cached);
       }
 
-      const now = new Date();
-      const startDate = calculateStartDate(now, period);
-      const previousStartDate = new Date(startDate.getTime() - (now - startDate));
+      const { startDate, endDate, previousStartDate } = resolveDateRange(period, qStart, qEnd);
+
+      const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;
+      const empCondition = employeeId ? (isUuid ? ' AND employeeId = ?' : ' AND userId = ?') : '';
+
+      const replacements = [
+        startDate, endDate,
+        previousStartDate, startDate,
+        shopId, previousStartDate, endDate
+      ];
+      if (employeeId) {
+        replacements.push(isUuid ? employeeId : parseInt(employeeId, 10));
+      }
 
       // Combined query for current and previous periods
-        const results = await sequelize.query(`
+      const results = await sequelize.query(`
         SELECT 
           DATE(createdAt) as date,
           COUNT(CASE WHEN createdAt >= ? AND createdAt <= ? THEN 1 END) as current_visitors,
           COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_visitors
         FROM Sales
-        WHERE shopId = ? AND createdAt >= ? AND saleStatus != 'cancelled'
+        WHERE shopId = ? AND createdAt >= ? AND createdAt <= ? AND saleStatus != 'cancelled'${empCondition}
         GROUP BY DATE(createdAt)
         ORDER BY DATE(createdAt) ASC
       `, {
-        replacements: [startDate, now, previousStartDate, startDate, shopId, previousStartDate],
+        replacements,
         type: sequelize.QueryTypes.SELECT
       });
 
@@ -76,7 +144,7 @@ const analyticsController = {
       };
 
       // Cache the result
-      setCachedAnalytics(shopId, 'visitors', { period }, response);
+      setCachedAnalytics(shopId, 'visitors', cacheParams, response);
       
       res.json(response);
     } catch (error) {
@@ -91,21 +159,32 @@ const analyticsController = {
   // Get order tracking statistics - OPTIMIZED with combined query and caching
   async getOrderTracking(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { period = 'week', employeeId, startDate: qStart, endDate: qEnd } = req.query;
       const shopId = req.user.shopId;
 
+      const cacheParams = { period, employeeId, startDate: qStart, endDate: qEnd };
       // Check cache first
-      const cached = getCachedAnalytics(shopId, 'orderTracking', { period });
+      const cached = getCachedAnalytics(shopId, 'orderTracking', cacheParams);
       if (cached) {
         return res.json(cached);
       }
 
-      const now = new Date();
-      const startDate = calculateStartDate(now, period);
-      const previousStartDate = new Date(startDate.getTime() - (now - startDate));
+      const { startDate, endDate, previousStartDate } = resolveDateRange(period, qStart, qEnd);
+
+      const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;
+      const empCondition = employeeId ? (isUuid ? ' AND s.employeeId = ?' : ' AND s.userId = ?') : '';
+
+      const replacements = [
+        startDate, endDate, startDate, endDate,
+        previousStartDate, startDate, previousStartDate, startDate,
+        shopId, previousStartDate, endDate
+      ];
+      if (employeeId) {
+        replacements.push(isUuid ? employeeId : parseInt(employeeId, 10));
+      }
 
       // Combined query for both current and previous periods
-        const results = await sequelize.query(`
+      const results = await sequelize.query(`
         SELECT 
           DATE(s.createdAt) as date,
           HOUR(s.createdAt) as hour,
@@ -114,15 +193,11 @@ const analyticsController = {
           COUNT(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN 1 END) as previous_count,
           SUM(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN (s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as previous_revenue
         FROM Sales s
-        WHERE s.shopId = ? AND s.createdAt >= ? AND s.saleStatus != 'cancelled'
+        WHERE s.shopId = ? AND s.createdAt >= ? AND s.createdAt <= ? AND s.saleStatus != 'cancelled'${empCondition}
         GROUP BY DATE(s.createdAt), HOUR(s.createdAt)
         ORDER BY DATE(s.createdAt), HOUR(s.createdAt)
       `, {
-        replacements: [
-          startDate, now, startDate, now,
-          previousStartDate, startDate, previousStartDate, startDate,
-          shopId, previousStartDate
-        ],
+        replacements,
         type: sequelize.QueryTypes.SELECT
       });
 
@@ -163,7 +238,7 @@ const analyticsController = {
       };
 
       // Cache the result
-      setCachedAnalytics(shopId, 'orderTracking', { period }, response);
+      setCachedAnalytics(shopId, 'orderTracking', cacheParams, response);
       
       res.json(response);
     } catch (error) {
@@ -178,13 +253,25 @@ const analyticsController = {
   // Get top selling products
   async getTopProducts(req, res) {
     try {
-      const { period = 'week', limit = 5 } = req.query;
+      const { period = 'week', limit = 5, employeeId, startDate: qStart, endDate: qEnd } = req.query;
       const shopId = req.user.shopId;
-      const now = new Date();
-      const startDate = calculateStartDate(now, period);
+      const { startDate, endDate, previousStartDate } = resolveDateRange(period, qStart, qEnd);
 
-      // Use raw SQL query for better control
-      // Note: For MySQL, table names are typically lowercase
+      const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;
+      let employeeCondition = '';
+      const replacements = { shopId, startDate, endDate, limit: parseInt(limit) };
+
+      if (employeeId) {
+        if (isUuid) {
+          employeeCondition = ' AND s.employeeId = :employeeId';
+          replacements.employeeId = employeeId;
+        } else {
+          employeeCondition = ' AND s.userId = :employeeId';
+          replacements.employeeId = parseInt(employeeId, 10);
+        }
+      }
+
+      // Use raw SQL query for top products
       const topProducts = await sequelize.query(`
         SELECT 
           p.id,
@@ -198,13 +285,14 @@ const analyticsController = {
         INNER JOIN Products p ON si.productId = p.id
         WHERE s.shopId = :shopId
           AND s.saleStatus != 'cancelled'
-          AND s.createdAt BETWEEN :startDate AND :now
+          AND s.createdAt BETWEEN :startDate AND :endDate
           AND p.shopId = :shopId
+          ${employeeCondition}
         GROUP BY p.id, p.name, p.price, p.sku
         ORDER BY revenue DESC
         LIMIT :limit
       `, {
-        replacements: { shopId, startDate, now, limit: parseInt(limit) },
+        replacements,
         type: sequelize.QueryTypes.SELECT
       });
 
@@ -214,7 +302,6 @@ const analyticsController = {
       );
 
       // Get previous period for comparison
-      const previousStartDate = new Date(startDate.getTime() - (now - startDate));
       const [previousProducts] = await sequelize.query(`
         SELECT SUM(si.quantity) as totalQuantity
         FROM SaleItems si
@@ -222,8 +309,9 @@ const analyticsController = {
         WHERE s.shopId = :shopId
           AND s.saleStatus != 'cancelled'
           AND s.createdAt BETWEEN :previousStartDate AND :startDate
+          ${employeeCondition}
       `, {
-        replacements: { shopId, previousStartDate, startDate },
+        replacements: { ...replacements, previousStartDate, startDate },
         type: sequelize.QueryTypes.SELECT
       });
 
@@ -258,17 +346,35 @@ const analyticsController = {
   // Get sales channels distribution
   async getSalesChannels(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { period = 'week', employeeId, startDate: qStart, endDate: qEnd } = req.query;
       const shopId = req.user.shopId;
-      const now = new Date();
-      const startDate = calculateStartDate(now, period);
+      const { startDate, endDate, previousStartDate } = resolveDateRange(period, qStart, qEnd);
+
+      const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;
+
+      const saleWhere = {
+        shopId,
+        ...NON_CANCELLED_SALE_FILTER,
+        createdAt: { [Op.between]: [startDate, endDate] }
+      };
+      const prevWhere = {
+        shopId,
+        ...NON_CANCELLED_SALE_FILTER,
+        createdAt: { [Op.between]: [previousStartDate, startDate] }
+      };
+
+      if (employeeId) {
+        if (isUuid) {
+          saleWhere.employeeId = employeeId;
+          prevWhere.employeeId = employeeId;
+        } else {
+          saleWhere.userId = parseInt(employeeId, 10);
+          prevWhere.userId = parseInt(employeeId, 10);
+        }
+      }
 
       const channels = await Sale.findAll({
-        where: {
-          shopId,
-          ...NON_CANCELLED_SALE_FILTER,
-          createdAt: { [Op.between]: [startDate, now] }
-        },
+        where: saleWhere,
         attributes: [
           'paymentMethod',
           [sequelize.fn('COUNT', sequelize.col('id')), 'totalSales'],
@@ -282,13 +388,8 @@ const analyticsController = {
       const totalRevenue = channels.reduce((sum, channel) => sum + parseFloat(channel.totalRevenue || 0), 0);
 
       // Get previous period for comparison
-      const previousStartDate = new Date(startDate.getTime() - (now - startDate));
       const previousChannels = await Sale.findAll({
-        where: {
-          shopId,
-          ...NON_CANCELLED_SALE_FILTER,
-          createdAt: { [Op.between]: [previousStartDate, startDate] }
-        },
+        where: prevWhere,
         attributes: [
           [sequelize.fn('COUNT', sequelize.col('id')), 'count']
         ],
@@ -321,17 +422,43 @@ const analyticsController = {
   // Get customer locations statistics
   async getCustomerLocations(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { period = 'week', employeeId, startDate: qStart, endDate: qEnd } = req.query;
       const shopId = req.user.shopId;
-      const now = new Date();
-      const startDate = calculateStartDate(now, period);
+      const { startDate, endDate, previousStartDate } = resolveDateRange(period, qStart, qEnd);
+
+      const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;
+
+      const customerWhere = {
+        shopId,
+        createdAt: { [Op.between]: [startDate, endDate] }
+      };
+
+      const prevCustomerWhere = {
+        shopId,
+        createdAt: { [Op.between]: [previousStartDate, startDate] }
+      };
+
+      // If employeeId is specified, restrict to customers linked to sales made by that employee
+      if (employeeId) {
+        const empFilter = isUuid ? { employeeId } : { userId: parseInt(employeeId, 10) };
+        const matchingCustomerIds = await Sale.findAll({
+          where: {
+            shopId,
+            ...NON_CANCELLED_SALE_FILTER,
+            ...empFilter,
+            customerId: { [Op.ne]: null }
+          },
+          attributes: [[sequelize.fn('DISTINCT', sequelize.col('customerId')), 'customerId']],
+          raw: true
+        });
+        const cIds = matchingCustomerIds.map(s => s.customerId).filter(Boolean);
+        customerWhere.id = { [Op.in]: cIds.length > 0 ? cIds : [-1] };
+        prevCustomerWhere.id = { [Op.in]: cIds.length > 0 ? cIds : [-1] };
+      }
 
       // Get customers grouped by location
       const customerLocations = await Customer.findAll({
-        where: {
-          shopId,
-          createdAt: { [Op.between]: [startDate, now] }
-        },
+        where: customerWhere,
         attributes: [
           'address',
           [sequelize.fn('COUNT', sequelize.col('id')), 'customerCount']
@@ -346,12 +473,8 @@ const analyticsController = {
       );
 
       // Get previous period
-      const previousStartDate = new Date(startDate.getTime() - (now - startDate));
       const previousCustomers = await Customer.count({
-        where: {
-          shopId,
-          createdAt: { [Op.between]: [previousStartDate, startDate] }
-        }
+        where: prevCustomerWhere
       });
 
       const percentageChange = calculateGrowth(totalCustomers, previousCustomers);
@@ -374,9 +497,9 @@ const analyticsController = {
       });
     } catch (error) {
       console.error('Error fetching customer locations:', error);
-      res.status(500).json({
+      res.status(500).json({ 
         error: 'Failed to fetch customer locations',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined 
       });
     }
   }
