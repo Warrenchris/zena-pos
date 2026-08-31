@@ -80,10 +80,24 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
     }));
   }
 
+  const calculatedItemsGross = saleItems.reduce((sum, item) => {
+    const unitPrice = parseFloat(item.price || item.unitPrice || item.priceAtSale || (item.Product && item.Product.price) || 0);
+    const quantity = parseInt(item.quantity || 0);
+    return sum + (unitPrice * quantity);
+  }, 0);
+
   const totalDiscount = parseFloat(sale.discount || 0);
   const tax = parseFloat(sale.tax || 0);
-  const subtotal = parseFloat(sale.subtotal || sale.totalAmount || 0);
   const total = parseFloat(sale.total || sale.totalAmount || 0);
+
+  // Derive accurate Gross Subtotal
+  const rawSubtotal = parseFloat(sale.subtotal || 0);
+  const subtotal = calculatedItemsGross > 0
+    ? calculatedItemsGross
+    : (rawSubtotal > 0 && Math.abs(rawSubtotal - total) > 0.01 ? rawSubtotal : (total + totalDiscount - tax));
+
+  // Determine effective total discount (from sale.discount or implicit difference)
+  const effectiveDiscount = totalDiscount > 0 ? totalDiscount : Math.max(0, subtotal - (total - tax));
 
   const calculateTotalRefund = () => {
     return saleItems.reduce((sum, item) => {
@@ -125,14 +139,32 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
     }
   };
 
+  const modalFooter = (
+    <div className="flex gap-3 justify-end w-full">
+      {hasPermission('process_refunds') && sale.status?.toUpperCase() !== 'REFUNDED' && (
+        <Button variant="danger" size="md" leftIcon={ArrowUturnLeftIcon} onClick={() => setShowRefundModal(true)}>
+          Process Refund
+        </Button>
+      )}
+      <Button variant="outline" size="md" leftIcon={PrinterIcon} onClick={handlePrint}>
+        Print Receipt
+      </Button>
+      <Button variant="primary" size="md" onClick={onClose}>
+        Close
+      </Button>
+    </div>
+  );
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={`Sale #${sale.invoiceNumber || sale.id}`}
       description={sale.createdAt ? formatDateTime(sale.createdAt) : ''}
+      size="lg"
+      footer={modalFooter}
     >
-      <div className="space-y-6">
+      <div className="max-h-[calc(85vh-12rem)] overflow-y-auto pr-1.5 space-y-5 scrollbar-thin">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Sale Info */}
           <div className="p-4 rounded-xl border border-border-default bg-surface-2/30 space-y-3">
@@ -209,12 +241,23 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
                   const productName = product?.name || item.name || 'Product';
                   const unitPrice = parseFloat(item.price || item.unitPrice || item.priceAtSale || 0);
                   const quantity = parseInt(item.quantity || 0);
+                  const itemDiscount = parseFloat(item.discount || 0);
+                  const lineTotal = (unitPrice * quantity) - itemDiscount;
                   return (
                     <tr key={index} className="hover:bg-surface-2/40 transition-colors">
-                      <td className="p-3 font-semibold text-text-primary">{productName}</td>
+                      <td className="p-3 font-semibold text-text-primary">
+                        <div>{productName}</div>
+                        {itemDiscount > 0 && (
+                          <div className="text-[11px] font-semibold text-success mt-0.5">
+                            🏷️ -{formatCurrency(itemDiscount)} discount applied
+                          </div>
+                        )}
+                      </td>
                       <td className="p-3 text-center text-text-secondary">{quantity}</td>
                       <td className="p-3 text-right text-text-secondary">{formatCurrency(unitPrice)}</td>
-                      <td className="p-3 text-right font-bold text-primary">{formatCurrency(unitPrice * quantity)}</td>
+                      <td className="p-3 text-right font-bold text-primary">
+                        {formatCurrency(lineTotal > 0 ? lineTotal : unitPrice * quantity)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -244,22 +287,24 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
           {subtotal > 0 && (
             <div className="flex justify-between text-text-secondary">
               <span>Subtotal</span>
-              <span>{formatCurrency(subtotal)}</span>
+              <span className="font-semibold text-text-primary">{formatCurrency(subtotal)}</span>
             </div>
           )}
-          {totalDiscount > 0 && (
-            <div className="flex justify-between text-danger font-medium">
-              <span>Discount</span>
-              <span>-{formatCurrency(totalDiscount)}</span>
+          {effectiveDiscount > 0 && (
+            <div className="flex justify-between text-success font-semibold">
+              <span>
+                Discount {sale.discountType === 'percentage' && sale.discountValue ? `(${sale.discountValue}%)` : (sale.discount ? `(${formatCurrency(sale.discount)})` : '')}
+              </span>
+              <span>-{formatCurrency(effectiveDiscount)}</span>
             </div>
           )}
-          {totalDiscount > 0 && (sale.metadata?.discountReason || sale.metadata?.discountApprovedBy) && (
+          {effectiveDiscount > 0 && (sale.metadata?.discountReason || sale.metadata?.discountApprovedBy || sale.discountReason || sale.discountApprovedBy) && (
             <div className="text-caption text-text-muted pl-1 -mt-1 space-y-0.5">
-              {sale.metadata?.discountReason && (
-                <div>Reason: <span className="text-text-secondary">{sale.metadata.discountReason}</span></div>
+              {(sale.metadata?.discountReason || sale.discountReason) && (
+                <div>Reason: <span className="text-text-secondary">{sale.metadata?.discountReason || sale.discountReason}</span></div>
               )}
-              {sale.metadata?.discountApprovedBy && (
-                <div>Approved by: <span className="text-text-secondary">{sale.metadata.discountApprovedBy}</span></div>
+              {(sale.metadata?.discountApprovedBy || sale.discountApprovedBy) && (
+                <div>Approved by: <span className="text-text-secondary">{sale.metadata?.discountApprovedBy || sale.discountApprovedBy}</span></div>
               )}
             </div>
           )}
@@ -271,7 +316,7 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
           )}
           <div className="flex justify-between text-body font-bold text-text-primary pt-2 border-t border-border-default">
             <span>Grand Total</span>
-            <span className="text-primary">{formatCurrency(total)}</span>
+            <span className="text-primary text-h3 font-bold">{formatCurrency(total)}</span>
           </div>
         </div>
 
@@ -281,21 +326,6 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
             {settings.receiptFooter}
           </div>
         )}
-
-        {/* Modal Actions */}
-        <div className="flex gap-3 justify-end pt-4 border-t border-border-default">
-          {hasPermission('process_refunds') && sale.status?.toUpperCase() !== 'REFUNDED' && (
-            <Button variant="danger" size="md" leftIcon={ArrowUturnLeftIcon} onClick={() => setShowRefundModal(true)}>
-              Process Refund
-            </Button>
-          )}
-          <Button variant="outline" size="md" leftIcon={PrinterIcon} onClick={handlePrint}>
-            Print Receipt
-          </Button>
-          <Button variant="primary" size="md" onClick={onClose}>
-            Close
-          </Button>
-        </div>
       </div>
     </Modal>
   );

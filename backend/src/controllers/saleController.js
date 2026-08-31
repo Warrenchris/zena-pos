@@ -1006,13 +1006,25 @@ exports.getMySales = async (req, res) => {
           email: sale.Customer.email,
           phone: sale.Customer.phone
         } : null,
+        Customer: sale.Customer,
         products,
+        SaleItems: saleItems,
         items: saleItems.length > 0 ? itemsText : '0 items',
         itemCount: `${saleItems.length} items`,
+        subtotal: parseFloat(sale.subtotal ?? (products.reduce((acc, p) => acc + (p.priceAtSale * p.quantity), 0))),
+        discount: parseFloat(sale.discount ?? 0),
+        discountType: sale.discountType || null,
+        discountValue: sale.discountValue ? parseFloat(sale.discountValue) : null,
+        tax: parseFloat(sale.tax ?? 0),
+        taxRate: parseFloat(sale.taxRate ?? 0),
         totalAmount: parseFloat(sale.total ?? 0),
         total: parseFloat(sale.total ?? 0),
+        paymentAmount: sale.paymentAmount ? parseFloat(sale.paymentAmount) : null,
+        change: sale.change ? parseFloat(sale.change) : null,
         paymentMethod: (sale.paymentMethod || 'cash').toUpperCase(),
-        status: (sale.saleStatus || 'completed').toUpperCase()
+        status: (sale.saleStatus || 'completed').toUpperCase(),
+        saleStatus: sale.saleStatus || 'completed',
+        metadata: sale.metadata || {}
       };
     });
 
