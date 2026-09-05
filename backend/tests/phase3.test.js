@@ -48,17 +48,22 @@ describe('Phase 3 Remediation Tests', () => {
   const cashierToken = tokenFor({ id: '550e8400-e29b-41d4-a716-446655440000', role: 'cashier', shopId: 1, isEmployee: true });
 
   const cleanDb = async () => {
-    await ActivityLog.destroy({ where: {} });
-    await HeldCart.destroy({ where: {} });
-    await SaleRefund.destroy({ where: {} });
-    await SaleItem.destroy({ where: {} });
-    await SalePayment.destroy({ where: {} });
-    await Sale.destroy({ where: {} });
-    await Customer.destroy({ where: {} });
-    await Product.destroy({ where: {} });
-    await Category.destroy({ where: {} });
-    await User.destroy({ where: { [Op.or]: [{ id: 101 }, { id: 102 }, { email: 'admin@example.com' }] } });
-    await Employee.destroy({ where: { [Op.or]: [{ id: '550e8400-e29b-41d4-a716-446655440000' }, { email: 'cashier@example.com' }] } });
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+    try {
+      await ActivityLog.destroy({ where: {} });
+      await HeldCart.destroy({ where: {} });
+      await SaleRefund.destroy({ where: {} });
+      await SaleItem.destroy({ where: {} });
+      await SalePayment.destroy({ where: {} });
+      await Sale.destroy({ where: {} });
+      await Customer.destroy({ where: {} });
+      await Product.destroy({ where: {} });
+      await Category.destroy({ where: {} });
+      await User.destroy({ where: { [Op.or]: [{ id: 101 }, { id: 102 }, { email: 'admin@example.com' }] } });
+      await Employee.destroy({ where: { [Op.or]: [{ id: '550e8400-e29b-41d4-a716-446655440000' }, { email: 'cashier@example.com' }] } });
+    } finally {
+      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
+    }
   };
 
   beforeAll(async () => {

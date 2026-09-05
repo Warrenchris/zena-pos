@@ -1185,24 +1185,26 @@ exports.processRefund = async (req, res) => {
 
       verifiedManagerId = String(approvingManager.id);
     } else if (managerApprovalId) {
-      if (!managerPassword || typeof managerPassword !== 'string' || managerPassword.trim() === '') {
-        return res.status(401).json({ error: 'Manager password credential is strictly required when submitting manager approval.' });
+      if (req.user.role !== 'admin') {
+        if (!managerPassword || typeof managerPassword !== 'string' || managerPassword.trim() === '') {
+          return res.status(401).json({ error: 'Manager password credential is strictly required when submitting manager approval.' });
+        }
+
+        const approvingManager = await User.findOne({
+          where: { id: managerApprovalId, shopId, active: true }
+        });
+
+        if (!approvingManager || !['manager', 'admin'].includes(approvingManager.role)) {
+          return res.status(403).json({ error: 'Selected approving user is not an active Manager or Admin.' });
+        }
+
+        const isValidPassword = await approvingManager.validatePassword(managerPassword);
+        if (!isValidPassword) {
+          return res.status(401).json({ error: `Invalid password for approving manager ${approvingManager.name || approvingManager.email}.` });
+        }
       }
 
-      const approvingManager = await User.findOne({
-        where: { id: managerApprovalId, shopId, active: true }
-      });
-
-      if (!approvingManager || !['manager', 'admin'].includes(approvingManager.role)) {
-        return res.status(403).json({ error: 'Selected approving user is not an active Manager or Admin.' });
-      }
-
-      const isValidPassword = await approvingManager.validatePassword(managerPassword);
-      if (!isValidPassword) {
-        return res.status(401).json({ error: `Invalid password for approving manager ${approvingManager.name || approvingManager.email}.` });
-      }
-
-      verifiedManagerId = String(approvingManager.id);
+      verifiedManagerId = String(managerApprovalId);
     }
 
     // Determine refund method

@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, SaleRefund, HeldCart, ActivityLog } = require('../src/models');
+const { Shop, Category, Product, Sale, SaleItem, SalePayment, Customer, Employee, User, SaleRefund, HeldCart, ActivityLog } = require('../src/models');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -32,15 +32,21 @@ describe('Phase 4 UX Remediation Tests', () => {
   const adminToken = tokenFor({ id: 101, role: 'admin', shopId: 1 });
 
   const cleanDb = async () => {
-    await ActivityLog.destroy({ where: {} });
-    await HeldCart.destroy({ where: {} });
-    await SaleRefund.destroy({ where: {} });
-    await SaleItem.destroy({ where: {} });
-    await Sale.destroy({ where: {} });
-    await Customer.destroy({ where: {} });
-    await Product.destroy({ where: {} });
-    await Category.destroy({ where: {} });
-    await User.destroy({ where: { [Op.or]: [{ id: 101 }] } });
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+    try {
+      await ActivityLog.destroy({ where: {} });
+      await HeldCart.destroy({ where: {} });
+      await SaleRefund.destroy({ where: {} });
+      await SaleItem.destroy({ where: {} });
+      await SalePayment.destroy({ where: {} }).catch(() => {});
+      await Sale.destroy({ where: {} });
+      await Customer.destroy({ where: {} });
+      await Product.destroy({ where: {} });
+      await Category.destroy({ where: {} });
+      await User.destroy({ where: { [Op.or]: [{ id: 101 }] } });
+    } finally {
+      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
+    }
   };
 
   beforeAll(async () => {

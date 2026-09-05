@@ -15,17 +15,13 @@ module.exports = {
       defaultValue: 0.00
     }).catch(() => {});
 
-    // Update paymentMethod enum to include 'check'
+    // Ensure paymentMethod is VARCHAR(50) to support all payment types including split
     try {
-      const [results] = await queryInterface.sequelize.query(
-        "SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_NAME = 'Sales' AND COLUMN_NAME = 'paymentMethod'"
-      );
-      
-      if (!results[0].COLUMN_TYPE.includes('check')) {
-        await queryInterface.sequelize.query(
-          "ALTER TABLE `Sales` MODIFY COLUMN `paymentMethod` ENUM('cash', 'card', 'mobile', 'mobile_money', 'other', 'check') NOT NULL DEFAULT 'cash'"
-        );
-      }
+      await queryInterface.changeColumn('Sales', 'paymentMethod', {
+        type: Sequelize.STRING(50),
+        allowNull: false,
+        defaultValue: 'cash'
+      });
     } catch (error) {} // Ignore errors
 
     // Ensure shopId exists

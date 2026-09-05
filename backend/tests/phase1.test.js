@@ -33,14 +33,18 @@ describe('Phase 1 Remediation Integration Tests', () => {
   const cashierToken = tokenFor({ id: '550e8400-e29b-41d4-a716-446655440000', role: 'cashier', shopId: 1, isEmployee: true });
 
   const cleanDb = async () => {
-    // Delete in reverse order of foreign key dependencies
-    await ActivityLog.destroy({ where: { shopId: 1 } });
-    await SaleItem.destroy({ where: { shopId: 1 } });
-    await SalePayment.destroy({ where: { shopId: 1 } });
-    await Sale.destroy({ where: { shopId: 1 } });
-    await Product.destroy({ where: { shopId: 1 } });
-    await User.destroy({ where: { [Op.or]: [{ id: 101 }, { email: 'admin@example.com' }] } });
-    await Employee.destroy({ where: { [Op.or]: [{ id: '550e8400-e29b-41d4-a716-446655440000' }, { email: 'cashier@example.com' }] } });
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+    try {
+      await ActivityLog.destroy({ where: { shopId: 1 } });
+      await SaleItem.destroy({ where: { shopId: 1 } });
+      await SalePayment.destroy({ where: { shopId: 1 } });
+      await Sale.destroy({ where: { shopId: 1 } });
+      await Product.destroy({ where: { shopId: 1 } });
+      await User.destroy({ where: { [Op.or]: [{ id: 101 }, { email: 'admin@example.com' }] } });
+      await Employee.destroy({ where: { [Op.or]: [{ id: '550e8400-e29b-41d4-a716-446655440000' }, { email: 'cashier@example.com' }] } });
+    } finally {
+      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
+    }
   };
 
   beforeAll(async () => {

@@ -338,7 +338,7 @@ router.patch('/:id/payment-status',
 
 // POST /api/sales/:saleId/refund - Process itemized refund
 router.post('/:saleId/refund',
-  checkRole(['admin', 'manager', 'cashier']),
+  checkPermission('process_refunds'),
   saleController.processRefund
 );
 

@@ -5,7 +5,7 @@ const app = require('../src/app');
 const sequelize = require('../src/config/database');
 const {
   Shop, Category, Product, Sale, SaleItem, Customer,
-  Employee, User, PendingPayment, HeldCart, ActivityLog
+  Employee, User, PendingPayment, HeldCart, ActivityLog, SaleRefund
 } = require('../src/models');
 const SalePayment = require('../src/models/SalePayment');
 const axios = require('axios');
@@ -33,17 +33,23 @@ describe('MySQL + SalePayments Integration Tests', () => {
   const cashierToken = tokenFor({ id: '660e8400-e29b-41d4-a716-446655440000', role: 'cashier', shopId: 1, isEmployee: true });
 
   const cleanDb = async () => {
-    await SalePayment.destroy({ where: {} });
-    await PendingPayment.destroy({ where: {} });
-    await HeldCart.destroy({ where: { shopId: 1 } });
-    await ActivityLog.destroy({ where: { shopId: 1 } });
-    await SaleItem.destroy({ where: { shopId: 1 } });
-    await Sale.destroy({ where: { shopId: 1 } });
-    await Customer.destroy({ where: { shopId: 1 } });
-    await Product.destroy({ where: { shopId: 1 } });
-    await Category.destroy({ where: { shopId: 1 } });
-    await User.destroy({ where: { [Op.or]: [{ id: 201 }, { email: 'msadmin@example.com' }] } });
-    await Employee.destroy({ where: { [Op.or]: [{ id: '660e8400-e29b-41d4-a716-446655440000' }, { email: 'mscashier@example.com' }] } });
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+    try {
+      await SalePayment.destroy({ where: {} });
+      await PendingPayment.destroy({ where: {} });
+      await SaleRefund.destroy({ where: {} }).catch(() => {});
+      await HeldCart.destroy({ where: { shopId: 1 } });
+      await ActivityLog.destroy({ where: { shopId: 1 } });
+      await SaleItem.destroy({ where: { shopId: 1 } });
+      await Sale.destroy({ where: { shopId: 1 } });
+      await Customer.destroy({ where: { shopId: 1 } });
+      await Product.destroy({ where: { shopId: 1 } });
+      await Category.destroy({ where: { shopId: 1 } });
+      await User.destroy({ where: { [Op.or]: [{ id: 201 }, { email: 'msadmin@example.com' }] } });
+      await Employee.destroy({ where: { [Op.or]: [{ id: '660e8400-e29b-41d4-a716-446655440000' }, { email: 'mscashier@example.com' }] } });
+    } finally {
+      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
+    }
   };
 
   beforeAll(async () => {
