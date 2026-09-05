@@ -9,8 +9,11 @@ const PurchaseOrder = sequelize.define('PurchaseOrder', {
   },
   poNumber: {
     type: DataTypes.STRING,
-    allowNull: false,
-    unique: true
+    allowNull: false
+  },
+  supplierId: {
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   supplierName: {
     type: DataTypes.STRING,
@@ -53,7 +56,7 @@ const PurchaseOrder = sequelize.define('PurchaseOrder', {
   },
   shopId: {
     type: DataTypes.INTEGER,
-    allowNull: true
+    allowNull: false
   }
 }, {
   tableName: 'PurchaseOrders',

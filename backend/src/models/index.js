@@ -23,6 +23,10 @@ const Coupon = require('./Coupon');
 const DiscountRule = require('./DiscountRule');
 const Purchase = require('./Purchase');
 const PurchaseOrder = require('./PurchaseOrder');
+const Supplier = require('./Supplier');
+const StockMovement = require('./StockMovement');
+const PurchaseItem = require('./PurchaseItem');
+const PurchaseOrderItem = require('./PurchaseOrderItem');
 const Permission = require('./Permission');
 const RolePermission = require('./RolePermission');
 
@@ -107,6 +111,33 @@ Invoice.hasMany(InvoiceItem, { foreignKey: 'invoiceId', as: 'items' });
 InvoiceItem.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
 InvoiceItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 
+// Supplier associations
+Supplier.belongsTo(Shop, { foreignKey: 'shopId' });
+Shop.hasMany(Supplier, { foreignKey: 'shopId' });
+Purchase.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
+Supplier.hasMany(Purchase, { foreignKey: 'supplierId', as: 'purchases' });
+PurchaseOrder.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
+Supplier.hasMany(PurchaseOrder, { foreignKey: 'supplierId', as: 'purchaseOrders' });
+
+// StockMovement associations
+StockMovement.belongsTo(Shop, { foreignKey: 'shopId' });
+StockMovement.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+StockMovement.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+Product.hasMany(StockMovement, { foreignKey: 'productId', as: 'stockMovements' });
+Shop.hasMany(StockMovement, { foreignKey: 'shopId' });
+
+// PurchaseItems associations
+Purchase.hasMany(PurchaseItem, { foreignKey: 'purchaseId', as: 'lineItems' });
+PurchaseItem.belongsTo(Purchase, { foreignKey: 'purchaseId' });
+PurchaseItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+PurchaseItem.belongsTo(Shop, { foreignKey: 'shopId' });
+
+// PurchaseOrderItems associations
+PurchaseOrder.hasMany(PurchaseOrderItem, { foreignKey: 'purchaseOrderId', as: 'lineItems' });
+PurchaseOrderItem.belongsTo(PurchaseOrder, { foreignKey: 'purchaseOrderId' });
+PurchaseOrderItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+PurchaseOrderItem.belongsTo(Shop, { foreignKey: 'shopId' });
+
 // Export models and sequelize instance
 module.exports = {
   sequelize,
@@ -132,6 +163,10 @@ module.exports = {
   DiscountRule,
   Purchase,
   PurchaseOrder,
+  Supplier,
+  StockMovement,
+  PurchaseItem,
+  PurchaseOrderItem,
   Permission,
   RolePermission
 };

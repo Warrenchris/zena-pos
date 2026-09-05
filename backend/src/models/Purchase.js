@@ -9,8 +9,11 @@ const Purchase = sequelize.define('Purchase', {
   },
   referenceNo: {
     type: DataTypes.STRING,
-    allowNull: false,
-    unique: true
+    allowNull: false
+  },
+  supplierId: {
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   supplierName: {
     type: DataTypes.STRING,
@@ -26,7 +29,7 @@ const Purchase = sequelize.define('Purchase', {
     defaultValue: DataTypes.NOW
   },
   status: {
-    type: DataTypes.ENUM('RECEIVED', 'PENDING', 'CANCELLED'),
+    type: DataTypes.ENUM('DRAFT', 'PENDING', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'),
     defaultValue: 'RECEIVED'
   },
   paymentStatus: {
@@ -42,6 +45,11 @@ const Purchase = sequelize.define('Purchase', {
     allowNull: false,
     defaultValue: 0.00
   },
+  paidAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
   notes: {
     type: DataTypes.TEXT,
     allowNull: true
@@ -53,7 +61,7 @@ const Purchase = sequelize.define('Purchase', {
   },
   shopId: {
     type: DataTypes.INTEGER,
-    allowNull: true
+    allowNull: false
   }
 }, {
   tableName: 'Purchases',

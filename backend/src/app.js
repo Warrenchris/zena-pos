@@ -61,6 +61,7 @@ const couponRoutes = require('./routes/coupons');
 const discountRoutes = require('./routes/discounts');
 const purchaseRoutes = require('./routes/purchases');
 const purchaseOrderRoutes = require('./routes/purchaseOrders');
+const supplierRoutes = require('./routes/suppliers');
 const permissionRoutes = require('./routes/permissions');
 
 const app = express();
@@ -152,6 +153,7 @@ app.use('/api/coupons', couponRoutes);
 app.use('/api/discounts', discountRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
+app.use('/api/suppliers', supplierRoutes);
 app.use('/api/permissions', permissionRoutes);
 
 const errorHandler = require('./middleware/errorHandler');
