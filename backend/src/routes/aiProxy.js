@@ -192,7 +192,7 @@ router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
     // Safe diagnostic log on upstream error (no secrets or sensitive data)
     const errField = resp.data?.field || 'unknown';
     const errMsg = resp.data?.message || resp.data?.detail || JSON.stringify(resp.data);
-    console.warn(`[aiProxy:rf-forecast] Upstream error status=${resp.status} (${duration}ms): field=${errField}, message=${errMsg}`);
+    console.warn(`[aiProxy:rf-forecast] Upstream error status=${resp.status} (${duration}ms, dates=${datesCount}): field=${errField}, message=${errMsg}`);
 
     return res.status(resp.status).json(resp.data);
   } catch (err) {
