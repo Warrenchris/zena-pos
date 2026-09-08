@@ -62,7 +62,19 @@ export default function SalesForecasting() {
 
       setForecast(fc.data);
     } catch (err) {
-      setError(err.response?.data?.detail || err.response?.data?.error || err.message);
+      const errData = err.response?.data;
+      let msg = err.message;
+      if (typeof errData?.detail === 'object' && errData?.detail !== null) {
+        msg = errData.detail.message || JSON.stringify(errData.detail);
+      } else if (typeof errData?.message === 'string') {
+        msg = errData.message;
+      } else if (typeof errData?.detail === 'string') {
+        msg = errData.detail;
+      } else if (typeof errData?.error === 'string') {
+        msg = errData.error;
+      }
+      setError(msg);
+      setForecast(null);
     } finally {
       setLoading(false);
     }

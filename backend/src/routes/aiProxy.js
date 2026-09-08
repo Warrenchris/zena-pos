@@ -13,17 +13,18 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE
 
 const forecastCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
-function buildForecastCacheKey(shopId, requestBody, periods) {
+function buildForecastCacheKey(shopId, requestBody, periods, model = 'prophet') {
   const dataHash = crypto
     .createHash('sha256')
     .update(JSON.stringify({
       dates: requestBody.dates,
       values: requestBody.values,
-      periods: periods ?? requestBody.periods
+      periods: periods ?? requestBody.periods,
+      model
     }))
     .digest('hex')
     .substring(0, 16);
-  return `forecast:${shopId}:${dataHash}`;
+  return `forecast:${shopId}:${model}:${periods}:${dataHash}`;
 }
 
 const aiRateLimiter = rateLimit({
@@ -109,7 +110,7 @@ router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
   try {
     const shopId = req.shopId || req.user?.shopId;
     const periods = req.query.periods || req.body.periods || 30;
-    const cacheKey = buildForecastCacheKey(shopId, req.body, periods);
+    const cacheKey = buildForecastCacheKey(shopId, req.body, periods, 'prophet');
     const cached = forecastCache.get(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });
@@ -140,6 +141,63 @@ router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
 
     return res.status(resp.status).json(resp.data);
   } catch (err) {
+    const status = err.response?.status || 503;
+    const data = err.response?.data || {
+      error: 'Upstream AI service unreachable',
+      details: err.message,
+      upstream: AI_SERVICE_URL,
+    };
+    return res.status(status).json(data);
+  }
+});
+
+router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
+  const startTime = Date.now();
+  const shopId = req.shopId || req.user?.shopId || 'unknown';
+  const periods = req.body.periods || 30;
+  const datesCount = Array.isArray(req.body.dates) ? req.body.dates.length : 0;
+
+  try {
+    const cacheKey = buildForecastCacheKey(shopId, req.body, periods, 'rf');
+    const cached = forecastCache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true, cache_hit: true });
+    }
+
+    const forwardHeaders = { ...req.headers };
+    delete forwardHeaders['host'];
+    delete forwardHeaders['content-length'];
+
+    const resp = await aiClient.request({
+      method: 'POST',
+      url: '/api/forecasting/rf-forecast',
+      data: req.body,
+      headers: forwardHeaders,
+      timeout: 30000,
+      validateStatus: () => true,
+      shopId,
+      userId: req.user?.id
+    });
+
+    const duration = Date.now() - startTime;
+
+    if (resp.status >= 200 && resp.status < 300) {
+      const responseData = typeof resp.data === 'object' && resp.data !== null
+        ? { ...resp.data, cached: false }
+        : { data: resp.data, cached: false };
+      forecastCache.set(cacheKey, responseData);
+      return res.status(resp.status).json(responseData);
+    }
+
+    // Safe diagnostic log on upstream error (no secrets or sensitive data)
+    const errField = resp.data?.field || 'unknown';
+    const errMsg = resp.data?.message || resp.data?.detail || JSON.stringify(resp.data);
+    console.warn(`[aiProxy:rf-forecast] Upstream error status=${resp.status} (${duration}ms): field=${errField}, message=${errMsg}`);
+
+    return res.status(resp.status).json(resp.data);
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    console.error(`[aiProxy:rf-forecast] Proxy failure (${duration}ms): ${err.message}`);
     const status = err.response?.status || 503;
     const data = err.response?.data || {
       error: 'Upstream AI service unreachable',
