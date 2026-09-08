@@ -7,6 +7,18 @@ import joblib
 from typing import Tuple, List, Dict, Optional
 
 
+# Constants for Random Forest forecasting requirements
+RF_WARMUP_DAYS = 30
+RF_MIN_TRAIN_ROWS = 10
+RF_MIN_CALENDAR_DAYS = RF_WARMUP_DAYS + RF_MIN_TRAIN_ROWS  # 40 days
+
+FEATURE_COLUMNS = [
+    'month', 'day_of_week', 'quarter',
+    'revenue_lag_1', 'revenue_lag_7', 'revenue_lag_30',
+    'revenue_rolling_7', 'revenue_rolling_30'
+]
+
+
 class FinancialForecastModel:
     def __init__(self):
         self.scaler = StandardScaler()
@@ -17,29 +29,80 @@ class FinancialForecastModel:
         )
         self._history_df: Optional[pd.DataFrame] = None
 
+    def preprocess_series(self, dates: List[str], values: List[float]) -> pd.DataFrame:
+        """
+        Normalize sparse event dates into a continuous daily time series.
+        Missing calendar days are filled with 0.0 according to POS semantics
+        (no sales records on a day represents zero completed sales).
+        """
+        raw_dates = pd.to_datetime(dates)
+        if raw_dates.tz is not None:
+            raw_dates = raw_dates.tz_convert('UTC').tz_localize(None)
+        raw_dates = raw_dates.normalize()
+
+        df = pd.DataFrame({
+            'date': raw_dates,
+            'revenue': [float(v) for v in values]
+        })
+
+        # Group any duplicate dates on the same calendar day
+        df = df.groupby('date', as_index=False)['revenue'].sum()
+        df = df.sort_values('date').reset_index(drop=True)
+
+        if len(df) == 0:
+            raise ValueError("Dataset cannot be empty.")
+
+        calendar_days = (df['date'].max() - df['date'].min()).days + 1
+        if calendar_days < RF_MIN_CALENDAR_DAYS:
+            raise ValueError(
+                f"Random Forest forecasting requires at least {RF_MIN_CALENDAR_DAYS} calendar days of "
+                f"daily history (30-day feature warm-up + 10 training samples). "
+                f"Current history spans {calendar_days} calendar days."
+            )
+
+        # Reindex to a complete daily calendar from min_date to max_date
+        full_calendar = pd.date_range(start=df['date'].min(), end=df['date'].max(), freq='D')
+        calendar_df = (
+            df.set_index('date')
+            .reindex(full_calendar)
+            .fillna({'revenue': 0.0})
+            .rename_axis('date')
+            .reset_index()
+        )
+
+        return calendar_df
+
     def prepare_features(self, data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Generate temporal calendar, lag, and rolling features.
+        
+        INVARIANT: data must be a continuous daily time series.
+        - revenue_lag_1: revenue 1 calendar day ago (yesterday).
+        - revenue_lag_7: revenue 7 calendar days ago (same day of week last week).
+        - revenue_lag_30: revenue 30 calendar days ago.
+        
+        DATA LEAKAGE PREVENTION:
+        - Rolling features strictly use shift(1) so features for day t depend only
+          on data observed prior to day t.
+        """
         data = data.copy()
         data['date'] = pd.to_datetime(data['date'])
         data['month'] = data['date'].dt.month
         data['day_of_week'] = data['date'].dt.dayofweek
         data['quarter'] = data['date'].dt.quarter
 
+        # Lag features
         data['revenue_lag_1'] = data['revenue'].shift(1)
         data['revenue_lag_7'] = data['revenue'].shift(7)
         data['revenue_lag_30'] = data['revenue'].shift(30)
 
-        data['revenue_rolling_7'] = data['revenue'].rolling(window=7).mean()
-        data['revenue_rolling_30'] = data['revenue'].rolling(window=30).mean()
+        # Historical rolling features without lookahead leakage
+        data['revenue_rolling_7'] = data['revenue'].shift(1).rolling(window=7).mean()
+        data['revenue_rolling_30'] = data['revenue'].shift(1).rolling(window=30).mean()
 
         data = data.dropna()
 
-        features = [
-            'month', 'day_of_week', 'quarter',
-            'revenue_lag_1', 'revenue_lag_7', 'revenue_lag_30',
-            'revenue_rolling_7', 'revenue_rolling_30'
-        ]
-
-        X = data[features].values
+        X = data[FEATURE_COLUMNS].values
         y = data['revenue'].values
 
         return X, y
@@ -61,20 +124,18 @@ class FinancialForecastModel:
         }
 
     def fit(self, dates: List[str], values: List[float]) -> Dict[str, Optional[float]]:
-        if len(dates) < 30:
+        """
+        Fit the Random Forest model on calendarized daily revenue data.
+        """
+        calendar_df = self.preprocess_series(dates, values)
+        self._history_df = calendar_df.copy()
+
+        X, y = self.prepare_features(calendar_df)
+        if len(X) < RF_MIN_TRAIN_ROWS:
             raise ValueError(
-                f"RandomForest forecasting requires at least 30 data points. Got {len(dates)}."
+                f"Insufficient data after feature engineering for training. "
+                f"Required at least {RF_MIN_TRAIN_ROWS} rows, got {len(X)}."
             )
-
-        df = pd.DataFrame({
-            'date': pd.to_datetime(dates),
-            'revenue': values,
-        }).sort_values('date').reset_index(drop=True)
-        self._history_df = df.copy()
-
-        X, y = self.prepare_features(df)
-        if len(X) < 10:
-            raise ValueError("Insufficient data after feature engineering for training.")
 
         split_idx = int(len(X) * 0.8)
         X_train, X_test = X[:split_idx], X[split_idx:]
@@ -91,32 +152,62 @@ class FinancialForecastModel:
         return {'mae': None, 'rmse': None, 'mape': None}
 
     def predict(self, periods: int) -> Dict[str, List]:
+        """
+        Generate recursive autoregressive forecasts for the next N calendar days.
+        Forecast step 1 corresponds to (latest_historical_date + 1 day).
+        Derives prediction intervals from the variance across ensemble decision trees.
+        """
         if self._history_df is None:
             raise ValueError("Model must be fitted before prediction.")
 
-        df = self._history_df.copy().sort_values('date').reset_index(drop=True)
+        history = self._history_df.copy().sort_values('date').reset_index(drop=True)
         predictions: List[float] = []
+        lower_bounds: List[float] = []
+        upper_bounds: List[float] = []
         dates: List[str] = []
 
         for _ in range(periods):
-            X, _ = self.prepare_features(df)
-            if len(X) == 0:
-                break
+            future_date = history['date'].max() + pd.Timedelta(days=1)
 
-            last_features = X[-1:]
-            pred = float(self.model.predict(self.scaler.transform(last_features))[0])
-            pred = max(0.0, pred)
+            # Construct feature row for future_date strictly from available history
+            feat_row = pd.DataFrame([{
+                'month': future_date.month,
+                'day_of_week': future_date.dayofweek,
+                'quarter': future_date.quarter,
+                'revenue_lag_1': history['revenue'].iloc[-1],
+                'revenue_lag_7': history['revenue'].iloc[-7],
+                'revenue_lag_30': history['revenue'].iloc[-30],
+                'revenue_rolling_7': history['revenue'].iloc[-7:].mean(),
+                'revenue_rolling_30': history['revenue'].iloc[-30:].mean(),
+            }])
 
-            next_date = df['date'].max() + pd.Timedelta(days=1)
-            df = pd.concat([
-                df,
-                pd.DataFrame({'date': [next_date], 'revenue': [pred]})
-            ], ignore_index=True)
+            X_future_scaled = self.scaler.transform(feat_row[FEATURE_COLUMNS].values)
+
+            # Predict mean and ensemble dispersion bounds across trees
+            pred = float(max(0.0, self.model.predict(X_future_scaled)[0]))
+            tree_preds = np.array([tree.predict(X_future_scaled)[0] for tree in self.model.estimators_])
+            std = float(tree_preds.std())
+
+            lower = float(max(0.0, pred - 1.96 * std))
+            upper = float(max(pred, pred + 1.96 * std))
 
             predictions.append(pred)
-            dates.append(next_date.isoformat())
+            lower_bounds.append(lower)
+            upper_bounds.append(upper)
+            dates.append(future_date.strftime('%Y-%m-%dT00:00:00.000Z'))
 
-        return {'dates': dates, 'values': predictions}
+            # Append prediction to history for next recursive step
+            history = pd.concat([
+                history,
+                pd.DataFrame({'date': [future_date], 'revenue': [pred]})
+            ], ignore_index=True)
+
+        return {
+            'dates': dates,
+            'values': predictions,
+            'lower_bounds': lower_bounds,
+            'upper_bounds': upper_bounds
+        }
 
     def train(self, data: pd.DataFrame) -> Dict[str, float]:
         """Legacy training interface for backward compatibility."""
