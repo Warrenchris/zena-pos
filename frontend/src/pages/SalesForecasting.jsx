@@ -16,6 +16,7 @@ import {
 export default function SalesForecasting() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [errorField, setErrorField] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [historical, setHistorical] = useState({ dates: [], values: [] });
   const [periods, setPeriods] = useState(14);
@@ -37,6 +38,7 @@ export default function SalesForecasting() {
   const generateForecast = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setErrorField(null);
     setIsUsingDemoData(false);
     try {
       await fetchHealth();
@@ -74,6 +76,7 @@ export default function SalesForecasting() {
         msg = errData.error;
       }
       setError(msg);
+      setErrorField(errData?.field || null);
       setForecast(null);
     } finally {
       setLoading(false);
@@ -216,7 +219,24 @@ export default function SalesForecasting() {
           )}
 
           {loading && <PanelSkeleton />}
-          {!loading && error && <PanelError message={error} onRetry={generateForecast} />}
+          {!loading && error && (errorField === 'history' ? (
+            <div className="bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 rounded-xl p-4 text-sm space-y-2">
+              <p className="font-semibold">More sales history needed for Random Forest</p>
+              <p>
+                Random Forest forecasting requires at least 40 calendar days of sales history to calculate lag trends.
+                You can continue using the <strong>Standard (Prophet)</strong> forecast in the meantime.
+              </p>
+              <button
+                type="button"
+                onClick={() => { setModel('prophet'); setError(null); setErrorField(null); }}
+                className="text-xs font-bold underline hover:opacity-80 text-amber-700 dark:text-amber-400"
+              >
+                Switch to Standard Forecast
+              </button>
+            </div>
+          ) : (
+            <PanelError message={error} onRetry={generateForecast} />
+          ))}
 
           {!loading && !error && forecast && chartData.length > 0 && (
             <div>
