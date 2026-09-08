@@ -380,6 +380,17 @@ export default function Dashboard() {
                 </option>
               ))}
             </select>
+
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="h-10 px-3.5 flex items-center gap-2 rounded-xl border border-border-default bg-surface hover:bg-surface-2 text-text-primary text-small font-medium transition-colors disabled:opacity-50"
+              title="Refresh Dashboard Data"
+            >
+              <ArrowPathIcon className={`h-4 w-4 text-text-secondary ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
       </Card>
