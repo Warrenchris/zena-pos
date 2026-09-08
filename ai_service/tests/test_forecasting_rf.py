@@ -155,23 +155,39 @@ def test_5_invalid_date():
 
 def test_6_nan_and_infinity():
     """Test 6 — NaN or Infinity in values triggers 422 with field=values."""
+    import json
+
     # Test NaN
-    response_nan = client.post("/api/forecasting/rf-forecast", json={
+    body_nan = json.dumps({
         "dates": ["2026-06-01T00:00:00.000Z", "2026-06-02T00:00:00.000Z", "2026-06-03T00:00:00.000Z", "2026-06-04T00:00:00.000Z", "2026-06-05T00:00:00.000Z"],
         "values": [100.0, float("nan"), 300.0, 400.0, 500.0],
         "periods": 14
-    })
+    }, allow_nan=True)
+    response_nan = client.post(
+        "/api/forecasting/rf-forecast",
+        content=body_nan,
+        headers={"Content-Type": "application/json"}
+    )
     assert response_nan.status_code == 422
+    assert response_nan.json()["error"] == "VALIDATION_ERROR"
     assert response_nan.json()["field"] == "values"
+    assert "NaN or Infinity" in response_nan.json()["message"]
 
     # Test Infinity
-    response_inf = client.post("/api/forecasting/rf-forecast", json={
+    body_inf = json.dumps({
         "dates": ["2026-06-01T00:00:00.000Z", "2026-06-02T00:00:00.000Z", "2026-06-03T00:00:00.000Z", "2026-06-04T00:00:00.000Z", "2026-06-05T00:00:00.000Z"],
         "values": [100.0, float("inf"), 300.0, 400.0, 500.0],
         "periods": 14
-    })
+    }, allow_nan=True)
+    response_inf = client.post(
+        "/api/forecasting/rf-forecast",
+        content=body_inf,
+        headers={"Content-Type": "application/json"}
+    )
     assert response_inf.status_code == 422
+    assert response_inf.json()["error"] == "VALIDATION_ERROR"
     assert response_inf.json()["field"] == "values"
+    assert "NaN or Infinity" in response_inf.json()["message"]
 
 
 def test_7_negative_revenue():
