@@ -4,7 +4,12 @@ import api from './api';
 const inFlightPostCache = new Map();
 
 function dedupePost(url, payload) {
-  const key = `${url}:${JSON.stringify(payload)}`;
+  let keyPayload = payload;
+  if (url.includes('/finance/analyze') && payload && typeof payload === 'object') {
+    const { date, ...rest } = payload;
+    keyPayload = rest;
+  }
+  const key = `${url}:${JSON.stringify(keyPayload)}`;
   if (inFlightPostCache.has(key)) {
     return inFlightPostCache.get(key);
   }
