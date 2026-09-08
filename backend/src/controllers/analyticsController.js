@@ -38,14 +38,16 @@ function resolveDateRange(period, startDateParam, endDateParam) {
   } else if (period === 'month') {
     startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     startDate.setHours(0, 0, 0, 0);
-    endDate = now;
+    endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
 
     previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
     previousEndDate = startDate;
   } else if (period === 'year') {
     startDate = new Date(now.getFullYear(), 0, 1);
     startDate.setHours(0, 0, 0, 0);
-    endDate = now;
+    endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
 
     previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
     previousEndDate = startDate;
@@ -55,7 +57,8 @@ function resolveDateRange(period, startDateParam, endDateParam) {
     startDate = new Date(now);
     startDate.setDate(now.getDate() - day + 1);
     startDate.setHours(0, 0, 0, 0);
-    endDate = now;
+    endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
 
     previousStartDate = new Date(startDate);
     previousStartDate.setDate(previousStartDate.getDate() - 7);
@@ -67,7 +70,9 @@ function resolveDateRange(period, startDateParam, endDateParam) {
     // Default fallback
     startDate = new Date(now);
     startDate.setDate(now.getDate() - 7);
-    endDate = now;
+    startDate.setHours(0, 0, 0, 0);
+    endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
 
     previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
     previousEndDate = startDate;

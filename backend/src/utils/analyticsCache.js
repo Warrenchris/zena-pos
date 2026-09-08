@@ -1,7 +1,7 @@
 const NodeCache = require('node-cache');
 
-// Create cache with 5-minute TTL
-const analyticsCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
+// Create cache with 60-second default TTL
+const analyticsCache = new NodeCache({ stdTTL: 60, checkperiod: 30 });
 
 /**
  * Cache wrapper for analytics queries
@@ -23,10 +23,12 @@ function setCachedAnalytics(shopId, endpoint, params, data) {
 }
 
 function invalidateAnalyticsCache(shopId) {
+  if (!shopId) return;
   // Clear all analytics cache for this shop
+  const prefix = `analytics:${shopId}:`;
   const keys = analyticsCache.keys();
   keys.forEach(key => {
-    if (key.includes(`analytics:${shopId}:`)) {
+    if (key.startsWith(prefix)) {
       analyticsCache.del(key);
     }
   });

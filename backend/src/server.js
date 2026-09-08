@@ -26,8 +26,8 @@ const startServer = async () => {
       database: process.env.DB_NAME,
     });
 
-    // Test database connection and sync models
-    await testConnection();
+    // Test database connection with retries for container readiness
+    await testConnection(5, 2000);
     logger.info('Database connection successful');
 
     // Seed database in development mode

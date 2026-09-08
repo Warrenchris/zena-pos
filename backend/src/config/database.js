@@ -27,16 +27,20 @@ const sequelize = new Sequelize(
   }
 );
 
-async function testConnection() {
-  try {
-    await sequelize.authenticate();
-    console.log('Database connection established successfully.');
-
-    // Database synchronization (sequelize.sync) is disabled.
-    // Schema alterations must be done via migrations only.
-  } catch (error) {
-    console.error('Unable to connect to the database:', error);
-    throw error;
+async function testConnection(maxRetries = 1, retryDelay = 2000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await sequelize.authenticate();
+      console.log('Database connection established successfully.');
+      return;
+    } catch (error) {
+      if (attempt >= maxRetries) {
+        console.error('Unable to connect to the database:', error);
+        throw error;
+      }
+      console.warn(`[database] Connection attempt ${attempt}/${maxRetries} failed: ${error.message}. Retrying in ${retryDelay / 1000}s...`);
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
   }
 }
 
