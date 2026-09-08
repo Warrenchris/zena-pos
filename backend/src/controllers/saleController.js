@@ -15,6 +15,7 @@ const SystemSettings = require('../models/SystemSettings');
 const { parseDate } = require('../utils/dateUtils');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
+const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
 
 // Get all sales with pagination
 exports.getAllSales = async (req, res) => {
@@ -111,6 +112,9 @@ exports.updateSale = async (req, res) => {
       details: `Updated sale ${sale.invoiceNumber} status to ${status}`
     });
 
+    // Invalidate analytics cache for the shop
+    invalidateAnalyticsCache(sale.shopId || req.user.shopId);
+
     res.json(updatedSale);
   } catch (error) {
     console.error('Error updating sale:', error);
@@ -163,6 +167,7 @@ exports.deleteSale = async (req, res) => {
     }, t);
 
     await t.commit();
+    invalidateAnalyticsCache(sale.shopId || req.user.shopId);
     res.json({ message: 'Sale deleted successfully' });
   } catch (error) {
     await t.rollback();
@@ -577,6 +582,9 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
 
   const { sale, invoiceNumber, total } = saleResult;
 
+  // Invalidate analytics and dashboard cache so new sale reflects immediately
+  invalidateAnalyticsCache(shopId);
+
   try {
     await logActivity({
       shopId: shopId,
@@ -637,6 +645,7 @@ exports.updatePaymentStatus = async (req, res) => {
     }
 
     await sale.update({ paymentStatus });
+    invalidateAnalyticsCache(sale.shopId || req.shopId || req.user.shopId);
     res.json(sale);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update payment status' });
@@ -1348,6 +1357,7 @@ exports.processRefund = async (req, res) => {
       }, t);
 
       await t.commit();
+      invalidateAnalyticsCache(shopId);
 
       res.json({
         refunds: createdRefunds,

@@ -384,6 +384,9 @@ class EnhancedSaleService {
 
       await t.commit();
 
+      const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
+      invalidateAnalyticsCache(shopId);
+
       const { logActivity } = require('../middleware/logger');
       try {
         await logActivity({

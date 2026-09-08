@@ -7,6 +7,7 @@ import {
   UsersIcon,
   TagIcon,
   ChartBarIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { lazy, Suspense } from 'react';
 import BusinessInsights from '../components/financial/BusinessInsights';
