@@ -92,12 +92,16 @@ export default function Dashboard() {
     }
   }, [userRole]);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const dashboardFilter = React.useMemo(() => ({
     period,
     employeeId: employeeId || undefined,
     startDate: period === 'custom' ? startDate : undefined,
-    endDate: period === 'custom' ? endDate : undefined
-  }), [period, employeeId, startDate, endDate]);
+    endDate: period === 'custom' ? endDate : undefined,
+    _refresh: refreshKey
+  }), [period, employeeId, startDate, endDate, refreshKey]);
 
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(true);
@@ -188,44 +192,41 @@ export default function Dashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('No auth token found');
-        return;
-      }
+  const loadDashboardData = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token || !userId || !userShopId) {
+      return;
+    }
 
-      // Check if user is authenticated
-      if (!userId) {
-        console.log('User not authenticated, skipping data fetch');
-        return;
-      }
+    try {
+      const [statsResult] = await Promise.all([
+        dispatch(fetchSalesStatistics()).unwrap(),
+        dispatch(fetchSales({ limit: 5 })),
+        dispatch(fetchCustomers({ limit: 5 })),
+        dispatch(fetchProducts({ limit: 5 }))
+      ]);
 
-      // Additional check: ensure user has shopId
-      if (!userShopId) {
-        console.error('User has no shopId, cannot fetch data');
-        return;
-      }
-
-      try {
-        const [statsResult] = await Promise.all([
-          dispatch(fetchSalesStatistics()).unwrap(),
-          dispatch(fetchSales({ limit: 5 })),
-          dispatch(fetchCustomers({ limit: 5 })),
-          dispatch(fetchProducts({ limit: 5 }))
-        ]);
-
-        // Only fetch insights and forecast after main data is loaded
-        await fetchInsights();
-        await fetchForecast(statsResult);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      }
-    };
-
-    loadDashboardData();
+      // Only fetch insights and forecast after main data is loaded
+      await fetchInsights();
+      await fetchForecast(statsResult);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    }
   }, [dispatch, userId, userShopId, fetchInsights, fetchForecast]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      setRefreshKey((prev) => prev + 1);
+      await loadDashboardData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadDashboardData]);
 
   // Check for low stock products
   useEffect(() => {
