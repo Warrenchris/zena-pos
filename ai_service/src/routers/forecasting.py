@@ -1,9 +1,16 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime
+import time
+import math
+import logging
+import pandas as pd
 from ..middleware.auth import get_current_user
 from ..models.financial_models import FinancialForecastModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -21,10 +28,23 @@ class ForecastResult(BaseModel):
 
 
 class RFForecastRequest(BaseModel):
-    dates: List[str]
-    values: List[float]
-    periods: int = 30
+    dates: List[Any]
+    values: List[Any]
+    periods: Optional[Any] = 30
     shop_id: Optional[str] = None
+
+
+def validation_error(message: str, field: str, detail: Optional[str] = None) -> JSONResponse:
+    logger.warning("[rf-forecast] Validation failed: %s (field=%s)", message, field)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "VALIDATION_ERROR",
+            "message": message,
+            "field": field,
+            "detail": detail or message
+        }
+    )
 
 
 class ProductForecastItem(BaseModel):
@@ -151,32 +171,166 @@ async def random_forest_forecast(
     user: dict = Depends(get_current_user)
 ):
     """
-    Revenue forecasting using RandomForest with lag/rolling features.
+    Revenue forecasting using RandomForest with lag and rolling features.
+    Sparse sales dates are calendarized to a continuous daily time series.
     """
-    if len(request.dates) < 30:
-        raise HTTPException(
-            status_code=422,
-            detail=f"RandomForest forecasting requires at least 30 data points. Got {len(request.dates)}."
+    start_time = time.time()
+
+    # 1. Horizon / Periods validation
+    if (
+        request.periods is None
+        or isinstance(request.periods, bool)
+        or not isinstance(request.periods, int)
+        or request.periods < 1
+        or request.periods > 365
+    ):
+        return validation_error(
+            "Forecast periods must be an integer between 1 and 365.",
+            field="periods",
+            detail=f"periods={request.periods}"
         )
 
+    # 2. Dataset presence validation
+    if request.dates is None or len(request.dates) == 0:
+        return validation_error(
+            "The dates array is required and cannot be empty.",
+            field="dates"
+        )
+    if request.values is None or len(request.values) == 0:
+        return validation_error(
+            "The values array is required and cannot be empty.",
+            field="values"
+        )
+
+    # 3. Length match validation
+    if len(request.dates) != len(request.values):
+        return validation_error(
+            "Dates and revenue values must contain the same number of observations.",
+            field="values",
+            detail=f"dates_length={len(request.dates)}, values_length={len(request.values)}"
+        )
+
+    # 4. Non-trivial activity floor check
+    if len(request.dates) < 5:
+        return validation_error(
+            "Random Forest forecasting requires at least 5 observed daily sales records.",
+            field="dates",
+            detail=f"observed_observations={len(request.dates)}"
+        )
+
+    # 5. Revenue values validation (numeric, finite, non-NaN, non-Infinity, non-negative)
+    clean_values = []
+    for idx, val in enumerate(request.values):
+        if val is None or isinstance(val, bool) or not isinstance(val, (int, float)):
+            return validation_error(
+                f"Revenue value at index {idx} must be a numeric value.",
+                field="values",
+                detail=f"index={idx}, value={val}"
+            )
+        if math.isnan(val) or math.isinf(val):
+            return validation_error(
+                "Revenue values cannot contain NaN or Infinity.",
+                field="values",
+                detail=f"index={idx}, value={val}"
+            )
+        if val < 0:
+            return validation_error(
+                "Revenue values must be non-negative numbers.",
+                field="values",
+                detail=f"index={idx}, value={val}"
+            )
+        clean_values.append(float(val))
+
+    # 6. Dates parsing and validation
+    parsed_dates = []
+    for idx, d_str in enumerate(request.dates):
+        if not isinstance(d_str, str) or not d_str.strip():
+            return validation_error(
+                f"Invalid date format at index {idx}: '{d_str}'.",
+                field="dates",
+                detail=f"index={idx}, date={d_str}"
+            )
+        try:
+            dt = pd.to_datetime(d_str)
+            if dt.tz is not None:
+                dt = dt.tz_convert('UTC').tz_localize(None)
+            dt = dt.normalize()
+            parsed_dates.append(dt)
+        except Exception:
+            return validation_error(
+                f"Invalid date format: '{d_str}'. Dates must be ISO formatted strings.",
+                field="dates",
+                detail=f"index={idx}, raw_value={d_str}"
+            )
+
+    # 7. Check chronological ordering & duplicate dates
+    for i in range(1, len(parsed_dates)):
+        prev_dt = parsed_dates[i - 1]
+        curr_dt = parsed_dates[i]
+        if curr_dt == prev_dt:
+            return validation_error(
+                f"Duplicate date detected: '{request.dates[i]}'. Each calendar day must appear at most once.",
+                field="dates",
+                detail=f"duplicate_date={request.dates[i]}"
+            )
+        if curr_dt < prev_dt:
+            return validation_error(
+                "Dates must be in chronological order.",
+                field="dates",
+                detail=f"index={i}, previous={request.dates[i-1]}, current={request.dates[i]}"
+            )
+
+    # 8. Model execution with safe exception handling
     try:
         model = FinancialForecastModel()
-        metrics = model.fit(request.dates, request.values)
+        metrics = model.fit(request.dates, clean_values)
         predictions = model.predict(request.periods)
-
-        return {
-            "dates": predictions["dates"],
-            "predictions": predictions["values"],
-            "model_quality": metrics,
-            "algorithm": "RandomForestRegressor",
-            "training_samples": len(request.dates),
-            "forecast_periods": request.periods,
-            "data_warning": None if len(request.dates) >= 60 else "Model accuracy improves with more historical data (60+ points recommended)"
-        }
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        err_msg = str(e)
+        field = "history" if ("calendar days" in err_msg or "history" in err_msg or "training" in err_msg) else "model"
+        return validation_error(
+            err_msg,
+            field=field,
+            detail=err_msg
+        )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error("[rf-forecast] Model execution failed: %s", e, exc_info=True)
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "MODEL_ERROR",
+                "message": "An error occurred during Random Forest forecasting.",
+                "detail": str(e)
+            }
+        )
+
+    duration_ms = round((time.time() - start_time) * 1000, 2)
+    calendar_days = (parsed_dates[-1] - parsed_dates[0]).days + 1
+    training_rows = calendar_days - 30
+
+    # Observability log with safe metadata
+    logger.info(
+        "[rf-forecast] Success: shop_id=%s observed_observations=%d calendar_days=%d training_rows=%d periods=%d execution_time_ms=%.2f",
+        request.shop_id or "unknown",
+        len(request.dates),
+        calendar_days,
+        training_rows,
+        request.periods,
+        duration_ms
+    )
+
+    return {
+        "dates": predictions["dates"],
+        "predictions": predictions["values"],
+        "lower_bounds": predictions.get("lower_bounds", []),
+        "upper_bounds": predictions.get("upper_bounds", []),
+        "model_quality": metrics,
+        "algorithm": "RandomForestRegressor",
+        "training_samples": calendar_days,
+        "observed_samples": len(request.dates),
+        "forecast_periods": request.periods,
+        "data_warning": None if calendar_days >= 60 else "Model accuracy improves with more historical data (60+ calendar days recommended)"
+    }
 
 
 @router.post("/stock-depletion")
