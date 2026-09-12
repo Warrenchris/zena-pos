@@ -16,11 +16,8 @@
     "dialect": "mysql"
   },
   "production": {
-    "username": "root",
-    "password": "root",
-    "database": "zana_pos_prod",
-    "host": "127.0.0.1",
-    "port": 3307,
-    "dialect": "mysql"
+    "use_env_variable": "DATABASE_URL",
+    "dialect": "mysql",
+    "logging": false
   }
 }

@@ -10,8 +10,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
-import downloadCSV from '../../utils/csv';
 import Card from '../ui/Card';
 
 const VisitorGraph = ({ filter = { period: 'week' } }) => {
@@ -55,15 +53,6 @@ const VisitorGraph = ({ filter = { period: 'week' } }) => {
   const total = totalVisitors || 0;
   const average = visitorData?.length ? Math.round(total / visitorData.length) : 0;
   const isPositive = (percentageChange || 0) >= 0;
-
-  const handleExportCSV = () => {
-    if (!visitorData || visitorData.length === 0) return;
-    const exportRows = visitorData.map(item => ({
-      Date: item.date,
-      Visitors: item.visitors
-    }));
-    downloadCSV(`daily_visitors_${new Date().toISOString().split('T')[0]}.csv`, exportRows);
-  };
 
   if (loading) {
     return (
@@ -117,7 +106,7 @@ const VisitorGraph = ({ filter = { period: 'week' } }) => {
           </div>
           <p className="mt-0.5 text-small text-text-secondary">Traffic engagement across the selected period</p>
         </div>
-        <div className="flex items-center gap-4 text-small">
+        <div className="flex items-center gap-3 text-small">
           <div className="rounded-xl border border-border-default/60 bg-surface-2/40 px-3 py-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Total</span>
             <p className="font-bold text-text-primary">{total.toLocaleString()}</p>
@@ -126,16 +115,6 @@ const VisitorGraph = ({ filter = { period: 'week' } }) => {
             <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Average</span>
             <p className="font-bold text-text-primary">{average.toLocaleString()}</p>
           </div>
-          <button
-            type="button"
-            onClick={handleExportCSV}
-            disabled={!visitorData || visitorData.length === 0}
-            className="p-2 rounded-xl border border-border-default bg-surface hover:bg-surface-2 text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40 shadow-2xs"
-            title="Export Visitors CSV"
-            aria-label="Export Visitors CSV"
-          >
-            <ArrowDownTrayIcon className="h-4 w-4" />
-          </button>
         </div>
       </div>
 

@@ -2,7 +2,7 @@
   "development": {
     "username": "root",
     "password": "root",
-    "database": "zana_db",
+    "database": "zana_pos",
     "host": "127.0.0.1",
     "port": 3307,
     "dialect": "mysql"
@@ -10,17 +10,14 @@
   "test": {
     "username": "root",
     "password": "root",
-    "database": "zana_db_test",
+    "database": "zana_pos_test",
     "host": "127.0.0.1",
     "port": 3307,
     "dialect": "mysql"
   },
   "production": {
-    "username": "root",
-    "password": "root",
-    "database": "zana_db",
-    "host": "127.0.0.1",
-    "port": 3307,
-    "dialect": "mysql"
+    "use_env_variable": "DATABASE_URL",
+    "dialect": "mysql",
+    "logging": false
   }
 }

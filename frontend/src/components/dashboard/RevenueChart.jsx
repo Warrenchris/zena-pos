@@ -78,15 +78,6 @@ const RevenueChart = ({ filter = { period: 'week' } }) => {
   const total = revenueData.reduce((acc, item) => acc + (item.revenue || 0), 0);
   const average = revenueData.length ? Math.round(total / revenueData.length) : 0;
 
-  const handleExportCSV = () => {
-    if (!revenueData || revenueData.length === 0) return;
-    const exportRows = revenueData.map(item => ({
-      Date: item.date,
-      'Revenue (KES)': item.revenue
-    }));
-    downloadCSV(`revenue_overview_${new Date().toISOString().split('T')[0]}.csv`, exportRows);
-  };
-
   if (loading) {
     return (
       <Card variant="default" className="p-6">
@@ -114,7 +105,7 @@ const RevenueChart = ({ filter = { period: 'week' } }) => {
           <h2 className="text-h4 font-semibold text-text-primary tracking-tight">Revenue Overview</h2>
           <p className="mt-0.5 text-small text-text-secondary">Sales performance across the selected period</p>
         </div>
-        <div className="flex items-center gap-4 text-small">
+        <div className="flex items-center gap-3 text-small">
           <div className="rounded-xl border border-border-default/60 bg-surface-2/40 px-3 py-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Total</span>
             <p className="font-bold text-text-primary">{format(total)}</p>
@@ -123,16 +114,6 @@ const RevenueChart = ({ filter = { period: 'week' } }) => {
             <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Average</span>
             <p className="font-bold text-text-primary">{format(average)}</p>
           </div>
-          <button
-            type="button"
-            onClick={handleExportCSV}
-            disabled={revenueData.length === 0}
-            className="p-2 rounded-xl border border-border-default bg-surface hover:bg-surface-2 text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40 shadow-2xs"
-            title="Export Revenue CSV"
-            aria-label="Export Revenue CSV"
-          >
-            <ArrowDownTrayIcon className="h-4 w-4" />
-          </button>
         </div>
       </div>
 
