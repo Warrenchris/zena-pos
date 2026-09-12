@@ -46,8 +46,9 @@ exports.register = async (req, res) => {
     const token = jwt.sign(
       { 
         id: user.id, 
-        role: user.role,
+        role: user.role, 
         shopId: createdShop?.id,
+        organizationId: createdShop?.organizationId || null,
         isEmployee: false
       },
       getPrivateKey(),
@@ -83,12 +84,12 @@ exports.login = async (req, res) => {
     }
 
     // First try to find a user
-    let user = await User.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name'] }] });
+    let user = await User.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name', 'organizationId'] }] });
     let isEmployee = false;
     
     // If no user found, try to find an employee
     if (!user) {
-      const employee = await Employee.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name'] }] });
+      const employee = await Employee.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name', 'organizationId'] }] });
       if (employee) {
         const isValidPassword = await employee.validatePassword(password);
         if (isValidPassword && employee.status === 'active') {
@@ -129,6 +130,7 @@ exports.login = async (req, res) => {
             id: user.id, 
             role: user.role, 
             shopId: user.shopId,
+            organizationId: user.Shop?.organizationId || null,
             isEmployee: !!user.isEmployee
           },
           getPrivateKey(),

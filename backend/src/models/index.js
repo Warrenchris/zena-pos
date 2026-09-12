@@ -29,6 +29,9 @@ const PurchaseItem = require('./PurchaseItem');
 const PurchaseOrderItem = require('./PurchaseOrderItem');
 const Permission = require('./Permission');
 const RolePermission = require('./RolePermission');
+const Organization = require('./Organization');
+const OrganizationMembership = require('./OrganizationMembership');
+const ShopAccess = require('./ShopAccess');
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -138,6 +141,48 @@ PurchaseOrderItem.belongsTo(PurchaseOrder, { foreignKey: 'purchaseOrderId' });
 PurchaseOrderItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 PurchaseOrderItem.belongsTo(Shop, { foreignKey: 'shopId' });
 
+// Organization & Membership associations (FINDING-12 Phase 1)
+Organization.hasMany(Shop, { foreignKey: 'organizationId' });
+Shop.belongsTo(Organization, { foreignKey: 'organizationId' });
+
+Organization.hasMany(OrganizationMembership, { foreignKey: 'organizationId' });
+OrganizationMembership.belongsTo(Organization, { foreignKey: 'organizationId' });
+
+OrganizationMembership.belongsTo(User, { foreignKey: 'userId' });
+OrganizationMembership.belongsTo(Employee, { foreignKey: 'employeeId' });
+User.hasMany(OrganizationMembership, { foreignKey: 'userId' });
+Employee.hasMany(OrganizationMembership, { foreignKey: 'employeeId' });
+
+OrganizationMembership.hasMany(ShopAccess, { foreignKey: 'membershipId' });
+ShopAccess.belongsTo(OrganizationMembership, { foreignKey: 'membershipId' });
+
+Shop.hasMany(ShopAccess, { foreignKey: 'shopId' });
+ShopAccess.belongsTo(Shop, { foreignKey: 'shopId' });
+
+// Auto-wrap guard: ensure every Shop has a parent Organization if none specified (backward compatibility)
+Shop.beforeValidate(async (shop, options) => {
+  if (!shop.organizationId) {
+    const orgName = shop.name || 'Default Organization';
+    const cleanName = orgName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'org';
+    const slug = `${cleanName}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+    const [org] = await Organization.findOrCreate({
+      where: { name: orgName },
+      defaults: {
+        name: orgName,
+        slug,
+        status: 'active',
+        currency: 'KES'
+      },
+      transaction: options?.transaction
+    });
+    shop.organizationId = org.id;
+  }
+});
+
 // Export models and sequelize instance
 module.exports = {
   sequelize,
@@ -168,5 +213,9 @@ module.exports = {
   PurchaseItem,
   PurchaseOrderItem,
   Permission,
-  RolePermission
+  RolePermission,
+  Organization,
+  OrganizationMembership,
+  ShopAccess
 };
+

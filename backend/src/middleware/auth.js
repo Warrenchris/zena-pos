@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 
-const auth = (req, res, next) => {
+const auth = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     if (!token) {
@@ -13,6 +13,20 @@ const auth = (req, res, next) => {
     const decoded = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
     req.user = decoded;
     req.shopId = decoded.shopId;
+
+    if (decoded.organizationId !== undefined) {
+      req.organizationId = decoded.organizationId;
+    } else if (decoded.shopId) {
+      try {
+        const { Shop } = require('../models');
+        const shop = await Shop.findByPk(decoded.shopId, { attributes: ['organizationId'] });
+        req.organizationId = shop?.organizationId || null;
+      } catch (lookupErr) {
+        req.organizationId = null;
+      }
+    } else {
+      req.organizationId = null;
+    }
 
     // If token is expired, return 401
     if (decoded.exp && Date.now() >= decoded.exp * 1000) {
