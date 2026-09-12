@@ -39,25 +39,32 @@ function resolveDateRange(period, startDateParam, endDateParam) {
     startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     startDate.setHours(0, 0, 0, 0);
     endDate = new Date(now);
+    endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     endDate.setHours(23, 59, 59, 999);
 
-    previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
-    previousEndDate = startDate;
+    const prevMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+    previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    previousStartDate.setHours(0, 0, 0, 0);
+    previousEndDate = new Date(prevMonthLastDay);
+    previousEndDate.setHours(23, 59, 59, 999);
   } else if (period === 'year') {
     startDate = new Date(now.getFullYear(), 0, 1);
     startDate.setHours(0, 0, 0, 0);
-    endDate = new Date(now);
+    endDate = new Date(now.getFullYear(), 11, 31);
     endDate.setHours(23, 59, 59, 999);
 
-    previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
-    previousEndDate = startDate;
+    previousStartDate = new Date(now.getFullYear() - 1, 0, 1);
+    previousStartDate.setHours(0, 0, 0, 0);
+    previousEndDate = new Date(now.getFullYear() - 1, 11, 31);
+    previousEndDate.setHours(23, 59, 59, 999);
   } else if (period === 'week') {
-    // Current calendar week (Monday to today) - matches Reports "This Week"
+    // Current calendar week (Monday to Sunday) - matches Reports "This Week"
     const day = now.getDay() || 7;
     startDate = new Date(now);
     startDate.setDate(now.getDate() - day + 1);
     startDate.setHours(0, 0, 0, 0);
-    endDate = new Date(now);
+    endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
     endDate.setHours(23, 59, 59, 999);
 
     previousStartDate = new Date(startDate);
@@ -79,6 +86,49 @@ function resolveDateRange(period, startDateParam, endDateParam) {
   }
 
   return { startDate, endDate, previousStartDate, previousEndDate };
+}
+
+function formatDateKey(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function generateBuckets(period, startDate, endDate) {
+  const buckets = [];
+  if (period === 'today') {
+    for (let h = 0; h < 24; h++) {
+      buckets.push(`${String(h).padStart(2, '0')}:00`);
+    }
+  } else if (period === 'week') {
+    const curr = new Date(startDate);
+    for (let i = 0; i < 7; i++) {
+      buckets.push(formatDateKey(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+  } else if (period === 'month') {
+    const year = startDate.getFullYear();
+    const month = startDate.getMonth();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    for (let day = 1; day <= lastDay; day++) {
+      const d = new Date(year, month, day);
+      buckets.push(formatDateKey(d));
+    }
+  } else if (period === 'year') {
+    const year = startDate.getFullYear();
+    for (let m = 1; m <= 12; m++) {
+      buckets.push(`${year}-${String(m).padStart(2, '0')}`);
+    }
+  } else {
+    const curr = new Date(startDate);
+    const end = new Date(endDate);
+    while (curr <= end) {
+      buckets.push(formatDateKey(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+  }
+  return buckets;
 }
 
 // Helper function to calculate growth
@@ -120,12 +170,13 @@ const analyticsController = {
       const results = await sequelize.query(`
         SELECT 
           DATE(createdAt) as date,
+          HOUR(createdAt) as hour,
           COUNT(CASE WHEN createdAt >= ? AND createdAt <= ? THEN 1 END) as current_visitors,
           COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_visitors
         FROM Sales
         WHERE shopId = ? AND createdAt >= ? AND createdAt <= ? AND saleStatus != 'cancelled'${empCondition}
-        GROUP BY DATE(createdAt)
-        ORDER BY DATE(createdAt) ASC
+        GROUP BY DATE(createdAt), HOUR(createdAt)
+        ORDER BY DATE(createdAt) ASC, HOUR(createdAt) ASC
       `, {
         replacements,
         type: sequelize.QueryTypes.SELECT
@@ -135,12 +186,33 @@ const analyticsController = {
       const previousPeriod = results.reduce((sum, day) => sum + parseInt(day.previous_visitors || 0), 0);
       const percentageChange = calculateGrowth(currentPeriod, previousPeriod);
 
-      const visitorData = results
-        .filter(r => parseInt(r.current_visitors) > 0)
-        .map(sale => ({
-          date: sale.date,
-          visitors: parseInt(sale.current_visitors)
-        }));
+      const buckets = generateBuckets(period, startDate, endDate);
+      const visitorMap = {};
+      buckets.forEach(b => {
+        visitorMap[b] = 0;
+      });
+
+      results.forEach(row => {
+        let key = row.date;
+        if (period === 'today') {
+          key = `${String(row.hour !== undefined ? row.hour : 0).padStart(2, '0')}:00`;
+        } else if (period === 'year' && row.date) {
+          key = String(row.date).substring(0, 7);
+        }
+        const count = parseInt(row.current_visitors || 0);
+        if (visitorMap[key] !== undefined) {
+          visitorMap[key] += count;
+        } else if (count > 0) {
+          visitorMap[key] = count;
+        }
+      });
+
+      const visitorData = Object.entries(visitorMap)
+        .map(([date, visitors]) => ({
+          date,
+          visitors
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
 
       const response = {
         visitorData,
@@ -214,15 +286,27 @@ const analyticsController = {
       const orderPercentageChange = calculateGrowth(currentPeriodOrders, previousPeriodOrders);
       const revenuePercentageChange = calculateGrowth(currentPeriodRevenue, previousPeriodRevenue);
 
-      // Group by date for response
+      // Group into buckets for response
+      const buckets = generateBuckets(period, startDate, endDate);
       const statsByDate = {};
+      buckets.forEach(b => {
+        statsByDate[b] = { orders: 0, revenue: 0 };
+      });
+
       results.forEach(row => {
-        if (row.current_count > 0 || row.current_revenue > 0) {
-          if (!statsByDate[row.date]) {
-            statsByDate[row.date] = { orders: 0, revenue: 0 };
-          }
-          statsByDate[row.date].orders += parseInt(row.current_count || 0);
-          statsByDate[row.date].revenue += parseFloat(row.current_revenue || 0);
+        let key = row.date;
+        if (period === 'today') {
+          key = `${String(row.hour !== undefined ? row.hour : 0).padStart(2, '0')}:00`;
+        } else if (period === 'year' && row.date) {
+          key = String(row.date).substring(0, 7);
+        }
+        const currentCount = parseInt(row.current_count || 0);
+        const currentRev = parseFloat(row.current_revenue || 0);
+        if (statsByDate[key] !== undefined) {
+          statsByDate[key].orders += currentCount;
+          statsByDate[key].revenue += currentRev;
+        } else if (currentCount > 0 || currentRev > 0) {
+          statsByDate[key] = { orders: currentCount, revenue: currentRev };
         }
       });
 
@@ -241,6 +325,19 @@ const analyticsController = {
         totalOrders: currentPeriodOrders,
         totalRevenue: currentPeriodRevenue
       };
+
+      // Cache the result
+      setCachedAnalytics(shopId, 'orderTracking', cacheParams, response);
+      
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching order statistics:', error);
+      res.status(500).json({ 
+        error: 'Failed to fetch order statistics',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined 
+      });
+    }
+  },
 
       // Cache the result
       setCachedAnalytics(shopId, 'orderTracking', cacheParams, response);
