@@ -11,7 +11,6 @@ Invoice.init({
   },
   invoiceNumber: {
     type: DataTypes.STRING,
-    unique: true,
     allowNull: false,
   },
   saleId: {
@@ -72,6 +71,13 @@ Invoice.init({
   modelName: 'Invoice',
   tableName: 'Invoices',
   timestamps: true,
+  indexes: [
+    {
+      unique: true,
+      fields: ['shopId', 'invoiceNumber'],
+      name: 'unique_invoices_shop_invoice_number'
+    }
+  ]
 });
 
 // Invoice number generation: INV-{timestamp}-{shopId}

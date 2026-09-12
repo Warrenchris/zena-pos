@@ -9,8 +9,7 @@ const Category = sequelize.define('Category', {
   },
   name: {
     type: DataTypes.STRING,
-    allowNull: false,
-    unique: true
+    allowNull: false
   },
   description: {
     type: DataTypes.TEXT,
@@ -28,6 +27,14 @@ const Category = sequelize.define('Category', {
       key: 'id'
     }
   }
+}, {
+  indexes: [
+    {
+      unique: true,
+      fields: ['shopId', 'name'],
+      name: 'unique_categories_shop_name'
+    }
+  ]
 });
 
 module.exports = Category;

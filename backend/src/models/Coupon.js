@@ -9,8 +9,7 @@ const Coupon = sequelize.define('Coupon', {
   },
   code: {
     type: DataTypes.STRING(50),
-    allowNull: false,
-    unique: true
+    allowNull: false
   },
   title: {
     type: DataTypes.STRING,
@@ -72,6 +71,11 @@ const Coupon = sequelize.define('Coupon', {
   tableName: 'Coupons',
   timestamps: true,
   indexes: [
+    {
+      unique: true,
+      name: 'unique_coupons_shop_code',
+      fields: ['shopId', 'code']
+    },
     {
       name: 'idx_coupons_code',
       fields: ['code']

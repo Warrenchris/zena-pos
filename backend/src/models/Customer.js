@@ -14,7 +14,6 @@ const Customer = sequelize.define('Customer', {
   email: {
     type: DataTypes.STRING,
     allowNull: true,
-    unique: true,
     validate: {
       isEmail: true
     }
@@ -59,6 +58,14 @@ const Customer = sequelize.define('Customer', {
       key: 'id'
     }
   }
+}, {
+  indexes: [
+    {
+      unique: true,
+      fields: ['shopId', 'email'],
+      name: 'unique_customers_shop_email'
+    }
+  ]
 });
 
 module.exports = Customer;

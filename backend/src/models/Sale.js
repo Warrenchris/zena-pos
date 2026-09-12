@@ -12,12 +12,10 @@ const Sale = sequelize.define('Sale', {
   },
   invoiceNumber: {
     type: DataTypes.STRING,
-    unique: true,
     allowNull: true
   },
   idempotencyKey: {
     type: DataTypes.STRING(64),
-    unique: true,
     allowNull: true
   },
   // Basic sale information
@@ -208,6 +206,19 @@ const Sale = sequelize.define('Sale', {
       key: 'id'
     }
   }
+}, {
+  indexes: [
+    {
+      unique: true,
+      fields: ['shopId', 'invoiceNumber'],
+      name: 'unique_sales_shop_invoice_number'
+    },
+    {
+      unique: true,
+      fields: ['shopId', 'idempotencyKey'],
+      name: 'unique_sales_shop_idempotency_key'
+    }
+  ]
 });
 
 // Relationships are now defined in models/index.js to avoid conflicts

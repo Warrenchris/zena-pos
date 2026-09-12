@@ -13,13 +13,11 @@ const Product = sequelize.define('Product', {
   },
   sku: {
     type: DataTypes.STRING,
-    allowNull: false,
-    unique: true
+    allowNull: false
   },
   barcode: {
     type: DataTypes.STRING,
-    allowNull: true,
-    unique: true
+    allowNull: true
   },
   description: {
     type: DataTypes.TEXT,
@@ -68,7 +66,19 @@ const Product = sequelize.define('Product', {
     }
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    {
+      unique: true,
+      fields: ['shopId', 'sku'],
+      name: 'unique_products_shop_sku'
+    },
+    {
+      unique: true,
+      fields: ['shopId', 'barcode'],
+      name: 'unique_products_shop_barcode'
+    }
+  ]
 });
 
 // Relationships are defined in models/index.js
