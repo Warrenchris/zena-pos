@@ -35,6 +35,10 @@ import { fetchProducts } from '../store/slices/productsSlice';
 import api, { employeesAPI } from '../services/api';
 import { notifyLowStock } from '../utils/notifications';
 
+// Track notified product conditions (productId:stockQuantity) to alert once per new low-stock condition
+// and avoid duplicate toasts on data refetches, polls, or remounts.
+const notifiedStockConditions = new Set();
+
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -119,7 +123,6 @@ export default function Dashboard() {
 
   const statisticsRef = React.useRef(statistics);
   statisticsRef.current = statistics;
-  const notifiedProductsRef = React.useRef(new Set());
 
   const fetchInsights = useCallback(async () => {
     try {
@@ -219,25 +222,24 @@ export default function Dashboard() {
     }
   }, [loadDashboardData]);
 
-  // Check for low stock products
+  // Check for low stock products (alert only once per unique low-stock condition)
   useEffect(() => {
-    if (products && products.length > 0) {
+    if (products && products.length > 0 && userRole === 'admin') {
       const lowStockProducts = products.filter(product =>
         product.stockQuantity <= product.reorderPoint && product.active
       );
 
-      if (lowStockProducts.length > 0 && userRole === 'admin') {
-        lowStockProducts.forEach(product => {
-          if (!notifiedProductsRef.current.has(product.id)) {
-            notifyLowStock(
-              product.name,
-              product.stockQuantity,
-              product.reorderPoint
-            );
-            notifiedProductsRef.current.add(product.id);
-          }
-        });
-      }
+      lowStockProducts.forEach(product => {
+        const conditionKey = `${product.id}:${product.stockQuantity}`;
+        if (!notifiedStockConditions.has(conditionKey)) {
+          notifyLowStock(
+            product.name,
+            product.stockQuantity,
+            product.reorderPoint
+          );
+          notifiedStockConditions.add(conditionKey);
+        }
+      });
     }
   }, [products, userRole]);
 

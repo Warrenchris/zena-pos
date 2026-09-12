@@ -1,6 +1,5 @@
 import React, { Suspense } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
-import { ToastProvider } from './Toast';
+import { Outlet } from 'react-router-dom';
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center h-screen">
@@ -9,16 +8,12 @@ const LoadingSpinner = () => (
 );
 
 const RootLayout = () => {
-  const location = useLocation();
-
   return (
-    <ToastProvider>
-      <div className="min-h-screen bg-app text-text-primary transition-colors duration-200">
-        <Suspense fallback={<LoadingSpinner />}>
-          <Outlet />
-        </Suspense>
-      </div>
-    </ToastProvider>
+    <div className="min-h-screen bg-app text-text-primary transition-colors duration-200">
+      <Suspense fallback={<LoadingSpinner />}>
+        <Outlet />
+      </Suspense>
+    </div>
   );
 };
 
