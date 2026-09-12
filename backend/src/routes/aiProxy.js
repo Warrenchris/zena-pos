@@ -101,6 +101,10 @@ router.use('/forward/api/finance', aiRateLimiter);
 
 router.delete('/cache/:shopId', checkRole(['admin']), (req, res) => {
   const { shopId } = req.params;
+  const userShopId = req.shopId || req.user?.shopId;
+  if (parseInt(shopId, 10) !== userShopId) {
+    return res.status(403).json({ error: 'Access denied: cannot clear cache for another shop' });
+  }
   const keys = forecastCache.keys().filter((key) => key.startsWith(`forecast:${shopId}:`));
   keys.forEach((key) => forecastCache.del(key));
   return res.json({ message: 'Forecast cache cleared', keysCleared: keys.length });

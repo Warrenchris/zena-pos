@@ -106,14 +106,15 @@ router.post('/callback', async (req, res) => {
 });
 
 // GET /api/mpesa/status/:checkoutRequestId (authenticated/frontend polling)
-router.get('/status/:checkoutRequestId', async (req, res) => {
+router.get('/status/:checkoutRequestId', auth, async (req, res) => {
   try {
     const { checkoutRequestId } = req.params;
+    const userShopId = req.shopId || req.user?.shopId;
     const pendingPayment = await PendingPayment.findOne({
       where: { checkoutRequestId }
     });
 
-    if (!pendingPayment) {
+    if (!pendingPayment || (userShopId && pendingPayment.shopId !== userShopId)) {
       return res.status(404).json({ error: 'Pending payment not found.' });
     }
 

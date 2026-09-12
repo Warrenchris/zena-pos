@@ -296,7 +296,7 @@ exports.adjustLoyaltyPoints = async (req, res) => {
 
     const { points, reason } = req.body;
     const customer = await Customer.findOne({
-      where: { id: req.params.id, active: true }
+      where: { id: req.params.id, active: true, shopId: req.user.shopId }
     });
 
     if (!customer) {

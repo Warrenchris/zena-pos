@@ -35,6 +35,7 @@ exports.getSalesSummary = async (req, res) => {
     // First, let's find the date range of existing sales
     const shopId = req.user.shopId;
     const salesRange = await Sale.findOne({
+      where: { shopId },
       attributes: [
         [sequelize.fn('MIN', sequelize.col('createdAt')), 'minDate'],
         [sequelize.fn('MAX', sequelize.col('createdAt')), 'maxDate']

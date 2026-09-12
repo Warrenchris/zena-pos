@@ -94,6 +94,10 @@ exports.getPermissionMatrix = async (req, res) => {
 
 // PUT /api/permissions/matrix
 exports.updatePermissionMatrix = async (req, res) => {
+  if (req.user?.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Permission denied', details: 'Only super_admin can modify global role permissions' });
+  }
+
   const transaction = await sequelize.transaction();
   try {
     const { updates } = req.body; // Array of { role, permissionId, permissionName, enabled }
