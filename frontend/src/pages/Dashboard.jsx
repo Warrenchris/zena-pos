@@ -8,6 +8,8 @@ import {
   TagIcon,
   ChartBarIcon,
   ArrowPathIcon,
+  ExclamationTriangleIcon,
+  CubeIcon,
 } from '@heroicons/react/24/outline';
 import { lazy, Suspense } from 'react';
 import BusinessInsights from '../components/financial/BusinessInsights';
@@ -468,133 +470,217 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Sales */}
         <Card variant="default">
-          <Card.Header title="Recent Sales" />
+          <Card.Header
+            title="Recent Sales"
+            action={
+              <button
+                onClick={() => navigate('/sales')}
+                className="text-caption font-semibold text-primary hover:text-primary-hover transition-colors"
+              >
+                View All →
+              </button>
+            }
+          />
           <Card.Body>
             {salesLoading ? (
-              <div className="animate-pulse space-y-4" role="status" aria-label="Loading recent sales">
+              <div className="animate-pulse space-y-3" role="status" aria-label="Loading recent sales">
                 {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex justify-between items-center">
-                    <div>
-                      <div className="h-4 w-24 bg-surface-2 rounded"></div>
-                      <div className="h-3 w-32 bg-surface-2 rounded mt-2"></div>
+                  <div key={i} className="flex items-center gap-3 py-2">
+                    <div className="h-9 w-9 rounded-full bg-surface-2 shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-4 w-28 bg-surface-2 rounded" />
+                      <div className="h-3 w-20 bg-surface-2/70 rounded" />
                     </div>
-                    <div className="text-right">
-                      <div className="h-4 w-20 bg-surface-2 rounded"></div>
-                      <div className="h-3 w-24 bg-surface-2 rounded mt-2"></div>
+                    <div className="text-right space-y-1.5">
+                      <div className="h-4 w-20 bg-surface-2 rounded" />
+                      <div className="h-3 w-16 bg-surface-2/70 rounded ml-auto" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : salesError ? (
-              <div className="text-center py-6" role="alert">
+              <div className="text-center py-8" role="alert">
                 <p className="text-danger mb-1 font-medium">Error loading recent sales</p>
                 <p className="text-text-muted text-small">{salesError}</p>
               </div>
             ) : !sales || sales.length === 0 ? (
-              <div className="text-center py-6">
+              <div className="text-center py-10">
+                <ShoppingBagIcon className="h-10 w-10 text-text-muted/40 mx-auto mb-2" />
                 <p className="text-text-secondary font-medium">No recent sales</p>
                 <p className="text-text-muted text-small mt-1">Create a sale from the POS to see it here.</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {(Array.isArray(sales) ? sales : []).slice(0, 5).map((sale) => (
-                  <div
-                    key={sale.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleSaleClick(sale)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleSaleClick(sale);
-                      }
-                    }}
-                    className="flex justify-between items-center hover:bg-surface-2 p-3 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  >
-                    <div>
-                      <p className="text-body font-medium text-text-primary">
-                        {sale.invoiceNumber}
-                      </p>
-                      <p className="text-small text-text-muted">
-                        {sale.Customer?.name || sale.customer?.name || WALK_IN_CUSTOMER_NAME}
-                      </p>
+              <div className="space-y-1">
+                {(Array.isArray(sales) ? sales : []).slice(0, 5).map((sale) => {
+                  const customerName = sale.Customer?.name || sale.customer?.name || WALK_IN_CUSTOMER_NAME;
+                  const initials = customerName
+                    .split(' ')
+                    .map((w) => w[0])
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase();
+                  const method = (sale.paymentMethod || 'cash').toLowerCase();
+                  const methodLabel = method === 'mpesa' || method === 'mobile' ? 'M-Pesa'
+                    : method === 'card' ? 'Card'
+                    : 'Cash';
+                  const methodColors = method === 'mpesa' || method === 'mobile'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-950/60 dark:text-green-300'
+                    : method === 'card'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                    : 'bg-surface-2 text-text-secondary';
+
+                  return (
+                    <div
+                      key={sale.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSaleClick(sale)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSaleClick(sale);
+                        }
+                      }}
+                      className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-surface-2/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group"
+                    >
+                      {/* Customer avatar */}
+                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-[12px] font-bold text-primary">{initials}</span>
+                      </div>
+
+                      {/* Name + invoice */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-body font-medium text-text-primary truncate">
+                          {customerName}
+                        </p>
+                        <p className="text-caption text-text-muted">
+                          {sale.invoiceNumber}
+                        </p>
+                      </div>
+
+                      {/* Payment method badge */}
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${methodColors}`}>
+                        {methodLabel}
+                      </span>
+
+                      {/* Amount + date */}
+                      <div className="text-right shrink-0">
+                        <p className="text-body font-bold text-primary">
+                          {formatCurrency(sale.total)}
+                        </p>
+                        <p className="text-caption text-text-muted">
+                          {formatDate(sale.createdAt)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-body font-semibold text-primary">
-                        {formatCurrency(sale.total)}
-                      </p>
-                      <p className="text-caption text-text-muted">
-                        {formatDate(sale.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card.Body>
         </Card>
 
-        {/* Low Stock Products */}
+        {/* Low Stock Alert */}
         <Card variant="default">
-          <Card.Header title="Low Stock Alert" />
+          <Card.Header
+            title="Low Stock Alert"
+            action={
+              <button
+                onClick={() => navigate('/products')}
+                className="text-caption font-semibold text-danger hover:text-danger/80 transition-colors"
+              >
+                Manage Stock →
+              </button>
+            }
+          />
           <Card.Body>
             {productsLoading ? (
-              <div className="animate-pulse space-y-4" role="status" aria-label="Loading low stock products">
+              <div className="animate-pulse space-y-3" role="status" aria-label="Loading low stock products">
                 {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex justify-between items-center">
-                    <div>
-                      <div className="h-4 w-32 bg-surface-2 rounded"></div>
-                      <div className="h-3 w-24 bg-surface-2 rounded mt-2"></div>
+                  <div key={i} className="flex items-center gap-3 py-2">
+                    <div className="h-9 w-9 rounded-lg bg-surface-2 shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-4 w-32 bg-surface-2 rounded" />
+                      <div className="h-2 w-full bg-surface-2/60 rounded-full" />
                     </div>
-                    <div className="text-right">
-                      <div className="h-4 w-16 bg-surface-2 rounded"></div>
-                      <div className="h-3 w-20 bg-surface-2 rounded mt-2"></div>
-                    </div>
+                    <div className="h-6 w-16 bg-surface-2 rounded-full" />
                   </div>
                 ))}
               </div>
             ) : products.filter(p => p.stockQuantity <= p.reorderPoint).length === 0 ? (
-              <div className="text-center py-6">
+              <div className="text-center py-10">
+                <CubeIcon className="h-10 w-10 text-emerald-400 mx-auto mb-2" />
                 <p className="text-text-secondary font-medium">All products are well stocked!</p>
-                <p className="text-text-muted text-small mt-1">Update stock levels from the Products page.</p>
+                <p className="text-text-muted text-small mt-1">Stock levels are looking healthy across your inventory.</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {products
                   .filter(p => p.stockQuantity <= p.reorderPoint)
                   .slice(0, 5)
-                  .map((product) => (
-                    <div
-                      key={product.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate('/products')}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          navigate('/products');
-                        }
-                      }}
-                      className="flex justify-between items-center hover:bg-surface-2 p-3 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                    >
-                      <div>
-                        <p className="text-body font-medium text-text-primary">
-                          {product.name}
-                        </p>
-                        <p className="text-small text-text-muted">
-                          SKU: {product.sku}
-                        </p>
+                  .map((product) => {
+                    const isCritical = product.stockQuantity === 0;
+                    const isVeryLow = product.stockQuantity > 0 && product.stockQuantity <= Math.ceil(product.reorderPoint * 0.5);
+                    const urgencyLabel = isCritical ? 'Out of Stock' : isVeryLow ? 'Critical' : 'Low Stock';
+                    const urgencyColors = isCritical
+                      ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+                      : isVeryLow
+                      ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300';
+                    const stockFillPct = product.reorderPoint > 0
+                      ? Math.min((product.stockQuantity / (product.reorderPoint * 2)) * 100, 100)
+                      : 0;
+                    const barColor = isCritical ? 'bg-red-500' : isVeryLow ? 'bg-orange-500' : 'bg-amber-400';
+
+                    return (
+                      <div
+                        key={product.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => navigate('/products')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            navigate('/products');
+                          }
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-surface-2/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 group"
+                      >
+                        {/* Product icon */}
+                        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          isCritical ? 'bg-red-100 dark:bg-red-950/40' : 'bg-amber-50 dark:bg-amber-950/30'
+                        }`}>
+                          {isCritical
+                            ? <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+                            : <CubeIcon className="h-5 w-5 text-amber-500" />
+                          }
+                        </div>
+
+                        {/* Name + stock fill bar */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-body font-medium text-text-primary truncate">
+                            {product.name}
+                          </p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className="h-1.5 flex-1 bg-surface-2 rounded-full overflow-hidden">
+                              <div
+                                className={`h-1.5 rounded-full transition-all duration-500 ${barColor}`}
+                                style={{ width: `${stockFillPct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-text-muted shrink-0">
+                              {product.stockQuantity}/{product.reorderPoint}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Urgency badge */}
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${urgencyColors}`}>
+                          {urgencyLabel}
+                        </span>
                       </div>
-                      <div className="text-right">
-                        <p className="text-body font-semibold text-danger">
-                          {product.stockQuantity} left
-                        </p>
-                        <p className="text-caption text-text-muted">
-                          Reorder: {product.reorderPoint}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             )}
           </Card.Body>

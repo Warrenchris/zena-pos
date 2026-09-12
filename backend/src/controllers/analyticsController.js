@@ -4,6 +4,27 @@ const sequelize = require('../config/database');
 const { getCachedAnalytics, setCachedAnalytics } = require('../utils/analyticsCache');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
+// Offset in milliseconds for Africa/Nairobi (UTC+3)
+const NAIROBI_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Return a Date object representing local-Nairobi midnight (00:00:00.000)
+ * for the calendar day that contains `utcNow`, expressed in UTC.
+ * e.g. if utcNow is 2026-09-12T15:03:00Z (= 18:03 local) the result is
+ *      2026-09-12T21:00:00.000Z (= 2026-09-13 00:00:00 local) — i.e.
+ *      we first find the local day, then express its midnight back in UTC.
+ */
+function nairobiMidnightUTC(utcNow, dayOffset = 0) {
+  // Shift to local time to identify the calendar date
+  const localMs = utcNow.getTime() + NAIROBI_OFFSET_MS;
+  // Truncate to midnight in local time (ms since epoch at local midnight)
+  const localMidnightMs = Math.floor(localMs / 86400000) * 86400000;
+  // Apply optional day offset (in whole local days)
+  const shiftedLocalMs = localMidnightMs + dayOffset * 86400000;
+  // Convert back to UTC
+  return new Date(shiftedLocalMs - NAIROBI_OFFSET_MS);
+}
+
 // Helper function to calculate start and end dates with previous period comparison
 function resolveDateRange(period, startDateParam, endDateParam) {
   const now = new Date();
@@ -13,18 +34,13 @@ function resolveDateRange(period, startDateParam, endDateParam) {
   let previousEndDate;
 
   if (period === 'today') {
-    // Africa/Nairobi day boundary
-    startDate = new Date(now);
-    startDate.setHours(0, 0, 0, 0);
-    endDate = new Date(now);
-    endDate.setHours(23, 59, 59, 999);
+    // Africa/Nairobi day boundary — anchor to local midnight expressed in UTC
+    // so that the DB range covers 00:00–23:59:59.999 Nairobi time.
+    startDate = nairobiMidnightUTC(now, 0);          // today 00:00:00 local → UTC
+    endDate   = new Date(nairobiMidnightUTC(now, 1).getTime() - 1); // today 23:59:59.999 local
 
-    previousStartDate = new Date(startDate);
-    previousStartDate.setDate(previousStartDate.getDate() - 1);
-    previousStartDate.setHours(0, 0, 0, 0);
-
-    previousEndDate = new Date(startDate);
-    previousEndDate.setMilliseconds(-1);
+    previousStartDate = nairobiMidnightUTC(now, -1); // yesterday 00:00:00 local → UTC
+    previousEndDate   = new Date(startDate.getTime() - 1); // yesterday 23:59:59.999 local
   } else if (period === 'custom' && (startDateParam || endDateParam)) {
     startDate = startDateParam ? new Date(startDateParam) : new Date(now);
     if (startDateParam) startDate.setHours(0, 0, 0, 0);
@@ -178,17 +194,19 @@ const analyticsController = {
         replacements.push(isUuid ? employeeId : parseInt(employeeId, 10));
       }
 
-      // Combined query for current and previous periods
+      // Combined query for current and previous periods.
+      // CONVERT_TZ shifts stored UTC timestamps to Africa/Nairobi (+03:00) before
+      // DATE() / HOUR() so that each sale lands in the correct local-time bucket.
       const results = await sequelize.query(`
         SELECT 
-          DATE(createdAt) as date,
-          HOUR(createdAt) as hour,
+          DATE(CONVERT_TZ(createdAt, '+00:00', '+03:00')) as date,
+          HOUR(CONVERT_TZ(createdAt, '+00:00', '+03:00')) as hour,
           COUNT(CASE WHEN createdAt >= ? AND createdAt <= ? THEN 1 END) as current_visitors,
           COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_visitors
         FROM Sales
         WHERE shopId = ? AND createdAt >= ? AND createdAt <= ? AND saleStatus != 'cancelled'${empCondition}
-        GROUP BY DATE(createdAt), HOUR(createdAt)
-        ORDER BY DATE(createdAt) ASC, HOUR(createdAt) ASC
+        GROUP BY DATE(CONVERT_TZ(createdAt, '+00:00', '+03:00')), HOUR(CONVERT_TZ(createdAt, '+00:00', '+03:00'))
+        ORDER BY DATE(CONVERT_TZ(createdAt, '+00:00', '+03:00')) ASC, HOUR(CONVERT_TZ(createdAt, '+00:00', '+03:00')) ASC
       `, {
         replacements,
         type: sequelize.QueryTypes.SELECT
@@ -272,19 +290,21 @@ const analyticsController = {
         replacements.push(isUuid ? employeeId : parseInt(employeeId, 10));
       }
 
-      // Combined query for both current and previous periods
+      // Combined query for both current and previous periods.
+      // CONVERT_TZ shifts stored UTC timestamps to Africa/Nairobi (+03:00) before
+      // DATE() / HOUR() so that each sale lands in the correct local-time bucket.
       const results = await sequelize.query(`
         SELECT 
-          DATE(s.createdAt) as date,
-          HOUR(s.createdAt) as hour,
+          DATE(CONVERT_TZ(s.createdAt, '+00:00', '+03:00')) as date,
+          HOUR(CONVERT_TZ(s.createdAt, '+00:00', '+03:00')) as hour,
           COUNT(CASE WHEN s.createdAt >= ? AND s.createdAt <= ? THEN 1 END) as current_count,
           SUM(CASE WHEN s.createdAt >= ? AND s.createdAt <= ? THEN (s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as current_revenue,
           COUNT(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN 1 END) as previous_count,
           SUM(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN (s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as previous_revenue
         FROM Sales s
         WHERE s.shopId = ? AND s.createdAt >= ? AND s.createdAt <= ? AND s.saleStatus != 'cancelled'${empCondition}
-        GROUP BY DATE(s.createdAt), HOUR(s.createdAt)
-        ORDER BY DATE(s.createdAt), HOUR(s.createdAt)
+        GROUP BY DATE(CONVERT_TZ(s.createdAt, '+00:00', '+03:00')), HOUR(CONVERT_TZ(s.createdAt, '+00:00', '+03:00'))
+        ORDER BY DATE(CONVERT_TZ(s.createdAt, '+00:00', '+03:00')), HOUR(CONVERT_TZ(s.createdAt, '+00:00', '+03:00'))
       `, {
         replacements,
         type: sequelize.QueryTypes.SELECT
