@@ -347,7 +347,50 @@
   font-weight: 600 !important;
 }
 
+/* ── Dashboard Responsive Overrides ── */
+
+/* On mobile, chart cards cap at a comfortable height and prevent overflow */
+@media (max-width: 640px) {
+  /* Charts: reduce fixed heights on small screens */
+  .dashboard-chart-viewport {
+    height: 220px !important;
+  }
+
+  /* Metric summary pill rows: allow wrapping without overflow */
+  .dashboard-metric-pills {
+    flex-wrap: wrap;
+  }
+
+  /* Stats grid: collapse to single column below md */
+  .stats-asymmetric-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto !important;
+  }
+
+  /* TopSellingProducts table: horizontally scrollable on mobile */
+  .dashboard-products-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .dashboard-products-table table {
+    min-width: 480px;
+  }
+
+  /* Selling Platform: stack donut + channel list vertically */
+  .selling-platform-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Tablet (641–1023px): limit inner chart heights slightly */
+@media (min-width: 641px) and (max-width: 1023px) {
+  .dashboard-chart-viewport {
+    height: 260px;
+  }
+}
+
 /* ── Landing Page Animations ── */
+
 @keyframes landing-float-0 {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }

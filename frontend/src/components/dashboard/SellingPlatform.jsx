@@ -4,6 +4,12 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { fetchSalesChannels } from '../../store/slices/analyticsSlice';
 import useCurrency from '../../hooks/useCurrency';
 import Card from '../ui/Card';
+import {
+  BanknotesIcon,
+  DevicePhoneMobileIcon,
+  CreditCardIcon,
+  TagIcon,
+} from '@heroicons/react/24/outline';
 
 // Harmonious palette using curated hues instead of generic web-safe colors
 const CHANNEL_COLORS = [
@@ -14,20 +20,16 @@ const CHANNEL_COLORS = [
   '#EC4899', // Pink
 ];
 
-// Icon glyph to make each channel feel more premium
-const CHANNEL_ICON = {
-  cash: '💵',
-  mpesa: '📱',
-  card: '💳',
-  default: '🏷️',
-};
-
-function getChannelIcon(name = '') {
+// Maps payment method name → heroicon component
+function ChannelIcon({ name = '', className = 'h-4 w-4' }) {
   const key = name.toLowerCase();
-  if (key.includes('mpesa') || key.includes('m-pesa') || key.includes('mobile')) return CHANNEL_ICON.mpesa;
-  if (key.includes('cash')) return CHANNEL_ICON.cash;
-  if (key.includes('card') || key.includes('visa') || key.includes('master')) return CHANNEL_ICON.card;
-  return CHANNEL_ICON.default;
+  if (key.includes('mpesa') || key.includes('m-pesa') || key.includes('mobile'))
+    return <DevicePhoneMobileIcon className={className} />;
+  if (key.includes('cash'))
+    return <BanknotesIcon className={className} />;
+  if (key.includes('card') || key.includes('visa') || key.includes('master'))
+    return <CreditCardIcon className={className} />;
+  return <TagIcon className={className} />;
 }
 
 const SellingPlatform = ({ filter = { period: 'week' } }) => {
@@ -59,10 +61,11 @@ const SellingPlatform = ({ filter = { period: 'week' } }) => {
       return (
         <div className="rounded-2xl border border-border-default/80 bg-surface/95 backdrop-blur-md px-4 py-3 shadow-floating min-w-[170px]">
           <p
-            className="font-semibold text-caption border-b border-border-default/60 pb-1.5 mb-2"
+            className="font-semibold text-caption border-b border-border-default/60 pb-1.5 mb-2 flex items-center gap-1.5"
             style={{ color }}
           >
-            {getChannelIcon(entry.name)} {entry.name}
+            <ChannelIcon name={entry.name} className="h-3.5 w-3.5" />
+            {entry.name}
           </p>
           <div className="space-y-1.5 text-caption text-text-secondary">
             <div className="flex justify-between gap-3">
@@ -234,7 +237,7 @@ const SellingPlatform = ({ filter = { period: 'week' } }) => {
                   {/* Channel header row */}
                   <div className="flex items-center justify-between text-caption">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm">{getChannelIcon(entry.name)}</span>
+                      <ChannelIcon name={entry.name} className="h-4 w-4 shrink-0" />
                       <span className="font-semibold text-text-primary capitalize">{entry.name || 'Other'}</span>
                       <span className="text-text-muted text-[10px]">
                         {(entry.orders || 0).toLocaleString()} orders

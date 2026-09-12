@@ -4,14 +4,19 @@ import { useNavigate } from 'react-router-dom';
 import { fetchTopProducts } from '../../store/slices/analyticsSlice';
 import useCurrency from '../../hooks/useCurrency';
 import Card from '../ui/Card';
+import {
+  TrophyIcon,
+  StarIcon,
+  FireIcon,
+} from '@heroicons/react/24/solid';
 
-// Rank medal colors for top 3
+// Rank badge config for top 3
 const RANK_STYLES = [
-  { bg: 'bg-amber-100 dark:bg-amber-950/60', text: 'text-amber-700 dark:text-amber-300', label: '🥇' },
-  { bg: 'bg-slate-100 dark:bg-slate-800/60',  text: 'text-slate-600 dark:text-slate-300',  label: '🥈' },
-  { bg: 'bg-orange-100 dark:bg-orange-950/60', text: 'text-orange-700 dark:text-orange-300', label: '🥉' },
-  { bg: 'bg-surface-2',                         text: 'text-text-muted',                       label: null },
-  { bg: 'bg-surface-2',                         text: 'text-text-muted',                       label: null },
+  { bg: 'bg-amber-100 dark:bg-amber-950/60', text: 'text-amber-600 dark:text-amber-400', Icon: TrophyIcon },
+  { bg: 'bg-slate-100 dark:bg-slate-800/60',  text: 'text-slate-500 dark:text-slate-300',  Icon: StarIcon },
+  { bg: 'bg-orange-100 dark:bg-orange-950/60', text: 'text-orange-600 dark:text-orange-400', Icon: FireIcon },
+  { bg: 'bg-surface-2', text: 'text-text-muted', Icon: null },
+  { bg: 'bg-surface-2', text: 'text-text-muted', Icon: null },
 ];
 
 // Sort icon component
@@ -142,7 +147,7 @@ const TopSellingProducts = ({ filter = { period: 'week' } }) => {
 
   // --- Main render ---
   return (
-    <Card variant="default" className="p-6 overflow-x-auto">
+    <Card variant="default" className="p-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
@@ -184,7 +189,8 @@ const TopSellingProducts = ({ filter = { period: 'week' } }) => {
         </div>
       </div>
 
-      <table className="min-w-full">
+      <div className="overflow-x-auto -mx-6 px-6">
+      <table className="min-w-full" style={{ minWidth: '480px' }}>
         <thead>
           <tr className="bg-surface-2/40 rounded-xl">
             <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-text-muted w-8">
@@ -217,10 +223,13 @@ const TopSellingProducts = ({ filter = { period: 'week' } }) => {
                 {/* Rank */}
                 <td className="px-4 py-3 whitespace-nowrap">
                   <div
-                    className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-[11px] font-bold ${rankStyle.bg} ${rankStyle.text}`}
-                  >
-                    {rankStyle.label ?? (idx + 1)}
-                  </div>
+                  className={`inline-flex items-center justify-center w-7 h-7 rounded-lg ${rankStyle.bg} ${rankStyle.text}`}
+                >
+                  {rankStyle.Icon
+                    ? <rankStyle.Icon className="h-4 w-4" />
+                    : <span className="text-[11px] font-bold">{idx + 1}</span>
+                  }
+                </div>
                 </td>
 
                 {/* Product name + revenue share bar */}
@@ -277,6 +286,7 @@ const TopSellingProducts = ({ filter = { period: 'week' } }) => {
           })}
         </tbody>
       </table>
+      </div>
     </Card>
   );
 };
