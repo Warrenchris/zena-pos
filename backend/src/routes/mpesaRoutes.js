@@ -114,7 +114,7 @@ router.get('/status/:checkoutRequestId', auth, async (req, res) => {
       where: { checkoutRequestId }
     });
 
-    if (!pendingPayment || (userShopId && pendingPayment.shopId !== userShopId)) {
+    if (!pendingPayment || pendingPayment.shopId !== userShopId) {
       return res.status(404).json({ error: 'Pending payment not found.' });
     }
 
