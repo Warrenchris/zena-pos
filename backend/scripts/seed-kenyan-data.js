@@ -73,6 +73,7 @@ async function seedKenyanData() {
     console.log('Staff Users verified/created.');
 
     // 2b. Create Kenyan Employees for HR listing
+    // Note: Employee.bulkCreate relies on the model-level beforeBulkCreate hook in Employee.js for password hashing.
     await Employee.destroy({ where: { shopId: shop.id } });
     await Employee.bulkCreate([
       {

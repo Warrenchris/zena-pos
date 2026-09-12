@@ -4,6 +4,7 @@ const sequelize = require('../config/database');
 const RolePermission = require('./RolePermission');
 const Permission = require('./Permission');
 const permissionCache = require('../services/permissionCache');
+const { isBcryptHash } = require('../utils/passwordUtils');
 
 const User = sequelize.define('User', {
   id: {
@@ -51,12 +52,12 @@ const User = sequelize.define('User', {
       }
     },
     beforeCreate: async (user) => {
-      if (user.password) {
+      if (user.password && !isBcryptHash(user.password)) {
         user.password = await bcrypt.hash(user.password, 8);
       }
     },
     beforeUpdate: async (user) => {
-      if (user.changed('password')) {
+      if (user.changed('password') && user.password && !isBcryptHash(user.password)) {
         user.password = await bcrypt.hash(user.password, 8);
       }
       // Invalidate user cache if role changes
@@ -67,6 +68,18 @@ const User = sequelize.define('User', {
         if (user.previous('role')) {
           permissionCache.invalidateRoleCache(user.previous('role'));
         }
+      }
+    },
+    beforeBulkCreate: async (records) => {
+      for (const record of records) {
+        if (record.password && !isBcryptHash(record.password)) {
+          record.password = await bcrypt.hash(record.password, 8);
+        }
+      }
+    },
+    beforeBulkUpdate: async (options) => {
+      if (options.attributes?.password && !isBcryptHash(options.attributes.password)) {
+        options.attributes.password = await bcrypt.hash(options.attributes.password, 8);
       }
     },
     afterUpdate: async (user) => {

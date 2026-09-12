@@ -2,6 +2,7 @@ const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const sequelize = require('../config/database');
 const Shop = require('./Shop');
+const { isBcryptHash } = require('../utils/passwordUtils');
 
 const Employee = sequelize.define('Employee', {
   id: {
@@ -62,13 +63,25 @@ const Employee = sequelize.define('Employee', {
   timestamps: true,
   hooks: {
     beforeCreate: async (employee) => {
-      if (employee.password) {
+      if (employee.password && !isBcryptHash(employee.password)) {
         employee.password = await bcrypt.hash(employee.password, 8);
       }
     },
     beforeUpdate: async (employee) => {
-      if (employee.changed('password') && employee.password) {
+      if (employee.changed('password') && employee.password && !isBcryptHash(employee.password)) {
         employee.password = await bcrypt.hash(employee.password, 8);
+      }
+    },
+    beforeBulkCreate: async (records) => {
+      for (const record of records) {
+        if (record.password && !isBcryptHash(record.password)) {
+          record.password = await bcrypt.hash(record.password, 8);
+        }
+      }
+    },
+    beforeBulkUpdate: async (options) => {
+      if (options.attributes?.password && !isBcryptHash(options.attributes.password)) {
+        options.attributes.password = await bcrypt.hash(options.attributes.password, 8);
       }
     }
   }

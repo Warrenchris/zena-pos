@@ -139,6 +139,7 @@ const seedDatabase = async () => {
     ]);
 
     // Create sample employees
+    // Note: Employee.bulkCreate relies on the model-level beforeBulkCreate hook in Employee.js for password hashing.
     await Employee.bulkCreate([
       {
         firstName: 'John',
