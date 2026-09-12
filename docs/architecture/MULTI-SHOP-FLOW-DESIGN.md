@@ -181,7 +181,7 @@ When the frontend switches branches, it follows a strict 4-step contract:
   - A cashier or local shop manager (`orgRole: 'member'`) cannot spawn new physical branches.
   - Only enterprise `owner` or `admin` accounts can expand an organization.
 
-### 4.2 Atomic Transaction Lifecycle
+### 4.2 Atomic Transaction Lifecycle & Activity Logging
 When a new Shop is created, the operation must execute within an atomic MySQL transaction (`sequelize.transaction`):
 
 ```
@@ -190,20 +190,50 @@ When a new Shop is created, the operation must execute within an atomic MySQL tr
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ 1. Validate caller has orgRole IN ('owner', 'admin') in req.organizationId             │
 │ 2. INSERT INTO Shops (name, address, phone, kraPin, registrationNumber, organizationId)│
-│ 3. INSERT INTO ShopAccess (membershipId, shopId, isDefault = 0)                        │
+│ 3. CONDITIONAL: IF caller is 'admin', INSERT INTO ShopAccess (membershipId, shopId)    │
+│    (IF caller is 'owner', BYPASS — owners possess universal implicit access by design)  │
 │ 4. INSERT INTO SystemSettings (shopId, defaultCurrency = 'KES', timezone, ...)         │
-│ 5. Commit Transaction & Return Created Shop Details                                    │
+│ 5. INSERT INTO ActivityLogs (SHOP_CREATED, shopId = newShop.id, performedBy = caller)  │
+│ 6. Commit Transaction & Return Created Shop Details                                    │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.3 The `ShopAccess` Resolution for Org Owners/Admins
+#### Activity Logging Implementation & Scoping Justification
+Every primary resource-creation action across this codebase (`SALE_CREATED` in `saleController.js`, `PRODUCT_CREATED` in `productController.js`, `PO_CREATED` in `purchases.js`) writes an audit log entry via the standardized helper `logActivity` from `backend/src/middleware/logger.js`:
+
+```javascript
+await logActivity({
+  shopId: newShop.id,
+  performedBy: req.user.id,
+  performedByType: req.user.isEmployee ? 'employee' : 'user',
+  action: 'SHOP_CREATED',
+  entity: 'Shop',
+  entityId: newShop.id,
+  details: `Shop "${newShop.name}" created under organization ${req.organizationId}`
+}, transaction);
+```
+
+**Scoping Decision: Scoped Directly to `newShop.id` (Not Nullable at Organization Level)**:
+1. **Preserves Database Constraints**: `ActivityLog.shopId` is defined as `INTEGER NOT NULL REFERENCES Shops(id)` (`backend/src/models/ActivityLog.js:23-30`). The helper explicitly guards `if (!shopId) return;` (`backend/src/middleware/logger.js:6-9`). Making `shopId` nullable would require an intrusive schema migration and break tenant-isolation filtering across existing audit queries.
+2. **Entity Direct Relevance & Audit Genesis**: The newly created shop is the direct entity brought into existence (`entity: 'Shop'`, `entityId: newShop.id`). Logging against `shopId: newShop.id` establishes the foundational genesis record for that branch's audit trail from day zero.
+3. **Seamless Organization-Level Roll-Up**: Because every `Shop` holds a foreign key `organizationId REFERENCES Organizations(id)`, organization-level consolidated reporting (Phase 4) can effortlessly retrieve all branch activities—including branch genesis events—via `SELECT * FROM ActivityLogs a JOIN Shops s ON s.id = a.shopId WHERE s.organizationId = :organizationId`. No nullable FKs or duplicate organization log tables are required.
+4. **Transaction Atomicity**: `newShop.id` is available immediately following Step 2. Passing the active `transaction` into `logActivity` guarantees that if settings initialization or subsequent steps fail, the audit record is atomically rolled back with the shop.
+
+### 4.3 The `ShopAccess` Authority Model: Option 1 (Owner Implicit Bypass, Admin Explicit Grants)
 **Central Architectural Question**: *Does the creating user's membership need a NEW `ShopAccess` row for this shop, or do owners/admins get implicit all-shops access without a row?*
 
-- **Decision**: **Explicit `ShopAccess` creation for the creator's membership upon shop creation**.
-- **Rationale**:
-  1. **Authoritative Single Source of Truth**: System queries of the form *"Who has operational clearance at Branch X?"* (`SELECT * FROM ShopAccess WHERE shopId = :id`) remain 100% complete and index-backed, without needing clumsy `UNION` queries against org admins.
-  2. **Fine-Grained Future Delegation**: An organization may appoint an `admin` (e.g. an operations director) who is assigned to manage North Region shops only. Relying on implicit universal access would prevent assigning sub-sets of branches to administrators.
-  3. **Guaranteed Branch Switching**: By explicitly writing a `ShopAccess` record for the creator, the new shop is immediately visible in their accessible shops list (`GET /api/shop/accessible`) without edge-case fallback logic.
+- **Decision**: **OPTION 1 — 'owner' role bypasses `ShopAccess` entirely by design; `ShopAccess` is authoritative for `admin` and `member` roles.**
+- **Specification**:
+  1. **Owner Authority**: An `owner` possesses universal, implicit operational access to every shop within their organization. No `ShopAccess` row is needed, queried, or created for an `owner`, ever (neither at shop creation, nor during branch switching, nor during user invitation).
+  2. **Admin & Member Authority**: `ShopAccess` is the single authoritative source of truth for `admin` and `member` roles. An `admin` or `member` can only access branches where an explicit, active `ShopAccess` record exists.
+  3. **Creator Grant at Shop Creation**:
+     - When an **`admin`** creates a shop: Step 3 of the atomic transaction inserts a `ShopAccess` row (`membershipId: callerMembership.id, shopId: newShop.id, isDefault: 0`), ensuring the creating admin immediately possesses operational clearance at the new branch.
+     - When an **`owner`** creates a shop: Step 3 is bypassed entirely. Zero rows are inserted into `ShopAccess`.
+  4. **Zero-Mutation Session Switching**: Branch switching (`POST /api/auth/switch-shop`) performs strictly zero writes for all roles. Owners are authorized purely via `orgRole === 'owner'`; admins and members are authorized via indexed `ShopAccess` lookup. Auto-provisioning rows on the fly during session switching is completely eliminated.
+- **Architectural Rationale**:
+  - **No Spurious Writes**: Prevents session switching from executing unnecessary database writes, locks, or side effects.
+  - **Clean Separation of Tenant Ownership vs. Operational Delegation**: The organization owner owns the entire enterprise boundary. Conversely, administrative personnel (e.g., regional branch managers) can be restricted to specific subsets of shops via explicit `ShopAccess` rows.
+  - **Eliminates Sync Drift**: Eliminates the need to retroactively provision `ShopAccess` records for all existing organization owners whenever a new shop is created.
 
 ### 4.4 Shop Bootstrapping & Default Configuration
 Existing single-shop onboarding creates a shop row, but relies on lazy initialization for settings. For a production multi-branch deployment:
@@ -257,6 +287,9 @@ Existing single-shop onboarding creates a shop row, but relies on lazy initializ
   }
 }
 ```
+*Note on `access` field*:
+- When created by an `admin` (`orgRole: 'admin'`), `access` contains the newly provisioned `ShopAccess` record.
+- When created by an `owner` (`orgRole: 'owner'`), `access` is `null` (since owners hold implicit org-wide access and bypass `ShopAccess` by design).
 
 ---
 
@@ -272,14 +305,14 @@ Existing single-shop onboarding creates a shop row, but relies on lazy initializ
   ```
 
 #### Processing Logic:
-1. Verify `shopId` belongs to `req.organizationId`.
-2. Fetch `OrganizationMembership` for caller (`organizationId: req.organizationId, userId: req.user.id`).
-3. Check authorization:
-   - User has active row in `ShopAccess` for `(membershipId, shopId)`, **OR**
-   - User has `orgRole: 'owner'` (an owner switching to an unassigned branch automatically receives an explicit `ShopAccess` grant on the fly).
-4. Fetch target `Shop` record.
-5. Mint new RS256 JWT containing `shopId: targetShopId`, `organizationId: req.organizationId`.
-6. Return refreshed session envelope.
+1. Verify target `shopId` exists, is active (`active: true`), and belongs to `req.organizationId` (`Shop.findOne({ where: { id: shopId, organizationId: req.organizationId, active: true } })`). If not found, return `404 Not Found`.
+2. Fetch caller's `OrganizationMembership` for `req.organizationId` (`userId: req.user.id` or `employeeId: req.user.id`). If not found or status is not `'active'`, return `403 Forbidden`.
+3. Check authorization (Pure Read-Then-Mint — Zero Database Writes):
+   - **If `membership.orgRole === 'owner'`**: Authorized immediately by design (implicit clearance across all organization shops; no `ShopAccess` lookup or insertion).
+   - **If `membership.orgRole IN ('admin', 'member')`**: Query `ShopAccess.findOne({ where: { membershipId: membership.id, shopId: targetShop.id } })`. If no row exists, return `403 Forbidden` (`{ error: "Access denied to target shop" }`).
+4. Mint new RS256 JWT containing `shopId: targetShop.id`, `organizationId: req.organizationId`, and caller claims.
+5. Return refreshed session envelope (`200 OK`).
+*(Strict Guarantee: `switch-shop` performs zero database mutations under all circumstances).*
 
 #### Response (`200 OK`):
 ```json
@@ -313,8 +346,8 @@ Provides the list of shops the caller can switch between (for populating future 
 - **Headers**: `Authorization: Bearer <jwt>`
 
 #### Processing Logic:
-- For `orgRole: 'owner'`: Returns **all active shops** in `req.organizationId`.
-- For `orgRole IN ('admin', 'member')`: Returns shops where an active `ShopAccess` record links caller's `membershipId`.
+- For `orgRole: 'owner'`: Returns **all active shops** in `req.organizationId` (aligned with Option 1: owners bypass `ShopAccess` and hold implicit clearance for every branch in their organization).
+- For `orgRole IN ('admin', 'member')`: Returns only shops where an active `ShopAccess` record links caller's `membershipId`.
 
 #### Response (`200 OK`):
 ```json
@@ -347,6 +380,9 @@ Provides the list of shops the caller can switch between (for populating future 
 | **P0/P1 Tenant Isolation Fixes** | **ZERO** | All 48 controllers rely on `req.user.shopId` and `req.shopId`. | `switch-shop` updates `token.shopId`. The active shop context remains completely isolated and enforced at the database level. |
 | **FINDING-04 Composite Unique Indexes** | **ZERO** | `(shopId, sku)`, `(shopId, barcode)`, `(shopId, invoiceNumber)`. | Creating Shop 18 allows Shop 18 to have `SKU-001` even if Shop 4 also has `SKU-001`. Independent branch namespaces preserved. |
 | **FINDING-11 Catalog Cache Invalidation** | **ZERO** | Cache key is `products:shop:${shopId}`. | Switching to Shop 18 automatically points queries and invalidations to `products:shop:18`, preventing cache cross-talk. |
+| **ShopAccess Authority Model (Option 1)** | **ZERO** | `owner` bypasses `ShopAccess`, while `admin`/`member` require indexed rows. Risk of inconsistent authorization between endpoints. | Uniform rule enforced: `membership.orgRole === 'owner' || hasShopAccess(membership.id, shopId)`. `ShopAccess` is authoritative for `admin`/`member`; `owner` access is determined solely by `orgRole`. |
+| **Activity Logging Scoping (`SHOP_CREATED`)** | **ZERO** | Shop creation is an org-level action, but `ActivityLog.shopId` is strictly non-nullable (`NOT NULL`). | Scoped to `shopId: newShop.id` within the creation transaction. Zero schema changes needed; initializes branch audit trail; rolls up cleanly to org-level reporting via `Shops.organizationId`. |
+| **Pure Read-Only Session Switching** | **ZERO** | Side-effect database mutations during session switching risk race conditions, write locks, or orphaned access grants. | Option 1 strictly guarantees `POST /api/auth/switch-shop` performs zero writes. Pure read-then-mint token refresh. |
 | **Dual Identity (Users vs. Employees)** | **LOW** | Employees (`UUID`) vs Users (`INT`). | `ShopAccess` points to `OrganizationMemberships.id` (`UUID`). Both identity types are supported identically without polymorphic fields. |
 | **Existing Login Flow** | **ZERO** | `authController.login` queries email without shop context. | Login continues minting tokens for the user's default shop. Zero changes to login endpoints. |
 
@@ -356,6 +392,8 @@ Provides the list of shops the caller can switch between (for populating future 
 
 To maintain strict modular boundaries across the 6-phase roadmap, the following are **explicitly out of scope**:
 - ❌ **No Frontend UI**: No React components, modals, dropdowns, or Redux modifications in this phase.
+- ❌ **No Database Writes on Session Switching**: `POST /api/auth/switch-shop` performs zero writes/mutations to `ShopAccess` or any other table.
+- ❌ **No `ActivityLog` Schema Modifications**: `ActivityLog.shopId` remains strictly `INTEGER NOT NULL REFERENCES Shops(id)`. Organization-level audit roll-up views are deferred to Phase 4.
 - ❌ **No Customer / Supplier Migration**: Customers and Suppliers remain strictly shop-scoped until Phase 2.
 - ❌ **No Master Catalog / Inventory Split**: Products remain single-table per-shop until Phase 3.
 - ❌ **No Org Analytics Roll-up**: Consolidated cross-shop reporting remains deferred to Phase 4.
@@ -371,9 +409,11 @@ To maintain strict modular boundaries across the 6-phase roadmap, the following 
 - [x] Complete absence of existing shop-creation endpoints confirmed via codebase grep.
 - [x] Frontend `authSlice` single-shop bottleneck identified and mapped.
 - [x] Option B (`switch-shop` token refresh) fully evaluated and justified over Options A and C.
-- [x] Atomic 3-step creation transaction (`Shop` + `ShopAccess` + `SystemSettings`) designed.
+- [x] Option 1 chosen for ShopAccess: authoritative for `admin`/`member`, bypassed by `owner`; zero writes on session switch.
+- [x] Atomic 5-step creation transaction (`Shop` + conditional `ShopAccess` + `SystemSettings` + `ActivityLog` scoped to `newShop.id`) designed.
+- [x] Existing `logActivity` signature (`backend/src/middleware/logger.js`) matched exactly.
 - [x] Zero-regression compatibility with FINDING-01 through FINDING-12 Phase 1 established.
 
 ---
 
-🛑 **HARD STOP**: Design document complete. Zero code, migrations, or route modifications have been made. Awaiting explicit user approval before proceeding to implementation.
+🛑 **HARD STOP**: Design document revision complete. Zero code, migrations, or route modifications have been made. Awaiting explicit user approval before proceeding to implementation.
