@@ -54,6 +54,13 @@ export default function Dashboard() {
     return `${year}-${month}-${day}`;
   };
 
+  const getTimeOfDayGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   const [period, setPeriod] = useState('week');
   const [startDate, setStartDate] = useState(() => formatLocalDate(new Date()));
   const [endDate, setEndDate] = useState(() => formatLocalDate(new Date()));
@@ -315,23 +322,56 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 min-h-screen">
-      {/* Welcome Header with Integrated Filter Options */}
-      <Card variant="default" className="p-6">
+      {/* Welcome Header with Integrated Filter Options & Quick Actions */}
+      <Card variant="default" className="p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-h2 font-bold text-text-primary tracking-tight">
-              Welcome back, {user?.name || 'User'}!
+            <h1 className="text-h3 font-bold text-text-primary tracking-tight">
+              {getTimeOfDayGreeting()}, {user?.name || 'User'}!
             </h1>
             <p className="text-text-secondary mt-1 text-body">
               Here is what is happening across your retail operations today.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="primary"
+              leftIcon={ShoppingBagIcon}
+              onClick={() => navigate('/pos')}
+            >
+              New Sale
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={TagIcon}
+              onClick={() => navigate('/products/new')}
+            >
+              Add Product
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={UsersIcon}
+              onClick={() => navigate('/customers/new')}
+            >
+              Add Customer
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={ChartBarIcon}
+              onClick={() => navigate('/reports')}
+            >
+              View Reports
+            </Button>
+
             <select
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
-              className="h-10 rounded-xl border border-border-default px-3 bg-surface text-text-primary text-small focus:ring-2 focus:ring-primary/30"
+              className="h-9 rounded-xl border border-border-default px-3 bg-surface text-text-primary text-small focus:ring-2 focus:ring-primary/30"
               aria-label="Filter by employee"
             >
               <option value="">All Employees</option>
@@ -346,7 +386,7 @@ export default function Dashboard() {
               type="button"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="h-10 px-3.5 flex items-center gap-2 rounded-xl border border-border-default bg-surface hover:bg-surface-2 text-text-primary text-small font-medium transition-colors disabled:opacity-50 shadow-sm"
+              className="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-border-default bg-surface hover:bg-surface-2 active:bg-surface-3 text-text-primary text-small font-medium transition-colors disabled:opacity-50 shadow-2xs"
               title="Refresh Dashboard Data"
             >
               <ArrowPathIcon className={`h-4 w-4 text-text-secondary ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -607,43 +647,6 @@ export default function Dashboard() {
           ) : (
             <BusinessInsights insights={insights} />
           )}
-        </Card.Body>
-      </Card>
-
-      {/* Quick Actions */}
-      <Card variant="default">
-        <Card.Header title="Quick Actions" />
-        <Card.Body>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <button
-              onClick={() => navigate('/pos')}
-              className="p-5 border border-border-default rounded-xl hover:bg-surface-2 hover:border-border-hover text-center transition-all duration-200 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            >
-              <ShoppingBagIcon className="h-8 w-8 text-primary mx-auto mb-2 group-hover:scale-110 transition-transform" />
-              <p className="text-body font-semibold text-text-primary">New Sale</p>
-            </button>
-            <button
-              onClick={() => navigate('/products/new')}
-              className="p-5 border border-border-default rounded-xl hover:bg-surface-2 hover:border-border-hover text-center transition-all duration-200 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            >
-              <TagIcon className="h-8 w-8 text-primary mx-auto mb-2 group-hover:scale-110 transition-transform" />
-              <p className="text-body font-semibold text-text-primary">Add Product</p>
-            </button>
-            <button
-              onClick={() => navigate('/customers/new')}
-              className="p-5 border border-border-default rounded-xl hover:bg-surface-2 hover:border-border-hover text-center transition-all duration-200 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            >
-              <UsersIcon className="h-8 w-8 text-primary mx-auto mb-2 group-hover:scale-110 transition-transform" />
-              <p className="text-body font-semibold text-text-primary">Add Customer</p>
-            </button>
-            <button
-              onClick={() => navigate('/reports')}
-              className="p-5 border border-border-default rounded-xl hover:bg-surface-2 hover:border-border-hover text-center transition-all duration-200 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            >
-              <ChartBarIcon className="h-8 w-8 text-primary mx-auto mb-2 group-hover:scale-110 transition-transform" />
-              <p className="text-body font-semibold text-text-primary">View Reports</p>
-            </button>
-          </div>
         </Card.Body>
       </Card>
 
