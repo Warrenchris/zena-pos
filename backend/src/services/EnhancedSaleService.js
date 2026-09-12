@@ -9,6 +9,7 @@ const Employee = require('../models/Employee');
 const sequelize = require('../config/database');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
+const { invalidateShopProductCache } = require('./productCache');
 
 class EnhancedSaleService {
   constructor() {
@@ -386,6 +387,7 @@ class EnhancedSaleService {
 
       const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
       invalidateAnalyticsCache(shopId);
+      await invalidateShopProductCache(shopId);
 
       const { logActivity } = require('../middleware/logger');
       try {

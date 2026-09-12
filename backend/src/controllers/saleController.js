@@ -16,6 +16,7 @@ const { parseDate } = require('../utils/dateUtils');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
+const { invalidateShopProductCache } = require('../services/productCache');
 
 // Get all sales with pagination
 exports.getAllSales = async (req, res) => {
@@ -584,6 +585,7 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
 
   // Invalidate analytics and dashboard cache so new sale reflects immediately
   invalidateAnalyticsCache(shopId);
+  await invalidateShopProductCache(shopId);
 
   try {
     await logActivity({
@@ -1358,6 +1360,7 @@ exports.processRefund = async (req, res) => {
 
       await t.commit();
       invalidateAnalyticsCache(shopId);
+      await invalidateShopProductCache(shopId);
 
       res.json({
         refunds: createdRefunds,
