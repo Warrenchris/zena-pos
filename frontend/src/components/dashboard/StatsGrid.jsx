@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
-import { TbEye } from 'react-icons/tb';
+import { TbEye, TbEyeOff } from 'react-icons/tb';
 import analyticsService from '../../services/analytics.service';
 import useCurrency from '../../hooks/useCurrency';
 
@@ -32,7 +32,9 @@ const StatsCard = ({
   featured = false,
   className = '',
   period,
-  onPeriodChange
+  onPeriodChange,
+  isMasked = false,
+  onToggleMask
 }) => {
   const isPositive = percentage > 0;
 
@@ -46,14 +48,28 @@ const StatsCard = ({
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <h3 className="text-caption font-semibold uppercase tracking-wider text-text-muted">{title}</h3>
-            {featured && <TbEye className="h-4 w-4 text-text-muted" />}
+            {featured && (
+              <button
+                type="button"
+                onClick={onToggleMask}
+                title={isMasked ? 'Show revenue figures' : 'Hide revenue figures'}
+                aria-label={isMasked ? 'Show revenue figures' : 'Hide revenue figures'}
+                className="p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors focus:outline-none"
+              >
+                {isMasked ? (
+                  <TbEyeOff className="h-4 w-4 text-primary" />
+                ) : (
+                  <TbEye className="h-4 w-4" />
+                )}
+              </button>
+            )}
           </div>
           <p
-            className={`font-bold text-text-primary tracking-tight ${
+            className={`font-bold text-text-primary tracking-tight transition-all duration-200 select-none ${
               featured ? 'mt-1.5 text-h2 md:text-2xl' : 'mt-1 text-body md:text-base'
             }`}
           >
-            {value}
+            {featured && isMasked ? value.replace(/[0-9,.]/g, '•') : value}
           </p>
           {featured && (
             <p className="mt-0.5 text-caption text-text-muted">{trend}</p>
@@ -77,7 +93,11 @@ const StatsCard = ({
         </div>
       </div>
 
-      <div className={featured ? 'h-20 md:h-24 w-full' : 'h-8'}>
+      <div
+        className={`${featured ? 'h-20 md:h-24 w-full' : 'h-8'} ${
+          featured && isMasked ? 'filter blur-[2px] opacity-60' : ''
+        } transition-all duration-300`}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <Area
@@ -111,6 +131,25 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
   const { format } = useCurrency();
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRevenueMasked, setIsRevenueMasked] = useState(() => {
+    try {
+      return localStorage.getItem('zana_hide_revenue_metrics') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleMask = () => {
+    setIsRevenueMasked((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('zana_hide_revenue_metrics', String(next));
+      } catch (e) {
+        console.warn('Failed to save revenue mask preference', e);
+      }
+      return next;
+    });
+  };
 
   // Dynamic comparison label based on period
   const getTrendLabel = (period) => {
@@ -254,6 +293,8 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
           className="md:col-span-2 md:row-span-3 md:self-start"
           period={period}
           onPeriodChange={onPeriodChange}
+          isMasked={isRevenueMasked}
+          onToggleMask={handleToggleMask}
         />
       )}
       {secondaryStats.map((stat, index) => (
