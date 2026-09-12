@@ -10,15 +10,15 @@ const StatsCard = ({ title, value, percentage, trend, data, color, featured = fa
   return (
     <div
       className={`rounded-2xl border border-border-default bg-surface overflow-hidden shadow-floating transition-all duration-200 hover:shadow-lg hover:border-border-hover ${
-        featured ? 'p-7 h-full flex flex-col justify-between' : 'p-4'
+        featured ? 'p-5 flex flex-col justify-start md:self-start' : 'p-3'
       } ${className}`.trim()}
     >
-      <div className={`flex items-start justify-between gap-4 ${featured ? 'mb-5' : 'mb-3'}`}>
+      <div className={`flex items-start justify-between gap-4 ${featured ? 'mb-3' : 'mb-2'}`}>
         <div className="min-w-0">
           <h3 className="text-caption font-semibold uppercase tracking-wider text-text-muted">{title}</h3>
           <p
             className={`font-bold text-text-primary tracking-tight ${
-              featured ? 'mt-2 text-h1 md:text-3xl' : 'mt-1 text-h3 md:text-xl'
+              featured ? 'mt-2 text-h2 md:text-2xl' : 'mt-1 text-body md:text-base'
             }`}
           >
             {value}
@@ -26,7 +26,7 @@ const StatsCard = ({ title, value, percentage, trend, data, color, featured = fa
         </div>
         <div
           className={`flex items-center rounded-full whitespace-nowrap shrink-0 border font-semibold ${
-            featured ? 'gap-1.5 px-3 py-1.5 text-small' : 'gap-1 px-2.5 py-1 text-caption'
+            featured ? 'gap-1.5 px-3 py-1.5 text-small' : 'gap-1 px-2.5 py-0.5 text-caption'
           } ${
             isPositive
               ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
@@ -42,7 +42,7 @@ const StatsCard = ({ title, value, percentage, trend, data, color, featured = fa
         </div>
       </div>
 
-      <div className={featured ? 'h-32 md:h-auto md:flex-1 md:min-h-0 w-full my-2' : 'h-10'}>
+      <div className={featured ? 'h-20 md:h-24 w-full' : 'h-8'}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <Area
@@ -57,7 +57,7 @@ const StatsCard = ({ title, value, percentage, trend, data, color, featured = fa
         </ResponsiveContainer>
       </div>
 
-      <p className={`text-caption text-text-muted ${featured ? 'mt-4' : 'mt-2'}`}>{trend}</p>
+      <p className={`text-caption text-text-muted ${featured ? 'mt-2' : 'mt-1.5'}`}>{trend}</p>
     </div>
   );
 };
@@ -160,32 +160,32 @@ const StatsGrid = ({ filter = { period: 'week' } }) => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:grid-rows-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3">
         {/* Featured Skeleton: Total Revenue */}
-        <div className="rounded-2xl border border-border-default bg-surface p-7 shadow-floating animate-pulse md:col-span-2 md:row-span-3 h-full flex flex-col justify-between">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div className="space-y-2">
-              <div className="h-4 w-28 rounded bg-surface-2" />
-              <div className="h-9 w-52 rounded bg-surface-2" />
+        <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-floating animate-pulse md:col-span-2 md:row-span-3 flex flex-col justify-start md:self-start">
+          <div className="mb-3 flex items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="h-3.5 w-24 rounded bg-surface-2" />
+              <div className="h-7 w-44 rounded bg-surface-2" />
             </div>
-            <div className="h-7 w-20 rounded-full bg-surface-2" />
+            <div className="h-6 w-16 rounded-full bg-surface-2" />
           </div>
-          <div className="h-32 md:h-auto md:flex-1 md:min-h-0 rounded bg-surface-2 my-2" />
-          <div className="mt-4 h-4 w-28 rounded bg-surface-2" />
+          <div className="h-20 md:h-24 rounded bg-surface-2" />
+          <div className="mt-2 h-3.5 w-24 rounded bg-surface-2" />
         </div>
 
         {/* Secondary Skeletons: Orders, Visitors, Conversion Rate */}
         {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-2xl border border-border-default bg-surface p-4 shadow-floating animate-pulse md:col-span-1">
-            <div className="mb-3 flex items-start justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="h-3.5 w-24 rounded bg-surface-2" />
-                <div className="h-6 w-24 rounded bg-surface-2" />
+          <div key={i} className="rounded-2xl border border-border-default bg-surface p-3 shadow-floating animate-pulse md:col-span-1">
+            <div className="mb-2 flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="h-3 w-20 rounded bg-surface-2" />
+                <div className="h-5 w-16 rounded bg-surface-2" />
               </div>
-              <div className="h-6 w-16 rounded-full bg-surface-2" />
+              <div className="h-5 w-14 rounded-full bg-surface-2" />
             </div>
-            <div className="h-10 rounded bg-surface-2" />
-            <div className="mt-2 h-3.5 w-20 rounded bg-surface-2" />
+            <div className="h-8 rounded bg-surface-2" />
+            <div className="mt-1.5 h-3 w-16 rounded bg-surface-2" />
           </div>
         ))}
       </div>
@@ -196,7 +196,7 @@ const StatsGrid = ({ filter = { period: 'week' } }) => {
   const secondaryStats = stats.filter((s) => s !== featuredStat);
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:grid-rows-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3">
       {featuredStat && (
         <StatsCard {...featuredStat} featured className="md:col-span-2 md:row-span-3" />
       )}
