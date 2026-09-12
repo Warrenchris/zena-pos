@@ -8,10 +8,8 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import useCurrency from '../../hooks/useCurrency';
 import analyticsService from '../../services/analytics.service';
-import downloadCSV from '../../utils/csv';
 import Card from '../ui/Card';
 
 const RevenueChart = ({ filter = { period: 'week' } }) => {
@@ -54,6 +52,13 @@ const RevenueChart = ({ filter = { period: 'week' } }) => {
       // fallback
     }
     return d;
+  };
+
+  const formatYAxisRevenue = (val) => {
+    if (val === 0) return 'KSh 0';
+    if (Math.abs(val) >= 1000000) return `KSh ${(val / 1000000).toFixed(1)}M`;
+    if (Math.abs(val) >= 1000) return `KSh ${(val / 1000).toFixed(0)}k`;
+    return `KSh ${val}`;
   };
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -141,7 +146,7 @@ const RevenueChart = ({ filter = { period: 'week' } }) => {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
               <defs>
                 <linearGradient id="revenueOverviewGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3} />
@@ -158,10 +163,11 @@ const RevenueChart = ({ filter = { period: 'week' } }) => {
                 dy={6}
               />
               <YAxis
+                width={68}
                 stroke="var(--border-default)"
                 tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
                 tickLine={false}
-                tickFormatter={(value) => format(value)}
+                tickFormatter={formatYAxisRevenue}
                 dx={-4}
               />
               <Tooltip
