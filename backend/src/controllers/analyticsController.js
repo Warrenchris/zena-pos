@@ -339,19 +339,6 @@ const analyticsController = {
     }
   },
 
-      // Cache the result
-      setCachedAnalytics(shopId, 'orderTracking', cacheParams, response);
-      
-      res.json(response);
-    } catch (error) {
-      console.error('Error fetching order statistics:', error);
-      res.status(500).json({ 
-        error: 'Failed to fetch order statistics',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined 
-      });
-    }
-  },
-
   // Get top selling products
   async getTopProducts(req, res) {
     try {

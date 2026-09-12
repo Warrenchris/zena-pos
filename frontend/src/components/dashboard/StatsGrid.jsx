@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Area, AreaChart, ResponsiveContainer } from 'recharts';
+import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
 import { TbEye, TbEyeOff } from 'react-icons/tb';
 import analyticsService from '../../services/analytics.service';
@@ -100,6 +100,7 @@ const StatsCard = ({
       >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
+            <YAxis hide domain={[0, (dataMax) => (dataMax === 0 ? 1 : dataMax * 1.15)]} />
             <Area
               type="monotone"
               dataKey="value"
@@ -179,6 +180,17 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
 
         const trendLabel = getTrendLabel(filter.period);
 
+        const orderDataMap = new Map((orderStats?.orderData || []).map(o => [o.date, o.orders || 0]));
+        const conversionData = (visitorStats?.visitorData || []).map(v => {
+          const orders = orderDataMap.get(v.date) || 0;
+          const visitors = v.visitors || 0;
+          const rate = visitors > 0 ? (orders / visitors) * 100 : 0;
+          return {
+            name: v.date,
+            value: parseFloat(rate.toFixed(1))
+          };
+        });
+
         const formattedStats = [
           {
             title: 'Total Revenue',
@@ -220,7 +232,7 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
               : '0.0%',
             percentage: visitorStats?.percentageChange || 0,
             trend: trendLabel,
-            data: (visitorStats?.visitorData || []).map(h => ({ value: h?.visitors || 0 })),
+            data: conversionData,
             color: '#8B5CF6'
           }
         ];
