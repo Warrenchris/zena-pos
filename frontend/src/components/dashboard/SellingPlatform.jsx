@@ -1,125 +1,269 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { fetchSalesChannels } from '../../store/slices/analyticsSlice';
 import useCurrency from '../../hooks/useCurrency';
+import Card from '../ui/Card';
+
+// Harmonious palette using curated hues instead of generic web-safe colors
+const CHANNEL_COLORS = [
+  '#784421', // Mocha Brown (primary)
+  '#10B981', // Emerald
+  '#6366F1', // Indigo
+  '#F59E0B', // Amber
+  '#EC4899', // Pink
+];
+
+// Icon glyph to make each channel feel more premium
+const CHANNEL_ICON = {
+  cash: '💵',
+  mpesa: '📱',
+  card: '💳',
+  default: '🏷️',
+};
+
+function getChannelIcon(name = '') {
+  const key = name.toLowerCase();
+  if (key.includes('mpesa') || key.includes('m-pesa') || key.includes('mobile')) return CHANNEL_ICON.mpesa;
+  if (key.includes('cash')) return CHANNEL_ICON.cash;
+  if (key.includes('card') || key.includes('visa') || key.includes('master')) return CHANNEL_ICON.card;
+  return CHANNEL_ICON.default;
+}
 
 const SellingPlatform = ({ filter = { period: 'week' } }) => {
   const dispatch = useDispatch();
   const { format } = useCurrency();
-  const { platforms, totalSales, totalRevenue, salesPercentageChange, loading, error } =
-    useSelector((state) => state.analytics.salesChannels);
+
+  const {
+    platforms = [],
+    totalSales = 0,
+    totalRevenue = 0,
+    salesPercentageChange = 0,
+    loading,
+    error,
+  } = useSelector((state) => state.analytics.salesChannels);
 
   useEffect(() => {
     dispatch(fetchSalesChannels(filter));
   }, [dispatch, filter]);
 
-  const COLORS = ['#3b82f6', '#22d3ee', '#a855f7', '#f97316', '#34d399'];
+  const hasData = Array.isArray(platforms) && platforms.length > 0;
 
+  // Custom Tooltip
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
+      const entry = payload[0].payload;
+      const index = platforms.indexOf(entry);
+      const color = CHANNEL_COLORS[index % CHANNEL_COLORS.length];
+
       return (
-        <div className="rounded-xl border border-border-default bg-surface px-4 py-3 text-caption text-text-primary shadow-floating">
-          <p className="font-semibold text-primary">{payload[0].name}</p>
-          <p className="text-text-secondary">{payload[0].value.toFixed(1)}% distribution</p>
-          <p className="text-caption text-text-muted">{payload[0].payload.orders} orders</p>
-          <p className="text-caption text-text-muted">{format(payload[0].payload.revenue)}</p>
+        <div className="rounded-2xl border border-border-default/80 bg-surface/95 backdrop-blur-md px-4 py-3 shadow-floating min-w-[170px]">
+          <p
+            className="font-semibold text-caption border-b border-border-default/60 pb-1.5 mb-2"
+            style={{ color }}
+          >
+            {getChannelIcon(entry.name)} {entry.name}
+          </p>
+          <div className="space-y-1.5 text-caption text-text-secondary">
+            <div className="flex justify-between gap-3">
+              <span>Share</span>
+              <span className="font-bold text-text-primary">{(entry.percentage || 0).toFixed(1)}%</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Orders</span>
+              <span className="font-bold text-text-primary">{(entry.orders || 0).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Revenue</span>
+              <span className="font-bold" style={{ color }}>{format(entry.revenue || 0)}</span>
+            </div>
+          </div>
         </div>
       );
     }
     return null;
   };
 
+  // Skeleton loader
   if (loading) {
     return (
-      <div className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating">
-        <div className="flex h-[300px] items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary" />
+      <Card variant="default" className="p-6">
+        <div className="animate-pulse space-y-5">
+          <div className="flex items-start justify-between">
+            <div className="space-y-2">
+              <div className="h-6 w-48 bg-surface-2 rounded-md" />
+              <div className="h-3.5 w-32 bg-surface-2/70 rounded-md" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-12 w-24 bg-surface-2 rounded-xl" />
+              <div className="h-12 w-28 bg-surface-2 rounded-xl" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="h-[220px] flex items-center justify-center">
+              <div className="w-40 h-40 rounded-full bg-surface-2/60" />
+            </div>
+            <div className="flex flex-col justify-center space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className="flex justify-between">
+                    <div className="h-3.5 w-20 bg-surface-2 rounded" />
+                    <div className="h-3.5 w-10 bg-surface-2 rounded" />
+                  </div>
+                  <div className="h-2 w-full bg-surface-2/60 rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-danger/20 bg-danger/5 p-6 shadow-floating">
-        <div className="flex h-[300px] items-center justify-center text-center text-danger text-body">
-          Error loading sales channels: {error}
+      <Card variant="default" className="p-6 border-danger/20 bg-danger/5">
+        <div className="flex h-[320px] flex-col items-center justify-center text-center">
+          <p className="text-danger font-semibold text-body mb-1">Unable to load payment channels</p>
+          <p className="text-text-muted text-caption">{error}</p>
         </div>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <Card variant="default" className="p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
         <div>
           <h2 className="text-h3 font-semibold text-text-primary tracking-tight">
-            Selling Platform Distribution
+            Payment Channels
           </h2>
-          <div className="text-caption text-text-secondary mt-0.5">
-            Total Sales: {totalSales?.toLocaleString()}
-            <span className={`ml-2 font-medium ${salesPercentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
-              {salesPercentageChange >= 0 ? '↑' : '↓'} {Math.abs(salesPercentageChange).toFixed(1)}%
+          <p className="text-caption text-text-secondary mt-0.5">
+            How customers are paying for orders
+          </p>
+        </div>
+
+        {/* Summary Metric Cards */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="px-3 py-1.5 rounded-xl bg-surface-2/60 border border-border-default/50 text-right">
+            <span className="text-[10px] uppercase font-semibold text-text-muted block tracking-wider">
+              Total Sales
+            </span>
+            <div className="flex items-center justify-end gap-1.5">
+              <span className="text-caption font-bold text-text-primary">
+                {(totalSales || 0).toLocaleString()}
+              </span>
+              <span
+                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
+                  salesPercentageChange >= 0
+                    ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-950/60'
+                    : 'text-rose-700 bg-rose-100 dark:text-rose-300 dark:bg-rose-950/60'
+                }`}
+              >
+                {salesPercentageChange >= 0 ? '↑' : '↓'} {Math.abs(salesPercentageChange || 0).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+
+          <div className="px-3 py-1.5 rounded-xl bg-surface-2/60 border border-border-default/50 text-right">
+            <span className="text-[10px] uppercase font-semibold text-text-muted block tracking-wider">
+              Total Revenue
+            </span>
+            <span className="text-caption font-bold text-text-primary">
+              {format(totalRevenue || 0)}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={platforms}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={6}
-                dataKey="percentage"
-              >
-                {platforms.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-            </PieChart>
-          </ResponsiveContainer>
+      {/* Content */}
+      {!hasData ? (
+        <div className="h-[280px] flex flex-col items-center justify-center text-center text-text-muted">
+          <p className="text-body font-medium">No payment channel data for this period</p>
+          <p className="text-caption mt-1">Sales processed via different payment methods will appear here.</p>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {/* Donut Chart */}
+          <div className="h-[240px] flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <defs>
+                  {platforms.map((_, index) => (
+                    <filter key={`glow-${index}`} id={`glow-${index}`} x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                      <feMerge>
+                        <feMergeNode in="coloredBlur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                  ))}
+                </defs>
+                <Pie
+                  data={platforms}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={65}
+                  outerRadius={95}
+                  paddingAngle={4}
+                  dataKey="percentage"
+                  strokeWidth={2}
+                  stroke="var(--bg-surface)"
+                >
+                  {platforms.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={CHANNEL_COLORS[index % CHANNEL_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
 
-        <div className="flex flex-col justify-center space-y-3">
-          {platforms.map((entry, index) => (
-            <div
-              key={entry.name}
-              className="flex items-center justify-between rounded-xl border border-border-default/70 bg-surface-0/60 px-4 py-2.5 text-body text-text-primary"
-            >
-              <div className="flex items-center">
-                <div
-                  className="mr-3 h-3 w-3 rounded-full"
-                  style={{
-                    backgroundColor: COLORS[index % COLORS.length],
-                  }}
-                />
-                <div>
-                  <p className="font-medium text-text-primary">{entry.name}</p>
-                  <p className="text-caption text-text-muted">
-                    {entry.orders} orders · {format(entry.revenue)}
-                  </p>
+          {/* Channel List with Progress Bars */}
+          <div className="flex flex-col justify-center space-y-3">
+            {platforms.map((entry, index) => {
+              const color = CHANNEL_COLORS[index % CHANNEL_COLORS.length];
+              const pct = entry.percentage || 0;
+
+              return (
+                <div key={entry.name || index} className="space-y-1.5">
+                  {/* Channel header row */}
+                  <div className="flex items-center justify-between text-caption">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{getChannelIcon(entry.name)}</span>
+                      <span className="font-semibold text-text-primary capitalize">{entry.name || 'Other'}</span>
+                      <span className="text-text-muted text-[10px]">
+                        {(entry.orders || 0).toLocaleString()} orders
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-text-muted text-[10px]">{format(entry.revenue || 0)}</span>
+                      <span className="font-bold text-text-primary">{pct.toFixed(1)}%</span>
+                    </div>
+                  </div>
+
+                  {/* Progress share bar */}
+                  <div className="h-2 w-full rounded-full bg-surface-2">
+                    <div
+                      className="h-2 rounded-full transition-all duration-700"
+                      style={{
+                        width: `${Math.min(pct, 100)}%`,
+                        backgroundColor: color,
+                        opacity: 0.85,
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-              <p className="text-body font-semibold text-text-primary">
-                {entry.percentage.toFixed(1)}%
-              </p>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
-      </div>
-
-      <div className="mt-6 border-t border-border-default/70 pt-4 text-caption text-text-secondary">
-        Total Revenue: {format(totalRevenue)}
-      </div>
-    </div>
+      )}
+    </Card>
   );
 };
 
