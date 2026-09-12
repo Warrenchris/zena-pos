@@ -69,7 +69,7 @@ router.post('/verify', auth, async (req, res) => {
     if (!verificationResult.verified) {
       // Find pending payment and update to failed
       const pendingPayment = await PendingPayment.findOne({
-        where: { checkoutRequestId: reference, paymentChannel: 'card' }
+        where: { checkoutRequestId: reference, paymentChannel: 'card', shopId: req.shopId || req.user?.shopId }
       });
       if (pendingPayment && pendingPayment.status === 'pending') {
         await pendingPayment.update({ status: 'failed' });
@@ -79,7 +79,7 @@ router.post('/verify', auth, async (req, res) => {
 
     // Find pending payment
     const pendingPayment = await PendingPayment.findOne({
-      where: { checkoutRequestId: reference, paymentChannel: 'card' }
+      where: { checkoutRequestId: reference, paymentChannel: 'card', shopId: req.shopId || req.user?.shopId }
     });
 
     if (!pendingPayment) {

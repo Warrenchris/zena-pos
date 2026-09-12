@@ -255,11 +255,11 @@ exports.getSalesSummary = async (req, res) => {
   }
 };
 
-// GET /api/reports/profit-loss?startDate=&endDate=&shopId=
+// GET /api/reports/profit-loss?startDate=&endDate=
 exports.getProfitAndLoss = async (req, res) => {
   try {
-    const { startDate, endDate, shopId: queryShopId } = req.query;
-    const targetShopId = queryShopId ? parseInt(queryShopId, 10) : (req.shopId || req.user?.shopId);
+    const { startDate, endDate } = req.query;
+    const targetShopId = req.shopId || req.user?.shopId;
 
     const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
     const expenseWhere = { shopId: targetShopId };
