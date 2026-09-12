@@ -97,27 +97,39 @@ function formatDateKey(d) {
 
 function generateBuckets(period, startDate, endDate) {
   const buckets = [];
+  const now = new Date();
+
   if (period === 'today') {
     for (let h = 0; h < 24; h++) {
       buckets.push(`${String(h).padStart(2, '0')}:00`);
     }
   } else if (period === 'week') {
     const curr = new Date(startDate);
-    for (let i = 0; i < 7; i++) {
+    const sunday = new Date(startDate);
+    sunday.setDate(startDate.getDate() + 6);
+    const capDate = sunday < now ? sunday : now;
+    const capStr = formatDateKey(capDate);
+
+    while (formatDateKey(curr) <= capStr && curr <= sunday) {
       buckets.push(formatDateKey(curr));
       curr.setDate(curr.getDate() + 1);
     }
   } else if (period === 'month') {
     const year = startDate.getFullYear();
     const month = startDate.getMonth();
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    for (let day = 1; day <= lastDay; day++) {
-      const d = new Date(year, month, day);
-      buckets.push(formatDateKey(d));
+    const monthEnd = new Date(year, month + 1, 0);
+    const capDate = monthEnd < now ? monthEnd : now;
+    const capStr = formatDateKey(capDate);
+
+    const curr = new Date(year, month, 1);
+    while (formatDateKey(curr) <= capStr && curr <= monthEnd) {
+      buckets.push(formatDateKey(curr));
+      curr.setDate(curr.getDate() + 1);
     }
   } else if (period === 'year') {
     const year = startDate.getFullYear();
-    for (let m = 1; m <= 12; m++) {
+    const maxMonth = (now.getFullYear() === year) ? (now.getMonth() + 1) : (year < now.getFullYear() ? 12 : 1);
+    for (let m = 1; m <= maxMonth; m++) {
       buckets.push(`${year}-${String(m).padStart(2, '0')}`);
     }
   } else {

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
+import { Area, AreaChart, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
 import { TbEye, TbEyeOff } from 'react-icons/tb';
+import { Popover } from '@headlessui/react';
+import DateRangePicker from '../DateRangePicker';
 import analyticsService from '../../services/analytics.service';
 import useCurrency from '../../hooks/useCurrency';
 
@@ -22,6 +24,36 @@ function QuickFilter({ label, value, current, setCurrent }) {
   );
 }
 
+const SparklineTooltip = ({ active, payload, label, isMasked, formatValue, featured }) => {
+  if (active && payload && payload.length) {
+    const item = payload[0];
+    const dateLabel = item.payload?.name || label;
+    const displayVal = isMasked
+      ? '••••••'
+      : formatValue
+      ? formatValue(item.value)
+      : item.value;
+
+    return (
+      <div
+        className={`pointer-events-none z-50 rounded-xl border border-border-default bg-surface/95 backdrop-blur-md shadow-floating text-text-primary ${
+          featured ? 'px-3 py-2 text-small' : 'px-2 py-1 text-caption'
+        }`}
+      >
+        {dateLabel && (
+          <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted leading-tight">
+            {dateLabel}
+          </p>
+        )}
+        <p className="font-bold text-text-primary leading-tight mt-0.5">
+          {displayVal}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 const StatsCard = ({
   title,
   value,
@@ -34,14 +66,18 @@ const StatsCard = ({
   period,
   onPeriodChange,
   isMasked = false,
-  onToggleMask
+  onToggleMask,
+  startDate,
+  endDate,
+  onDateChange,
+  formatValue
 }) => {
   const isPositive = percentage > 0;
 
   return (
     <div
-      className={`rounded-2xl border border-border-default bg-surface overflow-hidden shadow-floating transition-all duration-200 hover:shadow-lg hover:border-border-hover ${
-        featured ? 'p-5 flex flex-col justify-start' : 'p-3'
+      className={`rounded-2xl border border-border-default bg-surface shadow-floating transition-all duration-200 hover:shadow-lg hover:border-border-hover ${
+        featured ? 'p-5 flex flex-col justify-start overflow-visible relative' : 'p-3 overflow-hidden'
       } ${className}`.trim()}
     >
       <div className={`flex items-start justify-between gap-4 ${featured ? 'mb-2' : 'mb-2'}`}>
@@ -101,6 +137,17 @@ const StatsCard = ({
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <YAxis hide domain={[0, (dataMax) => (dataMax === 0 ? 1 : dataMax * 1.15)]} />
+            <Tooltip
+              content={
+                <SparklineTooltip
+                  isMasked={featured && isMasked}
+                  formatValue={formatValue}
+                  featured={featured}
+                />
+              }
+              cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: '3 3' }}
+              wrapperStyle={{ outline: 'none' }}
+            />
             <Area
               type="monotone"
               dataKey="value"
@@ -119,7 +166,33 @@ const StatsCard = ({
           <QuickFilter label="This Week" value="week" current={period} setCurrent={onPeriodChange} />
           <QuickFilter label="Month" value="month" current={period} setCurrent={onPeriodChange} />
           <QuickFilter label="Year" value="year" current={period} setCurrent={onPeriodChange} />
-          <QuickFilter label="Custom" value="custom" current={period} setCurrent={onPeriodChange} />
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            align="left"
+            onChange={(dates) => {
+              if (onDateChange) onDateChange(dates);
+              if (onPeriodChange) onPeriodChange('custom');
+            }}
+            renderTrigger={({ formattedStartStr, formattedEndStr }) => (
+              <Popover.Button
+                type="button"
+                onClick={() => onPeriodChange && onPeriodChange('custom')}
+                className={`px-3 py-1.5 rounded-lg text-caption font-semibold transition-colors flex items-center gap-1.5 focus:outline-none ${
+                  period === 'custom'
+                    ? 'bg-primary/20 text-primary border border-primary/30'
+                    : 'text-text-muted hover:text-text-primary hover:bg-surface-2'
+                }`}
+              >
+                <span>Custom</span>
+                {period === 'custom' && formattedStartStr && (
+                  <span className="text-[11px] opacity-85 font-normal">
+                    ({formattedStartStr === formattedEndStr ? formattedStartStr : `${formattedStartStr} - ${formattedEndStr}`})
+                  </span>
+                )}
+              </Popover.Button>
+            )}
+          />
         </div>
       ) : (
         <p className="text-caption text-text-muted mt-1.5">{trend}</p>
@@ -128,7 +201,14 @@ const StatsCard = ({
   );
 };
 
-const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChange }) => {
+const StatsGrid = ({
+  filter = { period: 'week' },
+  period = 'week',
+  onPeriodChange,
+  startDate,
+  endDate,
+  onDateChange
+}) => {
   const { format } = useCurrency();
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -197,6 +277,7 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
             value: format(orderStats?.totalRevenue || 0),
             percentage: orderStats?.revenuePercentageChange || 0,
             trend: trendLabel,
+            formatValue: (v) => format(v),
             data: (orderStats?.orderData || []).map(h => ({
               name: h.date,
               value: parseFloat(h?.revenue || 0)
@@ -208,6 +289,7 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
             value: (orderStats?.totalOrders || 0).toLocaleString(),
             percentage: orderStats?.orderPercentageChange || 0,
             trend: trendLabel,
+            formatValue: (v) => `${parseInt(v || 0).toLocaleString()} orders`,
             data: (orderStats?.orderData || []).map(h => ({
               name: h.date,
               value: parseInt(h?.orders || 0)
@@ -219,6 +301,7 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
             value: (visitorStats?.totalVisitors || 0).toLocaleString(),
             percentage: visitorStats?.percentageChange || 0,
             trend: trendLabel,
+            formatValue: (v) => `${parseInt(v || 0).toLocaleString()} visitors`,
             data: (visitorStats?.visitorData || []).map(h => ({
               name: h.date,
               value: parseInt(h?.visitors || 0)
@@ -232,6 +315,7 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
               : '0.0%',
             percentage: visitorStats?.percentageChange || 0,
             trend: trendLabel,
+            formatValue: (v) => `${parseFloat(v || 0).toFixed(1)}%`,
             data: conversionData,
             color: '#8B5CF6'
           }
@@ -241,10 +325,10 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
       } catch (error) {
         console.error('Error loading stats:', error);
         setStats([
-          { title: 'Total Revenue', value: format(0), percentage: 0, trend: 'No data', data: [], color: 'var(--color-primary)' },
-          { title: 'Total Orders', value: '0', percentage: 0, trend: 'No data', data: [], color: '#D97706' },
-          { title: 'Total Visitors', value: '0', percentage: 0, trend: 'No data', data: [], color: '#10B981' },
-          { title: 'Conversion Rate', value: '0.0%', percentage: 0, trend: 'No data', data: [], color: '#8B5CF6' }
+          { title: 'Total Revenue', value: format(0), percentage: 0, trend: 'No data', formatValue: (v) => format(v), data: [], color: 'var(--color-primary)' },
+          { title: 'Total Orders', value: '0', percentage: 0, trend: 'No data', formatValue: (v) => `${parseInt(v || 0).toLocaleString()} orders`, data: [], color: '#D97706' },
+          { title: 'Total Visitors', value: '0', percentage: 0, trend: 'No data', formatValue: (v) => `${parseInt(v || 0).toLocaleString()} visitors`, data: [], color: '#10B981' },
+          { title: 'Conversion Rate', value: '0.0%', percentage: 0, trend: 'No data', formatValue: (v) => `${parseFloat(v || 0).toFixed(1)}%`, data: [], color: '#8B5CF6' }
         ]);
       } finally {
         setLoading(false);
@@ -307,6 +391,9 @@ const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChang
           onPeriodChange={onPeriodChange}
           isMasked={isRevenueMasked}
           onToggleMask={handleToggleMask}
+          startDate={startDate}
+          endDate={endDate}
+          onDateChange={onDateChange}
         />
       )}
       {secondaryStats.map((stat, index) => (

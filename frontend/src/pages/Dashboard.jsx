@@ -32,7 +32,6 @@ import { fetchCustomers } from '../store/slices/customersSlice';
 import { fetchProducts } from '../store/slices/productsSlice';
 import api, { employeesAPI } from '../services/api';
 import { notifyLowStock } from '../utils/notifications';
-import DateRangePicker from '../components/DateRangePicker';
 
 export default function Dashboard() {
   const dispatch = useDispatch();
@@ -316,43 +315,24 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 min-h-screen">
-      {/* Welcome Header */}
+      {/* Welcome Header with Integrated Filter Options */}
       <Card variant="default" className="p-6">
-        <h1 className="text-h2 font-bold text-text-primary tracking-tight">
-          Welcome back, {user?.name || 'User'}!
-        </h1>
-        <p className="text-text-secondary mt-1 text-body">
-          Here is what is happening across your retail operations today.
-        </p>
-      </Card>
-
-      {/* Dashboard Filter Bar */}
-      <Card variant="default" className="p-4 !overflow-visible">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-caption font-semibold uppercase tracking-wider text-text-muted">
-              Filter Options
-            </span>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-h2 font-bold text-text-primary tracking-tight">
+              Welcome back, {user?.name || 'User'}!
+            </h1>
+            <p className="text-text-secondary mt-1 text-body">
+              Here is what is happening across your retail operations today.
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {period === 'custom' && (
-              <DateRangePicker
-                startDate={startDate}
-                endDate={endDate}
-                onChange={([start, end]) => {
-                  if (start) {
-                    setStartDate(formatLocalDate(start));
-                    setEndDate(formatLocalDate(end || start));
-                  }
-                }}
-              />
-            )}
-
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             <select
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
               className="h-10 rounded-xl border border-border-default px-3 bg-surface text-text-primary text-small focus:ring-2 focus:ring-primary/30"
+              aria-label="Filter by employee"
             >
               <option value="">All Employees</option>
               {employees.map((emp) => (
@@ -366,7 +346,7 @@ export default function Dashboard() {
               type="button"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="h-10 px-3.5 flex items-center gap-2 rounded-xl border border-border-default bg-surface hover:bg-surface-2 text-text-primary text-small font-medium transition-colors disabled:opacity-50"
+              className="h-10 px-3.5 flex items-center gap-2 rounded-xl border border-border-default bg-surface hover:bg-surface-2 text-text-primary text-small font-medium transition-colors disabled:opacity-50 shadow-sm"
               title="Refresh Dashboard Data"
             >
               <ArrowPathIcon className={`h-4 w-4 text-text-secondary ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -401,6 +381,14 @@ export default function Dashboard() {
         filter={dashboardFilter}
         period={period}
         onPeriodChange={setPeriod}
+        startDate={startDate}
+        endDate={endDate}
+        onDateChange={([start, end]) => {
+          if (start) {
+            setStartDate(formatLocalDate(start));
+            setEndDate(formatLocalDate(end || start));
+          }
+        }}
       />
 
       {/* Revenue and Visitors Section */}
