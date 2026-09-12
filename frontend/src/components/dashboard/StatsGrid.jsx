@@ -4,29 +4,45 @@ import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
 import analyticsService from '../../services/analytics.service';
 import useCurrency from '../../hooks/useCurrency';
 
-const StatsCard = ({ title, value, percentage, trend, data, color }) => {
+const StatsCard = ({ title, value, percentage, trend, data, color, featured = false, className = '' }) => {
   const isPositive = percentage > 0;
 
   return (
-    <div className="rounded-2xl border border-border-default bg-surface p-6 overflow-hidden shadow-floating transition-all duration-200 hover:shadow-lg hover:border-border-hover">
-      <div className="mb-4 flex items-start justify-between gap-4">
+    <div
+      className={`rounded-2xl border border-border-default bg-surface overflow-hidden shadow-floating transition-all duration-200 hover:shadow-lg hover:border-border-hover ${
+        featured ? 'p-7 h-full flex flex-col justify-between' : 'p-4'
+      } ${className}`.trim()}
+    >
+      <div className={`flex items-start justify-between gap-4 ${featured ? 'mb-5' : 'mb-3'}`}>
         <div className="min-w-0">
           <h3 className="text-caption font-semibold uppercase tracking-wider text-text-muted">{title}</h3>
-          <p className="mt-1.5 text-h2 font-bold text-text-primary tracking-tight">{value}</p>
+          <p
+            className={`font-bold text-text-primary tracking-tight ${
+              featured ? 'mt-2 text-h1 md:text-3xl' : 'mt-1 text-h3 md:text-xl'
+            }`}
+          >
+            {value}
+          </p>
         </div>
         <div
-          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-caption font-semibold whitespace-nowrap shrink-0 border ${
+          className={`flex items-center rounded-full whitespace-nowrap shrink-0 border font-semibold ${
+            featured ? 'gap-1.5 px-3 py-1.5 text-small' : 'gap-1 px-2.5 py-1 text-caption'
+          } ${
             isPositive
               ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
               : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20'
           }`}
         >
-          {isPositive ? <HiArrowUp className="h-3.5 w-3.5" /> : <HiArrowDown className="h-3.5 w-3.5" />}
+          {isPositive ? (
+            <HiArrowUp className={featured ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+          ) : (
+            <HiArrowDown className={featured ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+          )}
           <span>{Math.abs(percentage).toFixed(1)}%</span>
         </div>
       </div>
 
-      <div className="h-14">
+      <div className={featured ? 'h-32 md:h-auto md:flex-1 md:min-h-0 w-full my-2' : 'h-10'}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <Area
@@ -35,13 +51,13 @@ const StatsCard = ({ title, value, percentage, trend, data, color }) => {
               stroke={color}
               fill={color}
               fillOpacity={0.15}
-              strokeWidth={2.5}
+              strokeWidth={featured ? 2.5 : 2}
             />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      <p className="mt-3 text-caption text-text-muted">{trend}</p>
+      <p className={`text-caption text-text-muted ${featured ? 'mt-4' : 'mt-2'}`}>{trend}</p>
     </div>
   );
 };
@@ -144,22 +160,48 @@ const StatsGrid = ({ filter = { period: 'week' } }) => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-2xl border border-border-default bg-surface p-6 shadow-floating animate-pulse">
-            <div className="mb-4 h-4 w-3/4 rounded bg-surface-2" />
-            <div className="mb-4 h-8 w-1/2 rounded bg-surface-2" />
-            <div className="h-14 rounded bg-surface-2" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:grid-rows-3">
+        {/* Featured Skeleton: Total Revenue */}
+        <div className="rounded-2xl border border-border-default bg-surface p-7 shadow-floating animate-pulse md:col-span-2 md:row-span-3 h-full flex flex-col justify-between">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="h-4 w-28 rounded bg-surface-2" />
+              <div className="h-9 w-52 rounded bg-surface-2" />
+            </div>
+            <div className="h-7 w-20 rounded-full bg-surface-2" />
+          </div>
+          <div className="h-32 md:h-auto md:flex-1 md:min-h-0 rounded bg-surface-2 my-2" />
+          <div className="mt-4 h-4 w-28 rounded bg-surface-2" />
+        </div>
+
+        {/* Secondary Skeletons: Orders, Visitors, Conversion Rate */}
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="rounded-2xl border border-border-default bg-surface p-4 shadow-floating animate-pulse md:col-span-1">
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="h-3.5 w-24 rounded bg-surface-2" />
+                <div className="h-6 w-24 rounded bg-surface-2" />
+              </div>
+              <div className="h-6 w-16 rounded-full bg-surface-2" />
+            </div>
+            <div className="h-10 rounded bg-surface-2" />
+            <div className="mt-2 h-3.5 w-20 rounded bg-surface-2" />
           </div>
         ))}
       </div>
     );
   }
 
+  const featuredStat = stats.find((s) => s.title === 'Total Revenue') || stats[0];
+  const secondaryStats = stats.filter((s) => s !== featuredStat);
+
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat, index) => (
-        <StatsCard key={index} {...stat} />
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:grid-rows-3">
+      {featuredStat && (
+        <StatsCard {...featuredStat} featured className="md:col-span-2 md:row-span-3" />
+      )}
+      {secondaryStats.map((stat, index) => (
+        <StatsCard key={index} {...stat} className="md:col-span-1" />
       ))}
     </div>
   );
