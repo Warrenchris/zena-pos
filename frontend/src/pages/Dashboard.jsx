@@ -34,23 +34,6 @@ import api, { employeesAPI } from '../services/api';
 import { notifyLowStock } from '../utils/notifications';
 import DateRangePicker from '../components/DateRangePicker';
 
-function QuickFilter({ label, value, current, setCurrent }) {
-  const isActive = current === value;
-  return (
-    <button
-      type="button"
-      onClick={() => setCurrent(value)}
-      className={`px-3 py-1.5 rounded-lg text-caption font-semibold transition-colors ${
-        isActive
-          ? 'bg-primary/20 text-primary border border-primary/30'
-          : 'text-text-muted hover:text-text-primary hover:bg-surface-2'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -346,12 +329,10 @@ export default function Dashboard() {
       {/* Dashboard Filter Bar */}
       <Card variant="default" className="p-4 !overflow-visible">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default">
-            <QuickFilter label="Today" value="today" current={period} setCurrent={setPeriod} />
-            <QuickFilter label="This Week" value="week" current={period} setCurrent={setPeriod} />
-            <QuickFilter label="Month" value="month" current={period} setCurrent={setPeriod} />
-            <QuickFilter label="Year" value="year" current={period} setCurrent={setPeriod} />
-            <QuickFilter label="Custom" value="custom" current={period} setCurrent={setPeriod} />
+          <div className="flex items-center gap-2">
+            <span className="text-caption font-semibold uppercase tracking-wider text-text-muted">
+              Filter Options
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -416,7 +397,11 @@ export default function Dashboard() {
       )}
 
       {/* Enhanced Stats Grid */}
-      <StatsGrid filter={dashboardFilter} />
+      <StatsGrid
+        filter={dashboardFilter}
+        period={period}
+        onPeriodChange={setPeriod}
+      />
 
       {/* Revenue and Visitors Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -1,10 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { HiArrowUp, HiArrowDown } from 'react-icons/hi';
+import { TbEye } from 'react-icons/tb';
 import analyticsService from '../../services/analytics.service';
 import useCurrency from '../../hooks/useCurrency';
 
-const StatsCard = ({ title, value, percentage, trend, data, color, featured = false, className = '' }) => {
+function QuickFilter({ label, value, current, setCurrent }) {
+  const isActive = current === value;
+  return (
+    <button
+      type="button"
+      onClick={() => setCurrent && setCurrent(value)}
+      className={`px-3 py-1.5 rounded-lg text-caption font-semibold transition-colors ${
+        isActive
+          ? 'bg-primary/20 text-primary border border-primary/30'
+          : 'text-text-muted hover:text-text-primary hover:bg-surface-2'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+const StatsCard = ({
+  title,
+  value,
+  percentage,
+  trend,
+  data,
+  color,
+  featured = false,
+  className = '',
+  period,
+  onPeriodChange
+}) => {
   const isPositive = percentage > 0;
 
   return (
@@ -13,16 +42,22 @@ const StatsCard = ({ title, value, percentage, trend, data, color, featured = fa
         featured ? 'p-5 flex flex-col justify-start' : 'p-3'
       } ${className}`.trim()}
     >
-      <div className={`flex items-start justify-between gap-4 ${featured ? 'mb-3' : 'mb-2'}`}>
+      <div className={`flex items-start justify-between gap-4 ${featured ? 'mb-2' : 'mb-2'}`}>
         <div className="min-w-0">
-          <h3 className="text-caption font-semibold uppercase tracking-wider text-text-muted">{title}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-caption font-semibold uppercase tracking-wider text-text-muted">{title}</h3>
+            {featured && <TbEye className="h-4 w-4 text-text-muted" />}
+          </div>
           <p
             className={`font-bold text-text-primary tracking-tight ${
-              featured ? 'mt-2 text-h2 md:text-2xl' : 'mt-1 text-body md:text-base'
+              featured ? 'mt-1.5 text-h2 md:text-2xl' : 'mt-1 text-body md:text-base'
             }`}
           >
             {value}
           </p>
+          {featured && (
+            <p className="mt-0.5 text-caption text-text-muted">{trend}</p>
+          )}
         </div>
         <div
           className={`flex items-center rounded-full whitespace-nowrap shrink-0 border font-semibold ${
@@ -57,12 +92,22 @@ const StatsCard = ({ title, value, percentage, trend, data, color, featured = fa
         </ResponsiveContainer>
       </div>
 
-      <p className={`text-caption text-text-muted ${featured ? 'mt-2' : 'mt-1.5'}`}>{trend}</p>
+      {featured ? (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default w-fit">
+          <QuickFilter label="Today" value="today" current={period} setCurrent={onPeriodChange} />
+          <QuickFilter label="This Week" value="week" current={period} setCurrent={onPeriodChange} />
+          <QuickFilter label="Month" value="month" current={period} setCurrent={onPeriodChange} />
+          <QuickFilter label="Year" value="year" current={period} setCurrent={onPeriodChange} />
+          <QuickFilter label="Custom" value="custom" current={period} setCurrent={onPeriodChange} />
+        </div>
+      ) : (
+        <p className="text-caption text-text-muted mt-1.5">{trend}</p>
+      )}
     </div>
   );
 };
 
-const StatsGrid = ({ filter = { period: 'week' } }) => {
+const StatsGrid = ({ filter = { period: 'week' }, period = 'week', onPeriodChange }) => {
   const { format } = useCurrency();
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -163,15 +208,20 @@ const StatsGrid = ({ filter = { period: 'week' } }) => {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3">
         {/* Featured Skeleton: Total Revenue */}
         <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-floating animate-pulse md:col-span-2 md:row-span-3 flex flex-col justify-start md:self-start">
-          <div className="mb-3 flex items-start justify-between gap-4">
+          <div className="mb-2 flex items-start justify-between gap-4">
             <div className="space-y-1.5">
               <div className="h-3.5 w-24 rounded bg-surface-2" />
               <div className="h-7 w-44 rounded bg-surface-2" />
+              <div className="h-3 w-20 rounded bg-surface-2" />
             </div>
             <div className="h-6 w-16 rounded-full bg-surface-2" />
           </div>
           <div className="h-20 md:h-24 rounded bg-surface-2" />
-          <div className="mt-2 h-3.5 w-24 rounded bg-surface-2" />
+          <div className="mt-3 flex items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default w-fit">
+            {[1, 2, 3, 4, 5].map((p) => (
+              <div key={p} className="h-6 w-14 rounded-lg bg-surface-2" />
+            ))}
+          </div>
         </div>
 
         {/* Secondary Skeletons: Orders, Visitors, Conversion Rate */}
@@ -198,7 +248,13 @@ const StatsGrid = ({ filter = { period: 'week' } }) => {
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3">
       {featuredStat && (
-        <StatsCard {...featuredStat} featured className="md:col-span-2 md:row-span-3 md:self-start" />
+        <StatsCard
+          {...featuredStat}
+          featured
+          className="md:col-span-2 md:row-span-3 md:self-start"
+          period={period}
+          onPeriodChange={onPeriodChange}
+        />
       )}
       {secondaryStats.map((stat, index) => (
         <StatsCard key={index} {...stat} className="md:col-span-1" />
