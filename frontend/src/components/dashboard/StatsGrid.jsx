@@ -10,7 +10,7 @@ const StatsCard = ({ title, value, percentage, trend, data, color, featured = fa
   return (
     <div
       className={`rounded-2xl border border-border-default bg-surface overflow-hidden shadow-floating transition-all duration-200 hover:shadow-lg hover:border-border-hover ${
-        featured ? 'p-5 flex flex-col justify-start md:self-start' : 'p-3'
+        featured ? 'p-5 flex flex-col justify-start' : 'p-3'
       } ${className}`.trim()}
     >
       <div className={`flex items-start justify-between gap-4 ${featured ? 'mb-3' : 'mb-2'}`}>
@@ -26,7 +26,7 @@ const StatsCard = ({ title, value, percentage, trend, data, color, featured = fa
         </div>
         <div
           className={`flex items-center rounded-full whitespace-nowrap shrink-0 border font-semibold ${
-            featured ? 'gap-1.5 px-3 py-1.5 text-small' : 'gap-1 px-2.5 py-0.5 text-caption'
+            featured ? 'gap-1.5 px-3 py-1.5 text-small' : 'gap-1 px-2 py-0.5 text-caption'
           } ${
             isPositive
               ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
@@ -198,7 +198,7 @@ const StatsGrid = ({ filter = { period: 'week' } }) => {
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3">
       {featuredStat && (
-        <StatsCard {...featuredStat} featured className="md:col-span-2 md:row-span-3" />
+        <StatsCard {...featuredStat} featured className="md:col-span-2 md:row-span-3 md:self-start" />
       )}
       {secondaryStats.map((stat, index) => (
         <StatsCard key={index} {...stat} className="md:col-span-1" />
