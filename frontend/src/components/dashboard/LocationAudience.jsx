@@ -153,8 +153,9 @@ const LocationAudience = ({ filter = { period: 'week' } }) => {
           </h2>
           <div className="text-caption text-text-secondary mt-0.5">
             Total Customers: {totalCustomers?.toLocaleString() || 0}
-            <span className={`ml-2 font-medium ${percentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
-              {percentageChange >= 0 ? '↑' : '↓'} {Math.abs(percentageChange || 0).toFixed(1)}%
+            <span className={`inline-flex items-center gap-0.5 ml-2 font-medium ${percentageChange >= 0 ? 'text-success' : 'text-danger'}`}>
+              {percentageChange >= 0 ? <HiArrowUp className="h-3 w-3" /> : <HiArrowDown className="h-3 w-3" />}
+              {Math.abs(percentageChange || 0).toFixed(1)}%
             </span>
           </div>
         </div>

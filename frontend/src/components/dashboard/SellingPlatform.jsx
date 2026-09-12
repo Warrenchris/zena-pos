@@ -187,7 +187,7 @@ const SellingPlatform = ({ filter = { period: 'week' } }) => {
           <p className="text-caption mt-1">Sales processed via different payment methods will appear here.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 selling-platform-grid">
           {/* Donut Chart */}
           <div className="h-[240px] flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">

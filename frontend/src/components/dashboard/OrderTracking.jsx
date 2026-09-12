@@ -213,7 +213,7 @@ const OrderTracking = ({ filter = { period: 'week' } }) => {
       </div>
 
       {/* Chart Viewport */}
-      <div className="h-[320px] w-full">
+      <div className="h-[320px] w-full dashboard-chart-viewport">
         {!hasData ? (
           <div className="h-full flex flex-col items-center justify-center text-center text-text-muted">
             <p className="text-body font-medium">No order data recorded for this period</p>

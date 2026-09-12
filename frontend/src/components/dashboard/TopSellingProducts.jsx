@@ -189,7 +189,7 @@ const TopSellingProducts = ({ filter = { period: 'week' } }) => {
         </div>
       </div>
 
-      <div className="overflow-x-auto -mx-6 px-6">
+      <div className="overflow-x-auto -mx-6 px-6 dashboard-products-table">
       <table className="min-w-full" style={{ minWidth: '480px' }}>
         <thead>
           <tr className="bg-surface-2/40 rounded-xl">

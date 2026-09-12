@@ -118,7 +118,7 @@ const VisitorGraph = ({ filter = { period: 'week' } }) => {
         </div>
       </div>
 
-      <div className="h-[320px]">
+      <div className="h-[320px] dashboard-chart-viewport">
         {(!visitorData || visitorData.length === 0) ? (
           <div className="flex h-full w-full items-center justify-center text-center text-text-muted">
             <div>

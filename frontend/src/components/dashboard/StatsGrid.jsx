@@ -161,7 +161,7 @@ const StatsCard = ({
       </div>
 
       {featured ? (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default w-fit">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default w-fit dashboard-metric-pills">
           <QuickFilter label="Today" value="today" current={period} setCurrent={onPeriodChange} />
           <QuickFilter label="This Week" value="week" current={period} setCurrent={onPeriodChange} />
           <QuickFilter label="Month" value="month" current={period} setCurrent={onPeriodChange} />
@@ -340,7 +340,7 @@ const StatsGrid = ({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3 stats-asymmetric-grid">
         {/* Featured Skeleton: Total Revenue */}
         <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-floating animate-pulse md:col-span-2 md:row-span-3 flex flex-col justify-start md:self-start">
           <div className="mb-2 flex items-start justify-between gap-4">
@@ -381,7 +381,7 @@ const StatsGrid = ({
   const secondaryStats = stats.filter((s) => s !== featuredStat);
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3 stats-asymmetric-grid">
       {featuredStat && (
         <StatsCard
           {...featuredStat}
