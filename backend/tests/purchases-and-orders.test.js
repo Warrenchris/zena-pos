@@ -99,7 +99,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
         stockQuantity: 100,
         reorderPoint: 10,
         active: true,
-        shopId: 1
+        shopId: 1,
+        organizationId: 1
       }
     });
     prodShop1.stockQuantity = 100;
@@ -115,7 +116,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
         stockQuantity: 50,
         reorderPoint: 5,
         active: true,
-        shopId: 2
+        shopId: 2,
+        organizationId: 2
       }
     });
   });
