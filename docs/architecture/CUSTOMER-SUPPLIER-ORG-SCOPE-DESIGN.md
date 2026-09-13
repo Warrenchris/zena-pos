@@ -54,6 +54,10 @@ A complete audit across `backend/src` identified all call sites querying or muta
 | `backend/src/routes/suppliers.js:74-76` (`GET /api/suppliers/:id`) | `Supplier` | `where: { id: req.params.id, shopId }` | `where: { id: req.params.id, organizationId: req.organizationId }` |
 | `backend/src/controllers/dashboardController.js:46-51, 78-83, 362-373` | `Customer` | `where: { shopId, createdAt }` | Keep `shopId` (measures local branch acquisition) or dual filter |
 | `backend/src/controllers/analyticsController.js:552-560` | `Customer` | `where: { shopId, createdAt }` | Keep `shopId` (measures local branch acquisition) |
+| `backend/src/controllers/invoiceController.js` | None | `where: { shopId: req.user.shopId }` on `Invoice` & `Sale` | **No change** — Zero `Customer`/`Supplier` imports or queries; Invoices stay shop-scoped |
+| `backend/src/controllers/reportsController.js:86-90` | None (`Sale.customerId`) | `Sale.count({ where: { shopId }, col: 'customerId' })` | **No change** — Aggregates `customerId` directly on shop-scoped `Sale`; no `Customer` queries |
+| `backend/src/controllers/insightsController.js:490-498, 571-583` | None (`Sale.customerId`) | `Sale.findAll({ where: { shopId }, group: ['customerId'] })` | **No change** — Computes shop-level customer purchase metrics on `Sale`; no `Customer` queries |
+| `backend/src/controllers/couponController.js` | None | `where: { shopId: req.user.shopId }` on `Coupon` | **No change** — Zero `Customer`/`Supplier` imports or queries; coupons stay shop-scoped |
 
 ### 2.3 FINDING-08 (`adjustLoyaltyPoints`) Re-Verification & Threat Model
 In FINDING-08, `customerController.js:298-300` had an IDOR vulnerability where loyalty points could be manipulated across shops because the query used un-scoped `Customer.findByPk(req.params.id)`. The fix added `shopId: req.user.shopId`.
@@ -130,7 +134,7 @@ HAVING COUNT(*) > 1;
 | **Intra-Org Supplier Name Collisions** | **0** | Zero duplicate supplier names within any org |
 | **Intra-Org Supplier Email Collisions** | **1** | `alice@megasupplies.co.ke` appears 8 times under Shop 1 |
 
-*Note on Supplier Email duplicates*: The 8 records sharing `alice@megasupplies.co.ke` are distinct test supplier entities (`E2E Mega Supplies <timestamp>`) created under Shop 1. Because vendors frequently share sales representatives or generic contact emails (`sales@distributor.co.ke`), supplier email **must not** be constrained as unique. Uniqueness for suppliers is strictly governed by `(organizationId, name)`.
+*Note on Supplier Email duplicates*: The 8 records sharing `alice@megasupplies.co.ke` are distinct test supplier entities (`E2E Mega Supplies <timestamp>`) created under Shop 1 during previous verification runs. Because vendors frequently share sales representatives or generic contact emails (`sales@distributor.co.ke`), supplier email **must not** be constrained as unique. Uniqueness for suppliers is strictly governed by `(organizationId, name)`. *(See Section 8: Appendix: Data Hygiene Note for the complete inventory of these stale primary database records).*
 
 ### 3.3 Collision Verdict & Migration Safety Recommendation
 - **Verdict**: **SAFE TO MIGRATE DIRECTLY WITH ZERO REMEDIATION**.
@@ -150,17 +154,21 @@ HAVING COUNT(*) > 1;
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ Customers:                                                                             │
 │   id             INT PRIMARY KEY AUTO_INCREMENT                                        │
-│   organizationId INT NOT NULL REFERENCES Organizations(id) ON DELETE CASCADE [NEW]    │
+│   organizationId INT NOT NULL REFERENCES Organizations(id) ON DELETE RESTRICT [NEW]   │
 │   shopId         INT NULL REFERENCES Shops(id) ON DELETE SET NULL [RETAINED AS ORIGIN] │
 │   name, email, phone, address, loyaltyPoints, totalPurchases, active, ...              │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ Suppliers:                                                                             │
 │   id             INT PRIMARY KEY AUTO_INCREMENT                                        │
-│   organizationId INT NOT NULL REFERENCES Organizations(id) ON DELETE CASCADE [NEW]    │
+│   organizationId INT NOT NULL REFERENCES Organizations(id) ON DELETE RESTRICT [NEW]   │
 │   shopId         INT NULL REFERENCES Shops(id) ON DELETE SET NULL [RETAINED AS ORIGIN] │
 │   name, contactPerson, email, phone, address, ...                                      │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+#### Foreign Key Deletion Rule: `ON DELETE RESTRICT` (Phase 1 Precedent Alignment)
+In Phase 1, `Shops.organizationId` was configured with `ON DELETE RESTRICT` to prevent catastrophic accidental data loss. In a multi-branch enterprise POS, `Customers` (with accumulated loyalty points, transaction histories, debt ledger balances) and `Suppliers` (linked to historic purchase orders, stock receipts, and cost accounting) are high-value master data assets.
+Configuring `organizationId` with `ON DELETE RESTRICT` guarantees that an `Organization` record cannot be deleted while master customer or supplier records still reference it. Deleting a tenant requires deliberate handling or decommissioning of its master entities first, preventing silent, cascading obliteration of merchant business records.
 
 #### Recommendation: Retain `shopId` as a Nullable Informational Field ("Origin Branch")
 **Decision**: Do **NOT** drop `shopId`. Retain `shopId` as an informational foreign key referencing `Shops(id) ON DELETE SET NULL`.
@@ -214,7 +222,7 @@ await queryInterface.addConstraint('Customers', {
   type: 'foreign key',
   name: 'fk_customers_organization_id',
   references: { table: 'Organizations', field: 'id' },
-  onDelete: 'CASCADE',
+  onDelete: 'RESTRICT',
   onUpdate: 'CASCADE'
 });
 
@@ -227,7 +235,7 @@ await queryInterface.addConstraint('Suppliers', {
   type: 'foreign key',
   name: 'fk_suppliers_organization_id',
   references: { table: 'Organizations', field: 'id' },
-  onDelete: 'CASCADE',
+  onDelete: 'RESTRICT',
   onUpdate: 'CASCADE'
 });
 
@@ -368,6 +376,20 @@ When Phase 2 is implemented, the following controller changes must be executed:
 - `POST /api/suppliers`: `Supplier.create({ organizationId: req.organizationId, shopId: req.shopId, name, ... })`.
 - `GET /api/suppliers/:id`: `where: { id: req.params.id, organizationId: req.organizationId }`.
 
+#### 5. Controllers Confirmed Requiring Zero Scope Changes:
+- **`backend/src/controllers/invoiceController.js`**:
+  - *Audit Finding*: Imports `{ Invoice, InvoiceItem, Sale, SaleItem, User, Shop, Product }`. Creates invoices from `Sale` records (`where: { id: saleId, shopId: req.user.shopId }`) and renders invoice PDFs. It contains **zero** imports, queries, joins, or mutations of `Customer` or `Supplier`.
+  - *Scope Verdict*: **No change required**. Invoices remain shop-scoped (`shopId`).
+- **`backend/src/controllers/reportsController.js`**:
+  - *Audit Finding*: Calculates `activeCustomers` (lines 86-90) using `Sale.count({ where: { shopId, ... }, distinct: true, col: 'customerId' })`. This query aggregates the foreign key `Sale.customerId` directly against the shop-scoped `Sale` table. It contains **zero** imports or queries on `Customer` or `Supplier` models.
+  - *Scope Verdict*: **No change required**. Sales reporting remains shop-scoped (`shopId`).
+- **`backend/src/controllers/insightsController.js`**:
+  - *Audit Finding*: In `calculateTrends` / `generateInsights` (lines 490-498), monthly customer counts are computed via `Sale.findAll({ where: { shopId, ... }, attributes: [COUNT(DISTINCT CustomerId)] })`. In `getCustomerSegments` (lines 571-583), RFM segmentation metrics are aggregated from `Sale` records grouped by `customerId` for that specific branch. It contains **zero** imports or queries on `Customer` or `Supplier` models.
+  - *Scope Verdict*: **No change required**. Sales and customer frequency analytics on `Sale` remain shop-scoped.
+- **`backend/src/controllers/couponController.js`**:
+  - *Audit Finding*: Interacts strictly with the `Coupon` model, filtered by `shopWhere = (req) => ({ shopId: req.user.shopId })`. The string `"Customer"` appears only once in a default seed coupon title (`"Welcome New Customer"`). It contains **zero** imports, relations, or queries on `Customer` or `Supplier` models, and coupons are validated against cart amounts rather than customer records.
+  - *Scope Verdict*: **No change required**. Coupons remain shop-scoped (`shopId`).
+
 ### 4.5 FINDING-08 Loyalty-Points Redesign & Cross-Tenant Security Model
 
 ```
@@ -451,6 +473,28 @@ When approved to proceed to implementation, the phase will follow this sequentia
    - FINDING-08 loyalty adjustment verification test (both positive cross-branch and negative cross-tenant IDOR).
    - Cross-branch supplier sharing and purchase order creation test.
    - Full regression run of all 16 Jest suites on `zana_pos_test` and `zana_pos`.
+
+---
+
+## 8. Appendix: Data Hygiene Note — Stale Primary Database Test Fixtures
+
+During the collision audit in Section 3.2, 8 supplier records were identified in the primary database (`zana_pos`) that originated from prior E2E verification scripts:
+
+| Supplier ID | Supplier Name | Shop ID | Organization ID | Contact Email | Created At / Note |
+| :---: | :--- | :---: | :---: | :--- | :--- |
+| **2** | `E2E Mega Supplies 1788601324274` | 1 | 1 | `alice@megasupplies.co.ke` | Stale E2E test fixture |
+| **3** | `E2E Mega Supplies 1788601345834` | 1 | 1 | `alice@megasupplies.co.ke` | Stale E2E test fixture |
+| **4** | `E2E Mega Supplies 1788601377137` | 1 | 1 | `alice@megasupplies.co.ke` | Stale E2E test fixture |
+| **5** | `E2E Mega Supplies 1788601406954` | 1 | 1 | `alice@megasupplies.co.ke` | Stale E2E test fixture |
+| **6** | `E2E Mega Supplies 1788601481292` | 1 | 1 | `alice@megasupplies.co.ke` | Stale E2E test fixture |
+| **7** | `E2E Mega Supplies 1788601549362` | 1 | 1 | `alice@megasupplies.co.ke` | Stale E2E test fixture |
+| **8** | `E2E Mega Supplies 1788601600905` | 1 | 1 | `alice@megasupplies.co.ke` | Stale E2E test fixture |
+| **9** | `E2E Mega Supplies 1788601705467` | 1 | 1 | `alice@megasupplies.co.ke` | Stale E2E test fixture |
+
+### Operational Impact & Remediation Guidance:
+1. **Migration Impact**: **Zero blockers**. All 8 records have unique names (`E2E Mega Supplies <timestamp>`) and belong to Shop 1 (Org 1). The new composite unique index `(organizationId, name)` will apply cleanly without collision.
+2. **Referential Integrity Note**: Database inspection revealed that **13 historic `Purchase` records** reference these test suppliers (`Purchase.supplierId IN (2, 3, 4, 5, 6, 7, 8, 9)`). Hard-deleting these suppliers without cleaning their dependent purchases would violate referential integrity.
+3. **Recommendation**: Deletion is **explicitly deferred** from Phase 2 scope to avoid out-of-band schema or transaction risks. These IDs are documented here for a future dedicated fixture cleanup script or data hygiene maintenance pass.
 
 ---
 
