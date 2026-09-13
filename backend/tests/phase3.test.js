@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, SaleRefund, HeldCart, SalePayment, ActivityLog } = require('../src/models');
+const { Shop, Category, Product, Inventory, Sale, SaleItem, Customer, Employee, User, SaleRefund, HeldCart, SalePayment, ActivityLog } = require('../src/models');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -84,12 +84,17 @@ describe('Phase 3 Remediation Tests', () => {
       barcode: 'BARCODE-A',
       price: 15.00,
       cost: 7.00,
-      stockQuantity: 100,
-      reorderPoint: 5,
       categoryId: category.id,
       shopId: 1,
       organizationId: 1,
       active: true
+    });
+
+    await Inventory.create({
+      productId: product1.id,
+      shopId: 1,
+      stockQuantity: 100,
+      reorderPoint: 5
     });
 
     product2 = await Product.create({
@@ -98,12 +103,17 @@ describe('Phase 3 Remediation Tests', () => {
       barcode: 'BARCODE-B',
       price: 25.00,
       cost: 12.00,
-      stockQuantity: 50,
-      reorderPoint: 5,
       categoryId: category.id,
       shopId: 1,
       organizationId: 1,
       active: true
+    });
+
+    await Inventory.create({
+      productId: product2.id,
+      shopId: 1,
+      stockQuantity: 50,
+      reorderPoint: 5
     });
 
     // Setup User and Employee
@@ -301,8 +311,10 @@ describe('Phase 3 Remediation Tests', () => {
 
   // TEST 3.8 — Full refund updates sale status to 'refunded'
   test('TEST 3.8 — Full refund updates sale status to \'refunded\'', async () => {
-    const initialStock1 = (await Product.findByPk(product1.id)).stockQuantity;
-    const initialStock2 = (await Product.findByPk(product2.id)).stockQuantity;
+    const inv1 = await Inventory.findOne({ where: { productId: product1.id, shopId: 1 } });
+    const initialStock1 = parseFloat(inv1.stockQuantity);
+    const inv2 = await Inventory.findOne({ where: { productId: product2.id, shopId: 1 } });
+    const initialStock2 = parseFloat(inv2.stockQuantity);
 
     // Seed sale
     const s = await Sale.create({
@@ -337,8 +349,10 @@ describe('Phase 3 Remediation Tests', () => {
     const updatedSale = await Sale.findByPk(s.id);
     expect(updatedSale.saleStatus).toBe('refunded');
 
-    const finalStock1 = (await Product.findByPk(product1.id)).stockQuantity;
-    const finalStock2 = (await Product.findByPk(product2.id)).stockQuantity;
+    const finalInv1 = await Inventory.findOne({ where: { productId: product1.id, shopId: 1 } });
+    const finalInv2 = await Inventory.findOne({ where: { productId: product2.id, shopId: 1 } });
+    const finalStock1 = parseFloat(finalInv1.stockQuantity);
+    const finalStock2 = parseFloat(finalInv2.stockQuantity);
 
     expect(finalStock1).toBe(initialStock1 + 1);
     expect(finalStock2).toBe(initialStock2 + 1);
@@ -346,7 +360,8 @@ describe('Phase 3 Remediation Tests', () => {
 
   // TEST 3.9 — Partial refund updates sale status to 'partial_refund'
   test('TEST 3.9 — Partial refund updates sale status to \'partial_refund\'', async () => {
-    const initialStock1 = (await Product.findByPk(product1.id)).stockQuantity;
+    const inv1 = await Inventory.findOne({ where: { productId: product1.id, shopId: 1 } });
+    const initialStock1 = parseFloat(inv1.stockQuantity);
 
     const s = await Sale.create({
       invoiceNumber: `INV-${Date.now()}-2`,
@@ -378,13 +393,15 @@ describe('Phase 3 Remediation Tests', () => {
     const updatedSale = await Sale.findByPk(s.id);
     expect(updatedSale.saleStatus).toBe('partial_refund');
 
-    const finalStock1 = (await Product.findByPk(product1.id)).stockQuantity;
+    const finalInv1 = await Inventory.findOne({ where: { productId: product1.id, shopId: 1 } });
+    const finalStock1 = parseFloat(finalInv1.stockQuantity);
     expect(finalStock1).toBe(initialStock1 + 1);
   });
 
   // TEST 3.10 — Over-refund is rejected
   test('TEST 3.10 — Over-refund is rejected', async () => {
-    const initialStock1 = (await Product.findByPk(product1.id)).stockQuantity;
+    const inv1 = await Inventory.findOne({ where: { productId: product1.id, shopId: 1 } });
+    const initialStock1 = parseFloat(inv1.stockQuantity);
 
     const s = await Sale.create({
       invoiceNumber: `INV-${Date.now()}-3`,
@@ -410,7 +427,8 @@ describe('Phase 3 Remediation Tests', () => {
       .send(refundPayload)
       .expect(400);
 
-    const finalStock1 = (await Product.findByPk(product1.id)).stockQuantity;
+    const finalInv1 = await Inventory.findOne({ where: { productId: product1.id, shopId: 1 } });
+    const finalStock1 = parseFloat(finalInv1.stockQuantity);
     expect(finalStock1).toBe(initialStock1); // Stock must remain unchanged
   });
 
@@ -444,8 +462,10 @@ describe('Phase 3 Remediation Tests', () => {
 
   // TEST 3.12 — Refund transaction is atomic
   test('TEST 3.12 — Refund transaction is atomic', async () => {
-    const initialStock1 = (await Product.findByPk(product1.id)).stockQuantity;
-    const initialStock2 = (await Product.findByPk(product2.id)).stockQuantity;
+    const inv1 = await Inventory.findOne({ where: { productId: product1.id, shopId: 1 } });
+    const initialStock1 = parseFloat(inv1.stockQuantity);
+    const inv2 = await Inventory.findOne({ where: { productId: product2.id, shopId: 1 } });
+    const initialStock2 = parseFloat(inv2.stockQuantity);
 
     const s = await Sale.create({
       invoiceNumber: `INV-${Date.now()}-5`,
@@ -458,7 +478,7 @@ describe('Phase 3 Remediation Tests', () => {
     });
 
     await SaleItem.create({ saleId: s.id, productId: product1.id, quantity: 1, price: 15.00, shopId: 1 });
-    await SaleItem.create({ saleId: s.id, productId: product2.id, quantity: 1, price: 15.00, shopId: 1 });
+    await SaleItem.create({ saleId: s.id, productId: product2.id, quantity: 1, price: 25.00, shopId: 1 });
 
     const refundPayload = {
       items: [
@@ -488,8 +508,10 @@ describe('Phase 3 Remediation Tests', () => {
     }
 
     // Verify stock remains completely unchanged
-    const finalStock1 = (await Product.findByPk(product1.id)).stockQuantity;
-    const finalStock2 = (await Product.findByPk(product2.id)).stockQuantity;
+    const finalInv1 = await Inventory.findOne({ where: { productId: product1.id, shopId: 1 } });
+    const finalInv2 = await Inventory.findOne({ where: { productId: product2.id, shopId: 1 } });
+    const finalStock1 = parseFloat(finalInv1.stockQuantity);
+    const finalStock2 = parseFloat(finalInv2.stockQuantity);
     expect(finalStock1).toBe(initialStock1);
     expect(finalStock2).toBe(initialStock2);
 

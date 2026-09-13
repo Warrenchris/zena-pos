@@ -4,7 +4,7 @@ const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
 const {
-  Shop, Category, Product, Sale, SaleItem, Customer,
+  Shop, Category, Product, Inventory, Sale, SaleItem, Customer,
   Employee, User, PendingPayment, HeldCart, ActivityLog, SaleRefund
 } = require('../src/models');
 const SalePayment = require('../src/models/SalePayment');
@@ -75,12 +75,17 @@ describe('MySQL + SalePayments Integration Tests', () => {
       barcode: 'BARCODE-MS-001',
       price: 15.00,
       cost: 7.00,
-      stockQuantity: 200,
-      reorderPoint: 5,
       categoryId: category.id,
       shopId: 1,
       organizationId: 1,
       active: true
+    });
+
+    await Inventory.create({
+      productId: product.id,
+      shopId: 1,
+      stockQuantity: 200,
+      reorderPoint: 5
     });
 
     await User.create({
@@ -513,7 +518,8 @@ describe('MySQL + SalePayments Integration Tests', () => {
   // M.15 — Split sale rolls back fully on transaction failure
   // ===================================================================
   test('TEST M.15 — Split sale rolls back fully on transaction failure', async () => {
-    const initialStock = (await Product.findByPk(product.id)).stockQuantity;
+    const invBefore = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
+    const initialStock = parseFloat(invBefore.stockQuantity);
     const initialSaleCount = await Sale.count({ where: { shopId: 1 } });
 
     // Mock SalePayment.create to throw on 2nd call
@@ -547,8 +553,8 @@ describe('MySQL + SalePayments Integration Tests', () => {
     }
 
     // Verify stock unchanged
-    const finalStock = (await Product.findByPk(product.id)).stockQuantity;
-    expect(finalStock).toBe(initialStock);
+    const invAfter = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
+    expect(parseFloat(invAfter.stockQuantity)).toBe(initialStock);
 
     // Verify no sale was persisted
     const finalSaleCount = await Sale.count({ where: { shopId: 1 } });

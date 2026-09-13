@@ -301,8 +301,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
     expect(createRes.status).toBe(201);
     const purchaseId = createRes.body.id;
 
-    await prodShop1.reload();
-    const stockBefore = prodShop1.stockQuantity;
+    const invBefore = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    const stockBefore = parseFloat(invBefore.stockQuantity);
 
     // Receive pending goods
     const recRes = await request(app)
@@ -312,8 +312,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
     expect(recRes.status).toBe(200);
     expect(recRes.body.status).toBe('RECEIVED');
 
-    await prodShop1.reload();
-    expect(prodShop1.stockQuantity).toBe(stockBefore + 15);
+    const invAfter = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    expect(parseFloat(invAfter.stockQuantity)).toBe(stockBefore + 15);
   });
 
   // -------------------------------------------------------------
@@ -368,8 +368,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
   // TEST GROUP 7: PURCHASE ORDERS — LIFECYCLE & PARTIAL RECEIVING
   // -------------------------------------------------------------
   test('TEST 7.1 — PO Partial Receiving (Receive 40 of 100, then 60) updates stock correctly and prevents over-receiving', async () => {
-    await prodShop1.reload();
-    const stockStart = prodShop1.stockQuantity;
+    const invStart = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    const stockStart = parseFloat(invStart.stockQuantity);
 
     // 1. Create PO for 100 units
     const poRes = await request(app)
@@ -395,8 +395,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
     expect(rec40Res.status).toBe(200);
     expect(rec40Res.body.status).toBe('PARTIALLY_RECEIVED');
 
-    await prodShop1.reload();
-    expect(prodShop1.stockQuantity).toBe(stockStart + 40);
+    const invAfter40 = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    expect(parseFloat(invAfter40.stockQuantity)).toBe(stockStart + 40);
 
     // 3. Attempt to over-receive 70 units (Remaining is only 60) -> Expect HTTP 400
     const overRecRes = await request(app)
@@ -420,8 +420,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
     expect(rec60Res.status).toBe(200);
     expect(rec60Res.body.status).toBe('RECEIVED');
 
-    await prodShop1.reload();
-    expect(prodShop1.stockQuantity).toBe(stockStart + 100);
+    const invAfter60 = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    expect(parseFloat(invAfter60.stockQuantity)).toBe(stockStart + 100);
 
     // 5. Attempt to receive again on fully RECEIVED PO -> Expect HTTP 400
     const extraRecRes = await request(app)

@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, Customer, Employee, User, PendingPayment, SalePayment, SaleRefund, ActivityLog } = require('../src/models');
+const { Shop, Category, Product, Inventory, Sale, SaleItem, Customer, Employee, User, PendingPayment, SalePayment, SaleRefund, ActivityLog } = require('../src/models');
 const axios = require('axios');
 
 jest.mock('axios');
@@ -81,12 +81,17 @@ describe('Phase 2 Remediation Tests', () => {
       barcode: 'BARCODE-TEST',
       price: 10.00,
       cost: 5.00,
-      stockQuantity: 100,
-      reorderPoint: 5,
       categoryId: category.id,
       shopId: 1,
       organizationId: 1,
       active: true
+    });
+
+    await Inventory.create({
+      productId: product.id,
+      shopId: 1,
+      stockQuantity: 100,
+      reorderPoint: 5
     });
 
     // Setup User and Employee
@@ -155,7 +160,8 @@ describe('Phase 2 Remediation Tests', () => {
   // TEST 2.2 — M-Pesa callback confirms sale
   test('TEST 2.2 — M-Pesa callback confirms sale', async () => {
     const checkoutRequestId = 'ws_CO_TEST_2.2';
-    const initialStock = product.stockQuantity;
+    const invBefore = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
+    const initialStock = parseFloat(invBefore.stockQuantity);
 
     await PendingPayment.create({
       checkoutRequestId,
@@ -201,15 +207,16 @@ describe('Phase 2 Remediation Tests', () => {
     expect(sale).toBeDefined();
     expect(Number(sale.total)).toBe(20.00);
 
-    const updatedProduct = await Product.findByPk(product.id);
-    expect(updatedProduct.stockQuantity).toBe(initialStock - 2);
+    const updatedInv = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
+    expect(parseFloat(updatedInv.stockQuantity)).toBe(initialStock - 2);
   });
 
   // TEST 2.3 — M-Pesa callback failure leaves sale uncreated
   test('TEST 2.3 — M-Pesa callback failure leaves sale uncreated', async () => {
     const checkoutRequestId = 'ws_CO_TEST_2.3';
     const initialSaleCount = await Sale.count();
-    const initialStock = (await Product.findByPk(product.id)).stockQuantity;
+    const invBefore = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
+    const initialStock = parseFloat(invBefore.stockQuantity);
 
     await PendingPayment.create({
       checkoutRequestId,
@@ -248,14 +255,15 @@ describe('Phase 2 Remediation Tests', () => {
     const finalSaleCount = await Sale.count();
     expect(finalSaleCount).toBe(initialSaleCount);
 
-    const finalStock = (await Product.findByPk(product.id)).stockQuantity;
-    expect(finalStock).toBe(initialStock);
+    const invAfter = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
+    expect(parseFloat(invAfter.stockQuantity)).toBe(initialStock);
   });
 
   // TEST 2.4 — Card payment verification creates sale
   test('TEST 2.4 — Card payment verification creates sale', async () => {
     const reference = 'flw_ref_test_2.4';
-    const initialStock = (await Product.findByPk(product.id)).stockQuantity;
+    const invBefore = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
+    const initialStock = parseFloat(invBefore.stockQuantity);
 
     axios.get.mockResolvedValueOnce({
       data: {
@@ -299,8 +307,8 @@ describe('Phase 2 Remediation Tests', () => {
     const sale = await Sale.findOne({ where: { paymentReference: 'FLW_GATEWAY_REF_2.4' } });
     expect(sale).toBeDefined();
 
-    const finalStock = (await Product.findByPk(product.id)).stockQuantity;
-    expect(finalStock).toBe(initialStock - 1);
+    const invAfter = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
+    expect(parseFloat(invAfter.stockQuantity)).toBe(initialStock - 1);
   });
 
   // TEST 2.5 — Failed card verification blocks sale

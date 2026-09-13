@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Sale, SaleItem, ActivityLog, Employee, User, SalePayment } = require('../src/models');
+const { Shop, Category, Product, Inventory, Sale, SaleItem, ActivityLog, Employee, User, SalePayment } = require('../src/models');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -96,12 +96,16 @@ describe('Phase 1 Remediation Integration Tests', () => {
         barcode: `BARCODE-${1000 + i}`,
         price: 10.00 * i,
         cost: 5.00 * i,
-        stockQuantity: 100,
-        reorderPoint: 5,
         categoryId: category.id,
         shopId: 1,
         organizationId: 1,
         active: true
+      });
+      await Inventory.create({
+        productId: prod.id,
+        shopId: 1,
+        stockQuantity: 100,
+        reorderPoint: 5
       });
       products.push(prod);
     }
@@ -191,7 +195,8 @@ describe('Phase 1 Remediation Integration Tests', () => {
   // TEST 1.5 — Legitimate sale still works
   test('TEST 1.5 — Legitimate sale still works', async () => {
     const targetProduct = products[2]; // Product 3 (Price: 30.00)
-    const initialStock = targetProduct.stockQuantity;
+    const invBefore = await Inventory.findOne({ where: { productId: targetProduct.id, shopId: 1 } });
+    const initialStock = parseFloat(invBefore.stockQuantity);
 
     const payload = {
       items: [{ productId: targetProduct.id, quantity: 2, price: 30.00 }],
@@ -209,8 +214,8 @@ describe('Phase 1 Remediation Integration Tests', () => {
     expect(res.body.id).toBeDefined();
 
     // Verify stock is decremented
-    const updatedProd = await Product.findByPk(targetProduct.id);
-    expect(updatedProd.stockQuantity).toBe(initialStock - 2);
+    const updatedInv = await Inventory.findOne({ where: { productId: targetProduct.id, shopId: 1 } });
+    expect(parseFloat(updatedInv.stockQuantity)).toBe(initialStock - 2);
   });
 
   // TEST 1.6 — Activity log written on sale (integer user)
