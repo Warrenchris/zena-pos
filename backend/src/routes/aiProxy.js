@@ -7,6 +7,7 @@ const { ipKeyGenerator } = rateLimit;
 const NodeCache = require('node-cache');
 const router = express.Router();
 const { auth, checkRole } = require('../middleware/auth');
+const requireOrgAdmin = require('../middleware/requireOrgAdmin');
 require('dotenv').config();
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
@@ -27,6 +28,20 @@ function buildForecastCacheKey(shopId, requestBody, periods, model = 'prophet') 
   return `forecast:${shopId}:${model}:${periods}:${dataHash}`;
 }
 
+function buildOrgForecastCacheKey(organizationId, requestBody, periods, model = 'prophet') {
+  const dataHash = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({
+      dates: requestBody.dates,
+      values: requestBody.values,
+      periods: periods ?? requestBody.periods,
+      model
+    }))
+    .digest('hex')
+    .substring(0, 16);
+  return `forecast:org:${organizationId}:${model}:${periods}:${dataHash}`;
+}
+
 const aiRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -36,7 +51,13 @@ const aiRateLimiter = rateLimit({
     error: 'Too many AI requests. Please wait before requesting new forecasts.',
     retryAfter: '15 minutes'
   },
-  keyGenerator: (req) => req.shopId || ipKeyGenerator(req),
+  keyGenerator: (req) => {
+    const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
+    if (isOrg && (req.organizationId || req.user?.organizationId)) {
+      return `org:${req.organizationId || req.user?.organizationId}`;
+    }
+    return req.shopId ? String(req.shopId) : ipKeyGenerator(req);
+  },
 });
 
 const HEALTH_TTL = 30000; // 30 seconds – re-probe inline if cached result is stale
