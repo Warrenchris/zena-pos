@@ -59,4 +59,14 @@ const Supplier = sequelize.define('Supplier', {
   ]
 });
 
+Supplier.beforeValidate(async (supplier, options) => {
+  if (!supplier.organizationId && supplier.shopId) {
+    const Shop = sequelize.models.Shop || require('./Shop');
+    const shop = await Shop.findByPk(supplier.shopId, { attributes: ['organizationId'], transaction: options?.transaction });
+    if (shop && shop.organizationId) {
+      supplier.organizationId = shop.organizationId;
+    }
+  }
+});
+
 module.exports = Supplier;
