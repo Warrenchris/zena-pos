@@ -103,6 +103,12 @@ class EnhancedSaleService {
     } = body;
     const shopId = req.shopId || req.user.shopId;
     const user = req.user;
+    let organizationId = req.organizationId || user?.organizationId;
+    if (!organizationId && shopId) {
+      const { Shop } = require('../models');
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
 
     if (!Array.isArray(items) || items.length === 0) {
       const err = new Error('Sale must include at least one item');
@@ -329,7 +335,7 @@ class EnhancedSaleService {
       if (!isWalkIn) {
         if (resolvedCustomerId) {
           const existingCustomer = await Customer.findOne({
-            where: { id: resolvedCustomerId, shopId },
+            where: { id: resolvedCustomerId, organizationId },
             transaction: t
           });
           if (existingCustomer) {
@@ -346,7 +352,7 @@ class EnhancedSaleService {
         } else if (customer && customer.name && customer.name !== WALK_IN_CUSTOMER_NAME) {
           let customerRecord = await Customer.findOne({
             where: {
-              shopId,
+              organizationId,
               [Op.or]: [
                 ...(customer.email ? [{ email: customer.email }] : []),
                 ...(customer.phone ? [{ phone: customer.phone }] : []),
@@ -364,6 +370,7 @@ class EnhancedSaleService {
               location: customer.location || null,
               totalPurchases: serverTotal,
               lastVisit: new Date(),
+              organizationId,
               shopId
             }, { transaction: t });
           } else {

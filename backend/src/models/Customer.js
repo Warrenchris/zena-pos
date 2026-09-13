@@ -50,9 +50,17 @@ const Customer = sequelize.define('Customer', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
-  shopId: {
+  organizationId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: 'Organizations',
+      key: 'id'
+    }
+  },
+  shopId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
     references: {
       model: 'Shops',
       key: 'id'
@@ -62,8 +70,12 @@ const Customer = sequelize.define('Customer', {
   indexes: [
     {
       unique: true,
-      fields: ['shopId', 'email'],
-      name: 'unique_customers_shop_email'
+      fields: ['organizationId', 'email'],
+      name: 'unique_customers_org_email'
+    },
+    {
+      fields: ['organizationId', 'createdAt'],
+      name: 'idx_customers_org_createdAt'
     }
   ]
 });

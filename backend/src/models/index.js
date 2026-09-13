@@ -141,9 +141,15 @@ PurchaseOrderItem.belongsTo(PurchaseOrder, { foreignKey: 'purchaseOrderId' });
 PurchaseOrderItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 PurchaseOrderItem.belongsTo(Shop, { foreignKey: 'shopId' });
 
-// Organization & Membership associations (FINDING-12 Phase 1)
+// Organization & Membership associations (FINDING-12 Phase 1 & Phase 2)
 Organization.hasMany(Shop, { foreignKey: 'organizationId' });
 Shop.belongsTo(Organization, { foreignKey: 'organizationId' });
+
+Organization.hasMany(Customer, { foreignKey: 'organizationId' });
+Customer.belongsTo(Organization, { foreignKey: 'organizationId' });
+
+Organization.hasMany(Supplier, { foreignKey: 'organizationId' });
+Supplier.belongsTo(Organization, { foreignKey: 'organizationId' });
 
 Organization.hasMany(OrganizationMembership, { foreignKey: 'organizationId' });
 OrganizationMembership.belongsTo(Organization, { foreignKey: 'organizationId' });

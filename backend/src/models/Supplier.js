@@ -27,13 +27,36 @@ const Supplier = sequelize.define('Supplier', {
     type: DataTypes.TEXT,
     allowNull: true
   },
+  organizationId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Organizations',
+      key: 'id'
+    }
+  },
   shopId: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: true,
+    references: {
+      model: 'Shops',
+      key: 'id'
+    }
   }
 }, {
   tableName: 'Suppliers',
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    {
+      unique: true,
+      fields: ['organizationId', 'name'],
+      name: 'unique_suppliers_org_name'
+    },
+    {
+      fields: ['organizationId', 'createdAt'],
+      name: 'idx_suppliers_org_createdAt'
+    }
+  ]
 });
 
 module.exports = Supplier;

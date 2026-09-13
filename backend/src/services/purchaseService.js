@@ -13,11 +13,21 @@ const mapPaymentMethodToExpense = (method) => {
 };
 
 /**
- * Finds an existing supplier by name (case-insensitive) in this shop or creates one.
+ * Finds an existing supplier by id or name in this organization or creates one.
  */
-async function resolveSupplier({ shopId, supplierId, supplierName, supplierContact, supplierEmail, supplierPhone }, transaction = null) {
+async function resolveSupplier({ shopId, organizationId: explicitOrgId, supplierId, supplierName, supplierContact, supplierEmail, supplierPhone }, transaction = null) {
+  let organizationId = explicitOrgId;
+  if (!organizationId && shopId) {
+    const { Shop } = require('../models');
+    const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'], transaction });
+    organizationId = shop?.organizationId;
+  }
+
   if (supplierId) {
-    const existing = await Supplier.findOne({ where: { id: supplierId, shopId }, transaction });
+    const existing = await Supplier.findOne({
+      where: organizationId ? { id: supplierId, organizationId } : { id: supplierId, shopId },
+      transaction
+    });
     if (existing) return existing;
   }
 
@@ -25,12 +35,13 @@ async function resolveSupplier({ shopId, supplierId, supplierName, supplierConta
 
   const trimmedName = supplierName.trim();
   let supplier = await Supplier.findOne({
-    where: { shopId, name: trimmedName },
+    where: organizationId ? { name: trimmedName, organizationId } : { name: trimmedName, shopId },
     transaction
   });
 
   if (!supplier) {
     supplier = await Supplier.create({
+      organizationId,
       shopId,
       name: trimmedName,
       contactPerson: supplierContact ? supplierContact.trim() : null,

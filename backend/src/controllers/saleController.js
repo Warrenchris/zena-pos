@@ -258,7 +258,8 @@ exports.createSale = async (req, res) => {
     }
 
     const shopId = req.shopId || req.user.shopId;
-    const completeSale = await exports.createSaleInternal(req.body, shopId, req.user);
+    const organizationId = req.organizationId || req.user?.organizationId;
+    const completeSale = await exports.createSaleInternal(req.body, shopId, req.user, organizationId);
 
     res.status(201).json(completeSale);
   } catch (error) {
@@ -273,7 +274,14 @@ exports.createSale = async (req, res) => {
   }
 };
 
-exports.createSaleInternal = async (saleData, shopId, user) => {
+exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
+  let organizationId = orgId || user?.organizationId || saleData.organizationId;
+  if (!organizationId && shopId) {
+    const Shop = require('../models/Shop');
+    const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+    organizationId = shop?.organizationId;
+  }
+
   const {
     items,
     customer,
@@ -524,7 +532,7 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
     if (!isWalkIn) {
       if (resolvedCustomerId) {
         const existingCustomer = await Customer.findOne({
-          where: { id: resolvedCustomerId, shopId },
+          where: { id: resolvedCustomerId, organizationId },
           transaction: t
         });
         if (existingCustomer) {
@@ -541,7 +549,7 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
       } else if (customer && customer.name && customer.name !== WALK_IN_CUSTOMER_NAME) {
         let customerRecord = await Customer.findOne({
           where: {
-            shopId,
+            organizationId,
             [Op.or]: [
               ...(customer.email ? [{ email: customer.email }] : []),
               ...(customer.phone ? [{ phone: customer.phone }] : []),
@@ -559,6 +567,7 @@ exports.createSaleInternal = async (saleData, shopId, user) => {
             location: customer.location || null,
             totalPurchases: total,
             lastVisit: new Date(),
+            organizationId,
             shopId
           }, { transaction: t });
         } else {
@@ -1336,7 +1345,8 @@ exports.processRefund = async (req, res) => {
       // e. Decrement customer totalPurchases and loyaltyPoints if sale was for a registered customer
       if (sale.customerId) {
         const pointsToDeduct = Math.floor(totalRefundAmount);
-        const customerRecord = await Customer.findOne({ where: { id: sale.customerId, shopId }, transaction: t });
+        const organizationId = req.organizationId || req.user?.organizationId || (await Shop.findByPk(shopId, { attributes: ['organizationId'] }))?.organizationId;
+        const customerRecord = await Customer.findOne({ where: { id: sale.customerId, organizationId }, transaction: t });
         if (customerRecord) {
           const newTotalPurchases = Math.max(0, parseFloat(customerRecord.totalPurchases || 0) - totalRefundAmount);
           const newLoyaltyPoints = Math.max(0, (customerRecord.loyaltyPoints || 0) - pointsToDeduct);

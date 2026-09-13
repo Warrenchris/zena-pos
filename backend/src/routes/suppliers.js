@@ -6,16 +6,16 @@ const { auth, checkRole } = require('../middleware/auth');
 
 router.use(auth);
 
-// GET /api/suppliers — List suppliers for authenticated tenant shop
+// GET /api/suppliers — List suppliers for authenticated organization
 router.get('/', async (req, res) => {
   try {
-    const shopId = req.shopId || req.user?.shopId;
-    if (!shopId) {
-      return res.status(403).json({ error: 'Shop context required' });
+    const organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId) {
+      return res.status(403).json({ error: 'Organization context required' });
     }
 
     const { search } = req.query;
-    const whereClause = { shopId };
+    const whereClause = { organizationId };
 
     if (search) {
       whereClause[Op.or] = [
@@ -41,9 +41,10 @@ router.get('/', async (req, res) => {
 // POST /api/suppliers — Create supplier
 router.post('/', checkRole(['admin', 'manager']), async (req, res) => {
   try {
-    const shopId = req.shopId || req.user?.shopId;
-    if (!shopId) {
-      return res.status(403).json({ error: 'Shop context required' });
+    const organizationId = req.organizationId || req.user?.organizationId;
+    const shopId = req.shopId || req.user?.shopId || null;
+    if (!organizationId) {
+      return res.status(403).json({ error: 'Organization context required' });
     }
 
     const { name, contactPerson, email, phone, address } = req.body;
@@ -52,6 +53,7 @@ router.post('/', checkRole(['admin', 'manager']), async (req, res) => {
     }
 
     const supplier = await Supplier.create({
+      organizationId,
       shopId,
       name: name.trim(),
       contactPerson: contactPerson ? contactPerson.trim() : null,
@@ -70,9 +72,13 @@ router.post('/', checkRole(['admin', 'manager']), async (req, res) => {
 // GET /api/suppliers/:id — Single supplier with history
 router.get('/:id', async (req, res) => {
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId) {
+      return res.status(403).json({ error: 'Organization context required' });
+    }
+
     const supplier = await Supplier.findOne({
-      where: { id: req.params.id, shopId },
+      where: { id: req.params.id, organizationId },
       include: [
         { model: Purchase, as: 'purchases', limit: 10, order: [['createdAt', 'DESC']] },
         { model: PurchaseOrder, as: 'purchaseOrders', limit: 10, order: [['createdAt', 'DESC']] }
