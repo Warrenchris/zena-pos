@@ -250,7 +250,7 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
       );
       // shopB is not accessible, so surplusShops must be empty
       expect(alert.surplusShops).toHaveLength(0);
-      expect(alert.transferRecommendation).toBeNull();
+      expect(alert.transferRecommendation).toContain('Purchase order recommended');
     });
 
     it('rejects member with 403 Forbidden', async () => {
@@ -271,7 +271,7 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
       expect(res.status).toBe(200);
       expect(res.body.scope.accessibleShopsCount).toBe(2);
       expect(res.body.daily_data.length).toBeGreaterThanOrEqual(1);
-      const todayTotal = res.body.daily_data.reduce((acc, d) => acc + d.totalSales, 0);
+      const todayTotal = res.body.daily_data.reduce((acc, d) => acc + d.revenue, 0);
       expect(todayTotal).toBe(5000);
     });
 
@@ -282,7 +282,7 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.scope.accessibleShopsCount).toBe(1);
-      const todayTotal = res.body.daily_data.reduce((acc, d) => acc + d.totalSales, 0);
+      const todayTotal = res.body.daily_data.reduce((acc, d) => acc + d.revenue, 0);
       expect(todayTotal).toBe(3000);
     });
 
