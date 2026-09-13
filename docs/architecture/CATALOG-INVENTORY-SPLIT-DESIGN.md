@@ -1,10 +1,16 @@
-# FINDING-12 Phase 3: Master Catalog & Multi-Shop Inventory Split — Architecture & Implementation Design
+# Zena POS — Master Catalog & Multi-Shop Inventory Split Architecture Design
+**Document Version**: 1.1.0  
+**Phase**: FINDING-12 (Phase 3: Splitting Product into Organization Master Catalog & Branch Inventory)  
+**Status**: DESIGN REVISION PROPOSAL (Read-Only Pass — No Code, Model, Route, or Migration Mutations)  
+**Target File**: `docs/architecture/CATALOG-INVENTORY-SPLIT-DESIGN.md`  
+
+---
 
 ## 1. Executive Summary & Architectural Context
 
 ### 1.1 The Architectural Problem
 In the current Zena POS schema, the `Products` table conflates two distinct operational and economic concepts onto a single database row:
-1. **Master Catalog ("What We Sell")**: The definition and commercial identity of an item — `name`, `sku`, `barcode`, `categoryId`, `description`, `price`, `cost`, `weightGrams`, `expirationDate`, `active`, `nonReturnable`.
+1. **Master Catalog ("What We Sell")**: The commercial identity and specifications of an item — `name`, `sku`, `barcode`, `categoryId`, `description`, `price`, `cost`, `weightGrams`, `expirationDate`, `active`, `nonReturnable`.
 2. **Branch Inventory ("How Many We Have")**: The physical stock ledger and reordering thresholds for a specific branch — `stockQuantity`, `reorderPoint`.
 
 Because `Products` is currently scoped by `shopId` (with composite unique indexes `unique_products_shop_sku` on `(shopId, sku)` and `unique_products_shop_barcode` on `(shopId, barcode)` introduced in FINDING-04), an enterprise merchant operating multiple physical branch locations under one organization cannot maintain a unified master catalog:
@@ -35,7 +41,7 @@ This design document provides the comprehensive blueprint for splitting `Product
 
 ---
 
-## 2. Current State Audit & Codebase Mapping (Part 1)
+## 2. Current State Audit & Codebase Mapping
 
 ### 2.1 Current Product Schema & Database Constraints
 
@@ -98,7 +104,7 @@ An exhaustive search across the entire codebase revealed **35 distinct files and
 ```
 
 #### Bucket A: References Requiring ONLY Catalog Fields
-*Fields needed: `id`, `name`, `sku`, `barcode`, `categoryId`, `description`, `price`, `cost`, `nonReturnable`.*
+*Fields needed: `id`, `name`, `sku`, `barcode`, `categoryId`, `description`, `price`, `cost`, `nonReturnable`.*  
 *Destination: Read directly from organization-scoped Master Catalog (`Product`).*
 
 1. **`backend/src/controllers/saleController.js`**:
@@ -118,7 +124,7 @@ An exhaustive search across the entire codebase revealed **35 distinct files and
    - Item line validation: Validates `item.productId` exists, extracting `matchedProduct.name` and `matchedProduct.sku`.
 
 #### Bucket B: References Requiring ONLY Inventory Fields
-*Fields needed: `stockQuantity`, `reorderPoint`, `shopId`, `productId`.*
+*Fields needed: `stockQuantity`, `reorderPoint`, `shopId`, `productId`.*  
 *Destination: Read/Write against branch-scoped `Inventory` table.*
 
 1. **`backend/src/controllers/productController.js`**:
@@ -134,7 +140,7 @@ An exhaustive search across the entire codebase revealed **35 distinct files and
    - Immutable audit trail recording delta, previous stock, and new stock per shop and product.
 
 #### Bucket C: References Requiring BOTH Catalog & Inventory Fields
-*Fields needed: Joins catalog definition with branch inventory (`name`, `price`, `sku` + `stockQuantity`, `reorderPoint`).*
+*Fields needed: Joins catalog definition with branch inventory (`name`, `price`, `sku` + `stockQuantity`, `reorderPoint`).*  
 *Destination: Joined query (`Product LEFT JOIN Inventory ON Inventory.productId = Product.id AND Inventory.shopId = :shopId`).*
 
 1. **`backend/src/controllers/productController.js`**:
@@ -165,7 +171,7 @@ In FINDING-11, Redis caching was established using the key pattern `products:sho
 | **Invalidation on Catalog Edit** | Invalidates `catalog:org:${orgId}` | Invalidates all `products:shop:${sId}` for shops in org |
 | **Code Churn & Blast Radius** | High (requires redesigning cache client and reader) | **Minimal (reuses hardened FINDING-11 infrastructure)** |
 
-**Recommendation**: **Option 2 (Composite Shop Cache)**.
+**Recommendation**: **Option 2 (Composite Shop Cache)**.  
 Keep the Redis key `products:shop:${shopId}`. When a cache miss occurs, the database query executes a fast `LEFT JOIN` between `Product` and `Inventory` for that shop, caching the composite result for 10 minutes (600s).
 - All existing stock-mutating triggers (`EnhancedSaleService`, `saleController`, `purchaseService`, `updateStock`) continue to call `invalidateShopProductCache(shopId)`.
 - When an administrator modifies catalog definitions (name, price, barcode), the backend triggers a helper `invalidateOrgProductCaches(organizationId)` which invalidates `products:shop:${shopId}` for all shops belonging to that organization.
@@ -194,9 +200,9 @@ We audited the Python FastAPI microservice (`ai_service/`) and its endpoints in 
 
 ---
 
-## 3. Collision & Data Audit Results (Part 2)
+## 3. Collision & Data Audit Results
 
-A data audit script was executed against the primary database (`zana_pos`).
+A data audit script was executed directly against the primary database (`zana_pos`).
 
 ### 3.1 Organization & Shop Inventory
 ```
@@ -229,17 +235,19 @@ A data audit script was executed against the primary database (`zana_pos`).
 - **Cross-Organization Barcode Collisions**: **0** (all non-empty barcodes are distinct across shops).
 - **Null / Empty Barcodes**: Shop 1 has 38 products with null/empty barcodes. In MySQL, unique indexes permit multiple `NULL` values, ensuring `unique_products_org_barcode` will not collide on null barcodes.
 
-### 3.4 Data Audit Verdict
+### 3.4 Data Audit Verdict & Migration Collision Policy
+
 1. In the active primary database, **100% of existing products fall into Case (a): zero SKU overlap (1:1 mapping)**.
-2. There are currently **zero multi-shop organizations with products** in `zana_pos`.
-3. However, to guarantee absolute robustness for test environments and future multi-shop operations, the migration must formally specify deterministic handling for all three cases:
-   - **Case (a)**: 1:1 mapping (zero SKU overlap).
-   - **Case (b)**: Intra-org SKU overlap with identical non-stock fields.
-   - **Case (c)**: Intra-org SKU overlap with differing non-stock fields (price, cost, name, category divergences).
+2. There are currently **zero multi-shop organizations with products** in `zana_pos`, and zero intra-org SKU collisions exist in real data.
+3. **Simplified Migration Policy (Abort-and-Report)**:
+   - The migration handles **Case (a) only** (1:1 mapping of distinct products into the catalog and inventory).
+   - If the pre-flight collision check detects **ANY** intra-organization SKU overlap (Case b or c), the migration **ABORTS ENTIRELY** before making any schema modifications or creating unique indexes.
+   - It outputs a detailed diagnostic report identifying the organization, colliding SKU, product IDs, shop IDs, and whether non-stock fields (name, price, cost, category) match or differ across colliding rows (informational only; not used to auto-decide anything).
+   - **No Automated Merge or Deletion**: The migration contains **zero automated "canonical row selection," zero "foreign key re-pointing," and zero "delete duplicate Product row" logic**. If an intra-org collision is ever encountered in future environments, resolving it is strictly out of scope for this migration and requires a separate, human-reviewed, one-off script written and approved at that time based on the actual real-world business context.
 
 ---
 
-## 4. Target Architecture & Design Proposal (Part 3)
+## 4. Target Architecture & Detailed Design Proposal
 
 ### 4.1 Entity Modeling & Naming Decision
 
@@ -260,7 +268,7 @@ Blast Radius:                                   Blast Radius:
 ```
 
 #### Justification for Option B: Repurposing `Product` as Catalog Definition
-1. **Preservation of Foreign Key Graph**: Tables `SaleItems`, `PurchaseItems`, `PurchaseOrderItems`, `InvoiceItems`, and `SaleRefunds` all have `productId -> Products.id`. Repurposing `Product` means **zero DDL alteration on historic transactional tables**.
+1. **Preservation of Foreign Key Graph**: Tables `SaleItems`, `PurchaseItems`, `PurchaseOrderItems`, `InvoiceItems`, `SaleRefunds`, and `StockMovements` all have `productId -> Products.id`. Repurposing `Product` means **zero DDL alteration on historic transactional tables**.
 2. **Preservation of Eager-Load Semantics**: All reports, receipts, PDFs, and customer profile calculations that do `include: [{ model: Product, attributes: ['name', 'sku', 'price'] }]` continue to function with zero line changes.
 3. **Adherence to Operating Rules**: Per Rule 9 ("Implement the smallest complete production-quality solution") and Rule 7 ("Reuse existing architecture and patterns"), Option B minimizes blast radius by an order of magnitude while achieving 100% of the target architectural goals.
 
@@ -358,9 +366,40 @@ CREATE TABLE Inventory (
 
 ---
 
-### 4.3 Migration Approach for Existing Data
+### 4.3 Migration Strategy & Execution Protocol (Abort-and-Report Policy)
 
-The migration will be implemented as a sequential, set-based script using `sequelize-cli migration:generate`:
+The migration will be implemented as a sequential script using `sequelize-cli migration:generate`. It follows the proven pattern from Phase 2, augmented with a strict pre-flight collision gate:
+
+```
+                               Migration Execution Flow
+                                          │
+                                          ▼
+                      [Step 1] Add nullable organizationId
+                                          │
+                                          ▼
+                      [Step 2] Backfill organizationId via
+                               Shops.organizationId FK
+                                          │
+                                          ▼
+                      [Step 3] Pre-Flight Collision Gate
+                                          │
+                      ┌───────────────────┴───────────────────┐
+                      │                                       │
+                      ▼                                       ▼
+             [Collisions Found]                         [Zero Collisions]
+          Output Diagnostic Report                    Proceed with Migration
+          & ABORT ENTIRE SCRIPT                               │
+          (Zero Schema Changes)                               ▼
+                                              [Step 4] Create Inventory Table
+                                                              │
+                                                              ▼
+                                              [Step 5] Backfill Inventory
+                                                       from Products (Case a)
+                                                              │
+                                                              ▼
+                                              [Step 6] Restructure Constraints
+                                                       & Unique Indexes
+```
 
 #### Step 1: Add Nullable `organizationId` to `Products`
 ```sql
@@ -375,46 +414,87 @@ SET p.organizationId = s.organizationId
 WHERE p.organizationId IS NULL;
 ```
 
-#### Step 3: Create `Inventory` Table
-Create table `Inventory` with foreign keys and unique index `unique_inventory_shop_product (shopId, productId)`.
+#### Step 3: Pre-Flight Collision Gate (Abort-and-Report)
+Before creating any unique index or `Inventory` records, the migration executes an automated collision audit query:
 
-#### Step 4: Handle SKU Merges (Cases A, B, and C)
+```sql
+SELECT 
+  p.organizationId,
+  p.sku,
+  COUNT(*) AS collisionCount,
+  GROUP_CONCAT(p.id ORDER BY p.id) AS productIds,
+  GROUP_CONCAT(p.shopId ORDER BY p.shopId) AS shopIds,
+  COUNT(DISTINCT p.name) AS distinctNames,
+  COUNT(DISTINCT p.price) AS distinctPrices,
+  COUNT(DISTINCT p.cost) AS distinctCosts,
+  COUNT(DISTINCT p.categoryId) AS distinctCategories
+FROM Products p
+WHERE p.organizationId IS NOT NULL
+GROUP BY p.organizationId, p.sku
+HAVING COUNT(*) > 1;
+```
 
-##### Case (a): Zero Intra-Org SKU Overlap (100% of Current Production Data)
-Populate `Inventory` directly from `Products`:
+A companion check is run for barcodes:
+```sql
+SELECT 
+  p.organizationId,
+  p.barcode,
+  COUNT(*) AS collisionCount,
+  GROUP_CONCAT(p.id ORDER BY p.id) AS productIds,
+  GROUP_CONCAT(p.shopId ORDER BY p.shopId) AS shopIds
+FROM Products p
+WHERE p.organizationId IS NOT NULL 
+  AND p.barcode IS NOT NULL 
+  AND p.barcode != ''
+GROUP BY p.organizationId, p.barcode
+HAVING COUNT(*) > 1;
+```
+
+**Abort-and-Report Behavior**:
+- **If collisions are detected (`collisionCount > 0`)**:
+  1. The migration immediately logs an unhandled error and aborts execution.
+  2. The diagnostic output specifies:
+     ```
+     [MIGRATION ABORTED] Intra-organization SKU collisions detected!
+     Automated merging or deletion is disabled to prevent accidental data loss.
+     Colliding Records:
+     - Organization: 4 | SKU: 'COKE-500' | Products: [12, 45] | Shops: [4, 5]
+       Field Analysis: Names: identical | Prices: DIFFERENT (KES 100.00 vs 120.00) | Costs: identical
+     Action Required: A human-reviewed, one-off resolution script must resolve these duplicates before running this migration.
+     ```
+  3. No schema modifications, index drops, or table creations are applied.
+- **If zero collisions are detected (`collisionCount === 0`)**:
+  - The migration proceeds safely to Step 4 (Case a).
+
+#### Step 4: Create `Inventory` Table
+Create `Inventory` table with columns `id`, `shopId`, `productId`, `stockQuantity`, `reorderPoint`, `createdAt`, `updatedAt`, foreign keys with `ON DELETE CASCADE`, and unique index `unique_inventory_shop_product (shopId, productId)`.
+
+#### Step 5: Execute Case (a) Backfill into `Inventory`
+Because zero collisions exist, every product maps 1:1 to an inventory row for its original shop:
 ```sql
 INSERT INTO Inventory (shopId, productId, stockQuantity, reorderPoint, createdAt, updatedAt)
 SELECT p.shopId, p.id, p.stockQuantity, p.reorderPoint, NOW(), NOW()
 FROM Products p;
 ```
 
-##### Case (b): Intra-Org SKU Overlap with Identical Non-Stock Fields
-If two branches in the same organization created the same SKU with identical commercial fields:
-1. Identify the lowest `Product.id` as canonical (`minId`).
-2. Insert an `Inventory` row for the secondary branch pointing to `minId` with the secondary branch's `stockQuantity` and `reorderPoint`.
-3. Re-point all child transactional tables (`SaleItems`, `PurchaseItems`, `PurchaseOrderItems`, `InvoiceItems`, `SaleRefunds`, `StockMovements`) from the duplicate `productId` to `minId`.
-4. Delete the redundant secondary `Product` row.
-
-##### Case (c): Intra-Org SKU Overlap with Differing Non-Stock Fields (Pricing/Cost Divergence)
-> [!IMPORTANT]
-> **Policy on Commercial Field Divergences**:
-> If Shop A sells `COKE-500ML` for KES 100 and Shop B sells `COKE-500ML` for KES 120 under the same organization, an automated migration MUST NOT arbitrarily pick one price and discard the other. Doing so would cause silent pricing drift or margin degradation at one of the branches.
->
-> **Recommended Migration Handling for Case (c)**:
-> 1. The migration runs an automated pre-check query identifying any intra-org SKU duplicates where `price`, `cost`, or `name` differ.
-> 2. If any are detected, the migration preserves both rows by appending a branch disambiguation suffix to the duplicate SKU: e.g., `COKE-500ML-BRANCH-2` and logging a prominent `[MIGRATION WARNING]` with the affected IDs.
-> 3. Creates `Inventory` rows for each disambiguated product.
-> 4. Merchant administrators can then use the catalog management UI to reconcile the definitions deliberately.
-
-#### Step 5: Enforce Constraints & Drop Legacy Columns
+#### Step 6: Restructure Unique Constraints & Enforce Foreign Keys
 1. Enforce `Products.organizationId` `NOT NULL`.
-2. Make `Products.shopId` nullable with `ON DELETE SET NULL`.
-3. Drop `unique_products_shop_sku` and `unique_products_shop_barcode`.
-4. Create `unique_products_org_sku` on `(organizationId, sku)` and `unique_products_org_barcode` on `(organizationId, barcode)`.
-5. Drop `stockQuantity` and `reorderPoint` from `Products`.
+2. Add foreign key `fk_products_organization_id` referencing `Organizations(id) ON DELETE RESTRICT ON UPDATE CASCADE`.
+3. Modify `Products.shopId` to be nullable, with foreign key `fk_products_shop_id` referencing `Shops(id) ON DELETE SET NULL ON UPDATE CASCADE`.
+4. Drop legacy indexes: `unique_products_shop_sku` and `unique_products_shop_barcode`.
+5. Add new organization-scoped unique indexes: `unique_products_org_sku (organizationId, sku)` and `unique_products_org_barcode (organizationId, barcode)`.
+6. Add query index `idx_products_org_createdAt (organizationId, createdAt)`.
 
-#### Step 6: Fully Reversible `down` Migration
-Reconstructs `Products.stockQuantity` and `Products.reorderPoint` by joining with `Inventory`, drops `Inventory`, and restores shop-scoped unique indexes.
+*(Note: Dropping `Products.stockQuantity` and `Products.reorderPoint` is deferred to Sub-Phase 3C to allow a zero-downtime dual-write transition during Sub-Phase 3A and 3B).*
+
+#### Step 7: Fully Reversible `down` Migration
+The rollback script:
+1. Re-populates `Products.stockQuantity` and `Products.reorderPoint` from `Inventory` (`UPDATE Products p JOIN Inventory i ON i.productId = p.id AND i.shopId = p.shopId SET p.stockQuantity = i.stockQuantity, p.reorderPoint = i.reorderPoint`).
+2. Drops `unique_products_org_sku` and `unique_products_org_barcode`.
+3. Restores `unique_products_shop_sku` and `unique_products_shop_barcode`.
+4. Drops `fk_products_organization_id` constraint and `organizationId` column.
+5. Restores `shopId` to `NOT NULL`.
+6. Drops `Inventory` table.
 
 ---
 
@@ -548,7 +628,7 @@ await sequelize.transaction(async (t) => {
 
 ---
 
-### 4.7 API & Controller Impact Matrix
+### 4.7 Full Controller & API Impact Matrix
 
 | File | Function / Endpoint | Current Behavior | Phase 3 Target Behavior |
 | :--- | :--- | :--- | :--- |
@@ -564,14 +644,16 @@ await sequelize.transaction(async (t) => {
 | `purchaseService.js` | `receivePurchaseItems` | Increments `Product.stockQuantity`. | Upserts `Inventory` for `(productId, shopId)` and increments stock. Creates `StockMovement`. |
 | `purchaseService.js` | `reversePurchaseInventory` | Decrements `Product.stockQuantity`. | Decrements `Inventory.stockQuantity` for `(productId, shopId)`. Creates `StockMovement`. |
 | `insightsController.js` | Stock depletion & alerts | Reads `Product.stockQuantity`. | Joins `Inventory` for `shopId` and reads `Inventory.stockQuantity`. |
+| `reportsController.js` | `getSalesSummary`, `getProfitAndLoss` | Reads `Product.name` and `Product.cost`. | Reads catalog fields from `Product`. Zero query change needed (Bucket A). |
+| `invoiceController.js` | `getInvoiceById`, `exportInvoicePdf` | Eager-loads `Product` on `InvoiceItem`. | Continues eager-loading `Product` from catalog. Zero query change needed (Bucket A). |
 
 ---
 
-### 4.8 Staging Recommendation: Splitting Phase 3 into Sub-Phases
+### 4.8 Detailed Breakdown of Sub-Phases (3A, 3B, 3C)
 
 Given that `Product` is referenced across more than 35 files, implementing the schema migration, full controller rewrite, checkout lock refactor, and cache invalidation in a single pass presents an unnecessarily high blast radius.
 
-We strongly recommend decomposing Phase 3 into **three sequential, individually verifiable sub-phases**:
+We decompose Phase 3 into **three sequential, individually verifiable sub-phases**:
 
 ```
                        Phase 3 Implementation Roadmap
@@ -584,36 +666,85 @@ We strongly recommend decomposing Phase 3 into **three sequential, individually 
 (Zero Downtime DDL)          Refunds, Locks)          (Multi-Shop Sync)
 ```
 
-#### Sub-Phase 3A: Schema Migration & Read Paths (Zero-Downtime Foundation)
-- Generate and execute migration: Create `Inventory` table, backfill from `Products`, add `organizationId` to `Products`, restructure unique indexes to `(organizationId, sku)` and `(organizationId, barcode)`.
-- Introduce `Inventory.js` model and associations in `models/index.js`.
-- Temporarily retain `Products.stockQuantity` and `Products.reorderPoint` as columns.
-- Update read paths (`getAllProducts`, `getProductById`, `getProductsBatch`) to join `Inventory` for branch stock.
-- **Verification**: Test database migration, read queries return identical data, full Jest suite passes.
+#### Sub-Phase 3A: Schema Migration, `Inventory` Model, & Read Paths (Zero-Downtime Foundation)
+- **Goal**: Establish the `Inventory` table, backfill from `Products`, add `organizationId` to `Products`, restructure unique indexes to `(organizationId, sku)` and `(organizationId, barcode)`, and cut over all read endpoints while leaving write paths operational.
+- **Changes**:
+  1. Database Migration:
+     - Add `organizationId` to `Products`.
+     - Backfill `organizationId` from `Shops`.
+     - Run pre-flight collision check (abort if any collisions found).
+     - Create `Inventory` table.
+     - Backfill `Inventory` from `Products` for Case (a).
+     - Restructure unique indexes: drop `unique_products_shop_sku/barcode`, create `unique_products_org_sku/barcode`.
+  2. Models:
+     - Create `backend/src/models/Inventory.js`.
+     - Update `backend/src/models/Product.js` (add `organizationId`, update unique indexes).
+     - Update `backend/src/models/index.js` associations:
+       - `Product.hasMany(Inventory, { foreignKey: 'productId' })`
+       - `Inventory.belongsTo(Product, { foreignKey: 'productId' })`
+       - `Shop.hasMany(Inventory, { foreignKey: 'shopId' })`
+       - `Inventory.belongsTo(Shop, { foreignKey: 'shopId' })`
+       - `Organization.hasMany(Product, { foreignKey: 'organizationId' })`
+       - `Product.belongsTo(Organization, { foreignKey: 'organizationId' })`
+  3. Controller Read Paths:
+     - `productController.js:getAllProducts`: Join `Inventory` on `(productId, shopId)`, flatten `stockQuantity` and `reorderPoint` onto response object, fix Category include with `required: false`.
+     - `productController.js:getProductById`: Join `Inventory` for caller's `shopId`.
+     - `productController.js:getProductsBatch`: Join `Inventory` for caller's `shopId`.
+- **Verification**:
+  - Run database migration up and down on test database.
+  - Read endpoints (`GET /api/products`, `GET /api/products/:id`, `GET /api/products/batch`) return identical payload shapes with branch stock counts.
+  - Existing write paths continue functioning without failure because `stockQuantity` on `Products` is still present.
 
 #### Sub-Phase 3B: Stock Mutation Workflows & Pessimistic Ledger
-- Refactor all write paths:
-  - `saleController.js` & `EnhancedSaleService.js` checkout (pessimistic lock on `Inventory`).
-  - `saleController.js:refundSale` (increment `Inventory`).
-  - `purchaseService.js` receipt & reversal (update `Inventory`).
-  - `productController.js:updateStock` (update `Inventory`).
-- Keep dual-write to `Products.stockQuantity` during 3B to ensure zero regression for any un-migrated query.
-- **Verification**: Concurrent checkout stress test, purchase receiving test, refund test, Jest suite.
+- **Goal**: Cut over all stock writes from `Product.stockQuantity` to `Inventory.stockQuantity` with pessimistic locking. Maintain a temporary dual-write bridge to `Product.stockQuantity` to guarantee zero regressions.
+- **Changes**:
+  1. `EnhancedSaleService.js` & `saleController.js`:
+     - Checkout lock: Acquire `lock: t.LOCK.UPDATE` on `Inventory.findOne({ where: { productId, shopId } })`.
+     - Atomically decrement `Inventory.stockQuantity`.
+     - Dual-write decrement to `Product.stockQuantity` for safety.
+  2. `saleController.js:refundSale`:
+     - Increment `Inventory.stockQuantity`.
+     - Dual-write increment to `Product.stockQuantity`.
+  3. `purchaseService.js:receivePurchaseItems` & `reversePurchaseInventory`:
+     - Upsert / update `Inventory.stockQuantity` for `(productId, shopId)`.
+     - Dual-write update to `Product.stockQuantity`.
+  4. `productController.js:updateStock`:
+     - Update `Inventory.stockQuantity` for `(productId, shopId)`.
+     - Invalidate shop cache via `invalidateShopProductCache(shopId)`.
+  5. `productController.js:createProduct`:
+     - Create `Product` catalog row (`organizationId`, `shopId`).
+     - Create initial `Inventory` row (`productId`, `shopId`, `stockQuantity`, `reorderPoint`).
+- **Verification**:
+  - Concurrent checkout stress tests simulating simultaneous sales across registers.
+  - Purchase receiving and order reversal verification.
+  - Stock refund verification.
+  - `StockMovement` ledger accuracy verification.
 
-#### Sub-Phase 3C: Column Retirement & Cache Invalidation Hardening
-- Drop deprecated `Products.stockQuantity` and `Products.reorderPoint` columns via cleanup migration.
-- Implement `invalidateOrgProductCaches(organizationId)` in `productCache.js`.
-- Update `insightsController.js` stock depletion queries.
-- **Verification**: Full 16-suite Jest pass, cross-branch stock isolation test, cache invalidation verification.
+#### Sub-Phase 3C: Column Retirement, Cache Invalidation Hardening, & Multi-Shop Sync
+- **Goal**: Retire legacy `stockQuantity` and `reorderPoint` columns from `Products`, remove dual-write shims, implement organization-wide cache invalidation on catalog edits, and update AI analytics queries.
+- **Changes**:
+  1. Cleanup Migration:
+     - Drop `Products.stockQuantity` and `Products.reorderPoint` columns.
+     - Remove dual-write logic in all controllers and services.
+  2. Cache Service (`backend/src/services/productCache.js`):
+     - Implement `invalidateOrgProductCaches(organizationId)`: queries all `shopId`s belonging to `organizationId` and deletes `products:shop:${shopId}` keys.
+     - Hook into `productController.js:updateProduct` and `productController.js:deleteProduct`.
+  3. AI Forecasting / Analytics (`backend/src/controllers/insightsController.js`):
+     - Update stock depletion forecast queries to read `current_stock` from `Inventory` instead of `Product`.
+     - Update inventory alerts to compare `Inventory.stockQuantity <= Inventory.reorderPoint`.
+- **Verification**:
+  - Full execution of all 16 test suites on primary and test databases.
+  - Cache invalidation verification: verify modifying catalog price at Branch 1 invalidates cache for Branch 2 under the same organization.
+  - Verify stock deduction at Branch 1 does NOT invalidate cache or affect stock at Branch 2.
 
 ---
 
-## 5. Explicit Non-Scope (Part 4)
+## 5. Explicit Non-Scope Declarations
 
-To prevent scope creep, the following boundaries are strictly enforced:
+To maintain strict modular boundaries across the 6-phase roadmap, the following boundaries are **strictly out of scope**:
 1. **No Scope Changes to Operational Transactions**:
    - `Sales`, `SaleItems`, `Purchases`, `PurchaseItems`, `PurchaseOrders`, `PurchaseOrderItems`, `Invoices`, `InvoiceItems`, and `Expenses` **remain strictly `shopId`-scoped forever**.
-   - Only the target entity they point to changes internal organization (a `SaleItem` still has `productId`, but `Product` is now catalog-level and stock is verified in `Inventory`).
+   - Only the target entity they point to changes internal structure (a `SaleItem` still has `productId`, but `Product` is now catalog-level and stock is verified in `Inventory`).
 2. **No Frontend UI Modifications**:
    - The JSON shape returned by `/api/products`, `/api/sales`, and `/api/purchases` remains 100% backward-compatible. Frontend POS and inventory screens require zero changes.
 3. **No Phase 4+ Features**:
@@ -623,26 +754,38 @@ To prevent scope creep, the following boundaries are strictly enforced:
 
 ---
 
-## 6. Risk Analysis & Interactions (Part 5)
+## 6. Risk Analysis & Interactions with Prior Phases
 
-| Risk Factor | Affected Component | Severity | Mitigation Strategy |
-| :--- | :--- | :---: | :--- |
-| **Index Collision during Migration** | `Products` unique constraints | HIGH | Use the dynamic idempotent index drop/create pattern from FINDING-04. Drop `unique_products_shop_sku` and `unique_products_shop_barcode` before creating `unique_products_org_sku` and `unique_products_org_barcode`. |
-| **Race Condition during Checkout** | POS concurrent checkouts | HIGH | Pessimistically lock `Inventory` rows (`lock: t.LOCK.UPDATE`) inside the database transaction before decrementing. |
-| **Stale POS Cache** | Redis `products:shop:${shopId}` | HIGH | Preserve FINDING-11's `invalidateShopProductCache(shopId)` on all stock mutators, and introduce `invalidateOrgProductCaches(organizationId)` on catalog edits. |
-| **Category Cross-Branch Join Failure** | `productController.js:59` | MEDIUM | Change Category include in `getAllProducts` to `required: false` (LEFT JOIN) so shared products render across all branches even before categories are org-scoped. |
-| **Foreign Key Locking** | MySQL InnoDB | MEDIUM | Add supporting index `idx_products_shop_id` before modifying `shopId` foreign key. |
-| **Phase 1 / Phase 2 Interoperability** | Auth & Scoping Middleware | LOW | Reuses `req.organizationId` and `req.shopId` extracted cleanly by Phase 1's `auth` middleware. Zero changes to Phase 1 or Phase 2 migrations. |
+| System Layer | Risk Level | Interaction Analysis | Safeguard / Invariant |
+| :--- | :---: | :--- | :--- |
+| **FINDING-04 (Composite Unique Indexes)** | **HIGH** | FINDING-04 established `unique_products_shop_sku` on `(shopId, sku)` and `unique_products_shop_barcode` on `(shopId, barcode)`. Dropping and recreating them carelessly could cause migration failure or unindexed lookups. | Use the proven idempotent index drop/create pattern from Phase 2. Drop `unique_products_shop_sku/barcode` before creating `unique_products_org_sku/barcode`. Pre-flight collision check guarantees index creation succeeds. |
+| **FINDING-11 (Product Cache)** | **HIGH** | POS checkout relies on Redis key `products:shop:${shopId}` for sub-millisecond cart lookups. Breaking cache format causes POS downtime. | Reuses existing composite key `products:shop:${shopId}`. Preserves existing `invalidateShopProductCache(shopId)` for stock changes, adding `invalidateOrgProductCaches(orgId)` for catalog definition edits. |
+| **Concurrent Checkout Race Conditions** | **HIGH** | Multiple cashiers at the same or different branches selling items simultaneously could cause inventory desynchronization or negative stock. | Pessimistic locking (`lock: t.LOCK.UPDATE`) on `Inventory` rows inside the database transaction before decrementing stock. |
+| **Category Include Join Filtering** | **MEDIUM** | `productController.js:59` uses `where: { shopId: req.user.shopId }` on `Category`, which would silently filter out cross-branch products. | Change Category include in `getAllProducts` to `required: false` (LEFT JOIN), allowing shared catalog products to render across all branches. |
+| **P0/P1 Transaction Safety Fixes** | **LOW** | All prior P0/P1 fixes enforced transaction passing (`{ transaction: t }`) and proper error bubbling. | Preserves existing transaction wrapping across all controllers and services. All stock decrements and `StockMovement` inserts execute inside the caller's transaction. |
+| **Phase 1 & Phase 2 Interoperability** | **ZERO** | Auth middleware extracts `req.organizationId` and `req.shopId`. Phase 2 migrated `Customer` and `Supplier`. | Zero changes to Phase 1 or Phase 2 migrations. Reuses `req.organizationId` and `req.shopId` cleanly. Customers and Suppliers remain org-scoped; transactions remain shop-scoped. |
 
 ---
 
-## 7. Next Steps & Approval Gate
+## 7. Verification Protocol & Next Steps
 
-This design document completes the audit and technical specification for FINDING-12 Phase 3. 
+When approved to proceed to implementation, the phase will follow this sequential execution plan:
 
-### Key Audit Findings Summary for User Sign-Off:
-1. **Active Primary DB State**: Currently, all 78 products in `zana_pos` have globally distinct SKUs and barcodes across both active shops (Shop 1: 63 products, Shop 4: 15 products). There are currently **0 intra-org SKU collisions** and **0 field divergence cases (Case A 100%)**.
-2. **Entity Naming**: Confirmed decision to keep `Product` as the organization-scoped catalog definition and introduce `Inventory` as the branch stock ledger.
-3. **Staging Recommendation**: Recommended splitting Phase 3 into Sub-Phases 3A (Schema + Reads), 3B (Write Paths + Locks), and 3C (Column Cleanup + Cache).
+### Verification Protocol by Sub-Phase:
+1. **Sub-Phase 3A Verification**:
+   - Migration idempotency: execute `npx sequelize-cli db:migrate` and `db:migrate:undo` cleanly on test database.
+   - Read consistency: verify `GET /api/products`, `GET /api/products/:id`, and `GET /api/products/batch` return identical data before and after migration.
+   - Jest suite pass: all existing tests continue passing with zero write-path breakage.
+2. **Sub-Phase 3B Verification**:
+   - Stock mutation verification: simulate sales, refunds, purchase receipts, and stock adjustments; assert `Inventory.stockQuantity` updates accurately.
+   - Concurrency verification: run parallel checkout requests against the same product; assert pessimistic lock prevents race conditions and prevents negative stock.
+   - Ledger verification: verify `StockMovement` rows record accurate `previousStock` and `newStock` values.
+3. **Sub-Phase 3C Verification**:
+   - Schema cleanliness: confirm legacy columns `stockQuantity` and `reorderPoint` dropped from `Products`.
+   - Cross-branch cache isolation: verify a sale at Branch 1 invalidates only `products:shop:1` and does not affect `products:shop:2`.
+   - Cross-branch catalog sync: verify updating product price at Branch 1 invalidates both `products:shop:1` and `products:shop:2` under the same organization.
+   - Full regression suite: execute all 16 Jest suites across both `zana_pos_test` and `zana_pos`.
 
-**HARD STOP**: Awaiting user review and explicit approval of this design document before generating any migrations or writing implementation code.
+---
+
+🛑 **HARD STOP**: Design document revision complete at [`docs/architecture/CATALOG-INVENTORY-SPLIT-DESIGN.md`](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/docs/architecture/CATALOG-INVENTORY-SPLIT-DESIGN.md). Zero code, model, route, or migration changes have been made. Awaiting explicit user approval before writing any implementation code.
