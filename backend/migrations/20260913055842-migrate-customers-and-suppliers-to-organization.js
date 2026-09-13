@@ -232,8 +232,15 @@ module.exports = {
     // -------------------------------------------------------------
     // Step 6: Unique Constraint Restructuring & Query Indexes
     // -------------------------------------------------------------
-    // Customers: drop unique_customers_shop_email, add unique_customers_org_email
-    await dropIndexIfExists(queryInterface, 'Customers', 'unique_customers_shop_email');
+    // Customers: drop unique_customers_shop_email and any legacy global email unique indexes
+    const customerEmailIndexesToDrop = [
+      'unique_customers_shop_email',
+      'Customers_email_unique',
+      'email', 'email_2', 'email_3', 'email_4', 'email_5'
+    ];
+    for (const idx of customerEmailIndexesToDrop) {
+      await dropIndexIfExists(queryInterface, 'Customers', idx);
+    }
     await addUniqueIndexIfNotExists(
       queryInterface,
       'Customers',
@@ -247,8 +254,15 @@ module.exports = {
       'idx_customers_org_createdAt'
     );
 
-    // Suppliers: drop suppliers_shop_name_idx, add unique_suppliers_org_name
-    await dropIndexIfExists(queryInterface, 'Suppliers', 'suppliers_shop_name_idx');
+    // Suppliers: drop suppliers_shop_name_idx and any legacy global name unique indexes
+    const supplierNameIndexesToDrop = [
+      'suppliers_shop_name_idx',
+      'Suppliers_name_unique',
+      'name', 'name_2', 'name_3', 'name_4', 'name_5'
+    ];
+    for (const idx of supplierNameIndexesToDrop) {
+      await dropIndexIfExists(queryInterface, 'Suppliers', idx);
+    }
     await addUniqueIndexIfNotExists(
       queryInterface,
       'Suppliers',
