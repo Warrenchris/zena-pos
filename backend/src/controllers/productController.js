@@ -495,6 +495,7 @@ exports.updateProduct = async (req, res) => {
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
+    organizationId = organizationId || product.organizationId;
 
     const {
       name,
@@ -603,6 +604,7 @@ exports.deleteProduct = async (req, res) => {
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
+    organizationId = organizationId || product.organizationId;
 
     await product.update({ active: false });
     if (organizationId) {

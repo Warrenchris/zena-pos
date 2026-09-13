@@ -93,8 +93,6 @@ async function runVerification() {
       barcode: `BAR-${Date.now()}`,
       price: 100.00,
       cost: 50.00,
-      stockQuantity: 50.00,
-      reorderPoint: 10,
       shopId: shopA.id,
       organizationId: org.id,
       categoryId: category.id,
@@ -114,15 +112,13 @@ async function runVerification() {
   });
   invA.stockQuantity = 50.00;
   await invA.save();
-  prod.stockQuantity = 50.00;
-  await prod.save();
 
   console.log(`[Setup] Created Test Catalog Product ID=${prod.id} (SKU=${prod.sku}) with Initial Stock=50.00 at Shop ${shopA.id}\n`);
 
   // =========================================================================
-  // ITEM 2: Sale Checkout Stock Decrement & Dual-Write Bridge
+  // ITEM 2: Sale Checkout Stock Decrement
   // =========================================================================
-  console.log('--- VERIFICATION ITEM 2: Sale Checkout Stock Decrement & Dual-Write Bridge ---');
+  console.log('--- VERIFICATION ITEM 2: Sale Checkout Stock Decrement ---');
   const saleRes = await request(app)
     .post('/api/sales')
     .set('Authorization', adminTokenA)
@@ -138,7 +134,6 @@ async function runVerification() {
   const saleId = saleRes.body.id || saleRes.body.sale?.id;
 
   await invA.reload();
-  await prod.reload();
   const movementSale = await StockMovement.findOne({
     where: { productId: prod.id, shopId: shopA.id, type: 'SALE' },
     order: [['id', 'DESC']]
@@ -146,16 +141,15 @@ async function runVerification() {
 
   console.log(`Sale Created Successfully (Sale ID: ${saleId})`);
   console.log(`  Inventory.stockQuantity: ${invA.stockQuantity} (Expected: 45.00)`);
-  console.log(`  Product.stockQuantity (Dual-write): ${prod.stockQuantity} (Expected: 45.00)`);
   console.log(`  StockMovement Logged: Type=${movementSale?.type}, Delta=${movementSale?.quantity}, Prev=${movementSale?.previousStock}, New=${movementSale?.newStock}`);
   
-  if (parseFloat(invA.stockQuantity) !== 45.00 || parseFloat(prod.stockQuantity) !== 45.00) {
+  if (parseFloat(invA.stockQuantity) !== 45.00) {
     throw new Error(`Item 2 Failed: Stock does not match expected 45.00!`);
   }
   if (!movementSale || parseFloat(movementSale.newStock) !== 45.00) {
     throw new Error(`Item 2 Failed: StockMovement not properly recorded!`);
   }
-  console.log('>> ITEM 2 RESULT: PASSED (Pessimistic lock, Inventory decremented, Product dual-written identically, StockMovement audit logged)\n');
+  console.log('>> ITEM 2 RESULT: PASSED (Pessimistic lock, Inventory decremented, StockMovement audit logged)\n');
 
   // =========================================================================
   // ITEM 3: Insufficient Stock Rejection (Atomic Abort, No Partial Mutation)
@@ -174,14 +168,12 @@ async function runVerification() {
   console.log(`Error message: ${overSaleRes.body?.error || JSON.stringify(overSaleRes.body)}`);
 
   await invA.reload();
-  await prod.reload();
   console.log(`  Post-attempt Inventory.stockQuantity: ${invA.stockQuantity} (Must remain 45.00)`);
-  console.log(`  Post-attempt Product.stockQuantity: ${prod.stockQuantity} (Must remain 45.00)`);
 
   if (![400, 409].includes(overSaleRes.status)) {
     throw new Error(`Item 3 Failed: Over-sale request was not rejected with 400/409!`);
   }
-  if (parseFloat(invA.stockQuantity) !== 45.00 || parseFloat(prod.stockQuantity) !== 45.00) {
+  if (parseFloat(invA.stockQuantity) !== 45.00) {
     throw new Error(`Item 3 Failed: Stock was mutated despite rejection!`);
   }
   console.log('>> ITEM 3 RESULT: PASSED (Atomic rejection prevented partial stock mutation)\n');
@@ -193,8 +185,6 @@ async function runVerification() {
   // Reset stock to exactly 10.00
   invA.stockQuantity = 10.00;
   await invA.save();
-  prod.stockQuantity = 10.00;
-  await prod.save();
   console.log(`Initial stock reset to: 10.00`);
   console.log(`Firing TWO concurrent checkout requests for quantity 7.00 each... (7 + 7 = 14 > 10)`);
 
@@ -224,23 +214,21 @@ async function runVerification() {
   console.log(`  Request 2 Status: ${req2.status}, Body: ${req2.body?.id ? `Sale ID ${req2.body.id}` : req2.body?.error}`);
 
   await invA.reload();
-  await prod.reload();
   console.log(`  Final Inventory.stockQuantity: ${invA.stockQuantity} (Expected: exactly 3.00)`);
-  console.log(`  Final Product.stockQuantity: ${prod.stockQuantity} (Expected: exactly 3.00)`);
 
   const statuses = [req1.status, req2.status].sort();
   if (statuses[0] !== 201 || ![400, 409].includes(statuses[1])) {
     throw new Error(`Item 4 Failed: Expected exactly one 201 and one 400/409, got ${statuses[0]} and ${statuses[1]}`);
   }
-  if (parseFloat(invA.stockQuantity) !== 3.00 || parseFloat(prod.stockQuantity) !== 3.00) {
-    throw new Error(`Item 4 Failed: Stock oversold or incorrect! Expected 3.00, got Inventory=${invA.stockQuantity}, Product=${prod.stockQuantity}`);
+  if (parseFloat(invA.stockQuantity) !== 3.00) {
+    throw new Error(`Item 4 Failed: Stock oversold or incorrect! Expected 3.00, got Inventory=${invA.stockQuantity}`);
   }
   console.log('>> ITEM 4 RESULT: PASSED (Pessimistic lock serialized concurrent transactions: exactly one succeeded, one rejected, zero overselling)\n');
 
   // =========================================================================
-  // ITEM 5: Refund Stock Increment & Dual-Write Bridge
+  // ITEM 5: Refund Stock Increment
   // =========================================================================
-  console.log('--- VERIFICATION ITEM 5: Sale Refund Restock & Dual-Write Bridge ---');
+  console.log('--- VERIFICATION ITEM 5: Sale Refund Restock ---');
   const successfulSale = req1.status === 201 ? req1.body : req2.body;
   const refundRes = await request(app)
     .post(`/api/sales/${successfulSale.id}/refund`)
@@ -255,7 +243,6 @@ async function runVerification() {
   }
 
   await invA.reload();
-  await prod.reload();
   const movementRefund = await StockMovement.findOne({
     where: { productId: prod.id, shopId: shopA.id, type: 'SALE_REFUND' },
     order: [['id', 'DESC']]
@@ -263,19 +250,18 @@ async function runVerification() {
 
   console.log(`Refund Processed Successfully:`);
   console.log(`  Inventory.stockQuantity: ${invA.stockQuantity} (Expected: 5.00)`);
-  console.log(`  Product.stockQuantity (Dual-write): ${prod.stockQuantity} (Expected: 5.00)`);
   console.log(`  StockMovement Logged: Type=${movementRefund?.type}, Delta=+${movementRefund?.quantity}, Prev=${movementRefund?.previousStock}, New=${movementRefund?.newStock}`);
 
-  if (parseFloat(invA.stockQuantity) !== 5.00 || parseFloat(prod.stockQuantity) !== 5.00) {
+  if (parseFloat(invA.stockQuantity) !== 5.00) {
     throw new Error(`Item 5 Failed: Stock after refund does not match 5.00!`);
   }
   if (!movementRefund || parseFloat(movementRefund.newStock) !== 5.00) {
     throw new Error(`Item 5 Failed: Refund StockMovement not properly recorded!`);
   }
-  console.log('>> ITEM 5 RESULT: PASSED (Refund increments Inventory, Product dual-written, StockMovement logged)\n');
+  console.log('>> ITEM 5 RESULT: PASSED (Refund increments Inventory, StockMovement logged)\n');
 
   // =========================================================================
-  // ITEM 6: Purchase Receiving Stock Increment & Dual-Write Bridge
+  // ITEM 6: Purchase Receiving Stock Increment
   // =========================================================================
   console.log('--- VERIFICATION ITEM 6: Purchase Receiving Stock Increment ---');
   const purchaseRes = await request(app)
@@ -294,7 +280,6 @@ async function runVerification() {
   }
 
   await invA.reload();
-  await prod.reload();
   const movementPurchase = await StockMovement.findOne({
     where: { productId: prod.id, shopId: shopA.id, type: 'PURCHASE_RECEIPT' },
     order: [['id', 'DESC']]
@@ -302,13 +287,12 @@ async function runVerification() {
 
   console.log(`Purchase Received (Purchase ID: ${purchaseRes.body.id}):`);
   console.log(`  Inventory.stockQuantity: ${invA.stockQuantity} (Expected: 25.00)`);
-  console.log(`  Product.stockQuantity (Dual-write): ${prod.stockQuantity} (Expected: 25.00)`);
   console.log(`  StockMovement Logged: Type=${movementPurchase?.type}, Delta=+${movementPurchase?.quantity}, Prev=${movementPurchase?.previousStock}, New=${movementPurchase?.newStock}`);
 
-  if (parseFloat(invA.stockQuantity) !== 25.00 || parseFloat(prod.stockQuantity) !== 25.00) {
+  if (parseFloat(invA.stockQuantity) !== 25.00) {
     throw new Error(`Item 6 Failed: Stock after purchase receiving does not match 25.00!`);
   }
-  console.log('>> ITEM 6 RESULT: PASSED (Purchase receiving increments Inventory, dual-writes to Product, logs StockMovement)\n');
+  console.log('>> ITEM 6 RESULT: PASSED (Purchase receiving increments Inventory, logs StockMovement)\n');
 
   // =========================================================================
   // ITEM 7: Purchase Reversal / Cancellation Stock Decrement
@@ -324,7 +308,6 @@ async function runVerification() {
   }
 
   await invA.reload();
-  await prod.reload();
   const movementCancel = await StockMovement.findOne({
     where: { productId: prod.id, shopId: shopA.id, type: 'PURCHASE_REVERSAL' },
     order: [['id', 'DESC']]
@@ -332,13 +315,12 @@ async function runVerification() {
 
   console.log(`Purchase Cancelled:`);
   console.log(`  Inventory.stockQuantity: ${invA.stockQuantity} (Expected: 5.00)`);
-  console.log(`  Product.stockQuantity (Dual-write): ${prod.stockQuantity} (Expected: 5.00)`);
   console.log(`  StockMovement Logged: Type=${movementCancel?.type}, Delta=${movementCancel?.quantity}, Prev=${movementCancel?.previousStock}, New=${movementCancel?.newStock}`);
 
-  if (parseFloat(invA.stockQuantity) !== 5.00 || parseFloat(prod.stockQuantity) !== 5.00) {
+  if (parseFloat(invA.stockQuantity) !== 5.00) {
     throw new Error(`Item 7 Failed: Stock after purchase cancellation does not match 5.00!`);
   }
-  console.log('>> ITEM 7 RESULT: PASSED (Purchase cancellation decrements Inventory, dual-writes Product, logs StockMovement)\n');
+  console.log('>> ITEM 7 RESULT: PASSED (Purchase cancellation decrements Inventory, logs StockMovement)\n');
 
   // =========================================================================
   // ITEM 8: Manual Stock Adjustment (updateStock Endpoint)
@@ -354,7 +336,6 @@ async function runVerification() {
   }
 
   await invA.reload();
-  await prod.reload();
   const movementAdjust = await StockMovement.findOne({
     where: { productId: prod.id, shopId: shopA.id, type: 'ADJUSTMENT' },
     order: [['id', 'DESC']]
@@ -362,13 +343,12 @@ async function runVerification() {
 
   console.log(`Stock Adjusted via PATCH /api/products/:id/stock:`);
   console.log(`  Inventory.stockQuantity: ${invA.stockQuantity} (Expected: 20.00)`);
-  console.log(`  Product.stockQuantity (Dual-write): ${prod.stockQuantity} (Expected: 20.00)`);
   console.log(`  StockMovement Logged: Type=${movementAdjust?.type}, Delta=+${movementAdjust?.quantity}, Prev=${movementAdjust?.previousStock}, New=${movementAdjust?.newStock}`);
 
-  if (parseFloat(invA.stockQuantity) !== 20.00 || parseFloat(prod.stockQuantity) !== 20.00) {
+  if (parseFloat(invA.stockQuantity) !== 20.00) {
     throw new Error(`Item 8 Failed: Stock after manual adjustment does not match 20.00!`);
   }
-  console.log('>> ITEM 8 RESULT: PASSED (Manual stock adjustment updates Inventory and Product identically with audit trail)\n');
+  console.log('>> ITEM 8 RESULT: PASSED (Manual stock adjustment updates Inventory with audit trail)\n');
 
   // =========================================================================
   // ITEM 9: Cross-Branch Write Isolation
@@ -438,21 +418,19 @@ async function runVerification() {
   }
 
   const newProdId = createProdRes.body.id;
-  const createdProdDb = await Product.findByPk(newProdId);
   const createdInvDb = await Inventory.findOne({ where: { productId: newProdId, shopId: shopA.id } });
 
   console.log(`Product created via POST /api/products (ID: ${newProdId}):`);
   console.log(`  Response body.stockQuantity: ${createProdRes.body.stockQuantity} (Expected: 30)`);
   console.log(`  Response body.reorderPoint: ${createProdRes.body.reorderPoint} (Expected: 7)`);
-  console.log(`  DB Product.stockQuantity (Dual-write): ${createdProdDb?.stockQuantity} (Expected: 30)`);
   console.log(`  DB Inventory.stockQuantity: ${createdInvDb?.stockQuantity} (Expected: 30)`);
   console.log(`  DB Inventory.reorderPoint: ${createdInvDb?.reorderPoint} (Expected: 7)`);
   console.log(`  DB Inventory.shopId: ${createdInvDb?.shopId} (Expected: ${shopA.id})`);
 
-  if (!createdInvDb || parseFloat(createdInvDb.stockQuantity) !== 30 || parseFloat(createdProdDb.stockQuantity) !== 30) {
-    throw new Error(`Item 10 Failed: Product or Inventory row was not created properly with initial stock 30!`);
+  if (!createdInvDb || parseFloat(createdInvDb.stockQuantity) !== 30) {
+    throw new Error(`Item 10 Failed: Inventory row was not created properly with initial stock 30!`);
   }
-  console.log('>> ITEM 10 RESULT: PASSED (createProduct explicitly created Inventory row and dual-write Product stockQuantity with zero model hooks)\n');
+  console.log('>> ITEM 10 RESULT: PASSED (createProduct explicitly created Inventory row with zero model hooks)\n');
 
   } finally {
     console.log('--- Cleaning up verification test fixtures from database ---');

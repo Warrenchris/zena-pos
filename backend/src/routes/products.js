@@ -7,6 +7,7 @@ const { auth, checkRole } = require('../middleware/auth');
 // Validation middleware
 const validateProduct = [
   body('name')
+    .if((value, { req }) => req.method === 'POST' || value !== undefined)
     .trim()
     .notEmpty()
     .withMessage('Product name is required')
@@ -28,18 +29,19 @@ const validateProduct = [
     .isLength({ max: 1000 })
     .withMessage('Description must be less than 1000 characters'),
   body('price')
+    .if((value, { req }) => req.method === 'POST' || value !== undefined)
     .notEmpty()
     .withMessage('Price is required')
     .isFloat({ min: 0 })
     .withMessage('Price must be a positive number'),
   body('cost')
+    .if((value, { req }) => req.method === 'POST' || value !== undefined)
     .notEmpty()
     .withMessage('Cost is required')
     .isFloat({ min: 0 })
     .withMessage('Cost must be a positive number'),
   body('stockQuantity')
-    .notEmpty()
-    .withMessage('Stock quantity is required')
+    .optional({ checkFalsy: true })
     .isInt({ min: 0 })
     .withMessage('Stock quantity must be a positive integer'),
   body('reorderPoint')
@@ -47,6 +49,9 @@ const validateProduct = [
     .isInt({ min: 0 })
     .withMessage('Reorder point must be a positive integer'),
   body().custom((value, { req }) => {
+    if (req.method === 'PUT' && req.body.categoryId === undefined && req.body.CategoryId === undefined) {
+      return true;
+    }
     const catId = req.body.categoryId || req.body.CategoryId;
     if (catId === undefined || catId === null || catId === '') {
       throw new Error('Category is required');
