@@ -12,6 +12,9 @@ const User = require('../models/User');
 const SaleRefund = require('../models/SaleRefund');
 const SalePayment = require('../models/SalePayment');
 const SystemSettings = require('../models/SystemSettings');
+const Inventory = require('../models/Inventory');
+const StockMovement = require('../models/StockMovement');
+const logger = require('../utils/logger');
 const { parseDate } = require('../utils/dateUtils');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
@@ -368,8 +371,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
 
     for (const item of items) {
       const product = await Product.findOne({
-        where: { id: item.productId, active: true, shopId },
-        lock: t.LOCK.UPDATE,
+        where: organizationId ? { id: item.productId, active: true, organizationId } : { id: item.productId, active: true, shopId },
         transaction: t
       });
 
@@ -379,7 +381,23 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
         throw err;
       }
 
-      if (product.stockQuantity < item.quantity) {
+      let inventory = await Inventory.findOne({
+        where: { productId: product.id, shopId },
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+
+      if (!inventory) {
+        logger.warn(`[createSaleInternal] No inventory row found for productId ${product.id} and shopId ${shopId}. Creating explicit default.`);
+        inventory = await Inventory.create({
+          productId: product.id,
+          shopId,
+          stockQuantity: product.stockQuantity || 0,
+          reorderPoint: product.reorderPoint !== undefined ? product.reorderPoint : 10
+        }, { transaction: t });
+      }
+
+      if (inventory.stockQuantity < item.quantity) {
         const err = new Error(`Insufficient stock for product: ${product.name}`);
         err.statusCode = 409;
         throw err;
@@ -389,7 +407,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
       const itemSubtotal = itemPrice * item.quantity;
       subtotal += itemSubtotal;
 
-      lockedProducts.push({ product, item, itemPrice, itemSubtotal });
+      lockedProducts.push({ product, inventory, item, itemPrice, itemSubtotal });
 
       saleItems.push({
         productId: product.id,
@@ -510,9 +528,24 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
       }, { transaction: t })
     ));
 
-    await Promise.all(lockedProducts.map(({ product, item }) =>
-      product.decrement('stockQuantity', { by: item.quantity, transaction: t })
-    ));
+    // Decrement stock on Inventory and dual-write to Product
+    for (const { product, inventory, item } of lockedProducts) {
+      const prevStock = parseFloat(inventory.stockQuantity || 0);
+      const newStock = prevStock - item.quantity;
+      await inventory.update({ stockQuantity: newStock }, { transaction: t });
+      await product.update({ stockQuantity: newStock }, { transaction: t });
+
+      await StockMovement.create({
+        shopId,
+        productId: product.id,
+        quantity: -item.quantity,
+        previousStock: prevStock,
+        newStock: newStock,
+        type: 'SALE',
+        reference: invoiceNumber,
+        userId: resolvedUserId
+      }, { transaction: t });
+    }
 
     const SalePayment = require('../models/SalePayment');
     await SalePayment.create({
@@ -1280,14 +1313,44 @@ exports.processRefund = async (req, res) => {
 
         // b. Update inventory ONLY if disposition is 'restock'
         if (disposition === 'restock') {
-          const product = await Product.findOne({
-            where: { id: item.productId, shopId },
+          let inventory = await Inventory.findOne({
+            where: { productId: item.productId, shopId },
             lock: t.LOCK.UPDATE,
             transaction: t
           });
 
-          if (product) {
-            await product.increment('stockQuantity', { by: item.quantity, transaction: t });
+          const product = await Product.findOne({
+            where: { id: item.productId },
+            transaction: t
+          });
+
+          if (!inventory && product) {
+            logger.warn(`[processRefund] No inventory row found for productId ${product.id} and shopId ${shopId}. Creating explicit default.`);
+            inventory = await Inventory.create({
+              productId: product.id,
+              shopId,
+              stockQuantity: product.stockQuantity || 0,
+              reorderPoint: product.reorderPoint !== undefined ? product.reorderPoint : 10
+            }, { transaction: t });
+          }
+
+          if (inventory) {
+            const prevStock = parseFloat(inventory.stockQuantity || 0);
+            const newStock = prevStock + item.quantity;
+            await inventory.update({ stockQuantity: newStock }, { transaction: t });
+            if (product) {
+              await product.update({ stockQuantity: newStock }, { transaction: t });
+            }
+            await StockMovement.create({
+              shopId,
+              productId: item.productId,
+              quantity: item.quantity,
+              previousStock: prevStock,
+              newStock: newStock,
+              type: 'SALE_REFUND',
+              reference: `REFUND-${sale.invoiceNumber || sale.id}`,
+              userId: (!req.user?.isEmployee && typeof req.user?.id === 'number') ? req.user.id : null
+            }, { transaction: t });
           }
         } else if (disposition === 'damaged_writeoff') {
           // Log damaged write-off loss in ActivityLogs
