@@ -57,9 +57,17 @@ const Product = sequelize.define('Product', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
-  shopId: {
+  organizationId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: 'Organizations',
+      key: 'id'
+    }
+  },
+  shopId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
     references: {
       model: 'Shops',
       key: 'id'
@@ -70,13 +78,17 @@ const Product = sequelize.define('Product', {
   indexes: [
     {
       unique: true,
-      fields: ['shopId', 'sku'],
-      name: 'unique_products_shop_sku'
+      fields: ['organizationId', 'sku'],
+      name: 'unique_products_org_sku'
     },
     {
       unique: true,
-      fields: ['shopId', 'barcode'],
-      name: 'unique_products_shop_barcode'
+      fields: ['organizationId', 'barcode'],
+      name: 'unique_products_org_barcode'
+    },
+    {
+      fields: ['organizationId', 'createdAt'],
+      name: 'idx_products_org_createdAt'
     }
   ]
 });
