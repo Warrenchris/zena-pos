@@ -38,6 +38,7 @@ async function runVerification() {
     console.log('[Database] Isolation level is fully compatible with InnoDB pessimistic locking (SELECT ... FOR UPDATE)\n');
   }
 
+  try {
   // Setup test organization, shops, category
   const [org] = await Organization.findOrCreate({
     where: { id: 800 },
@@ -453,9 +454,31 @@ async function runVerification() {
   }
   console.log('>> ITEM 10 RESULT: PASSED (createProduct explicitly created Inventory row and dual-write Product stockQuantity with zero model hooks)\n');
 
-  console.log('========================================================================');
-  console.log('           ALL SUB-PHASE 3B VERIFICATION CHECKS PASSED!                 ');
-  console.log('========================================================================\n');
+  } finally {
+    console.log('--- Cleaning up verification test fixtures from database ---');
+    try {
+      const { SaleRefund, SalePayment, SaleItem, Sale, PurchaseItem, Purchase, StockMovement, Inventory, Product, Shop, Organization, User, Category } = require('../src/models');
+      const shopIds = [801, 802];
+      await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+      await SaleRefund.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await SalePayment.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await SaleItem.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await Sale.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await PurchaseItem.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await Purchase.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await StockMovement.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await Inventory.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await Product.destroy({ where: { shopId: shopIds } }).catch(() => {});
+      await Category.destroy({ where: { id: 850 } }).catch(() => {});
+      await User.destroy({ where: { id: 881 } }).catch(() => {});
+      await Shop.destroy({ where: { id: shopIds } }).catch(() => {});
+      await Organization.destroy({ where: { id: 800 } }).catch(() => {});
+      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
+      console.log('Cleanup completed successfully.\n');
+    } catch (cleanErr) {
+      console.warn('Cleanup warning:', cleanErr.message);
+    }
+  }
   process.exit(0);
 }
 
