@@ -177,6 +177,32 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
     });
   });
 
+  afterAll(async () => {
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
+    try {
+      if (sharedProduct) {
+        await Inventory.destroy({ where: { productId: sharedProduct.id } }).catch(() => {});
+        await Product.destroy({ where: { id: sharedProduct.id } }).catch(() => {});
+      }
+      if (shopA || shopB) {
+        const shopIds = [shopA?.id, shopB?.id].filter(Boolean);
+        await Sale.destroy({ where: { shopId: shopIds } }).catch(() => {});
+        await ShopAccess.destroy({ where: { shopId: shopIds } }).catch(() => {});
+        await Shop.destroy({ where: { id: shopIds } }).catch(() => {});
+      }
+      if (org) {
+        await OrganizationMembership.destroy({ where: { organizationId: org.id } }).catch(() => {});
+        await Organization.destroy({ where: { id: org.id } }).catch(() => {});
+      }
+      const userIds = [ownerUser?.id, adminUser?.id, memberUser?.id].filter(Boolean);
+      if (userIds.length > 0) {
+        await User.destroy({ where: { id: userIds } }).catch(() => {});
+      }
+    } finally {
+      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
+    }
+  });
+
   describe('GET /api/insights/organization/summary', () => {
     it('returns aggregated totals and branchPerformance for owner across both shops', async () => {
       const res = await request(app)
