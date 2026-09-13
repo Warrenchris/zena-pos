@@ -70,6 +70,7 @@ describe('Phase 4 UX Remediation Tests', () => {
       reorderPoint: 5,
       categoryId: category.id,
       shopId: 1,
+      organizationId: 1,
       active: true
     });
 
@@ -83,6 +84,7 @@ describe('Phase 4 UX Remediation Tests', () => {
       reorderPoint: 5,
       categoryId: category.id,
       shopId: 1,
+      organizationId: 1,
       active: true
     });
 
@@ -96,6 +98,7 @@ describe('Phase 4 UX Remediation Tests', () => {
       reorderPoint: 5,
       categoryId: category.id,
       shopId: 1,
+      organizationId: 1,
       active: true
     });
 
