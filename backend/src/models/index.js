@@ -32,6 +32,7 @@ const RolePermission = require('./RolePermission');
 const Organization = require('./Organization');
 const OrganizationMembership = require('./OrganizationMembership');
 const ShopAccess = require('./ShopAccess');
+const Inventory = require('./Inventory');
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -165,6 +166,16 @@ ShopAccess.belongsTo(OrganizationMembership, { foreignKey: 'membershipId' });
 Shop.hasMany(ShopAccess, { foreignKey: 'shopId' });
 ShopAccess.belongsTo(Shop, { foreignKey: 'shopId' });
 
+// Organization & Catalog / Inventory associations (FINDING-12 Phase 3)
+Organization.hasMany(Product, { foreignKey: 'organizationId' });
+Product.belongsTo(Organization, { foreignKey: 'organizationId' });
+
+Shop.hasMany(Inventory, { foreignKey: 'shopId' });
+Inventory.belongsTo(Shop, { foreignKey: 'shopId' });
+
+Product.hasMany(Inventory, { foreignKey: 'productId' });
+Inventory.belongsTo(Product, { foreignKey: 'productId' });
+
 // Auto-wrap guard: ensure every Shop has a parent Organization if none specified (backward compatibility)
 Shop.beforeValidate(async (shop, options) => {
   if (!shop.organizationId) {
@@ -222,6 +233,7 @@ module.exports = {
   RolePermission,
   Organization,
   OrganizationMembership,
-  ShopAccess
+  ShopAccess,
+  Inventory
 };
 

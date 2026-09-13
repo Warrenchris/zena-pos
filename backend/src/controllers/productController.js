@@ -1,9 +1,22 @@
 const { logActivity } = require('../middleware/logger');
 const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
-const Product = require('../models/Product');
-const Category = require('../models/Category');
-const SystemSettings = require('../models/SystemSettings');
+const { Product, Category, SystemSettings, Inventory, Shop } = require('../models');
+
+// Helper to format product with branch-scoped inventory
+function formatProductWithInventory(product) {
+  if (!product) return product;
+  const plain = (typeof product.get === 'function')
+    ? product.get({ plain: true })
+    : { ...product };
+
+  const inventories = plain.Inventories || (plain.Inventory ? [plain.Inventory] : []);
+  const branchInv = inventories.length > 0 ? inventories[0] : null;
+
+  plain.stockQuantity = branchInv ? branchInv.stockQuantity : 0;
+  plain.reorderPoint = branchInv ? branchInv.reorderPoint : (plain.reorderPoint !== undefined ? plain.reorderPoint : 10);
+  return plain;
+}
 const redisClient = require('../config/redis');
 const { invalidateShopProductCache } = require('../services/productCache');
 const logger = require('../utils/logger');
@@ -22,12 +35,19 @@ exports.getAllProducts = async (req, res) => {
       fuzzy
     } = req.query;
 
+    const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
+
     const numericPage = Math.max(parseInt(page, 10) || 1, 1);
     const numericPageSize = Math.min(Math.max(parseInt(pageSize, 10) || 12, 1), 100);
     const offset = (numericPage - 1) * numericPageSize;
 
     const isDefaultQuery = !search && !categoryId && !availability && !minPrice && !maxPrice;
-    const cacheKey = `products:shop:${req.user.shopId}`;
+    const cacheKey = `products:shop:${shopId}`;
 
     if (isDefaultQuery) {
       try {
@@ -36,7 +56,7 @@ exports.getAllProducts = async (req, res) => {
           const cachedResult = JSON.parse(cachedData);
           const totalPages = Math.ceil(cachedResult.count / numericPageSize) || 1;
           const paginatedProducts = cachedResult.rows.slice(offset, offset + numericPageSize);
-          logger.debug(`Product catalogue cache HIT for shop: ${req.user.shopId}`);
+          logger.debug(`Product catalogue cache HIT for shop: ${shopId}`);
           return res.json({
             products: paginatedProducts,
             searchType: 'exact',
@@ -48,30 +68,45 @@ exports.getAllProducts = async (req, res) => {
           });
         }
       } catch (err) {
-        logger.warn(`Redis error fetching product cache for shop ${req.user.shopId}:`, err);
+        logger.warn(`Redis error fetching product cache for shop ${shopId}:`, err);
       }
 
-      logger.debug(`Product catalogue cache MISS for shop: ${req.user.shopId}, querying database`);
+      logger.debug(`Product catalogue cache MISS for shop: ${shopId}, querying database`);
       try {
+        const catalogWhere = { active: true };
+        if (organizationId) {
+          catalogWhere.organizationId = organizationId;
+        } else {
+          catalogWhere.shopId = shopId;
+        }
+
         const allProducts = await Product.findAndCountAll({
-          where: { active: true, shopId: req.user.shopId },
+          where: catalogWhere,
           include: [
-            { model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } }
+            { model: Category, attributes: ['id', 'name'], required: false },
+            {
+              model: Inventory,
+              attributes: ['stockQuantity', 'reorderPoint', 'shopId'],
+              where: { shopId },
+              required: false
+            }
           ],
           order: [['createdAt', 'DESC']],
           distinct: true,
         });
 
+        const formattedRows = allProducts.rows.map(p => formatProductWithInventory(p));
+
         try {
           if (redisClient.status === 'ready') {
-            await redisClient.setex(cacheKey, 600, JSON.stringify({ count: allProducts.count, rows: allProducts.rows }));
+            await redisClient.setex(cacheKey, 600, JSON.stringify({ count: allProducts.count, rows: formattedRows }));
           }
         } catch (err) {
-          logger.warn(`Redis error caching products for shop ${req.user.shopId}:`, err);
+          logger.warn(`Redis error caching products for shop ${shopId}:`, err);
         }
 
         const totalPages = Math.ceil(allProducts.count / numericPageSize) || 1;
-        const paginatedProducts = allProducts.rows.slice(offset, offset + numericPageSize);
+        const paginatedProducts = formattedRows.slice(offset, offset + numericPageSize);
         return res.json({
           products: paginatedProducts,
           searchType: 'exact',
@@ -83,14 +118,17 @@ exports.getAllProducts = async (req, res) => {
         });
       } catch (error) {
         console.error('Error fetching all products on cache miss:', error);
-        // Fall through to regular DB paginated execution in case of unexpected DB error
       }
     }
 
     const where = {
       active: true,
-      shopId: req.user.shopId,
     };
+    if (organizationId) {
+      where.organizationId = organizationId;
+    } else {
+      where.shopId = shopId;
+    }
 
     if (search && String(search).trim()) {
       const term = `%${String(search).trim()}%`;
@@ -112,20 +150,35 @@ exports.getAllProducts = async (req, res) => {
       if (maxPrice) where.price[Op.lte] = parseFloat(maxPrice);
     }
 
+    const inventoryWhere = { shopId };
+    let inventoryRequired = false;
+
     if (availability === 'in_stock') {
-      where.stockQuantity = { [Op.gt]: 0 };
+      inventoryWhere.stockQuantity = { [Op.gt]: 0 };
+      inventoryRequired = true;
     } else if (availability === 'low_stock') {
-      // stockQuantity <= reorderPoint and > 0
-      where[Op.and] = [
+      const { Sequelize } = require('sequelize');
+      inventoryWhere[Op.and] = [
         { stockQuantity: { [Op.gt]: 0 } },
-        { stockQuantity: { [Op.lte]: { [Op.col]: 'reorderPoint' } } },
+        Sequelize.where(Sequelize.col('Inventories.stockQuantity'), '<=', Sequelize.col('Inventories.reorderPoint'))
       ];
+      inventoryRequired = true;
     } else if (availability === 'out_of_stock') {
-      where.stockQuantity = 0;
+      where[Op.or] = [
+        { '$Inventories.id$': null },
+        { '$Inventories.stockQuantity$': 0 }
+      ];
+      inventoryRequired = false;
     }
 
     const include = [
-      { model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } },
+      { model: Category, attributes: ['id', 'name'], required: false },
+      {
+        model: Inventory,
+        attributes: ['id', 'stockQuantity', 'reorderPoint', 'shopId'],
+        where: inventoryWhere,
+        required: inventoryRequired
+      }
     ];
 
     let { rows, count } = await Product.findAndCountAll({
@@ -146,24 +199,18 @@ exports.getAllProducts = async (req, res) => {
       if (dialect.includes('mysql') || dialect.includes('mariadb')) {
         const fuzzyWhere = {
           active: true,
-          shopId: req.user.shopId,
         };
+        if (organizationId) {
+          fuzzyWhere.organizationId = organizationId;
+        } else {
+          fuzzyWhere.shopId = shopId;
+        }
 
         if (categoryId) fuzzyWhere.CategoryId = parseInt(categoryId, 10);
         if (minPrice || maxPrice) {
           fuzzyWhere.price = {};
           if (minPrice) fuzzyWhere.price[Op.gte] = parseFloat(minPrice);
           if (maxPrice) fuzzyWhere.price[Op.lte] = parseFloat(maxPrice);
-        }
-        if (availability === 'in_stock') {
-          fuzzyWhere.stockQuantity = { [Op.gt]: 0 };
-        } else if (availability === 'low_stock') {
-          fuzzyWhere[Op.and] = [
-            { stockQuantity: { [Op.gt]: 0 } },
-            { stockQuantity: { [Op.lte]: { [Op.col]: 'reorderPoint' } } },
-          ];
-        } else if (availability === 'out_of_stock') {
-          fuzzyWhere.stockQuantity = 0;
         }
 
         const { Sequelize } = require('sequelize');
@@ -191,24 +238,18 @@ exports.getAllProducts = async (req, res) => {
       } else if (dialect.includes('postgres')) {
         const fuzzyWhere = {
           active: true,
-          shopId: req.user.shopId,
         };
+        if (organizationId) {
+          fuzzyWhere.organizationId = organizationId;
+        } else {
+          fuzzyWhere.shopId = shopId;
+        }
 
         if (categoryId) fuzzyWhere.CategoryId = parseInt(categoryId, 10);
         if (minPrice || maxPrice) {
           fuzzyWhere.price = {};
           if (minPrice) fuzzyWhere.price[Op.gte] = parseFloat(minPrice);
           if (maxPrice) fuzzyWhere.price[Op.lte] = parseFloat(maxPrice);
-        }
-        if (availability === 'in_stock') {
-          fuzzyWhere.stockQuantity = { [Op.gt]: 0 };
-        } else if (availability === 'low_stock') {
-          fuzzyWhere[Op.and] = [
-            { stockQuantity: { [Op.gt]: 0 } },
-            { stockQuantity: { [Op.lte]: { [Op.col]: 'reorderPoint' } } },
-          ];
-        } else if (availability === 'out_of_stock') {
-          fuzzyWhere.stockQuantity = 0;
         }
 
         const { Sequelize } = require('sequelize');
@@ -235,9 +276,10 @@ exports.getAllProducts = async (req, res) => {
     }
 
     const totalPages = Math.ceil(count / numericPageSize) || 1;
+    const formattedRows = rows.map(p => formatProductWithInventory(p));
 
     res.json({
-      products: rows,
+      products: formattedRows,
       searchType,
       pagination: {
         currentPage: numericPage,
@@ -254,16 +296,38 @@ exports.getAllProducts = async (req, res) => {
 // Get product by ID
 exports.getProductById = async (req, res) => {
   try {
+    const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
+
+    const where = { id: req.params.id, active: true };
+    if (organizationId) {
+      where.organizationId = organizationId;
+    } else {
+      where.shopId = shopId;
+    }
+
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true, shopId: req.user.shopId },
-      include: [{ model: Category, attributes: ['id', 'name'], where: { shopId: req.user.shopId } }]
+      where,
+      include: [
+        { model: Category, attributes: ['id', 'name'], required: false },
+        {
+          model: Inventory,
+          attributes: ['stockQuantity', 'reorderPoint', 'shopId'],
+          where: { shopId },
+          required: false
+        }
+      ]
     });
     
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
     
-    res.json(product);
+    res.json(formatProductWithInventory(product));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch product' });
   }
@@ -516,6 +580,11 @@ exports.updateStock = async (req, res) => {
 exports.getProductsBatch = async (req, res) => {
   try {
     const shopId = req.user?.shopId || req.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
     const { ids } = req.query;
     
     let idArray = [];
@@ -533,16 +602,30 @@ exports.getProductsBatch = async (req, res) => {
       return res.status(400).json({ error: 'Batch query limited to 100 products max' });
     }
 
+    const where = {
+      id: { [Op.in]: idArray },
+      active: true
+    };
+    if (organizationId) {
+      where.organizationId = organizationId;
+    } else {
+      where.shopId = shopId;
+    }
+
     const products = await Product.findAll({
-      where: {
-        id: { [Op.in]: idArray },
-        active: true,
-        shopId
-      },
-      attributes: ['id', 'name', 'sku', 'price', 'stockQuantity', 'active']
+      where,
+      attributes: ['id', 'name', 'sku', 'price', 'stockQuantity', 'active'],
+      include: [
+        {
+          model: Inventory,
+          attributes: ['stockQuantity', 'reorderPoint', 'shopId'],
+          where: { shopId },
+          required: false
+        }
+      ]
     });
 
-    res.json(products);
+    res.json(products.map(p => formatProductWithInventory(p)));
   } catch (error) {
     logger.error('Error in getProductsBatch:', error);
     res.status(500).json({ error: 'Failed to batch fetch products' });
