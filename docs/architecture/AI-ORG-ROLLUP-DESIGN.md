@@ -1,6 +1,6 @@
 # FINDING-12 Phase 4: Organization-Wide AI Roll-Up Analytics Design
 
-**Status:** Proposed Architecture Design  
+**Status:** Approved-in-Part Architecture Design (Revision 2 — ShopAccess Delegation Alignment & Advisory Clarification)  
 **Author:** Principal Architect  
 **Date:** September 13, 2026  
 **Target Milestone:** FINDING-12 Phase 4 (Multi-Branch & Organization Architecture)  
@@ -12,9 +12,14 @@
 
 Phase 3 successfully completed the decoupling of product definitions into an organization-scoped master catalog (`Products`) and branch-specific stock ledgers (`Inventory`). Prior to Phase 4, all business intelligence, sales reporting, and AI forecasting operate strictly at the single-shop level (`req.shopId` scoping across `insightsController.js`, `dashboardController.js`, and `reportsController.js`).
 
-Phase 4 introduces an **additive, non-breaking organization-level analytics layer**. This allows multi-branch merchants and enterprise owners to obtain consolidated roll-up visibility across all their physical locations—such as total company revenue, comparative branch performance rankings, organization-wide inventory health, and aggregated demand forecasting—without impacting or altering the behavior of single-shop merchants or existing per-shop endpoints.
+Phase 4 introduces an **additive, non-breaking organization-level analytics layer**. This allows multi-branch merchants and enterprise owners to obtain consolidated roll-up visibility across their physical locations—such as total revenue, comparative branch performance rankings, organization-wide inventory health, and aggregated demand forecasting—without impacting or altering the behavior of single-shop merchants or existing per-shop endpoints.
 
 A comprehensive audit of the Python AI microservice confirms that it is **100% stateless and decoupled from the database**. All ML algorithms (Prophet time series, Random Forest regression, Isolation Forest anomaly detection, and KMeans customer segmentation) compute purely on in-memory arrays supplied in request payloads. Consequently, **Phase 4 requires ZERO Python-side code changes**. All aggregation, data shaping, and security enforcement are handled entirely on the Node.js backend.
+
+Per Phase 1's authoritative access control design, analytics roll-ups enforce a **two-tier delegation model**:
+1. **Owners** see the full organization roll-up across all active branches (bypassing `ShopAccess` by design).
+2. **Admins** see roll-ups scoped strictly to the subset of branches granted to them via `ShopAccess` (e.g., a regional manager for North region branches sees only those branches' numbers).
+3. **Members** (cashiers, clerks) are rejected with `403 Forbidden`.
 
 ---
 
@@ -46,7 +51,7 @@ Inspection of `ai_service/src/` confirms the following fundamental architectural
    - `/api/insights/analyze`: Operates on dimensionless parallel arrays of numbers (e.g., `revenue: [1000, 1200]`). It evaluates MoM percent change and retention ratios. It does not inspect `shopId`.
    - `/api/insights/anomalies`: Runs scikit-learn `IsolationForest` on daily features (`revenue`, `transaction_count`, `avg_transaction_value`, `day_of_week`, `is_weekend`). It detects multivariate statistical outliers regardless of whether the observations represent one store or a conglomerate.
    - `/api/insights/customer-segments`: Runs scikit-learn `KMeans` with standard scaling on customer behavioral metrics. Because Phase 2 already established `Customer` as an organization-scoped identity, clustering customers across the organization is mathematically superior to single-shop clustering.
-   - `/api/forecasting/forecast` & `/rf-forecast`: Fits Facebook Prophet or Random Forest on `{ dates: [...], values: [...] }`. In `rf-forecast`, `shop_id` is merely accepted as an optional metadata string for logging (`logger.info("[rf-forecast] Success: shop_id=%s ...")`). The model itself trains purely on the continuous time series.
+   - `/api/forecasting/forecast` & `/rf-forecast`: Fits Facebook Prophet or Random Forest on `{ dates: [...], values: [...] }`. In `rf-forecast`, `shop_id` is accepted purely as optional metadata for logging (`logger.info("[rf-forecast] Success: shop_id=%s ...")`). The model itself trains purely on the continuous time series.
    - `/api/forecasting/stock-depletion`: Iterates through an array of items `{ product_id, product_name, current_stock, daily_sales }`.
 3. **Verdict**: The Python microservice works **identically** on pre-aggregated multi-shop data. **Zero Python changes are required.**
 
@@ -57,7 +62,7 @@ Inspection of `ai_service/src/` confirms the following fundamental architectural
 
 #### Scope Boundary Recommendation & Justification
 
-**Recommendation**: Phase 4 should explicitly create a focused, executive-level **Organization Roll-Up Analytics** module, but should **NOT** refactor or duplicate the entire operational reporting suite in `reportsController.js` and `dashboardController.js`.
+**Recommendation**: Phase 4 explicitly creates a focused, executive-level **Organization Roll-Up Analytics** module, but does **NOT** refactor or duplicate the entire operational reporting suite in `reportsController.js` and `dashboardController.js`.
 
 **Justification**:
 1. **Executive Intent vs. Cashier/Store Operations**: An organization executive viewing cross-branch roll-ups wants strategic macro-indicators: consolidated revenue, multi-branch growth comparisons, branch ranking ("which branch is outperforming?"), company-wide stock depletion, and consolidated forecasting. They do not need an hourly cash-drawer breakdown or register-level shift sales combining 10 stores into one unreadable 240-row timeline.
@@ -87,24 +92,26 @@ Key observations:
      `DELETE /api/ai/cache/org/:organizationId`
    - Forecast caches use a 1-hour TTL (`stdTTL: 3600`). Because forecasting runs expensive ML algorithms on historical time series, neither sales nor stock changes should trigger immediate cache eviction (sales happen every second in high-volume retail). Retaining the 1-hour TTL for org-level forecasts preserves server CPU while maintaining consistency with per-shop caching.
 
-### 1.5 Access Control Analysis
+### 1.5 Access Control Analysis: Two-Tier Delegation Model
 
 In earlier phases, two distinct access control precedents were established:
-1. **Phase 1 Precedent (Governance Axis)**: Shop creation (`POST /api/shop`) and shop access management required `orgRole IN ('owner', 'admin')`.
+1. **Phase 1 Precedent (Governance & Delegation Axis)**: Shop creation (`POST /api/shop`) required `orgRole IN ('owner', 'admin')`. Crucially, Phase 1 established that **owners bypass `ShopAccess` grants by design** (having universal access across all branches), whereas **admins are explicitly scoped to the specific shops granted via `ShopAccess`** (e.g., a regional manager for North region shops).
 2. **Phase 2 Precedent (Operational Axis)**: Customer and Supplier lookups (`GET /api/customers`, `GET /api/suppliers`) were granted to *any active organization member* (including cashiers and branch employees).
 
-#### Which Precedent Fits Organization Analytics?
+#### Two-Tier Resolution for Organization Analytics
 
-**Decision**: Organization roll-up analytics must strictly follow **Phase 1 (Governance Axis: `orgRole IN ('owner', 'admin')`)**.
+Treating `owner` and `admin` as equivalent for analytics access would violate Phase 1's delegation model: an admin assigned to 2 of 10 shops would see full company revenue and competing regions' financial performance. Therefore, analytics access enforces a **two-tier resolution**:
 
-**Justification**:
-1. **Business Confidentiality**: In multi-branch retail, store employees (cashiers, shelf stockers, branch managers) must not have access to company-wide financial performance, total organizational revenue, or margins and sales figures of competing branches.
-2. **Role Mapping in `OrganizationMemberships`**:
-   - `owner`: Business proprietor; has global visibility across all shops in the organization.
-   - `admin`: Operations director / regional manager; has multi-shop administrative privileges.
-   - `member`: Branch-level staff (cashier, store keeper). Membership is restricted to specific shops via `ShopAccess`.
-3. If an individual needs to see organization-wide financial roll-ups, the owner elevates their membership `orgRole` to `admin`.
-4. Therefore, any attempt by a `member` to request organization-level roll-ups will be rejected with `403 Forbidden` (`Organization analytics requires owner or admin privileges`).
+1. **Tier 1 — Owner (Global Governance)**:
+   - Must have `orgRole === 'owner'` in an active `OrganizationMembership`.
+   - Bypasses `ShopAccess` entirely by design.
+   - Analytics queries aggregate across **all active shops** in the entire organization.
+2. **Tier 2 — Admin (Delegated Regional Governance)**:
+   - Must have `orgRole === 'admin'` in an active `OrganizationMembership`.
+   - Analytics queries are **strictly scoped to the subset of shops explicitly granted via `ShopAccess`**.
+   - If an admin has access to 3 of 10 branches, their roll-up aggregates only those 3 branches. They never see revenue, rankings, or alerts for the other 7 branches.
+3. **Rejection — Member & Others (Zero Cross-Branch Visibility)**:
+   - Any membership role without `owner` or `admin` (e.g., `member`, standard cashiers, clerks) is rejected with `403 Forbidden` (`Organization analytics requires owner or admin privileges`). Standard staff only access their single shop's operational dashboard via `req.shopId`.
 
 ---
 
@@ -158,21 +165,21 @@ Rather than blindly cloning all 11 endpoints, Phase 4 defines **three high-impac
                   ┌──────────────────────────────────────────────┼──────────────────────────────────────────────┐
                   ▼                                              ▼                                              ▼
     GET /api/insights/organization/summary        GET /api/insights/organization/inventory-alerts    GET /api/insights/organization/daily-sales
-    - Org-wide Total Revenue & Sales             - Cross-branch Low Stock Alerts                    - Consolidated Daily Revenue Series
-    - Branch Performance Ranking & Share          - Stock Balances per Branch                        - Ready for AI Prophet / RF Forecast
-    - Org-wide Revenue Trend Series               - Inter-Branch Restock Opportunities               - Uses forecast:org:{orgId}:... Cache
+    - Revenue & Sales in Scope                   - Scoped Low Stock Alerts                          - Consolidated Daily Revenue Series
+    - Branch Ranking in Scope                    - Scoped Stock Balances per Branch                 - Ready for AI Prophet / RF Forecast
+    - Scoped Sales Trend Series                  - Read-Only Advisory Text                          - Uses forecast:org:{orgId}:... Cache
 ```
 
 1. **`GET /api/insights/organization/summary` (Executive Financial Roll-Up)**:
-   - Aggregates revenue, transactions, and active customers across all active branches.
-   - Provides a ranked `branchPerformance` breakdown (revenue, transaction count, average ticket, percent of total revenue).
-   - Generates company-wide 30-day sales trend.
-2. **`GET /api/insights/organization/inventory-alerts` (Cross-Branch Stock Health & Transfer)**:
-   - Identifies every catalog product that has depleted to critical levels in *at least one* branch.
-   - Crucially, displays the current stock of that product across **all other branches** in the organization.
-   - *High Business Value*: If Branch A has 0 units of Milk and Branch B has 50 units, the system surfaces an actionable inter-branch transfer recommendation instead of merely suggesting a supplier purchase.
+   - Aggregates revenue, transactions, and active customers across all shops in caller's authorized scope.
+   - Provides a ranked `branchPerformance` breakdown for authorized branches (revenue, transaction count, average ticket, percent of total revenue).
+   - Generates consolidated 30-day sales trend.
+2. **`GET /api/insights/organization/inventory-alerts` (Cross-Branch Stock Health & Advisory)**:
+   - Identifies catalog products depleted to critical levels in *at least one* authorized branch.
+   - Displays the current stock of that product across **all other authorized branches**.
+   - Generates read-only advisory text (`transferRecommendation`) to highlight inter-branch stock availability.
 3. **`GET /api/insights/organization/daily-sales` (Consolidated Time Series for AI Forecasting)**:
-   - Aggregates daily sales across all active branches for the last 90 days.
+   - Aggregates daily sales across authorized branches for the last 90 days.
    - Formats data into `{ dates: [...], values: [...], daily_data: [...] }`.
    - Directly usable by the existing AI forecasting proxy (`POST /api/ai/forward/api/forecasting/forecast` or `rf-forecast`) with the new org cache key.
 
@@ -183,13 +190,20 @@ Rather than blindly cloning all 11 endpoints, Phase 4 defines **three high-impac
 #### 1. Executive Summary Roll-Up
 - **Endpoint**: `GET /api/insights/organization/summary`
 - **Access Control**: `auth`, active membership, `orgRole IN ('owner', 'admin')`.
+  - For `owner`: Scope covers **all active shops** in the organization.
+  - For `admin`: Scope covers **only shops granted in caller's `ShopAccess` records**.
 - **Query Parameters**:
   - `startDate` (optional, default: 30 days ago)
   - `endDate` (optional, default: now)
-- **Response Shape**:
+- **Response Shape (Owner Example — Global Organization Scope)**:
 ```json
 {
   "organizationId": 4,
+  "scope": {
+    "role": "owner",
+    "accessibleShopsCount": 2,
+    "totalOrgShopsCount": 2
+  },
   "period": {
     "startDate": "2026-08-14T00:00:00.000Z",
     "endDate": "2026-09-13T23:59:59.999Z"
@@ -227,14 +241,65 @@ Rather than blindly cloning all 11 endpoints, Phase 4 defines **three high-impac
 }
 ```
 
+- **Response Shape (Admin Example — Regional Delegated Scope)**:
+> [!NOTE]
+> When called by an `admin` whose `ShopAccess` is restricted to 1 of the organization's 2 branches (e.g. Westlands only), the response legitimately includes only Westlands data. `accessibleShopsCount` reflects their authorized scope (1 of 2). This is by design to enforce Phase 1 delegation and prevent regional data leakage.
+```json
+{
+  "organizationId": 4,
+  "scope": {
+    "role": "admin",
+    "accessibleShopsCount": 1,
+    "totalOrgShopsCount": 2,
+    "note": "Scoped to authorized ShopAccess branches"
+  },
+  "period": {
+    "startDate": "2026-08-14T00:00:00.000Z",
+    "endDate": "2026-09-13T23:59:59.999Z"
+  },
+  "metrics": {
+    "totalRevenue": 1500000.00,
+    "totalSales": 70,
+    "averageTransactionValue": 21428.57,
+    "activeShopsCount": 1
+  },
+  "branchPerformance": [
+    {
+      "shopId": 4,
+      "shopName": "Soko Safi Supermarket (Westlands)",
+      "totalRevenue": 1500000.00,
+      "totalSales": 70,
+      "averageTransactionValue": 21428.57,
+      "revenueSharePercentage": 100.00,
+      "rank": 1
+    }
+  ],
+  "salesTrend": [
+    { "date": "2026-09-10", "totalSales": 30000.00, "transactionCount": 3 },
+    { "date": "2026-09-11", "totalSales": 42000.00, "transactionCount": 5 }
+  ]
+}
+```
+
+---
+
 #### 2. Cross-Branch Inventory Alerts & Transfer Opportunities
 - **Endpoint**: `GET /api/insights/organization/inventory-alerts`
 - **Access Control**: `auth`, active membership, `orgRole IN ('owner', 'admin')`.
+  - For `owner`: Evaluates stock across all active shops in the organization.
+  - For `admin`: Evaluates stock only across caller's `ShopAccess` granted branches.
+- **Read-Only Advisory Invariant**:
+> [!IMPORTANT]
+> **Zero Writes / Advisory Only**: This endpoint performs zero database writes. The `transferRecommendation` field is human-readable advisory text computed from read-only `Inventory` comparisons; it does not create, queue, or execute any stock movement. An actual inter-branch stock transfer feature (with audit trail, authorization, and in-transit state tracking) is a distinct, larger feature explicitly out of scope for Phase 4.
 - **Response Shape**:
 ```json
 {
   "organizationId": 4,
-  "alertCount": 3,
+  "scope": {
+    "role": "owner",
+    "accessibleShopsCount": 2
+  },
+  "alertCount": 1,
   "alerts": [
     {
       "productId": 12,
@@ -258,19 +323,26 @@ Rather than blindly cloning all 11 endpoints, Phase 4 defines **three high-impac
           "status": "HEALTHY"
         }
       ],
-      "transferRecommendation": "Transfer up to 20 units from Kilimani to Westlands"
+      "transferRecommendation": "Advisory: Consider transferring up to 20 units from Kilimani to Westlands."
     }
   ]
 }
 ```
 
+---
+
 #### 3. Consolidated Organization Daily Sales
 - **Endpoint**: `GET /api/insights/organization/daily-sales`
 - **Access Control**: `auth`, active membership, `orgRole IN ('owner', 'admin')`.
+  - Aggregates daily sales across caller's authorized branches.
 - **Response Shape**:
 ```json
 {
   "organizationId": 4,
+  "scope": {
+    "role": "owner",
+    "accessibleShopsCount": 2
+  },
   "dates": ["2026-06-15", "2026-06-16", "..."],
   "values": [12450.00, 18900.50, "..."],
   "daily_data": [
@@ -288,19 +360,14 @@ Rather than blindly cloning all 11 endpoints, Phase 4 defines **three high-impac
 
 ### 3.3 Database Aggregation Strategy (No N+1 Queries)
 
-To aggregate across $N$ shops, the Node backend will **never** execute $N$ sequential loop queries. Instead, it resolves the set of active shops for `req.organizationId` and queries MySQL in single set-based SQL operations:
+To aggregate across $N$ shops, the Node backend will **never** execute $N$ sequential loop queries. Instead, it consumes `req.accessibleShopIds` (pre-resolved by `requireOrgAdmin`) and queries MySQL in single set-based SQL operations:
 
 ```javascript
-// 1. Resolve all active shop IDs for the organization
-const shops = await Shop.findAll({
-  where: { organizationId: req.organizationId, active: true },
-  attributes: ['id', 'name'],
-  raw: true
-});
-const shopIds = shops.map(s => s.id);
-const shopMap = new Map(shops.map(s => [s.id, s.name]));
+// 1. shopIds comes directly from req.accessibleShopIds (resolved by requireOrgAdmin)
+const shopIds = req.accessibleShopIds;
+const shopMap = new Map(req.accessibleShops.map(s => [s.id, s.name]));
 
-// 2. Aggregate Sales in a single query across all active shops
+// 2. Aggregate Sales in a single query across all accessible shops
 const branchAggregates = await Sale.findAll({
   where: {
     shopId: { [Op.in]: shopIds },
@@ -317,7 +384,7 @@ const branchAggregates = await Sale.findAll({
   raw: true
 });
 
-// 3. Aggregate Daily Trend in a single query across all active shops
+// 3. Aggregate Daily Trend in a single query across all accessible shops
 const dailyTrend = await Sale.findAll({
   where: {
     shopId: { [Op.in]: shopIds },
@@ -337,18 +404,25 @@ const dailyTrend = await Sale.findAll({
 
 ---
 
-### 3.4 Access Control Implementation Pattern
+### 3.4 Access Control Implementation Pattern (`requireOrgAdmin`)
 
-A dedicated middleware or inline authorization check ensures rock-solid governance:
+The `requireOrgAdmin` middleware enforces the two-tier resolution and attaches `req.accessibleShopIds`:
 
 ```javascript
-// Middleware: verifyOrgAdminOrOwner
+/**
+ * Middleware: requireOrgAdmin
+ * Enforces Phase 1 access control:
+ * - Owner: full organization scope (all active shops).
+ * - Admin: scoped strictly to shops granted in ShopAccess.
+ * - Member: rejected with 403 Forbidden.
+ */
 async function requireOrgAdmin(req, res, next) {
   const organizationId = req.organizationId;
   if (!organizationId) {
-    return res.status(403).json({ error: 'Organization context required' });
+    return res.status(403).json({ error: 'Organization context required.' });
   }
 
+  // 1. Verify active membership with owner or admin role
   const membershipWhere = {
     organizationId,
     status: 'active'
@@ -364,7 +438,40 @@ async function requireOrgAdmin(req, res, next) {
     return res.status(403).json({ error: 'Organization analytics requires owner or admin privileges.' });
   }
 
+  // 2. Resolve accessible shops based on two-tier delegation
+  let accessibleShops = [];
+  if (membership.orgRole === 'owner') {
+    // Owner bypasses ShopAccess by design (Phase 1 precedent)
+    accessibleShops = await Shop.findAll({
+      where: { organizationId, active: true },
+      attributes: ['id', 'name'],
+      order: [['id', 'ASC']],
+      raw: true
+    });
+  } else {
+    // Admin is scoped strictly to ShopAccess grants (Phase 1 delegation)
+    const accesses = await ShopAccess.findAll({
+      where: { membershipId: membership.id },
+      include: [{
+        model: Shop,
+        where: { organizationId, active: true },
+        attributes: ['id', 'name']
+      }],
+      order: [[Shop, 'id', 'ASC']]
+    });
+    accessibleShops = accesses.map(a => ({ id: a.Shop.id, name: a.Shop.name }));
+  }
+
+  if (!accessibleShops.length) {
+    return res.status(403).json({ error: 'No accessible shops found for this account.' });
+  }
+
+  // 3. Attach resolution context to request object
   req.membership = membership;
+  req.isOwner = membership.orgRole === 'owner';
+  req.accessibleShops = accessibleShops;
+  req.accessibleShopIds = accessibleShops.map(s => s.id);
+
   next();
 }
 ```
@@ -410,11 +517,12 @@ async function requireOrgAdmin(req, res, next) {
 ## Part 4 — Explicit Non-Scope
 
 The following areas are strictly out of scope for Phase 4:
-1. **No Changes to Existing Per-Shop Insights/Forecasting**: All endpoints (`/api/insights/*`, `/api/dashboard/*`, `/api/reports/*`) remain completely intact with their existing behavior, routes, and response schemas.
-2. **No Cash Drawer / Register Features**: Cash registers and drawer reconciliations are Phase 5 (Registers).
-3. **No Subscription / Entitlement Gating**: Multi-branch feature gating and subscription plans are Phase 6 (Billing & Entitlements).
-4. **No Frontend Modifications**: This phase defines and implements the backend architecture and API endpoints only.
-5. **No Modifications to Phase 1, 2, or 3 Core Models**: No changes to `Organizations`, `OrganizationMemberships`, `ShopAccess`, `Customers`, `Suppliers`, `Products`, or `Inventory` schemas.
+1. **No Stock Transfer Execution or In-Transit State Tracking**: The `inventory-alerts` endpoint performs zero writes. The `transferRecommendation` field is human-readable advisory text computed from read-only `Inventory` comparisons; it does not create, queue, or execute any stock movement. An actual inter-branch stock transfer feature (with audit trail, transfer manifests, approval authorization, and in-transit state tracking) is a distinct, larger operational feature explicitly deferred.
+2. **No Changes to Existing Per-Shop Insights/Forecasting**: All endpoints (`/api/insights/*`, `/api/dashboard/*`, `/api/reports/*`) remain completely intact with their existing behavior, routes, and response schemas.
+3. **No Cash Drawer / Register Features**: Cash registers and drawer reconciliations are Phase 5 (Registers).
+4. **No Subscription / Entitlement Gating**: Multi-branch feature gating and subscription plans are Phase 6 (Billing & Entitlements).
+5. **No Frontend Modifications**: This phase defines and implements the backend architecture and API endpoints only.
+6. **No Modifications to Phase 1, 2, or 3 Core Models**: No changes to `Organizations`, `OrganizationMemberships`, `ShopAccess`, `Customers`, `Suppliers`, `Products`, or `Inventory` schemas.
 
 ---
 
@@ -458,16 +566,19 @@ Client (Owner / Admin)
 [GET /api/insights/organization/*]
        │
        ▼
-[requireOrgAdmin Middleware] ─── (orgRole in ['owner', 'admin']) ───► If member: 403 Forbidden
+[requireOrgAdmin Middleware]
+       ├── If member: 403 Forbidden
+       ├── If owner: Resolve ALL Active Shops in Org (bypasses ShopAccess)
+       └── If admin: Resolve ShopAccess-Granted Shops (delegated scope)
        │
        ▼
-[Resolve Active Shops in Org]
+[req.accessibleShopIds attached]
        │
        ▼
-[Single SQL Aggregation via Op.in(shopIds)]
-   ├── Sale.findAll (grouped by shopId) ──► Branch Performance Ranking
-   ├── Sale.findAll (grouped by Date)   ──► Consolidated Daily Trend
-   └── Inventory.findAll + Product      ──► Multi-Branch Stock & Inter-Shop Transfers
+[Single SQL Aggregation via Op.in(accessibleShopIds)]
+   ├── Sale.findAll (grouped by shopId) ──► Branch Performance Ranking (in scope)
+   ├── Sale.findAll (grouped by Date)   ──► Consolidated Daily Trend (in scope)
+   └── Inventory.findAll + Product      ──► Multi-Branch Stock & Advisory Text (zero writes)
        │
        ▼
 [Assemble Consolidated Payload]
