@@ -187,7 +187,7 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
       expect(res.body.scope.role).toBe('owner');
       expect(res.body.scope.accessibleShopsCount).toBe(2);
       expect(res.body.scope.totalOrgShopsCount).toBe(2);
-      expect(res.body.aggregatedTotals.totalRevenue).toBe(5000);
+      expect(res.body.metrics.totalRevenue).toBe(5000);
       expect(res.body.branchPerformance).toHaveLength(2);
       expect(res.body.branchPerformance[0].shopId).toBe(shopA.id);
       expect(res.body.branchPerformance[0].revenueSharePercentage).toBe(60);
@@ -204,7 +204,7 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
       expect(res.body.scope.role).toBe('admin');
       expect(res.body.scope.accessibleShopsCount).toBe(1);
       expect(res.body.scope.totalOrgShopsCount).toBe(2);
-      expect(res.body.aggregatedTotals.totalRevenue).toBe(3000);
+      expect(res.body.metrics.totalRevenue).toBe(3000);
       expect(res.body.branchPerformance).toHaveLength(1);
       expect(res.body.branchPerformance[0].shopId).toBe(shopA.id);
     });
@@ -228,13 +228,13 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
       expect(res.body.alerts.length).toBeGreaterThanOrEqual(1);
       const alert = res.body.alerts.find(a => a.productId === sharedProduct.id);
       expect(alert).toBeDefined();
-      expect(alert.criticalBranches).toEqual(
+      expect(alert.depletedShops).toEqual(
         expect.arrayContaining([expect.objectContaining({ shopId: shopA.id })])
       );
-      expect(alert.surplusBranches).toEqual(
+      expect(alert.surplusShops).toEqual(
         expect.arrayContaining([expect.objectContaining({ shopId: shopB.id })])
       );
-      expect(alert.transferRecommendation).toContain('Transfer recommended');
+      expect(alert.transferRecommendation).toContain('transferring');
     });
 
     it('delegated admin only sees alerts for accessible shop without other shop details', async () => {
@@ -245,11 +245,11 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
       expect(res.status).toBe(200);
       const alert = res.body.alerts.find(a => a.productId === sharedProduct.id);
       expect(alert).toBeDefined();
-      expect(alert.criticalBranches).toEqual(
+      expect(alert.depletedShops).toEqual(
         expect.arrayContaining([expect.objectContaining({ shopId: shopA.id })])
       );
-      // shopB is not accessible, so surplusBranches must be empty
-      expect(alert.surplusBranches).toHaveLength(0);
+      // shopB is not accessible, so surplusShops must be empty
+      expect(alert.surplusShops).toHaveLength(0);
       expect(alert.transferRecommendation).toBeNull();
     });
 
@@ -270,8 +270,8 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.scope.accessibleShopsCount).toBe(2);
-      expect(res.body.dailySales.length).toBeGreaterThanOrEqual(1);
-      const todayTotal = res.body.dailySales.reduce((acc, d) => acc + d.totalRevenue, 0);
+      expect(res.body.daily_data.length).toBeGreaterThanOrEqual(1);
+      const todayTotal = res.body.daily_data.reduce((acc, d) => acc + d.totalSales, 0);
       expect(todayTotal).toBe(5000);
     });
 
@@ -282,7 +282,7 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.scope.accessibleShopsCount).toBe(1);
-      const todayTotal = res.body.dailySales.reduce((acc, d) => acc + d.totalRevenue, 0);
+      const todayTotal = res.body.daily_data.reduce((acc, d) => acc + d.totalSales, 0);
       expect(todayTotal).toBe(3000);
     });
 
