@@ -399,7 +399,8 @@ exports.createProduct = async (req, res) => {
       CategoryId: parsedCategoryId,
       expirationDate: expirationDate || null,
       weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
-      shopId
+      shopId,
+      organizationId: req.organizationId || req.user?.organizationId
     });
 
     const productWithCategory = await Product.findOne({

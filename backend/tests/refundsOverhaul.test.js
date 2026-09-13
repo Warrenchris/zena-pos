@@ -100,6 +100,7 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
       stockQuantity: 50,
       reorderPoint: 5,
       shopId: 1,
+      organizationId: 1,
       CategoryId: category.id
     });
 
@@ -148,6 +149,7 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
       stockQuantity: 10,
       reorderPoint: 2,
       shopId: 1,
+      organizationId: 1,
       CategoryId: category.id
     });
 
@@ -219,6 +221,7 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
       stockQuantity: 20,
       reorderPoint: 5,
       shopId: 1,
+      organizationId: 1,
       CategoryId: category.id
     });
 
@@ -273,6 +276,7 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
       stockQuantity: 10,
       reorderPoint: 2,
       shopId: 1,
+      organizationId: 1,
       CategoryId: category.id
     });
 
@@ -323,6 +327,7 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
       nonReturnable: true,
       reorderPoint: 5,
       shopId: 1,
+      organizationId: 1,
       CategoryId: category.id
     });
 
@@ -382,6 +387,7 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
       stockQuantity: 15,
       reorderPoint: 3,
       shopId: 1,
+      organizationId: 1,
       CategoryId: category.id
     });
 
