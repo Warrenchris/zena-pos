@@ -1,6 +1,6 @@
 const request = require('supertest');
 const app = require('../../src/app');
-const { Sale, Product, Expense, SaleItem, SalePayment, SaleRefund, Invoice, Shop } = require('../../src/models');
+const { Sale, Product, Inventory, Expense, SaleItem, SalePayment, SaleRefund, Invoice, Shop } = require('../../src/models');
 const sequelize = require('../../src/config/database');
 
 describe('Insights Controller', () => {
@@ -28,6 +28,7 @@ describe('Insights Controller', () => {
     await SaleItem.destroy({ where: { shopId: 1 } }).catch(() => {});
     await Sale.destroy({ where: { shopId: 1 } }).catch(() => {});
     await Expense.destroy({ where: { shopId: 1 } }).catch(() => {});
+    await Inventory.destroy({ where: { shopId: 1 } }).catch(() => {});
     await Product.destroy({ where: { shopId: 1 } }).catch(() => {});
 
     await Shop.findOrCreate({
@@ -42,15 +43,20 @@ describe('Insights Controller', () => {
 
   describe('GET /api/insights', () => {
     it('should return insights with trends, recommendations, and alerts', async () => {
-      await Product.create({
+      const product = await Product.create({
         name: 'Test Product',
         sku: 'TEST123',
         price: 100,
         cost: 60,
-        stockQuantity: 5,
-        reorderPoint: 10,
         shopId: 1,
         organizationId: 1
+      });
+
+      await Inventory.create({
+        productId: product.id,
+        shopId: 1,
+        stockQuantity: 5,
+        reorderPoint: 10
       });
 
       await Sale.create({
