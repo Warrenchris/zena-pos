@@ -1,7 +1,8 @@
 const { logActivity } = require('../middleware/logger');
 const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
-const { Product, Category, SystemSettings, Inventory, Shop } = require('../models');
+const { Product, Category, SystemSettings, Inventory, Shop, StockMovement, User } = require('../models');
+const sequelize = require('../config/database');
 
 // Helper to format product with branch-scoped inventory
 function formatProductWithInventory(product) {
@@ -359,6 +360,12 @@ exports.createProduct = async (req, res) => {
     } = req.body;
 
     const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
+
     let finalSku = sku ? String(sku).trim() : '';
     let finalBarcode = barcode ? String(barcode).trim() : '';
     let finalReorderPoint = (reorderPoint !== undefined && reorderPoint !== null && reorderPoint !== '')
@@ -385,32 +392,63 @@ exports.createProduct = async (req, res) => {
 
     const targetCategoryId = categoryId || CategoryId;
     const parsedCategoryId = targetCategoryId ? parseInt(targetCategoryId, 10) : null;
+    const initialStock = (stockQuantity !== undefined && stockQuantity !== null && stockQuantity !== '')
+      ? parseFloat(stockQuantity)
+      : 0;
+    const initialReorder = (finalReorderPoint !== undefined && finalReorderPoint !== null && finalReorderPoint !== '')
+      ? parseInt(finalReorderPoint, 10)
+      : 10;
 
-    const product = await Product.create({
-      name,
-      sku: finalSku,
-      barcode: finalBarcode,
-      description,
-      price,
-      cost,
-      stockQuantity,
-      reorderPoint: finalReorderPoint,
-      categoryId: parsedCategoryId,
-      CategoryId: parsedCategoryId,
-      expirationDate: expirationDate || null,
-      weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
-      shopId,
-      organizationId: req.organizationId || req.user?.organizationId
+    let productWithCategory = null;
+    await sequelize.transaction(async (t) => {
+      // 1. Create master catalog Product entry (with dual-write initial stockQuantity)
+      const product = await Product.create({
+        name,
+        sku: finalSku,
+        barcode: finalBarcode,
+        description,
+        price,
+        cost,
+        stockQuantity: initialStock,
+        reorderPoint: initialReorder,
+        categoryId: parsedCategoryId,
+        CategoryId: parsedCategoryId,
+        expirationDate: expirationDate || null,
+        weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
+        shopId,
+        organizationId
+      }, { transaction: t });
+
+      // 2. Explicitly provision branch Inventory row (no model hooks)
+      if (shopId) {
+        await Inventory.create({
+          productId: product.id,
+          shopId,
+          stockQuantity: initialStock,
+          reorderPoint: initialReorder
+        }, { transaction: t });
+      }
+
+      productWithCategory = await Product.findOne({
+        where: { id: product.id },
+        include: [
+          { model: Category, attributes: ['id', 'name'] },
+          {
+            model: Inventory,
+            attributes: ['stockQuantity', 'reorderPoint', 'shopId'],
+            where: { shopId },
+            required: false
+          }
+        ],
+        transaction: t
+      });
     });
 
-    const productWithCategory = await Product.findOne({
-      where: { id: product.id },
-      include: [{ model: Category, attributes: ['id', 'name'] }]
-    });
+    if (shopId) {
+      await invalidateShopProductCache(shopId);
+    }
 
-    await invalidateShopProductCache(req.user.shopId);
-
-    res.status(201).json(productWithCategory);
+    res.status(201).json(formatProductWithInventory(productWithCategory));
     try {
       await logActivity({
         shopId: req.shopId || req.user?.shopId,
@@ -418,8 +456,8 @@ exports.createProduct = async (req, res) => {
         performedByType: req.user?.isEmployee ? 'employee' : 'user',
         action: 'PRODUCT_CREATED',
         entity: 'Product',
-        entityId: product.id,
-        details: `SKU: ${sku}`
+        entityId: productWithCategory?.id,
+        details: `SKU: ${finalSku}`
       });
     } catch (_) {}
   } catch (error) {
@@ -438,8 +476,22 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
+
+    const targetProductWhere = { id: req.params.id, active: true };
+    if (organizationId) {
+      targetProductWhere.organizationId = organizationId;
+    } else {
+      targetProductWhere.shopId = req.user?.shopId;
+    }
+
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true, shopId: req.user.shopId }
+      where: targetProductWhere
     });
 
     if (!product) {
@@ -481,14 +533,36 @@ exports.updateProduct = async (req, res) => {
       weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : product.weightGrams)
     });
 
-    await invalidateShopProductCache(req.user.shopId);
+    if (shopId && (stockQuantity !== undefined || reorderPoint !== undefined)) {
+      const inventory = await Inventory.findOne({
+        where: { productId: product.id, shopId }
+      });
+      if (inventory) {
+        const invUpdates = {};
+        if (stockQuantity !== undefined) invUpdates.stockQuantity = stockQuantity;
+        if (reorderPoint !== undefined) invUpdates.reorderPoint = reorderPoint;
+        await inventory.update(invUpdates);
+      }
+    }
+
+    if (shopId) {
+      await invalidateShopProductCache(shopId);
+    }
 
     const updatedProduct = await Product.findOne({
       where: { id: product.id },
-      include: [{ model: Category, attributes: ['id', 'name'] }]
+      include: [
+        { model: Category, attributes: ['id', 'name'] },
+        {
+          model: Inventory,
+          attributes: ['stockQuantity', 'reorderPoint', 'shopId'],
+          where: { shopId },
+          required: false
+        }
+      ]
     });
 
-    res.json(updatedProduct);
+    res.json(formatProductWithInventory(updatedProduct));
     try {
       await logActivity({
         shopId: req.shopId || req.user?.shopId,
@@ -545,22 +619,107 @@ exports.updateStock = async (req, res) => {
     }
 
     const { quantity } = req.body;
-    const product = await Product.findOne({
-      where: { id: req.params.id, active: true, shopId: req.user.shopId }
+    const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
+
+    const productWhere = { id: req.params.id, active: true };
+    if (organizationId) {
+      productWhere.organizationId = organizationId;
+    } else {
+      productWhere.shopId = shopId;
+    }
+
+    let resultProduct = null;
+    await sequelize.transaction(async (t) => {
+      // 1. Lock Product row
+      const product = await Product.findOne({
+        where: productWhere,
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+
+      if (!product) {
+        const notFoundErr = new Error('Product not found');
+        notFoundErr.status = 404;
+        throw notFoundErr;
+      }
+
+      // 2. Lock Inventory row for (shopId, productId)
+      let inventory = await Inventory.findOne({
+        where: { productId: product.id, shopId },
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+
+      if (!inventory) {
+        logger.warn(`[productController:updateStock] Explicitly creating missing Inventory row for productId=${product.id}, shopId=${shopId}`);
+        inventory = await Inventory.create({
+          productId: product.id,
+          shopId,
+          stockQuantity: product.stockQuantity || 0,
+          reorderPoint: product.reorderPoint || 10
+        }, { transaction: t });
+      }
+
+      const delta = parseInt(quantity, 10);
+      const prevStock = parseFloat(inventory.stockQuantity || 0);
+      const newQuantity = Math.round((prevStock + delta) * 100) / 100;
+      if (newQuantity < 0) {
+        const badReqErr = new Error('Insufficient stock');
+        badReqErr.status = 400;
+        throw badReqErr;
+      }
+
+      // 3. Mutate Inventory.stockQuantity
+      await inventory.update({ stockQuantity: newQuantity }, { transaction: t });
+
+      // 4. DUAL-WRITE BRIDGE: also update Product.stockQuantity with the identical computed value
+      await product.update({ stockQuantity: newQuantity }, { transaction: t });
+
+      // 5. Create StockMovement audit entry based on Inventory values
+      let validUserId = null;
+      if (req.user?.id) {
+        const existingUser = await User.findByPk(req.user.id, { attributes: ['id'], transaction: t });
+        if (existingUser) validUserId = existingUser.id;
+      }
+
+      await StockMovement.create({
+        shopId,
+        productId: product.id,
+        quantity: delta,
+        previousStock: prevStock,
+        newStock: newQuantity,
+        type: 'ADJUSTMENT',
+        reference: `MANUAL_ADJUSTMENT_${Date.now()}`,
+        notes: `Manual stock adjustment of ${delta >= 0 ? '+' : ''}${delta}`,
+        userId: validUserId
+      }, { transaction: t });
+
+      resultProduct = await Product.findOne({
+        where: { id: product.id },
+        include: [
+          { model: Category, attributes: ['id', 'name'], required: false },
+          {
+            model: Inventory,
+            attributes: ['stockQuantity', 'reorderPoint', 'shopId'],
+            where: { shopId },
+            required: false
+          }
+        ],
+        transaction: t
+      });
     });
 
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
+    if (shopId) {
+      await invalidateShopProductCache(shopId);
     }
 
-    const newQuantity = product.stockQuantity + parseInt(quantity);
-    if (newQuantity < 0) {
-      return res.status(400).json({ error: 'Insufficient stock' });
-    }
+    res.json(formatProductWithInventory(resultProduct));
 
-    await product.update({ stockQuantity: newQuantity });
-    await invalidateShopProductCache(req.user.shopId);
-    res.json(product);
     try {
       await logActivity({
         shopId: req.shopId || req.user?.shopId,
@@ -568,11 +727,17 @@ exports.updateStock = async (req, res) => {
         performedByType: req.user?.isEmployee ? 'employee' : 'user',
         action: 'STOCK_ADJUSTED',
         entity: 'Product',
-        entityId: product.id,
+        entityId: req.params.id,
         details: `Delta: ${quantity}`
       });
     } catch (_) {}
   } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    if (error.status === 400) {
+      return res.status(400).json({ error: error.message || 'Insufficient stock' });
+    }
     res.status(500).json({ error: 'Failed to update stock' });
   }
 };

@@ -1,6 +1,7 @@
-const { Product, StockMovement, Supplier, Expense, PurchaseItem, PurchaseOrderItem, User } = require('../models');
+const { Product, Inventory, StockMovement, Supplier, Expense, PurchaseItem, PurchaseOrderItem, User } = require('../models');
 const { invalidateShopProductCache } = require('./productCache');
 const { logActivity } = require('../middleware/logger');
+const logger = require('../utils/logger');
 
 // Map frontend payment methods to Expense ENUM ('cash', 'card', 'bank_transfer', 'mobile_money', 'other')
 const mapPaymentMethodToExpense = (method) => {
@@ -74,16 +75,33 @@ async function applyStockReceipt({ shopId, items, reference, userId }, transacti
     if (qty > 0 && item.productId) {
       // Row-level lock on the product to prevent concurrent update races
       const product = await Product.findOne({
-        where: { id: item.productId, shopId },
+        where: { id: item.productId },
         lock: transaction.LOCK.UPDATE,
         transaction
       });
 
       if (!product) {
-        throw new Error(`Product ID ${item.productId} not found in shop ${shopId}`);
+        throw new Error(`Product ID ${item.productId} not found`);
       }
 
-      const prevStock = parseFloat(product.stockQuantity || 0);
+      // Lock or explicitly initialize Inventory row for this shop
+      let inventory = await Inventory.findOne({
+        where: { productId: product.id, shopId },
+        lock: transaction.LOCK.UPDATE,
+        transaction
+      });
+
+      if (!inventory) {
+        logger.info(`[purchaseService:applyStockReceipt] Explicitly creating missing Inventory row for productId=${product.id}, shopId=${shopId}`);
+        inventory = await Inventory.create({
+          productId: product.id,
+          shopId,
+          stockQuantity: 0,
+          reorderPoint: product.reorderPoint || 10
+        }, { transaction });
+      }
+
+      const prevStock = parseFloat(inventory.stockQuantity || 0);
       const newStock = Math.round((prevStock + qty) * 100) / 100;
 
       // Weighted average cost calculation
@@ -96,12 +114,18 @@ async function applyStockReceipt({ shopId, items, reference, userId }, transacti
         }
       }
 
+      // Primary mutation: Inventory
+      await inventory.update({
+        stockQuantity: newStock
+      }, { transaction });
+
+      // Dual-write bridge: update Product.stockQuantity with identical newStock (and update cost)
       await product.update({
         stockQuantity: newStock,
         cost: newCost
       }, { transaction });
 
-      // Create StockMovement audit entry
+      // Create StockMovement audit entry based on Inventory values
       await StockMovement.create({
         shopId,
         productId: product.id,
@@ -143,15 +167,35 @@ async function reverseStockReceipt({ shopId, items, reference, userId }, transac
 
     if (qty > 0 && item.productId) {
       const product = await Product.findOne({
-        where: { id: item.productId, shopId },
+        where: { id: item.productId },
         lock: transaction.LOCK.UPDATE,
         transaction
       });
 
       if (product) {
-        const prevStock = parseFloat(product.stockQuantity || 0);
+        let inventory = await Inventory.findOne({
+          where: { productId: product.id, shopId },
+          lock: transaction.LOCK.UPDATE,
+          transaction
+        });
+
+        if (!inventory) {
+          logger.warn(`[purchaseService:reverseStockReceipt] Inventory row missing for productId=${product.id}, shopId=${shopId}; creating fallback`);
+          inventory = await Inventory.create({
+            productId: product.id,
+            shopId,
+            stockQuantity: 0,
+            reorderPoint: product.reorderPoint || 10
+          }, { transaction });
+        }
+
+        const prevStock = parseFloat(inventory.stockQuantity || 0);
         const newStock = Math.max(0, Math.round((prevStock - qty) * 100) / 100);
 
+        // Primary mutation: Inventory
+        await inventory.update({ stockQuantity: newStock }, { transaction });
+
+        // Dual-write bridge: Product.stockQuantity
         await product.update({ stockQuantity: newStock }, { transaction });
 
         await StockMovement.create({
