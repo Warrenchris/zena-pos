@@ -3,7 +3,7 @@ const request = require('supertest');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
 const {
-  Shop, Category, Product, Sale, SaleItem, SaleRefund, SalePayment,
+  Shop, Category, Product, Inventory, Sale, SaleItem, SaleRefund, SalePayment,
   User, SystemSettings
 } = require('../src/models');
 const jwt = require('jsonwebtoken');
@@ -280,6 +280,13 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
       CategoryId: category.id
     });
 
+    await Inventory.create({
+      productId: prod.id,
+      shopId: 1,
+      stockQuantity: 10,
+      reorderPoint: 2
+    });
+
     const sale = await Sale.create({
       invoiceNumber: 'INV-R4-' + Date.now(),
       subtotal: 500.00,
@@ -312,8 +319,8 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
 
     expect(res.statusCode).toEqual(200);
 
-    const updatedProd = await Product.findByPk(prod.id);
-    expect(updatedProd.stockQuantity).toEqual(10); // Unchanged!
+    const updatedInv = await Inventory.findOne({ where: { productId: prod.id, shopId: 1 } });
+    expect(parseFloat(updatedInv.stockQuantity)).toEqual(10); // Unchanged!
   });
 
   // TEST R.5: Non-Returnable Product Block

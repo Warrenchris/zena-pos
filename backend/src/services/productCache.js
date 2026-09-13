@@ -17,6 +17,29 @@ async function invalidateShopProductCache(shopId) {
   }
 }
 
+/**
+ * Invalidates the cached product catalogue for all shops belonging to an organization.
+ * Used when catalog-level definitions (name, price, sku, category) are edited or deleted.
+ * @param {number|string} organizationId - The organization ID whose branches should be invalidated.
+ */
+async function invalidateOrgProductCaches(organizationId) {
+  if (!organizationId) return;
+  try {
+    const { Shop } = require('../models');
+    const shops = await Shop.findAll({
+      where: { organizationId },
+      attributes: ['id']
+    });
+    for (const shop of shops) {
+      await invalidateShopProductCache(shop.id);
+    }
+    logger.info(`Invalidated product catalogue caches for organization: ${organizationId} (${shops.length} shops)`);
+  } catch (error) {
+    logger.warn(`Error invalidating org product caches for org ${organizationId}:`, error);
+  }
+}
+
 module.exports = {
-  invalidateShopProductCache
+  invalidateShopProductCache,
+  invalidateOrgProductCaches
 };

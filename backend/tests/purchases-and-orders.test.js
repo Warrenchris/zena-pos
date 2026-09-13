@@ -97,14 +97,11 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
         name: 'Test Milk 500ml',
         price: 60.00,
         cost: 40.00,
-        stockQuantity: 100,
-        reorderPoint: 10,
         active: true,
         shopId: 1,
         organizationId: 1
       }
     });
-    prodShop1.stockQuantity = 100;
     prodShop1.cost = 40.00;
     await prodShop1.save();
 
@@ -114,15 +111,13 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
         name: 'Test Bread 400g',
         price: 70.00,
         cost: 50.00,
-        stockQuantity: 50,
-        reorderPoint: 5,
         active: true,
         shopId: 2,
         organizationId: 2
       }
     });
 
-    await Inventory.findOrCreate({
+    const [invShop1] = await Inventory.findOrCreate({
       where: { productId: prodShop1.id, shopId: 1 },
       defaults: {
         productId: prodShop1.id,
@@ -131,8 +126,10 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
         reorderPoint: 10
       }
     });
+    invShop1.stockQuantity = 100;
+    await invShop1.save();
 
-    await Inventory.findOrCreate({
+    const [invShop2] = await Inventory.findOrCreate({
       where: { productId: prodShop2.id, shopId: 2 },
       defaults: {
         productId: prodShop2.id,
@@ -141,6 +138,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
         reorderPoint: 5
       }
     });
+    invShop2.stockQuantity = 50;
+    await invShop2.save();
   });
 
   // -------------------------------------------------------------
@@ -203,7 +202,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
   // TEST GROUP 3: INVENTORY RECEIVING & WEIGHTED AVERAGE COST
   // -------------------------------------------------------------
   test('TEST 3.1 — Recording purchase with status RECEIVED increments stock, logs StockMovement, and recalculates cost', async () => {
-    const initialStock = prodShop1.stockQuantity; // 100
+    const initialInv = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    const initialStock = parseFloat(initialInv.stockQuantity); // 100
     const initialCost = parseFloat(prodShop1.cost); // 40.00
     const newQty = 50;
     const newUnitCost = 50.00;
@@ -225,7 +225,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
 
     // Verify stock incremented
     await prodShop1.reload();
-    expect(prodShop1.stockQuantity).toBe(initialStock + newQty); // 150
+    const updatedInv = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    expect(parseFloat(updatedInv.stockQuantity)).toBe(initialStock + newQty); // 150
 
     // Verify weighted average cost: (100 * 40 + 50 * 50) / 150 = 6500 / 150 = 43.33
     const expectedAvgCost = Math.round((((initialStock * initialCost) + (newQty * newUnitCost)) / (initialStock + newQty)) * 100) / 100;
@@ -260,8 +261,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
     const purchaseId = createRes.body.id;
     const refNo = createRes.body.referenceNo;
 
-    await prodShop1.reload();
-    const stockAfterReceipt = prodShop1.stockQuantity;
+    const invAfterReceipt = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    const stockAfterReceipt = parseFloat(invAfterReceipt.stockQuantity);
 
     // 2. Cancel the purchase
     const cancelRes = await request(app)
@@ -272,8 +273,8 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
     expect(cancelRes.body.purchase.status).toBe('CANCELLED');
 
     // 3. Verify stock reversed
-    await prodShop1.reload();
-    expect(prodShop1.stockQuantity).toBe(stockAfterReceipt - 20);
+    const invAfterCancel = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    expect(parseFloat(invAfterCancel.stockQuantity)).toBe(stockAfterReceipt - 20);
 
     // 4. Verify reversal StockMovement entry
     const revMovement = await StockMovement.findOne({

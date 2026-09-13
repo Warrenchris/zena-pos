@@ -1,5 +1,6 @@
 const Sale = require('../models/Sale');
 const Product = require('../models/Product');
+const Inventory = require('../models/Inventory');
 const Expense = require('../models/Expense');
 const SaleItem = require('../models/SaleItem');
 const SystemSettings = require('../models/SystemSettings');
@@ -56,10 +57,18 @@ const generateRecommendations = async (shopId) => {
   const settings = await SystemSettings.findOne({ where: { shopId } });
   const defaultLowStock = settings?.lowStockThreshold !== undefined ? settings.lowStockThreshold : 10;
 
-  const allShopProducts = await Product.findAll({ where: { shopId } });
-  const lowStockProducts = allShopProducts.filter(p => {
-    const threshold = (p.reorderPoint !== null && p.reorderPoint !== undefined) ? p.reorderPoint : defaultLowStock;
-    return p.stockQuantity <= threshold;
+  const inventoryRows = await Inventory.findAll({
+    where: { shopId },
+    include: [{
+      model: Product,
+      attributes: ['id', 'name', 'active'],
+      where: { active: true },
+      required: false
+    }]
+  });
+  const lowStockProducts = inventoryRows.filter(inv => {
+    const threshold = (inv.reorderPoint !== null && inv.reorderPoint !== undefined) ? inv.reorderPoint : defaultLowStock;
+    return parseFloat(inv.stockQuantity || 0) <= threshold;
   });
 
   if (lowStockProducts.length > 0) {
@@ -67,11 +76,11 @@ const generateRecommendations = async (shopId) => {
       type: 'INVENTORY',
       priority: 'HIGH',
       message: `${lowStockProducts.length} products need restocking`,
-      details: lowStockProducts.map(p => ({
-        id: p.id,
-        name: p.name,
-        currentStock: p.stockQuantity,
-        reorderPoint: (p.reorderPoint !== null && p.reorderPoint !== undefined) ? p.reorderPoint : defaultLowStock
+      details: lowStockProducts.map(inv => ({
+        id: inv.Product ? inv.Product.id : inv.productId,
+        name: inv.Product ? inv.Product.name : 'Unknown Product',
+        currentStock: parseFloat(inv.stockQuantity || 0),
+        reorderPoint: (inv.reorderPoint !== null && inv.reorderPoint !== undefined) ? inv.reorderPoint : defaultLowStock
       }))
     });
   }
@@ -213,8 +222,14 @@ const getStockDepletionForecast = async (shopId, userId) => {
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
   const products = await Product.findAll({
-    where: { shopId, active: true },
-    attributes: ['id', 'name', 'stockQuantity']
+    where: { active: true },
+    attributes: ['id', 'name'],
+    include: [{
+      model: Inventory,
+      attributes: ['stockQuantity'],
+      where: { shopId },
+      required: true
+    }]
   });
 
   if (!products.length) return [];
@@ -241,7 +256,7 @@ const getStockDepletionForecast = async (shopId, userId) => {
     products: products.map((p) => ({
       product_id: String(p.id),
       product_name: p.name,
-      current_stock: parseFloat(p.stockQuantity || 0),
+      current_stock: parseFloat(p.Inventories?.[0]?.stockQuantity || 0),
       daily_sales: salesByProduct[p.id] || []
     })),
     alert_threshold_days: insightsConfig.STOCK_DEPLETION_DAYS
@@ -274,7 +289,16 @@ const getStockDepletionForecast = async (shopId, userId) => {
         'productId',
         [sequelize.fn('SUM', sequelize.col('quantity')), 'qty']
       ],
-      include: [{ model: Product, attributes: ['id', 'name', 'stockQuantity'], where: { shopId } }],
+      include: [{
+        model: Product,
+        attributes: ['id', 'name'],
+        include: [{
+          model: Inventory,
+          attributes: ['stockQuantity'],
+          where: { shopId },
+          required: false
+        }]
+      }],
       group: ['productId'],
     });
 
@@ -282,10 +306,11 @@ const getStockDepletionForecast = async (shopId, userId) => {
     for (const row of salesByProductAgg) {
       const prod = row.Product;
       if (!prod) continue;
+      const invStock = parseFloat(prod.Inventories?.[0]?.stockQuantity || 0);
       const sold = Number(row.getDataValue('qty') || 0);
       const daily = sold / lookbackDays;
       if (daily > 0) {
-        const days = prod.stockQuantity / daily;
+        const days = invStock / daily;
         if (days > 0 && days <= insightsConfig.STOCK_DEPLETION_DAYS) {
           soonOut.push({ id: prod.id, name: prod.name, daysToDeplete: Math.ceil(days) });
         }
@@ -301,24 +326,30 @@ const getStockDepletionForecast = async (shopId, userId) => {
 const generateAlerts = async (shopId, userId) => {
   const alerts = [];
 
-  const criticalStock = await Product.findAll({
+  const criticalInventories = await Inventory.findAll({
     where: {
       shopId,
       stockQuantity: {
         [Op.lte]: insightsConfig.CRITICAL_STOCK_UNITS
       }
-    }
+    },
+    include: [{
+      model: Product,
+      attributes: ['id', 'name', 'active'],
+      where: { active: true },
+      required: false
+    }]
   });
 
-  if (criticalStock.length > 0) {
+  if (criticalInventories.length > 0) {
     alerts.push({
       type: 'INVENTORY',
       severity: 'HIGH',
       message: 'Critical stock levels detected',
-      details: criticalStock.map(p => ({
-        id: p.id,
-        name: p.name,
-        currentStock: p.stockQuantity
+      details: criticalInventories.map(inv => ({
+        id: inv.Product ? inv.Product.id : inv.productId,
+        name: inv.Product ? inv.Product.name : 'Unknown Product',
+        currentStock: parseFloat(inv.stockQuantity || 0)
       }))
     });
   }
@@ -683,8 +714,14 @@ const getStockDepletion = async (req, res) => {
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
     const products = await Product.findAll({
-      where: { shopId, active: true },
-      attributes: ['id', 'name', 'stockQuantity']
+      where: { active: true },
+      attributes: ['id', 'name'],
+      include: [{
+        model: Inventory,
+        attributes: ['stockQuantity'],
+        where: { shopId },
+        required: true
+      }]
     });
 
     const dailySalesRows = await SaleItem.findAll({
@@ -711,7 +748,7 @@ const getStockDepletion = async (req, res) => {
         products: products.map((p) => ({
           product_id: String(p.id),
           product_name: p.name,
-          current_stock: parseFloat(p.stockQuantity || 0),
+          current_stock: parseFloat(p.Inventories?.[0]?.stockQuantity || 0),
           daily_sales: salesByProduct[p.id] || []
         })),
         alert_threshold_days: insightsConfig.STOCK_DEPLETION_DAYS

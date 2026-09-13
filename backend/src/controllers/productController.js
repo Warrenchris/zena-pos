@@ -19,7 +19,7 @@ function formatProductWithInventory(product) {
   return plain;
 }
 const redisClient = require('../config/redis');
-const { invalidateShopProductCache } = require('../services/productCache');
+const { invalidateShopProductCache, invalidateOrgProductCaches } = require('../services/productCache');
 const logger = require('../utils/logger');
 
 // Get all products with filters and pagination
@@ -401,7 +401,7 @@ exports.createProduct = async (req, res) => {
 
     let productWithCategory = null;
     await sequelize.transaction(async (t) => {
-      // 1. Create master catalog Product entry (with dual-write initial stockQuantity)
+      // 1. Create master catalog Product entry
       const product = await Product.create({
         name,
         sku: finalSku,
@@ -409,8 +409,6 @@ exports.createProduct = async (req, res) => {
         description,
         price,
         cost,
-        stockQuantity: initialStock,
-        reorderPoint: initialReorder,
         categoryId: parsedCategoryId,
         CategoryId: parsedCategoryId,
         expirationDate: expirationDate || null,
@@ -525,8 +523,6 @@ exports.updateProduct = async (req, res) => {
       description,
       price,
       cost,
-      stockQuantity,
-      reorderPoint,
       categoryId: parsedCategoryId,
       CategoryId: parsedCategoryId,
       expirationDate: expirationDate || null,
@@ -545,7 +541,9 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-    if (shopId) {
+    if (organizationId) {
+      await invalidateOrgProductCaches(organizationId);
+    } else if (shopId) {
       await invalidateShopProductCache(shopId);
     }
 
@@ -584,8 +582,22 @@ exports.updateProduct = async (req, res) => {
 // Delete product (soft delete)
 exports.deleteProduct = async (req, res) => {
   try {
+    const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
+
+    const deleteWhere = { id: req.params.id, active: true };
+    if (organizationId) {
+      deleteWhere.organizationId = organizationId;
+    } else {
+      deleteWhere.shopId = req.user?.shopId;
+    }
+
     const product = await Product.findOne({
-      where: { id: req.params.id, active: true, shopId: req.user.shopId }
+      where: deleteWhere
     });
 
     if (!product) {
@@ -593,7 +605,11 @@ exports.deleteProduct = async (req, res) => {
     }
 
     await product.update({ active: false });
-    await invalidateShopProductCache(req.user.shopId);
+    if (organizationId) {
+      await invalidateOrgProductCaches(organizationId);
+    } else if (shopId) {
+      await invalidateShopProductCache(shopId);
+    }
     res.json({ message: 'Product deleted successfully' });
     try {
       await logActivity({
@@ -660,8 +676,8 @@ exports.updateStock = async (req, res) => {
         inventory = await Inventory.create({
           productId: product.id,
           shopId,
-          stockQuantity: product.stockQuantity || 0,
-          reorderPoint: product.reorderPoint || 10
+          stockQuantity: 0,
+          reorderPoint: 10
         }, { transaction: t });
       }
 
@@ -676,9 +692,6 @@ exports.updateStock = async (req, res) => {
 
       // 3. Mutate Inventory.stockQuantity
       await inventory.update({ stockQuantity: newQuantity }, { transaction: t });
-
-      // 4. DUAL-WRITE BRIDGE: also update Product.stockQuantity with the identical computed value
-      await product.update({ stockQuantity: newQuantity }, { transaction: t });
 
       // 5. Create StockMovement audit entry based on Inventory values
       let validUserId = null;
@@ -780,7 +793,7 @@ exports.getProductsBatch = async (req, res) => {
 
     const products = await Product.findAll({
       where,
-      attributes: ['id', 'name', 'sku', 'price', 'stockQuantity', 'active'],
+      attributes: ['id', 'name', 'sku', 'price', 'active'],
       include: [
         {
           model: Inventory,
