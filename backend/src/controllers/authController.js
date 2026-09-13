@@ -9,6 +9,7 @@ const emailService = require('../services/emailService');
 // Helper to retrieve private key dynamically
 const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const Shop = require('../models/Shop');
+const { OrganizationMembership, ShopAccess } = require('../models');
 const logger = require('../utils/logger');
 
 exports.register = async (req, res) => {
@@ -317,3 +318,135 @@ exports.changePassword = async (req, res) => {
     return res.status(500).json({ error: 'Failed to change password.', details: error.message });
   }
 };
+
+exports.switchShop = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array(), error: errors.array()[0]?.msg });
+    }
+
+    const targetShopId = parseInt(req.body.shopId, 10);
+    const orgId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
+
+    // 1. Fetch target Shop by shopId, confirm shop.organizationId === req.organizationId
+    // Reject 404 if not found or organizationId mismatch (do not confirm existence of shop to unauthorized org)
+    const shop = await Shop.findOne({
+      where: {
+        id: targetShopId,
+        active: true
+      }
+    });
+
+    if (!shop || shop.organizationId !== orgId) {
+      return res.status(404).json({ error: 'Shop not found' });
+    }
+
+    // 2. Fetch caller's OrganizationMembership for req.organizationId
+    const membershipWhere = {
+      organizationId: orgId,
+      status: 'active'
+    };
+    if (req.user.isEmployee) {
+      membershipWhere.employeeId = req.user.id;
+    } else {
+      membershipWhere.userId = req.user.id;
+    }
+
+    const membership = await OrganizationMembership.findOne({ where: membershipWhere });
+    if (!membership) {
+      return res.status(403).json({ error: 'Active organization membership required.' });
+    }
+
+    // 3. Authorization:
+    // IF membership.orgRole === 'owner': authorized, skip ShopAccess check entirely.
+    // ELSE: query ShopAccess for (membershipId, shopId) — must find an active row, else 403.
+    if (membership.orgRole === 'owner') {
+      // Authorized by design — universal implicit access, zero ShopAccess check, zero DB writes
+    } else {
+      const access = await ShopAccess.findOne({
+        where: {
+          membershipId: membership.id,
+          shopId: targetShopId
+        }
+      });
+      if (!access) {
+        return res.status(403).json({ error: 'Access denied to target shop' });
+      }
+    }
+
+    // ZERO DATABASE WRITES — hard design invariant (no create, update, delete)
+
+    // 4. Mint new RS256 JWT with the same claim shape as login
+    const token = jwt.sign(
+      {
+        id: req.user.id,
+        role: req.user.role,
+        shopId: targetShopId,
+        organizationId: orgId,
+        isEmployee: !!req.user.isEmployee
+      },
+      getPrivateKey(),
+      {
+        algorithm: 'RS256',
+        expiresIn: process.env.JWT_EXPIRES_IN || '2h'
+      }
+    );
+
+    // Fetch user/employee info to match login response structure
+    let userData = null;
+    if (req.user.isEmployee) {
+      const emp = await Employee.findByPk(req.user.id);
+      if (emp) {
+        userData = {
+          id: emp.id,
+          name: `${emp.firstName} ${emp.lastName}`,
+          email: emp.email,
+          role: req.user.role || 'employee',
+          shopId: targetShopId,
+          organizationId: orgId
+        };
+      }
+    } else {
+      const u = await User.findByPk(req.user.id);
+      if (u) {
+        userData = {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          shopId: targetShopId,
+          organizationId: orgId
+        };
+      }
+    }
+
+    if (!userData) {
+      userData = {
+        id: req.user.id,
+        role: req.user.role,
+        shopId: targetShopId,
+        organizationId: orgId
+      };
+    }
+
+    return res.status(200).json({
+      message: 'Switched active shop successfully',
+      token,
+      user: userData,
+      shop: {
+        id: shop.id,
+        name: shop.name,
+        address: shop.address,
+        phone: shop.phone
+      }
+    });
+  } catch (error) {
+    logger.error('switchShop error:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+

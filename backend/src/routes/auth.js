@@ -68,5 +68,19 @@ router.post(
 
 router.get('/profile', auth, authController.getProfile);
 router.post('/change-password', auth, authController.changePassword);
+router.post(
+  '/switch-shop',
+  auth,
+  [
+    body('shopId')
+      .notEmpty()
+      .withMessage('shopId is required')
+      .bail()
+      .isInt()
+      .withMessage('shopId must be an integer')
+  ],
+  authController.switchShop
+);
 
 module.exports = router;
+
