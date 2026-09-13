@@ -377,6 +377,7 @@ async function runPrimaryVerification() {
     } finally {
       await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
       await sequelize.close();
+      process.exit(0);
     }
   }
 }
