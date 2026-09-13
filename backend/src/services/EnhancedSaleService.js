@@ -6,7 +6,10 @@ const SaleRefund = require('../models/SaleRefund');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const Employee = require('../models/Employee');
+const Inventory = require('../models/Inventory');
+const StockMovement = require('../models/StockMovement');
 const sequelize = require('../config/database');
+const logger = require('../utils/logger');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 const { invalidateShopProductCache } = require('./productCache');
@@ -158,8 +161,7 @@ class EnhancedSaleService {
 
       for (const item of items) {
         const product = await Product.findOne({
-          where: { id: item.productId, active: true, shopId },
-          lock: t.LOCK.UPDATE,
+          where: organizationId ? { id: item.productId, active: true, organizationId } : { id: item.productId, active: true, shopId },
           transaction: t
         });
 
@@ -169,7 +171,23 @@ class EnhancedSaleService {
           throw err;
         }
 
-        if (product.stockQuantity < item.quantity) {
+        let inventory = await Inventory.findOne({
+          where: { productId: product.id, shopId },
+          lock: t.LOCK.UPDATE,
+          transaction: t
+        });
+
+        if (!inventory) {
+          logger.warn(`[EnhancedSaleService] No inventory row found for productId ${product.id} and shopId ${shopId}. Creating explicit default.`);
+          inventory = await Inventory.create({
+            productId: product.id,
+            shopId,
+            stockQuantity: product.stockQuantity || 0,
+            reorderPoint: product.reorderPoint !== undefined ? product.reorderPoint : 10
+          }, { transaction: t });
+        }
+
+        if (inventory.stockQuantity < item.quantity) {
           const err = new Error(`Insufficient stock for product: ${product.name}`);
           err.statusCode = 409;
           throw err;
@@ -179,7 +197,7 @@ class EnhancedSaleService {
         const itemSubtotal = itemPrice * item.quantity;
         subtotal += itemSubtotal;
 
-        lockedProducts.push({ product, item, itemPrice, itemSubtotal });
+        lockedProducts.push({ product, inventory, item, itemPrice, itemSubtotal });
 
         const itemDiscountAmount = parseFloat(item.discount || 0);
         saleItems.push({
@@ -310,10 +328,25 @@ class EnhancedSaleService {
         }, { transaction: t })
       ));
 
-      // Decrement stock
-      await Promise.all(lockedProducts.map(({ product, item }) =>
-        product.decrement('stockQuantity', { by: item.quantity, transaction: t })
-      ));
+      // Decrement stock on Inventory and dual-write to Product
+      for (const { product, inventory, item } of lockedProducts) {
+        const prevStock = parseFloat(inventory.stockQuantity || 0);
+        const newStock = prevStock - item.quantity;
+        await inventory.update({ stockQuantity: newStock }, { transaction: t });
+        await product.update({ stockQuantity: newStock }, { transaction: t });
+
+        const validUserId = (!user?.isEmployee && typeof user?.id === 'number') ? user.id : null;
+        await StockMovement.create({
+          shopId,
+          productId: product.id,
+          quantity: -item.quantity,
+          previousStock: prevStock,
+          newStock: newStock,
+          type: 'SALE',
+          reference: invoiceNumber,
+          userId: validUserId
+        }, { transaction: t });
+      }
 
       // Insert SalePayments rows
       await Promise.all(payments.map(pay =>
