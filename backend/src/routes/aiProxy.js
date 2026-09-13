@@ -120,6 +120,17 @@ router.use('/forward/api/forecasting', aiRateLimiter);
 router.use('/forward/api/insights', aiRateLimiter);
 router.use('/forward/api/finance', aiRateLimiter);
 
+router.delete('/cache/org/:organizationId', requireOrgAdmin, (req, res) => {
+  const { organizationId } = req.params;
+  const targetOrgId = parseInt(organizationId, 10);
+  if (targetOrgId !== req.organizationId) {
+    return res.status(403).json({ error: 'Access denied: cannot clear cache for another organization' });
+  }
+  const keys = forecastCache.keys().filter((key) => key.startsWith(`forecast:org:${targetOrgId}:`));
+  keys.forEach((key) => forecastCache.del(key));
+  return res.json({ message: 'Organization forecast cache cleared', keysCleared: keys.length });
+});
+
 router.delete('/cache/:shopId', checkRole(['admin']), (req, res) => {
   const { shopId } = req.params;
   const userShopId = req.shopId || req.user?.shopId;
@@ -133,9 +144,12 @@ router.delete('/cache/:shopId', checkRole(['admin']), (req, res) => {
 
 router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
   try {
+    const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
     const shopId = req.shopId || req.user?.shopId;
     const periods = req.query.periods || req.body.periods || 30;
-    const cacheKey = buildForecastCacheKey(shopId, req.body, periods, 'prophet');
+    const cacheKey = (isOrg && (req.organizationId || req.user?.organizationId))
+      ? buildOrgForecastCacheKey(req.organizationId || req.user?.organizationId, req.body, periods, 'prophet')
+      : buildForecastCacheKey(shopId, req.body, periods, 'prophet');
     const cached = forecastCache.get(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });
@@ -178,12 +192,15 @@ router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
 
 router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
   const startTime = Date.now();
+  const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
   const shopId = req.shopId || req.user?.shopId || 'unknown';
   const periods = req.body.periods || 30;
   const datesCount = Array.isArray(req.body.dates) ? req.body.dates.length : 0;
 
   try {
-    const cacheKey = buildForecastCacheKey(shopId, req.body, periods, 'rf');
+    const cacheKey = (isOrg && (req.organizationId || req.user?.organizationId))
+      ? buildOrgForecastCacheKey(req.organizationId || req.user?.organizationId, req.body, periods, 'rf')
+      : buildForecastCacheKey(shopId, req.body, periods, 'rf');
     const cached = forecastCache.get(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });
@@ -280,4 +297,7 @@ router.use(async (req, res, next) => {
 
 module.exports = router;
 module.exports.forecastCache = forecastCache;
+module.exports.buildForecastCacheKey = buildForecastCacheKey;
+module.exports.buildOrgForecastCacheKey = buildOrgForecastCacheKey;
 module.exports.stopProbe = stopProbe;
+
