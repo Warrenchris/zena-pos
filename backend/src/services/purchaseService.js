@@ -96,8 +96,8 @@ async function applyStockReceipt({ shopId, items, reference, userId }, transacti
         inventory = await Inventory.create({
           productId: product.id,
           shopId,
-          stockQuantity: product.stockQuantity || 0,
-          reorderPoint: product.reorderPoint || 10
+          stockQuantity: 0,
+          reorderPoint: 10
         }, { transaction });
       }
 
@@ -119,11 +119,12 @@ async function applyStockReceipt({ shopId, items, reference, userId }, transacti
         stockQuantity: newStock
       }, { transaction });
 
-      // Dual-write bridge: update Product.stockQuantity with identical newStock (and update cost)
-      await product.update({
-        stockQuantity: newStock,
-        cost: newCost
-      }, { transaction });
+      // Update Product cost if unitCost supplied
+      if (unitCost >= 0) {
+        await product.update({
+          cost: newCost
+        }, { transaction });
+      }
 
       // Create StockMovement audit entry based on Inventory values
       await StockMovement.create({
@@ -184,8 +185,8 @@ async function reverseStockReceipt({ shopId, items, reference, userId }, transac
           inventory = await Inventory.create({
             productId: product.id,
             shopId,
-            stockQuantity: product.stockQuantity || 0,
-            reorderPoint: product.reorderPoint || 10
+            stockQuantity: 0,
+            reorderPoint: 10
           }, { transaction });
         }
 
@@ -194,9 +195,6 @@ async function reverseStockReceipt({ shopId, items, reference, userId }, transac
 
         // Primary mutation: Inventory
         await inventory.update({ stockQuantity: newStock }, { transaction });
-
-        // Dual-write bridge: Product.stockQuantity
-        await product.update({ stockQuantity: newStock }, { transaction });
 
         await StockMovement.create({
           shopId,

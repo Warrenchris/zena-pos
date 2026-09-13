@@ -35,16 +35,6 @@ const Product = sequelize.define('Product', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
-  stockQuantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0
-  },
-  reorderPoint: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 10
-  },
   expirationDate: {
     type: DataTypes.DATE,
     allowNull: true

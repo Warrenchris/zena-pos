@@ -392,8 +392,8 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
         inventory = await Inventory.create({
           productId: product.id,
           shopId,
-          stockQuantity: product.stockQuantity || 0,
-          reorderPoint: product.reorderPoint !== undefined ? product.reorderPoint : 10
+          stockQuantity: 0,
+          reorderPoint: 10
         }, { transaction: t });
       }
 
@@ -528,12 +528,11 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
       }, { transaction: t })
     ));
 
-    // Decrement stock on Inventory and dual-write to Product
+    // Decrement stock on Inventory
     for (const { product, inventory, item } of lockedProducts) {
       const prevStock = parseFloat(inventory.stockQuantity || 0);
       const newStock = prevStock - item.quantity;
       await inventory.update({ stockQuantity: newStock }, { transaction: t });
-      await product.update({ stockQuantity: newStock }, { transaction: t });
 
       await StockMovement.create({
         shopId,
@@ -1329,8 +1328,8 @@ exports.processRefund = async (req, res) => {
             inventory = await Inventory.create({
               productId: product.id,
               shopId,
-              stockQuantity: product.stockQuantity || 0,
-              reorderPoint: product.reorderPoint !== undefined ? product.reorderPoint : 10
+              stockQuantity: 0,
+              reorderPoint: 10
             }, { transaction: t });
           }
 
@@ -1338,9 +1337,6 @@ exports.processRefund = async (req, res) => {
             const prevStock = parseFloat(inventory.stockQuantity || 0);
             const newStock = prevStock + item.quantity;
             await inventory.update({ stockQuantity: newStock }, { transaction: t });
-            if (product) {
-              await product.update({ stockQuantity: newStock }, { transaction: t });
-            }
             await StockMovement.create({
               shopId,
               productId: item.productId,

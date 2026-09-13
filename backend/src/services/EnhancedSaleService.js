@@ -182,8 +182,8 @@ class EnhancedSaleService {
           inventory = await Inventory.create({
             productId: product.id,
             shopId,
-            stockQuantity: product.stockQuantity || 0,
-            reorderPoint: product.reorderPoint !== undefined ? product.reorderPoint : 10
+            stockQuantity: 0,
+            reorderPoint: 10
           }, { transaction: t });
         }
 
@@ -328,12 +328,11 @@ class EnhancedSaleService {
         }, { transaction: t })
       ));
 
-      // Decrement stock on Inventory and dual-write to Product
+      // Decrement stock on Inventory
       for (const { product, inventory, item } of lockedProducts) {
         const prevStock = parseFloat(inventory.stockQuantity || 0);
         const newStock = prevStock - item.quantity;
         await inventory.update({ stockQuantity: newStock }, { transaction: t });
-        await product.update({ stockQuantity: newStock }, { transaction: t });
 
         const validUserId = (!user?.isEmployee && typeof user?.id === 'number') ? user.id : null;
         await StockMovement.create({
