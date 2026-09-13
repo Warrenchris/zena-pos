@@ -12,7 +12,8 @@ const {
   Expense,
   ActivityLog,
   Supplier,
-  User
+  User,
+  Inventory
 } = require('../src/models');
 
 function tokenFor(user) {
@@ -118,6 +119,26 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
         active: true,
         shopId: 2,
         organizationId: 2
+      }
+    });
+
+    await Inventory.findOrCreate({
+      where: { productId: prodShop1.id, shopId: 1 },
+      defaults: {
+        productId: prodShop1.id,
+        shopId: 1,
+        stockQuantity: 100,
+        reorderPoint: 10
+      }
+    });
+
+    await Inventory.findOrCreate({
+      where: { productId: prodShop2.id, shopId: 2 },
+      defaults: {
+        productId: prodShop2.id,
+        shopId: 2,
+        stockQuantity: 50,
+        reorderPoint: 5
       }
     });
   });

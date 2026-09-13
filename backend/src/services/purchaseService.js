@@ -96,7 +96,7 @@ async function applyStockReceipt({ shopId, items, reference, userId }, transacti
         inventory = await Inventory.create({
           productId: product.id,
           shopId,
-          stockQuantity: 0,
+          stockQuantity: product.stockQuantity || 0,
           reorderPoint: product.reorderPoint || 10
         }, { transaction });
       }
@@ -184,7 +184,7 @@ async function reverseStockReceipt({ shopId, items, reference, userId }, transac
           inventory = await Inventory.create({
             productId: product.id,
             shopId,
-            stockQuantity: 0,
+            stockQuantity: product.stockQuantity || 0,
             reorderPoint: product.reorderPoint || 10
           }, { transaction });
         }
