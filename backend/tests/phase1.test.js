@@ -100,6 +100,7 @@ describe('Phase 1 Remediation Integration Tests', () => {
         reorderPoint: 5,
         categoryId: category.id,
         shopId: 1,
+        organizationId: 1,
         active: true
       });
       products.push(prod);

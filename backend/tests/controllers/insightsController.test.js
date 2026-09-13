@@ -49,7 +49,8 @@ describe('Insights Controller', () => {
         cost: 60,
         stockQuantity: 5,
         reorderPoint: 10,
-        shopId: 1
+        shopId: 1,
+        organizationId: 1
       });
 
       await Sale.create({

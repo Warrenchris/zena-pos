@@ -79,6 +79,7 @@ describe('MySQL + SalePayments Integration Tests', () => {
       reorderPoint: 5,
       categoryId: category.id,
       shopId: 1,
+      organizationId: 1,
       active: true
     });
 
