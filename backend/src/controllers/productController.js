@@ -13,7 +13,7 @@ function formatProductWithInventory(product) {
   const inventories = plain.Inventories || (plain.Inventory ? [plain.Inventory] : []);
   const branchInv = inventories.length > 0 ? inventories[0] : null;
 
-  plain.stockQuantity = branchInv ? branchInv.stockQuantity : 0;
+  plain.stockQuantity = branchInv ? branchInv.stockQuantity : (plain.stockQuantity !== undefined ? plain.stockQuantity : 0);
   plain.reorderPoint = branchInv ? branchInv.reorderPoint : (plain.reorderPoint !== undefined ? plain.reorderPoint : 10);
   return plain;
 }

@@ -93,6 +93,47 @@ const Product = sequelize.define('Product', {
   ]
 });
 
+// Auto-wrap hook: ensure organizationId is populated from shopId or default org
+Product.beforeValidate(async (product, options) => {
+  if (!product.organizationId) {
+    if (product.shopId) {
+      const Shop = sequelize.models.Shop || require('./Shop');
+      const shop = await Shop.findByPk(product.shopId, { attributes: ['organizationId'], transaction: options?.transaction });
+      if (shop && shop.organizationId) {
+        product.organizationId = shop.organizationId;
+      }
+    }
+    if (!product.organizationId) {
+      const Org = sequelize.models.Organization || require('./Organization');
+      const org = await Org.findOne({ attributes: ['id'], transaction: options?.transaction });
+      if (org) {
+        product.organizationId = org.id;
+      }
+    }
+  }
+});
+
+// Auto-seed initial Inventory row for origin branch on direct Product creation (3A dual-write bridge)
+Product.afterCreate(async (product, options) => {
+  if (product.shopId) {
+    const Inventory = sequelize.models.Inventory || require('./Inventory');
+    try {
+      await Inventory.findOrCreate({
+        where: { shopId: product.shopId, productId: product.id },
+        defaults: {
+          shopId: product.shopId,
+          productId: product.id,
+          stockQuantity: product.stockQuantity || 0,
+          reorderPoint: product.reorderPoint !== undefined ? product.reorderPoint : 10
+        },
+        transaction: options?.transaction
+      });
+    } catch (err) {
+      // Non-fatal if table doesn't exist yet during initial setup
+    }
+  }
+});
+
 // Relationships are defined in models/index.js
 
 module.exports = Product;
