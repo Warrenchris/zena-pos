@@ -27,6 +27,13 @@ async function runProof() {
     await sequelize.query('DROP TABLE IF EXISTS `Inventory`');
     // Drop test products if remaining
     await sequelize.query("DELETE FROM `Products` WHERE `sku` = 'TEST-COLLIDE-SKU'");
+    // Ensure legacy global sku unique index is dropped if present so FINDING-04 shop-scoped indexes govern
+    try {
+      await sequelize.query('ALTER TABLE `Products` DROP INDEX `products_sku_unique`');
+    } catch (e) {}
+    try {
+      await sequelize.query('ALTER TABLE `Products` DROP INDEX `products_barcode_unique`');
+    } catch (e) {}
 
     // 1. Setup collision scenario
     console.log('[Step 1] Setting up intra-organization SKU collision scenario...');

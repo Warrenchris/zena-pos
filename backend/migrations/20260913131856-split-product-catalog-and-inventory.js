@@ -333,6 +333,7 @@ module.exports = {
     // -------------------------------------------------------------
     const productSkuIndexesToDrop = [
       'unique_products_shop_sku',
+      'products_sku_unique',
       'Products_sku_unique',
       'sku', 'sku_2', 'sku_3', 'sku_4', 'sku_5'
     ];
@@ -342,6 +343,7 @@ module.exports = {
 
     const productBarcodeIndexesToDrop = [
       'unique_products_shop_barcode',
+      'products_barcode_unique',
       'Products_barcode_unique',
       'barcode', 'barcode_2', 'barcode_3', 'barcode_4', 'barcode_5'
     ];
