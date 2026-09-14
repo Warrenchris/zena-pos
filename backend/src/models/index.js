@@ -179,6 +179,16 @@ Inventory.belongsTo(Shop, { foreignKey: 'shopId' });
 Product.hasMany(Inventory, { foreignKey: 'productId' });
 Inventory.belongsTo(Product, { foreignKey: 'productId' });
 
+// Organization & Subscription / Billing associations (FINDING-12 Phase 6)
+Organization.hasOne(Subscription, { foreignKey: 'organizationId' });
+Subscription.belongsTo(Organization, { foreignKey: 'organizationId' });
+Subscription.belongsTo(Plan, { foreignKey: 'planId' });
+Plan.hasMany(Subscription, { foreignKey: 'planId' });
+
+Subscription.hasMany(SubscriptionInvoice, { foreignKey: 'subscriptionId' });
+SubscriptionInvoice.belongsTo(Subscription, { foreignKey: 'subscriptionId' });
+SubscriptionInvoice.belongsTo(Organization, { foreignKey: 'organizationId' });
+SubscriptionInvoice.belongsTo(Plan, { foreignKey: 'planId' });
 
 // Export models and sequelize instance
 module.exports = {
@@ -214,6 +224,9 @@ module.exports = {
   Organization,
   OrganizationMembership,
   ShopAccess,
-  Inventory
+  Inventory,
+  Plan,
+  Subscription,
+  SubscriptionInvoice
 };
 
