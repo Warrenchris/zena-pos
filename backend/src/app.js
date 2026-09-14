@@ -154,6 +154,7 @@ app.use('/api/purchases', purchaseRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/permissions', permissionRoutes);
+app.use('/api/billing', billingRoutes);
 
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);
