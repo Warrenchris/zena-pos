@@ -13,6 +13,7 @@ try {
 
 const { testConnection } = require('./config/database');
 const app = require('./app');
+const { startBillingScheduler, stopBillingScheduler } = require('./services/billingScheduler');
 
 const PORT = process.env.PORT || 3000;
 
@@ -45,9 +46,13 @@ const startServer = async () => {
       logger.info(`Server running on http://localhost:${PORT}`);
     });
 
+    // Start recurring background billing scheduler (skipped in test environment)
+    startBillingScheduler();
+
     // Handle graceful shutdown
     const shutdown = (signal) => {
       logger.warn(`Received ${signal}. Shutting down gracefully...`);
+      stopBillingScheduler();
       server.close(() => {
         logger.info('HTTP server closed');
         process.exit(0);
