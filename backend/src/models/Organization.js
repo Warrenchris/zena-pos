@@ -17,7 +17,7 @@ const Organization = sequelize.define('Organization', {
     unique: true
   },
   status: {
-    type: DataTypes.ENUM('active', 'suspended', 'trial'),
+    type: DataTypes.ENUM('trialing', 'trial', 'active', 'past_due', 'canceled', 'suspended'),
     allowNull: false,
     defaultValue: 'active'
   },

@@ -33,6 +33,9 @@ const Organization = require('./Organization');
 const OrganizationMembership = require('./OrganizationMembership');
 const ShopAccess = require('./ShopAccess');
 const Inventory = require('./Inventory');
+const Plan = require('./Plan');
+const Subscription = require('./Subscription');
+const SubscriptionInvoice = require('./SubscriptionInvoice');
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
