@@ -33,7 +33,7 @@ describe('Coupons and Discounts API Integration Tests', () => {
     // Ensure Shop 1 exists
     await Shop.findOrCreate({
       where: { id: 1 },
-      defaults: { name: 'Test Shop 1' }
+      defaults: { name: 'Test Shop 1', organizationId: 1 }
     });
   });
 

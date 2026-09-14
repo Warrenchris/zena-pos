@@ -35,6 +35,7 @@ async function seedKenyanData() {
       defaults: {
         address: 'Westlands Commercial Center, Ring Road, Westlands, Nairobi, Kenya',
         phone: '+254711223344',
+        organizationId: 4
       }
     });
     console.log(`Using Shop: ${shop.name} (ID: ${shop.id})`);
@@ -193,7 +194,8 @@ async function seedKenyanData() {
           name: cust.name,
           email: cust.email,
           address: cust.address,
-          loyaltyPoints: cust.loyaltyPoints
+          loyaltyPoints: cust.loyaltyPoints,
+          organizationId: shop.organizationId
         }
       });
       customers.push(customer);

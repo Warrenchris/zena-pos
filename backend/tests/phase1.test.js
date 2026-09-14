@@ -56,7 +56,7 @@ describe('Phase 1 Remediation Integration Tests', () => {
     // Ensure shop exists
     [shop] = await Shop.findOrCreate({
       where: { id: 1 },
-      defaults: { name: 'Test Shop Alpha', active: true }
+      defaults: { name: 'Test Shop Alpha', organizationId: 1, active: true }
     });
 
     // Ensure category exists

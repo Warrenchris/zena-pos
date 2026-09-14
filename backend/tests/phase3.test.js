@@ -71,8 +71,8 @@ describe('Phase 3 Remediation Tests', () => {
     await cleanDb();
 
     // Setup shops
-    [shop1] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'Shop 1', active: true } });
-    [shop2] = await Shop.findOrCreate({ where: { id: 2 }, defaults: { name: 'Shop 2', active: true } });
+    [shop1] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'Shop 1', organizationId: 1, active: true } });
+    [shop2] = await Shop.findOrCreate({ where: { id: 2 }, defaults: { name: 'Shop 2', organizationId: 2, active: true } });
 
     // Setup category
     category = await Category.create({ name: 'Test Category', shopId: 1, active: true });

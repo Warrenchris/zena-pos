@@ -37,7 +37,7 @@ async function runTests() {
   // Setup test shop & settings
   const [shop] = await Shop.findOrCreate({
     where: { name: 'Sprint 1 Test Shop' },
-    defaults: { address: 'Test Address', phone: '0700000000' }
+    defaults: { address: 'Test Address', phone: '0700000000', organizationId: 1 }
   });
 
   const testShopId = shop.id;

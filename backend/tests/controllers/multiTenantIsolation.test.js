@@ -41,6 +41,7 @@ describe('Multi-tenant isolation', () => {
       where: { id: 1 },
       defaults: {
         name: 'Test Shop Alpha',
+        organizationId: 1,
         active: true
       }
     });
@@ -49,6 +50,7 @@ describe('Multi-tenant isolation', () => {
       where: { id: 2 },
       defaults: {
         name: 'Test Shop Beta',
+        organizationId: 2,
         active: true
       }
     });

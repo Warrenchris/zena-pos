@@ -65,7 +65,7 @@ describe('MySQL + SalePayments Integration Tests', () => {
     await sequelize.authenticate();
     await cleanDb();
 
-    [shop] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'MS Test Shop', active: true } });
+    [shop] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'MS Test Shop', organizationId: 1, active: true } });
 
     category = await Category.create({ name: 'MS Test Category', shopId: 1, active: true });
 

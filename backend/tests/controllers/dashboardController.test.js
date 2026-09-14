@@ -31,7 +31,7 @@ describe('Dashboard Controller', () => {
 
     await Shop.findOrCreate({
       where: { id: 1 },
-      defaults: { name: 'Test Shop', active: true }
+      defaults: { name: 'Test Shop', organizationId: 1, active: true }
     });
   }, 30000);
 

@@ -14,7 +14,7 @@ async function runSprint2Tests() {
   // Setup test shop & user
   const [shop] = await Shop.findOrCreate({
     where: { name: 'Sprint 2 Security Test Shop' },
-    defaults: { address: '123 Security Way', phone: '0711111111', kraPin: 'A099887766Z', registrationNumber: 'REG/2026/001' }
+    defaults: { address: '123 Security Way', phone: '0711111111', kraPin: 'A099887766Z', registrationNumber: 'REG/2026/001', organizationId: 1 }
   });
 
   const testShopId = shop.id;
