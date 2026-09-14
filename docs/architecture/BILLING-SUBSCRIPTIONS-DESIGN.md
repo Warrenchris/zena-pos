@@ -1,7 +1,7 @@
 # Zana POS — SaaS Subscriptions, Billing & Feature Entitlements Architecture Design
-**Document Version**: 1.0.0  
+**Document Version**: 1.1.0  
 **Phase**: FINDING-12 (Phase 6: Multi-Tenant SaaS Subscriptions, Billing Engine, & Feature Entitlements)  
-**Status**: DESIGN & AUDIT PROPOSAL (Read-Only Architectural Pass — Zero Code, Model, Route, or Migration Mutations)  
+**Status**: REVISED ARCHITECTURAL DESIGN (Read-Only Architectural Pass — Zero Code, Model, Route, or Migration Mutations)  
 **Target File**: `docs/architecture/BILLING-SUBSCRIPTIONS-DESIGN.md`  
 
 ---
@@ -20,6 +20,7 @@ While Phases 1–4 made Zena POS *capable* of multi-tenancy, **Phase 6 is the co
 2. **SaaS Billing Engine**: Recurring periodic subscriptions denominated in Kenyan Shillings (`KES`) using Kenya's primary payment rail (**M-Pesa STK Push**) and international/card rails (**Flutterwave**).
 3. **Trial & Lifecycle State Machine**: 14-day automatic trial on merchant registration, graceful expiration with soft warnings (`past_due`), and zero false-positive lockouts.
 4. **Centralized Feature Entitlements (`canUseFeature`)**: Strict server-side enforcement of branch quotas (`maxShops`), team limits (`maxUsers`), and premium modules (Phase 4's `org_insights`).
+5. **Strict Backward Compatibility**: 100% grandfathering of all pre-existing organizations at migration time with zero disruption.
 
 > [!IMPORTANT]
 > **Financial & Security Rigor Principle**: Money bugs are as destructive as tenant isolation bugs. A billing bug that locks out a paying merchant in the middle of Saturday retail hours destroys business trust. Conversely, a webhook bug that grants unearned lifetime access to unpaid tenants undermines commercial viability. This design applies the hardened security patterns established during the P0 vulnerability remediations.
@@ -94,7 +95,7 @@ status: {
 **Finding**:
 The `status` column on `Organizations` was established in Phase 1 with values `'active'`, `'suspended'`, and `'trial'`.
 - In `authController.js:register`, newly created organizations currently default to `'active'`.
-- **Phase 6 Alignment**: When a merchant registers, `Organization.status` should be explicitly set to `'trial'`. We will expand this enum slightly (or introduce `'past_due'`) to provide an explicit grace period state.
+- **Phase 6 Alignment**: When a merchant registers, `Organization.status` will be set to `'trial'`. We will expand this enum to include `'past_due'` and `'trialing'` to support explicit lifecycle states.
 
 ---
 
@@ -112,7 +113,7 @@ Review of the P0 vulnerability remediations ([`FINDING-03`](file:///c:/Users/WAR
 
 ### 3.1 Plan Tiers & Concrete Differentiators
 
-Rather than inventing speculative enterprise features, plan tiers must reflect **what Zena actually has to sell today**:
+Plan tiers reflect **what Zena actually has to sell today**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -125,7 +126,7 @@ Rather than inventing speculative enterprise features, plan tiers must reflect *
 │ • Up to 2 Staff / Cashiers    │ • Up to 10 Staff / Cashiers  │ • Unlimited Staff            │
 │ • Core POS & Local Inventory  │ • Multi-Shop Switching       │ • Priority Support           │
 │ • Single-Shop Basic Reports   │ • Org Customers & Suppliers  │ • Custom Integrations        │
-│ • Basic Single-Shop AI Alert  │ • Executive AI Roll-Ups      │ • All Features Unlocked      │
+│ • Single-Shop AI Insights     │ • Executive AI Roll-Ups      │ • All Features Unlocked      │
 │                               │   (Phase 4 org_insights)     │                              │
 └───────────────────────────────┴──────────────────────────────┴──────────────────────────────┘
 ```
@@ -149,36 +150,45 @@ Rather than inventing speculative enterprise features, plan tiers must reflect *
 
 ---
 
-### 3.2 Trial Handling & The "No False-Positive Lockout" Policy
+### 3.2 Trial Handling & The "Zero Sales-Blocking" Invariant
 
 ```
-[ Merchant Registers ]
-         │
-         ▼
- ┌────────────────┐
- │     TRIAL      │ ◄── 14 Days Full Access (Growth Plan capabilities)
- └───────┬────────┘
-         │ (Day 14 expires, unpaid)
-         ▼
- ┌────────────────┐
- │    PAST_DUE    │ ◄── 7 Days Grace Period
- └───────┬────────┘     • Core POS sales continue completely uninterrupted
-         │              • Premium actions locked (cannot add new shop, no AI roll-up)
-         │              • Dismissible banner: "Trial expired. Subscribe to keep all branches."
-         │ (Day 21, still unpaid)
-         ▼
- ┌────────────────┐
- │   SUSPENDED    │ ◄── Read-Only / Payment Wall
- └────────────────┘     • Back-office access allows viewing history and settling bill
-                        • Core sales restricted until subscription renewed
+[ Merchant Registers (Post-Phase-6) ]
+                  │
+                  ▼
+          ┌────────────────┐
+          │    TRIALING    │ ◄── 14 Days Full Access (Growth Plan capabilities)
+          └───────┬────────┘
+                  │ (Day 14 expires, unpaid)
+                  ▼
+          ┌────────────────┐
+          │    PAST_DUE    │ ◄── 7 Days Soft Warning / Grace Period
+          └───────┬────────┘     • POS sales checkout, inventory, and local reports CONTINUE UNINTERRUPTED
+                  │              • Growth/admin actions locked (cannot create new shop, cannot add staff, no org AI)
+                  │              • Dismissible banner: "Trial expired. Subscribe to keep all branches."
+                  │ (Day 21, still unpaid)
+                  ▼
+          ┌────────────────┐
+          │   SUSPENDED    │ ◄── Growth-Gated Operational State
+          └────────────────┘     • POS sales checkout, inventory, and local operations CONTINUE INDEFINITELY
+                                 • Growth/admin actions STAY BLOCKED (cannot add shops, cannot add staff, no org AI)
+                                 • Non-payment is handled through out-of-band communication/collection outside app
 ```
 
-#### Why Grace Period Over Hard Lockout?
-In Kenya, SME merchants pay via M-Pesa. A merchant might be busy running their retail shop and miss an SMS reminder on Friday evening. If Zena executed a hard lockout at midnight, their cashiers would be blocked from ringing up customer sales on Saturday morning, triggering catastrophic churn.
-- **Trial Duration**: 14 Days.
-- **Grace Period (`past_due`)**: 7 Days.
-- **In-App Communication**: Non-blocking warning banner across admin and cashier headers during `past_due`.
-- **Enforcement during `past_due`**: Gated creation endpoints (`createShop`, `org_insights`) are disabled, but **existing single-shop sales and inventory lookups remain operational**.
+> [!IMPORTANT]
+> **NON-NEGOTIABLE ARCHITECTURAL INVARIANT: Sale creation is NEVER blocked, at any subscription status, ever — no exceptions.**  
+> Under no circumstance will a cashier at a physical retail counter be blocked from ringing up a sale, adjusting stock, or printing a receipt because of subscription expiry, non-payment, or grace-period lapse. Core retail point-of-sale checkout at existing shops continues completely uninterrupted indefinitely across all statuses (`trialing`, `active`, `past_due`, `suspended`).
+
+#### Enforcement Boundaries: Growth/Administrative Only
+Enforcement applies exclusively to expansion and executive analytics:
+1. `shopController.createShop`: Blocked if active shops $\ge$ quota or if organization is not in an `active` or `trialing` state.
+2. `employeeController.createEmployee`: Blocked if active team members $\ge$ quota.
+3. `requireOrgAdmin.js` / `orgInsightsRoutes.js`: Blocked for Phase 4 multi-branch executive AI roll-ups.
+
+#### Collection & Account Management Strategy
+In the Kenyan SME retail context, halting cashier checkout punishes innocent retail consumers and causes immediate merchant churn. Instead:
+- When an account transitions to `past_due` or `suspended`, the application displays non-blocking billing alerts to administrators.
+- Outstanding subscription payments are recovered through **out-of-band account management, email/SMS reminders, and direct customer success outreach**, never by locking the cash register in the middle of a business day.
 
 ---
 
@@ -192,16 +202,15 @@ In Kenya, SME merchants pay via M-Pesa. A merchant might be busy running their r
 > 2. Safaricom Daraja STK push requires user PIN authorization on the physical handset for every transaction; passive automated debits without PIN entry are not available for standard B2B merchants.
 > 3. Forcing Kenyan merchants to provide credit cards causes immediate drop-off.
 >
-> **Recommended v1 Architecture**:
-> - **Period-Based Invoiced Subscriptions (30-day renewable periods)**.
-> - When renewal is due (or when upgrading):
->   - The merchant clicks **"Renew / Upgrade Subscription"**.
+> **The Approved v1 Architecture**:
+> - **Period-Based Invoiced Subscriptions (30-day renewable periods)**:
+>   - When renewal is due (or when upgrading), the merchant clicks **"Renew / Upgrade Subscription"**.
 >   - They enter their M-Pesa phone number (or choose Card).
 >   - System sends Daraja STK Push to the owner's phone.
 >   - When the owner enters their PIN, Safaricom fires the callback to `/api/billing/mpesa/callback`.
 >   - The callback extends `subscription.currentPeriodEnd` by +30 days and sets `organization.status = 'active'`.
 >   - For cardholders, Flutterwave standard checkout achieves the exact same +30 days extension.
-> - **Super-Admin Manual Override**: Platform super-admins can manually extend a subscription (for cash payments, enterprise invoices, or customer service grace periods).
+> - **Super-Admin Manual Override**: Platform operators can manually extend a subscription (for cash payments, enterprise invoices, or customer service grace periods) via a strictly authorized endpoint.
 
 This is **not a cop-out**—it is the proven, frictionless payment model for B2B software across East Africa.
 
@@ -209,25 +218,27 @@ This is **not a cop-out**—it is the proven, frictionless payment model for B2B
 
 ### 3.4 Entitlement Enforcement Mechanism (`canUseFeature`)
 
-To prevent fragmented `if (plan === 'pro')` conditionals scattered across controllers, all entitlement checks are centralized in a dedicated service and middleware.
+All entitlement checks are centralized in a dedicated service and middleware, completely avoiding scattered `if (plan === 'pro')` conditionals.
 
 #### Service Architecture: `backend/src/services/entitlementService.js`
 ```javascript
 /**
- * Resolves active subscription and plan for an organization
- * Uses Redis cache (TTL: 15 minutes) invalidated on subscription mutation
+ * Resolves active subscription and plan for an organization.
+ * Uses Redis cache (TTL: 15 minutes) invalidated on subscription mutation.
  */
 async function getOrganizationEntitlements(organizationId) { ... }
 
 /**
- * Checks if a specific feature flag is granted
+ * Checks if a specific feature flag is granted.
+ * Note: Core sale creation NEVER calls this function.
+ * This is invoked strictly on premium modules (e.g. 'org_insights', 'multi_shop').
  */
 async function canUseFeature(organizationId, featureKey) {
-  const { plan, subscription, isGracePeriod } = await getOrganizationEntitlements(organizationId);
+  const { plan, subscription } = await getOrganizationEntitlements(organizationId);
   
-  // Hard suspended or expired past grace period
+  // Growth-gated state: administrative features blocked if suspended
   if (subscription.status === 'suspended') {
-    return { allowed: false, reason: 'Subscription is suspended due to non-payment.' };
+    return { allowed: false, reason: 'Subscription is suspended due to non-payment. Gated administrative features are locked.' };
   }
   
   // Premium feature check (e.g. 'org_insights')
@@ -240,13 +251,14 @@ async function canUseFeature(organizationId, featureKey) {
 }
 
 /**
- * Checks if an operational quota has been exceeded
+ * Checks if an operational quota has been exceeded.
+ * Invoked on shop creation (maxShops) and employee creation (maxUsers).
  */
 async function checkQuota(organizationId, quotaKey, currentCount) {
   const { plan, subscription } = await getOrganizationEntitlements(organizationId);
   
   if (subscription.status === 'suspended') {
-    return { allowed: false, reason: 'Subscription is suspended.' };
+    return { allowed: false, reason: 'Subscription is suspended. Expanding resources is locked.' };
   }
   
   const limit = plan[quotaKey];
@@ -279,11 +291,45 @@ const requireFeature = (featureKey) => async (req, res, next) => {
 
 ### 3.5 Downgrade & Non-Payment Behavior
 
-| Event | System Action | Existing Data Impact |
+| Event | System Action | Operational Impact |
 | :--- | :--- | :--- |
-| **Merchant Downgrades (Growth $\rightarrow$ Starter)** | `planId` updated for next cycle. `maxShops` becomes 1. | **Zero Data Deletion**: Existing shops remain intact and accessible in read-only/maintenance mode. Merchant cannot create a *new* shop until they upgrade. |
-| **Trial Expires (Day 15–21)** | Status set to `'past_due'`. Grace period banner shown. | All existing single-shop sales and inventories remain fully functional. Premium creation actions blocked. |
-| **Subscription Suspended (Day 22+)** | Status set to `'suspended'`. | Read-only access to historical data, sales reports, and customer lists. POS sales checkout gated until bill settled. |
+| **Merchant Downgrades (Growth $\rightarrow$ Starter)** | `planId` updated for next cycle. `maxShops` becomes 1. | **Zero Data Deletion**: Existing shops remain intact and operational. Merchant cannot create a *new* shop until they upgrade. |
+| **Trial Expires (Day 15–21)** | Status set to `'past_due'`. Grace period banner shown. | All existing single-shop sales, inventory, and reporting remain fully functional. Premium creation actions blocked. |
+| **Subscription Suspended (Day 22+)** | Status set to `'suspended'`. Non-payment handled out-of-band. | **Zero Disruption to Core POS**: POS sales checkout, local inventory, and branch reporting **CONTINUE WORKING INDEFINITELY** at all existing branches. Growth/admin actions (creating new branches, adding new staff beyond quota, multi-branch AI roll-ups) remain locked. Non-payment is handled through account management outreach, never via in-app cash-register lockout. |
+
+---
+
+### 3.6 Backward Compatibility & Grandfathering Policy (Pre-Existing Organizations)
+
+A non-negotiable architectural invariant of this multi-tenant transformation is **strict backward compatibility**: every Organization that exists before Phase 6 ships—including real production organizations with real sales history—must be grandfathered with zero disruption. There must be no retroactive trial clock, no unexpected quota rejections, and zero risk of hitting suspension for a merchant who was never told they were on a trial.
+
+#### Exact Grandfathering Mechanism:
+1. **Dedicated Founding Merchant Plan**:
+   The migration seeds a dedicated internal plan:
+   - `name: 'Grandfathered (Founding Merchant)'`
+   - `code: 'grandfathered'`
+   - `priceMonthly: 0.00`
+   - `currency: 'KES'`
+   - `maxShops: -1` (unlimited; guarantees zero breaking quota errors for existing multi-branch setups)
+   - `maxUsers: -1` (unlimited)
+   - `features: { "org_insights": true, "multi_shop": true, "api_access": true }`
+   - `isActive: false` (hidden from public plan listings and self-serve checkout)
+
+2. **Single Migration-Time Backfill**:
+   The migration queries all existing organizations (`SELECT id, status FROM Organizations`) and inserts a permanent `Subscription` row for each:
+   - `organizationId = org.id`
+   - `planId = grandfatheredPlan.id`
+   - `status = 'active'`
+   - `billingCycle = 'yearly'`
+   - `currentPeriodStart = NOW()`
+   - `currentPeriodEnd = '2099-12-31 23:59:59'` (indefinite / permanent)
+   - `trialEndsAt = null`
+   - Ensures `Organization.status` remains `'active'`.
+
+3. **Strict Separation Between Pre-Existing and New Organizations**:
+   - **Pre-existing organizations** are grandfathered permanently **once, at migration time**.
+   - **New organizations** created *after* Phase 6 ships (via `authController.js:register`) go through the standard trial lifecycle: provisioned with `status: 'trialing'`, `trialEndsAt = NOW() + 14 DAYS`, linked to the standard trial tier.
+   - This distinction is **enforced strictly by the database state established during migration**, NOT by an ongoing runtime check (such as `if org.createdAt < date`) that could drift or introduce performance overhead.
 
 ---
 
@@ -304,12 +350,12 @@ const Plan = sequelize.define('Plan', {
   },
   name: {
     type: DataTypes.STRING(50),
-    allowNull: false // "Starter", "Growth", "Pro"
+    allowNull: false // "Starter", "Growth", "Pro", "Grandfathered (Founding Merchant)"
   },
   code: {
     type: DataTypes.STRING(50),
     allowNull: false,
-    unique: true // "starter", "growth", "pro"
+    unique: true // "starter", "growth", "pro", "grandfathered"
   },
   priceMonthly: {
     type: DataTypes.DECIMAL(10, 2),
@@ -339,7 +385,7 @@ const Plan = sequelize.define('Plan', {
   isActive: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: true
+    defaultValue: true // false for 'grandfathered'
   }
 }, {
   tableName: 'Plans',
@@ -526,11 +572,12 @@ const SubscriptionInvoice = sequelize.define('SubscriptionInvoice', {
 
 1. **Migration 1 (`create-plans-table.js`)**:
    - Creates `Plans` table.
-   - Seeds baseline plans: `starter` (KES 1,500), `growth` (KES 3,500), `pro` (KES 7,500).
+   - Seeds baseline commercial plans (`starter`, `growth`, `pro`) and the internal `grandfathered` plan.
 2. **Migration 2 (`create-subscriptions-table.js`)**:
    - Creates `Subscriptions` table with foreign keys to `Organizations` and `Plans`.
-   - Backfills existing organizations:
-     - For every existing Organization (IDs 1–6): Create a `Subscription` on `growth` plan with `status = 'active'`, `currentPeriodEnd = NOW() + 1 YEAR` to ensure zero disruption to current merchants.
+   - **Grandfathering Backfill**:
+     - Queries all pre-existing organizations: `SELECT id FROM Organizations`.
+     - For each, inserts an active `Subscription` pointing to `grandfathered` plan with `currentPeriodEnd = '2099-12-31 23:59:59'`, `status = 'active'`, and `trialEndsAt = null`.
 3. **Migration 3 (`create-subscription-invoices-table.js`)**:
    - Creates `SubscriptionInvoices` table.
 4. **Migration 4 (`update-organizations-status-enum.js`)**:
@@ -547,12 +594,37 @@ All billing routes mounted at `/api/billing`:
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/billing/plans` | Public / Authenticated | List all active SaaS subscription plans |
 | `GET` | `/api/billing/subscription` | Any Org Member | Get organization's current plan, status, days remaining, and usage limits |
-| `POST` | `/api/billing/subscribe/mpesa` | **Owner Only** | Initiate M-Pesa STK push for renewal/upgrade (Body: `{ planCode, phone }`) |
-| `POST` | `/api/billing/subscribe/card` | **Owner Only** | Initiate Flutterwave checkout link (Body: `{ planCode }`) |
+| `POST` | `/api/billing/subscribe/mpesa` | **Org Owner Only** | Initiate M-Pesa STK push for renewal/upgrade (Body: `{ planCode, phone }`) |
+| `POST` | `/api/billing/subscribe/card` | **Org Owner Only** | Initiate Flutterwave checkout link (Body: `{ planCode }`) |
 | `POST` | `/api/billing/mpesa/callback` | **Public Webhook** (Safaricom) | Handle Daraja STK push callback, extend subscription |
 | `POST` | `/api/billing/flutterwave/webhook` | **Public Webhook** (Flutterwave) | Handle Flutterwave payment webhook with `verif-hash` |
-| `GET` | `/api/billing/invoices` | **Owner / Admin** | List historical subscription invoices and receipts |
-| `POST` | `/api/billing/manual-grant` | **Super-Admin Only** | Manually extend subscription for cash/bank payments |
+| `GET` | `/api/billing/invoices` | **Org Owner / Admin** | List historical subscription invoices and receipts |
+| `POST` | `/api/billing/manual-grant` | **Platform-Admin Only (Allowlist)** | Manually extend subscription for cash/bank payments or custom agreements |
+
+> [!NOTE]
+> **Zero Changes to Sales Routes**: `/api/sales` and `/api/sales/*` have **ZERO** subscription middleware guards. Retail customer checkout remains 100% unaffected by Phase 6.
+
+#### 4.3.1 Platform-Admin Access Control for Manual Grants
+
+An exhaustive audit of the codebase revealed that while `auth.js:67` checks `if (req.user && req.user.role === 'super_admin')`, the underlying `User` model (`User.js:32-34`) strictly limits `role` to `ENUM('admin', 'cashier', 'manager')` and has a `beforeValidate` hook that rejects any other value. Therefore, **no functional platform-admin or super-admin role exists in the database schema today**.
+
+- **Security Rule**: An Organization Owner or Organization Admin must **NEVER** be able to grant themselves or another organization a subscription extension.
+- **Prerequisite**: Building a dedicated platform-admin authorization mechanism is a strict prerequisite for `POST /api/billing/manual-grant`.
+- **Minimal v1 Implementation (No Over-Engineering)**:
+  - Implement `backend/src/middleware/requirePlatformAdmin.js`.
+  - Reads an environment variable allowlist: `PLATFORM_ADMIN_USER_IDS` (e.g. comma-separated `1,2`) or `PLATFORM_ADMIN_EMAILS` (`operator@zenapos.com`).
+  - Verifies:
+    ```javascript
+    const platformAdminIds = (process.env.PLATFORM_ADMIN_USER_IDS || '').split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
+    const platformAdminEmails = (process.env.PLATFORM_ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+    const isPlatformAdmin = platformAdminIds.includes(req.user.id) || platformAdminEmails.includes(req.user.email?.toLowerCase());
+    if (!isPlatformAdmin) {
+      return res.status(403).json({ error: 'Access denied: Platform administrator authorization required.' });
+    }
+    next();
+    ```
+  - This provides airtight security against unauthorized manual grants without over-building a complex platform-roles table for a single operational endpoint.
 
 ---
 
@@ -627,11 +699,12 @@ The following items are strictly out of scope for Phase 6:
 
 ## 6. Part 5 — Risk Call-Outs & Mitigation Strategy
 
-### 6.1 Risk A: False-Positive Lockout of Paying Merchants
+### 6.1 Risk A: False-Positive Lockout of Paying Merchants (Eliminated by Design)
 - **Threat**: A paying merchant's network drops during an M-Pesa push, or a webhook is delayed by Safaricom for 10 minutes. The merchant is locked out while standing in front of customers.
-- **Mitigation**:
-  1. The 7-day Grace Period (`past_due`) ensures that even if a payment fails or is delayed, POS sales checkout is **never halted immediately**.
-  2. The manual extension endpoint allows support admins to instantly unblock any merchant.
+- **Mitigation & Architectural Invariant**:
+  1. **Eliminated by Design**: Under this revised design, **Sale creation is NEVER blocked at any subscription status, ever**. Core cashier operations continue indefinitely.
+  2. Even in the worst-case scenario of an unpaid account reaching `suspended`, the business continues ringing up sales. Non-payment is handled strictly out-of-band via account management.
+  3. The 7-day Grace Period (`past_due`) provides ample warning before administrative creation tools are locked.
 
 ### 6.2 Risk B: Webhook Replay & Unverified Source Attacks (P0 Lessons)
 - **Threat**: An attacker calls `/api/billing/flutterwave/webhook` or `/api/billing/mpesa/callback` with fake payment confirmations to grant free subscriptions.
@@ -653,8 +726,8 @@ The following items are strictly out of scope for Phase 6:
 ## 7. Next Steps & Implementation Roadmap
 
 Upon approval of this design document:
-1. **Step 1 — Migrations**: Create `Plans`, `Subscriptions`, `SubscriptionInvoices` tables and seed baseline tiers.
+1. **Step 1 — Migrations**: Create `Plans`, `Subscriptions`, `SubscriptionInvoices` tables, seed baseline tiers, and backfill grandfathered subscriptions for all pre-existing organizations.
 2. **Step 2 — Entitlement Engine**: Implement `entitlementService.js` and `requireEntitlement.js` with Redis caching.
 3. **Step 3 — Controller Integration**: Wire `checkQuota` into `shopController.js:createShop` and `canUseFeature` into `requireOrgAdmin.js`.
-4. **Step 4 — Billing Endpoints & Webhooks**: Implement `billingController.js` and hardened callbacks for M-Pesa STK Push and Flutterwave.
-5. **Step 5 — Full Test Verification**: Jest test suite verifying plan enforcement, grace periods, webhook idempotency, and anti-hijacking.
+4. **Step 4 — Billing Endpoints & Webhooks**: Implement `billingController.js`, hardened callbacks for M-Pesa STK Push and Flutterwave, and `requirePlatformAdmin` for manual grants.
+5. **Step 5 — Full Test Verification**: Jest test suite verifying plan enforcement, grandfathering, grace periods, zero sales blocking under suspension, webhook idempotency, and platform-admin authorization.
