@@ -62,6 +62,7 @@ const purchaseRoutes = require('./routes/purchases');
 const purchaseOrderRoutes = require('./routes/purchaseOrders');
 const supplierRoutes = require('./routes/suppliers');
 const permissionRoutes = require('./routes/permissions');
+const billingRoutes = require('./routes/billingRoutes');
 
 const app = express();
 app.set('trust proxy', 1);
