@@ -54,7 +54,7 @@ describe('Phase 4 UX Remediation Tests', () => {
     await cleanDb();
 
     // Setup shop
-    [shop1] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'Shop 1', active: true } });
+    [shop1] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'Shop 1', organizationId: 1, active: true } });
 
     // Setup category
     category = await Category.create({ name: 'Test Category', shopId: 1, active: true });

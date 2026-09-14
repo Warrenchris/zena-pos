@@ -48,12 +48,12 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
     // Ensure Shop 1 and Shop 2 exist
     [shop1] = await Shop.findOrCreate({
       where: { id: 1 },
-      defaults: { name: 'Main POS Test Shop', active: true }
+      defaults: { name: 'Main POS Test Shop', organizationId: 1, active: true }
     });
 
     [shop2] = await Shop.findOrCreate({
       where: { id: 2 },
-      defaults: { name: 'Second POS Test Shop', active: true }
+      defaults: { name: 'Second POS Test Shop', organizationId: 2, active: true }
     });
 
     // Ensure test users exist for foreign key relations

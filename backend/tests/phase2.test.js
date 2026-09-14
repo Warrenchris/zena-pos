@@ -68,8 +68,8 @@ describe('Phase 2 Remediation Tests', () => {
     await cleanDb();
 
     // Setup shops
-    [shop1] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'Shop 1', active: true } });
-    [shop2] = await Shop.findOrCreate({ where: { id: 2 }, defaults: { name: 'Shop 2', active: true } });
+    [shop1] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'Shop 1', organizationId: 1, active: true } });
+    [shop2] = await Shop.findOrCreate({ where: { id: 2 }, defaults: { name: 'Shop 2', organizationId: 2, active: true } });
 
     // Setup category
     category = await Category.create({ name: 'Test Category', shopId: 1, active: true });
@@ -366,6 +366,7 @@ describe('Phase 2 Remediation Tests', () => {
         email: `customer${i}@shop1.com`,
         phone: `071111111${i}`,
         shopId: 1,
+        organizationId: 1,
         active: true
       });
     }
@@ -376,6 +377,7 @@ describe('Phase 2 Remediation Tests', () => {
       email: 'customer@shop2.com',
       phone: '0722222222',
       shopId: 2,
+      organizationId: 2,
       active: true
     });
 
@@ -409,6 +411,7 @@ describe('Phase 2 Remediation Tests', () => {
       phone: '0733333333',
       totalPurchases: 0,
       shopId: 1,
+      organizationId: 1,
       active: true
     });
 
@@ -500,6 +503,7 @@ describe('Phase 2 Remediation Tests', () => {
     const existing = await Customer.create({
       name: 'Walk-in Customer',
       shopId: 1,
+      organizationId: 1,
       totalPurchases: 0
     });
 
@@ -649,7 +653,8 @@ describe('Phase 2 Remediation Tests', () => {
     const cust = await Customer.create({
       name: 'Profile User',
       email: 'profile@user.com',
-      shopId: 1
+      shopId: 1,
+      organizationId: 1
     });
 
     const saleRecord = await Sale.create({
@@ -691,7 +696,8 @@ describe('Phase 2 Remediation Tests', () => {
     const newCust = await Customer.create({
       name: 'Brand New Customer',
       email: 'newbie@customer.com',
-      shopId: 1
+      shopId: 1,
+      organizationId: 1
     });
 
     const res = await request(app)
@@ -709,7 +715,8 @@ describe('Phase 2 Remediation Tests', () => {
       name: 'Refund Target Customer',
       totalPurchases: 50.00,
       loyaltyPoints: 50,
-      shopId: 1
+      shopId: 1,
+      organizationId: 1
     });
 
     const saleRecord = await Sale.create({

@@ -33,7 +33,8 @@ describe('Shared NON_CANCELLED_SALE_FILTER Verification', () => {
     // 1. Create a test shop
     const shop = await Shop.create({
       name: `Test Shop ${Date.now()}`,
-      address: 'Test Address'
+      address: 'Test Address',
+      organizationId: 1
     });
 
     const user = await User.create({

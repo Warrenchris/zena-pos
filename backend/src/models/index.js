@@ -176,29 +176,6 @@ Inventory.belongsTo(Shop, { foreignKey: 'shopId' });
 Product.hasMany(Inventory, { foreignKey: 'productId' });
 Inventory.belongsTo(Product, { foreignKey: 'productId' });
 
-// Auto-wrap guard: ensure every Shop has a parent Organization if none specified (backward compatibility)
-Shop.beforeValidate(async (shop, options) => {
-  if (!shop.organizationId) {
-    const orgName = shop.name || 'Default Organization';
-    const cleanName = orgName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') || 'org';
-    const slug = `${cleanName}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-
-    const [org] = await Organization.findOrCreate({
-      where: { name: orgName },
-      defaults: {
-        name: orgName,
-        slug,
-        status: 'active',
-        currency: 'KES'
-      },
-      transaction: options?.transaction
-    });
-    shop.organizationId = org.id;
-  }
-});
 
 // Export models and sequelize instance
 module.exports = {

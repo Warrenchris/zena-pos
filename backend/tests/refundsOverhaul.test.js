@@ -35,7 +35,7 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
     // Setup shop
     shop = await Shop.findOne({ where: { id: 1 } });
     if (!shop) {
-      shop = await Shop.create({ id: 1, name: 'Main Shop' });
+      shop = await Shop.create({ id: 1, name: 'Main Shop', organizationId: 1 });
     }
 
     // Setup Category

@@ -80,23 +80,5 @@ const Customer = sequelize.define('Customer', {
   ]
 });
 
-Customer.beforeValidate(async (customer, options) => {
-  if (!customer.organizationId) {
-    if (customer.shopId) {
-      const Shop = sequelize.models.Shop || require('./Shop');
-      const shop = await Shop.findByPk(customer.shopId, { attributes: ['organizationId'], transaction: options?.transaction });
-      if (shop && shop.organizationId) {
-        customer.organizationId = shop.organizationId;
-      }
-    }
-    if (!customer.organizationId) {
-      const Org = sequelize.models.Organization || require('./Organization');
-      const org = await Org.findOne({ attributes: ['id'], transaction: options?.transaction });
-      if (org) {
-        customer.organizationId = org.id;
-      }
-    }
-  }
-});
 
 module.exports = Customer;
