@@ -14,7 +14,7 @@ async function runSprint4Tests() {
   // Setup test shop, user, and category
   const [shop] = await Shop.findOrCreate({
     where: { name: 'Sprint 4 Inventory Test Shop' },
-    defaults: { address: '789 Inventory Blvd', phone: '0733333333' }
+    defaults: { address: '789 Inventory Blvd', phone: '0733333333', organizationId: 1 }
   });
 
   const testShopId = shop.id;

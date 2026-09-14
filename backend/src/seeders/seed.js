@@ -15,6 +15,7 @@ const seedDatabase = async () => {
       name: 'Default Shop',
       address: 'Nairobi, Kenya',
       phone: '+254700000000',
+      organizationId: 3
     });
 
     // Create users and associate to the default shop
@@ -118,7 +119,8 @@ const seedDatabase = async () => {
         phone: '+254700000001',
         address: 'Nairobi, Kenya',
         loyaltyPoints: 100,
-        shopId: defaultShop.id
+        shopId: defaultShop.id,
+        organizationId: defaultShop.organizationId
       },
       {
         name: 'Jane Smith',
@@ -126,7 +128,8 @@ const seedDatabase = async () => {
         phone: '+254700000002',
         address: 'Mombasa, Kenya',
         loyaltyPoints: 50,
-        shopId: defaultShop.id
+        shopId: defaultShop.id,
+        organizationId: defaultShop.organizationId
       },
       {
         name: 'Bob Johnson',
@@ -134,7 +137,8 @@ const seedDatabase = async () => {
         phone: '+254700000003',
         address: 'Kisumu, Kenya',
         loyaltyPoints: 75,
-        shopId: defaultShop.id
+        shopId: defaultShop.id,
+        organizationId: defaultShop.organizationId
       }
     ]);
 

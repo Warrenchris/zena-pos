@@ -2,7 +2,7 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Shop, Category, Product, Inventory, Sale, SaleItem, Customer, Employee, User, PendingPayment, SalePayment, SaleRefund, ActivityLog } = require('../src/models');
+const { Shop, Organization, Category, Product, Inventory, Sale, SaleItem, Customer, Employee, User, PendingPayment, SalePayment, SaleRefund, ActivityLog } = require('../src/models');
 const axios = require('axios');
 
 jest.mock('axios');
@@ -66,6 +66,10 @@ describe('Phase 2 Remediation Tests', () => {
 
     await sequelize.authenticate();
     await cleanDb();
+
+    // Setup organizations
+    await Organization.findOrCreate({ where: { id: 1 }, defaults: { id: 1, name: 'Shop 1 Org', slug: 'shop-1-org', status: 'active', currency: 'KES' } });
+    await Organization.findOrCreate({ where: { id: 2 }, defaults: { id: 2, name: 'Shop 2 Org', slug: 'shop-2-org', status: 'active', currency: 'KES' } });
 
     // Setup shops
     [shop1] = await Shop.findOrCreate({ where: { id: 1 }, defaults: { name: 'Shop 1', organizationId: 1, active: true } });

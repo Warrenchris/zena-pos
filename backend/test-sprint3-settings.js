@@ -13,7 +13,7 @@ async function runSprint3Tests() {
   // Setup test shop & users (1 admin user, 1 cashier user)
   const [shop] = await Shop.findOrCreate({
     where: { name: 'Sprint 3 Permissions Test Shop' },
-    defaults: { address: '456 Role Ave', phone: '0722222222' }
+    defaults: { address: '456 Role Ave', phone: '0722222222', organizationId: 1 }
   });
 
   const testShopId = shop.id;

@@ -7,7 +7,8 @@ const seedDatabase = async () => {
     const defaultShop = await Shop.create({
       name: 'Demo Shop',
       address: 'Nairobi, Kenya',
-      phone: '+254700000000'
+      phone: '+254700000000',
+      organizationId: 1
     });
 
     // Create sample employees
