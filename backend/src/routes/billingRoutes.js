@@ -170,7 +170,8 @@ router.post('/mpesa/callback', async (req, res) => {
     await billingService.processConfirmedRenewal({
       invoice,
       paymentMethod: 'mpesa',
-      receiptOrTxRef: receiptNumber,
+      receiptOrTxRef: checkoutRequestId,
+      gatewayReference: receiptNumber,
       rawMetadata: req.body,
       transaction: t
     });

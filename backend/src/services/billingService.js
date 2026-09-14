@@ -146,12 +146,13 @@ async function processConfirmedRenewal({
     { where: { id: invoice.organizationId }, transaction }
   );
 
+  const refString = gatewayReference ? ` Receipt/Ref: ${gatewayReference}.` : '';
   // Log activity
   await logBillingActivity({
     organizationId: invoice.organizationId,
     action: 'SUBSCRIPTION_RENEWAL_CONFIRMED',
     invoiceId: invoice.id,
-    details: `${paymentMethod.toUpperCase()} renewal confirmed for invoice ${invoice.invoiceNumber}. Amount: ${invoice.amount} ${invoice.currency}. Period extended to ${newPeriodEnd.toISOString()}`
+    details: `${paymentMethod.toUpperCase()} renewal confirmed for invoice ${invoice.invoiceNumber}.${refString} Amount: ${invoice.amount} ${invoice.currency}. Period extended to ${newPeriodEnd.toISOString()}`
   }, transaction);
 
   return {

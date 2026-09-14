@@ -441,13 +441,26 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
   });
 
   describe('Verification 10: Grace Period & Past-Due Transition', () => {
+    let expiredOrg;
+    let expiredShop;
     let testSub;
     let gfSub;
 
     beforeAll(async () => {
+      expiredOrg = await Organization.create({
+        name: 'Expired Test Org',
+        slug: `expired-org-${Date.now()}`,
+        status: 'active'
+      });
+      expiredShop = await Shop.create({
+        name: 'Expired Test Shop',
+        organizationId: expiredOrg.id,
+        active: true
+      });
+
       // Expired active subscription (ended yesterday)
       testSub = await Subscription.create({
-        organizationId: org.id,
+        organizationId: expiredOrg.id,
         planId: starterPlan.id,
         status: 'active',
         billingCycle: 'monthly',
@@ -463,6 +476,8 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
 
     afterAll(async () => {
       if (testSub) await Subscription.destroy({ where: { id: testSub.id } });
+      if (expiredShop) await Shop.destroy({ where: { id: expiredShop.id } });
+      if (expiredOrg) await Organization.destroy({ where: { id: expiredOrg.id } });
     });
 
     it('should transition expired active subscription to past_due, while grandfathered org is immune', async () => {
