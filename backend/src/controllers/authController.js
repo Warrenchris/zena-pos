@@ -9,7 +9,7 @@ const emailService = require('../services/emailService');
 // Helper to retrieve private key dynamically
 const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const Shop = require('../models/Shop');
-const { OrganizationMembership, ShopAccess } = require('../models');
+const { sequelize, Organization, OrganizationMembership, ShopAccess } = require('../models');
 const logger = require('../utils/logger');
 
 exports.register = async (req, res) => {
@@ -26,22 +26,51 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: 'User already exists' });
     }
 
-    // Create the shop if provided; first user is admin by default
-    let createdShop = null;
-    if (shop?.name) {
-      createdShop = await Shop.create({
-        name: shop.name,
-        address: shop.address || null,
-        phone: shop.phone || null,
-      });
-    }
+    // Atomic transaction: Organization, Shop, User, and OrganizationMembership
+    const { user, createdShop } = await sequelize.transaction(async (t) => {
+      let createdOrg = null;
+      let newShop = null;
 
-    const user = await User.create({
-      name,
-      email,
-      password,
-      role: role || 'admin',
-      shopId: createdShop?.id,
+      if (shop?.name) {
+        const cleanName = (shop.name || 'org')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '') || 'org';
+        const slug = `${cleanName}-${Date.now()}`;
+
+        createdOrg = await Organization.create({
+          name: shop.name,
+          slug,
+          status: 'active',
+          currency: 'KES'
+        }, { transaction: t });
+
+        newShop = await Shop.create({
+          name: shop.name,
+          address: shop.address || null,
+          phone: shop.phone || null,
+          organizationId: createdOrg.id
+        }, { transaction: t });
+      }
+
+      const createdUser = await User.create({
+        name,
+        email,
+        password,
+        role: role || 'admin',
+        shopId: newShop?.id,
+      }, { transaction: t });
+
+      if (createdOrg) {
+        await OrganizationMembership.create({
+          organizationId: createdOrg.id,
+          userId: createdUser.id,
+          orgRole: 'owner',
+          status: 'active'
+        }, { transaction: t });
+      }
+
+      return { user: createdUser, createdShop: newShop };
     });
 
     const token = jwt.sign(
@@ -67,6 +96,7 @@ exports.register = async (req, res) => {
       token
     });
   } catch (error) {
+    logger.error('Registration error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
