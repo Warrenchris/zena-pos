@@ -475,6 +475,7 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
     });
 
     afterAll(async () => {
+      if (expiredShop) await ActivityLog.destroy({ where: { shopId: expiredShop.id } });
       if (testSub) await Subscription.destroy({ where: { id: testSub.id } });
       if (expiredShop) await Shop.destroy({ where: { id: expiredShop.id } });
       if (expiredOrg) await Organization.destroy({ where: { id: expiredOrg.id } });
