@@ -1,12 +1,16 @@
 const { Op } = require('sequelize');
 const Employee = require('../models/Employee');
 const User = require('../models/User');
+const Shop = require('../models/Shop');
+const OrganizationMembership = require('../models/OrganizationMembership');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
 const { validateEmployee } = require('../utils/validation');
 const sequelize = require('../config/database');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
+const entitlementService = require('../services/entitlementService');
+const { sendUpgradePrompt } = require('../utils/upgradePrompt');
 
 // Get all employees and shop staff
 exports.getAllEmployees = async (req, res) => {
@@ -232,7 +236,64 @@ exports.createEmployee = async (req, res) => {
   try {
     const validationError = validateEmployee(req.body);
     if (validationError) {
+      await transaction.rollback();
       return res.status(400).json({ error: validationError });
+    }
+
+    // Resolve organization context
+    let orgId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+    if (!orgId && req.user?.shopId) {
+      const callerShop = await Shop.findByPk(req.user.shopId, { attributes: ['organizationId'] });
+      orgId = callerShop?.organizationId || null;
+    }
+
+    if (orgId) {
+      // Count active members:
+      // Count OrganizationMemberships with status 'active' (covering Users and Employees with memberships)
+      // Plus any active Employees in the organization's shops not already represented in OrganizationMembership
+      const activeMemberships = await OrganizationMembership.findAll({
+        where: { organizationId: orgId, status: 'active' },
+        attributes: ['userId', 'employeeId']
+      });
+
+      const memberEmployeeIds = new Set(
+        activeMemberships.filter(m => m.employeeId).map(m => m.employeeId)
+      );
+
+      const orgShops = await Shop.findAll({
+        where: { organizationId: orgId },
+        attributes: ['id']
+      });
+      const shopIds = orgShops.map(s => s.id);
+
+      let unlinkedEmployeeCount = 0;
+      if (shopIds.length > 0) {
+        const activeEmployees = await Employee.findAll({
+          where: {
+            shopId: shopIds,
+            status: 'active'
+          },
+          attributes: ['id']
+        });
+        unlinkedEmployeeCount = activeEmployees.filter(e => !memberEmployeeIds.has(e.id)).length;
+      }
+
+      const currentActiveMemberCount = activeMemberships.length + unlinkedEmployeeCount;
+
+      const quotaResult = await entitlementService.checkQuota(orgId, 'maxUsers', currentActiveMemberCount);
+      if (!quotaResult.allowed) {
+        await transaction.rollback();
+        const { plan } = await entitlementService.getOrganizationEntitlements(orgId);
+        return sendUpgradePrompt(res, {
+          type: 'quota',
+          key: 'maxUsers',
+          current: currentActiveMemberCount,
+          limit: quotaResult.limit,
+          currentPlan: plan,
+          requiredPlan: 'growth',
+          reason: quotaResult.reason
+        });
+      }
     }
 
     // Check if email already exists in either Users or Employees

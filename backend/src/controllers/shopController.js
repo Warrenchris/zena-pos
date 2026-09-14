@@ -10,6 +10,8 @@ const {
 } = require('../models');
 const { logActivity } = require('../middleware/logger');
 const { validationResult } = require('express-validator');
+const entitlementService = require('../services/entitlementService');
+const { sendUpgradePrompt } = require('../utils/upgradePrompt');
 
 exports.getMine = async (req, res) => {
   const shop = await Shop.findByPk(req.user.shopId);
@@ -56,7 +58,26 @@ exports.createShop = async (req, res) => {
       return res.status(403).json({ error: 'Only organization owners and admins can create shops.' });
     }
 
-    // 2. Atomic MySQL transaction
+    // 2. Additive Quota Check: verify branch quota (maxShops)
+    const currentActiveShopCount = await Shop.count({
+      where: { organizationId: orgId, active: true }
+    });
+
+    const quotaResult = await entitlementService.checkQuota(orgId, 'maxShops', currentActiveShopCount);
+    if (!quotaResult.allowed) {
+      const { plan } = await entitlementService.getOrganizationEntitlements(orgId);
+      return sendUpgradePrompt(res, {
+        type: 'quota',
+        key: 'maxShops',
+        current: currentActiveShopCount,
+        limit: quotaResult.limit,
+        currentPlan: plan,
+        requiredPlan: 'growth',
+        reason: quotaResult.reason
+      });
+    }
+
+    // 3. Atomic MySQL transaction
     const result = await sequelize.transaction(async (t) => {
       // Step A: Insert Shop
       const newShop = await Shop.create({

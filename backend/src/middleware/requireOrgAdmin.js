@@ -1,4 +1,6 @@
 const { OrganizationMembership, Shop, ShopAccess } = require('../models');
+const entitlementService = require('../services/entitlementService');
+const { sendUpgradePrompt } = require('../utils/upgradePrompt');
 
 /**
  * Middleware: requireOrgAdmin
@@ -71,6 +73,19 @@ async function requireOrgAdmin(req, res, next) {
     req.accessibleShops = accessibleShops;
     req.accessibleShopIds = accessibleShops.map(s => s.id);
     req.totalOrgShopsCount = totalOrgShopsCount;
+
+    // 5. Entitlement check: verify organization has 'org_insights' feature
+    const featureResult = await entitlementService.canUseFeature(organizationId, 'org_insights');
+    if (!featureResult.allowed) {
+      const { plan } = await entitlementService.getOrganizationEntitlements(organizationId);
+      return sendUpgradePrompt(res, {
+        type: 'feature',
+        key: 'org_insights',
+        currentPlan: plan,
+        requiredPlan: 'growth',
+        reason: featureResult.reason
+      });
+    }
 
     next();
   } catch (error) {

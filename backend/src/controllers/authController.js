@@ -9,7 +9,7 @@ const emailService = require('../services/emailService');
 // Helper to retrieve private key dynamically
 const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const Shop = require('../models/Shop');
-const { sequelize, Organization, OrganizationMembership, ShopAccess } = require('../models');
+const { sequelize, Organization, OrganizationMembership, ShopAccess, Subscription, Plan } = require('../models');
 const logger = require('../utils/logger');
 
 exports.register = async (req, res) => {
@@ -26,7 +26,7 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: 'User already exists' });
     }
 
-    // Atomic transaction: Organization, Shop, User, and OrganizationMembership
+    // Atomic transaction: Organization, Shop, User, OrganizationMembership, and Subscription
     const { user, createdShop } = await sequelize.transaction(async (t) => {
       let createdOrg = null;
       let newShop = null;
@@ -68,6 +68,28 @@ exports.register = async (req, res) => {
           orgRole: 'owner',
           status: 'active'
         }, { transaction: t });
+
+        // Phase 6c: Provision 14-day trial on Growth plan
+        const growthPlan = await Plan.findOne({
+          where: { code: 'growth' },
+          transaction: t
+        });
+
+        if (growthPlan) {
+          const now = new Date();
+          const trialEndsAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+          await Subscription.create({
+            organizationId: createdOrg.id,
+            planId: growthPlan.id,
+            status: 'trialing',
+            billingCycle: 'monthly',
+            currentPeriodStart: now,
+            currentPeriodEnd: trialEndsAt,
+            trialEndsAt: trialEndsAt,
+            cancelAtPeriodEnd: false
+          }, { transaction: t });
+        }
       }
 
       return { user: createdUser, createdShop: newShop };
