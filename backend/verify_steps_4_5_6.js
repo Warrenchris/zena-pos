@@ -155,31 +155,27 @@ async function runVerifications() {
   const cacheBefore = await redisClient.get(cacheKey);
   console.log(`Cache key "${cacheKey}" before calls:`, cacheBefore);
 
-  // Step 2: Track database queries during Call 1
+  // Step 2: Track database queries during Call 1 and Call 2 via Subscription.findOne spy
   let dbQueriesCall1 = 0;
   let dbQueriesCall2 = 0;
-  let tracking = false;
+  let activeCall = 0;
 
-  const originalQuery = sequelize.dialect.queryConnection;
+  const originalFindOne = Subscription.findOne;
+  Subscription.findOne = async function(...args) {
+    if (activeCall === 1) dbQueriesCall1++;
+    if (activeCall === 2) dbQueriesCall2++;
+    return originalFindOne.apply(this, args);
+  };
 
   // Call 1: Should MISS Redis cache and query DB
   console.log('\nExecuting Call 1 (Expecting Cache MISS -> DB Query -> Set Redis)...');
-  const call1StartQueries = [];
-  const logListener = (sql) => {
-    if (sql.includes('Subscriptions') && sql.includes('Plans')) {
-      if (tracking === 1) dbQueriesCall1++;
-      if (tracking === 2) dbQueriesCall2++;
-    }
-  };
-  sequelize.on('beforeQuery', logListener);
-
-  tracking = 1;
+  activeCall = 1;
   const res1 = await entitlementService.canUseFeature(orgIdForCache, 'org_insights');
-  tracking = 0;
+  activeCall = 0;
 
   const cacheAfterCall1 = await redisClient.get(cacheKey);
   console.log(`Call 1 Result:`, res1);
-  console.log(`DB Queries on Subscriptions/Plans during Call 1: ${dbQueriesCall1}`);
+  console.log(`DB Queries on Subscription.findOne during Call 1: ${dbQueriesCall1}`);
   console.log(`Redis Cache Key "${cacheKey}" populated after Call 1:`, cacheAfterCall1 !== null);
   if (cacheAfterCall1) {
     const parsedCache = JSON.parse(cacheAfterCall1);
@@ -188,14 +184,15 @@ async function runVerifications() {
 
   // Call 2: Should HIT Redis cache and execute ZERO DB queries
   console.log('\nExecuting Call 2 (Expecting Cache HIT -> 0 DB Queries)...');
-  tracking = 2;
+  activeCall = 2;
   const res2 = await entitlementService.canUseFeature(orgIdForCache, 'org_insights');
-  tracking = 0;
+  activeCall = 0;
 
-  sequelize.removeListener('beforeQuery', logListener);
+  // Restore original findOne
+  Subscription.findOne = originalFindOne;
 
   console.log(`Call 2 Result:`, res2);
-  console.log(`DB Queries on Subscriptions/Plans during Call 2: ${dbQueriesCall2}`);
+  console.log(`DB Queries on Subscription.findOne during Call 2: ${dbQueriesCall2}`);
   console.log(`Cache HIT Verified: DB Queries Call 1 = ${dbQueriesCall1}, DB Queries Call 2 = ${dbQueriesCall2} (Zero DB queries on second call)`);
 
   if (dbQueriesCall1 < 1 || dbQueriesCall2 !== 0) {
