@@ -9,7 +9,9 @@ const {
   Product,
   Inventory,
   Sale,
-  User
+  User,
+  Subscription,
+  Plan
 } = require('../src/models');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
@@ -43,6 +45,19 @@ describe('Organization Insights Endpoints (FINDING-12 Phase 4)', () => {
       currency: 'KES',
       status: 'active'
     });
+
+    const gfPlan = await Plan.findOne({ where: { code: 'grandfathered' } });
+    if (gfPlan) {
+      await Subscription.create({
+        organizationId: org.id,
+        planId: gfPlan.id,
+        status: 'active',
+        billingCycle: 'yearly',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date('2099-12-31 23:59:59'),
+        trialEndsAt: null
+      });
+    }
 
     // Create 2 Shops
     shopA = await Shop.create({

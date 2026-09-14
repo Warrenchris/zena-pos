@@ -37,6 +37,17 @@ module.exports = async () => {
       "(2, 'Shop 2 Org', 'shop-2-org', 'active', 'KES', NOW(), NOW()) " +
       "ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);"
     );
+
+    const [gfPlans] = await sequelize.query("SELECT id FROM `Plans` WHERE `code` = 'grandfathered' LIMIT 1;");
+    const gfPlanId = gfPlans[0]?.id;
+    if (gfPlanId) {
+      await sequelize.query(
+        "INSERT INTO `Subscriptions` (`id`, `organizationId`, `planId`, `status`, `billingCycle`, `currentPeriodStart`, `currentPeriodEnd`, `trialEndsAt`, `cancelAtPeriodEnd`, `createdAt`, `updatedAt`) VALUES " +
+        `('00000000-0000-0000-0000-000000000001', 1, ${gfPlanId}, 'active', 'yearly', NOW(), '2099-12-31 23:59:59', NULL, 0, NOW(), NOW()), ` +
+        `('00000000-0000-0000-0000-000000000002', 2, ${gfPlanId}, 'active', 'yearly', NOW(), '2099-12-31 23:59:59', NULL, 0, NOW(), NOW()) ` +
+        "ON DUPLICATE KEY UPDATE `status`='active';"
+      );
+    }
     await sequelize.close();
   } catch (e) {
     console.error('[Test Setup] Migration execution failed:', e.message);

@@ -9,7 +9,9 @@ const {
   ShopAccess,
   ActivityLog,
   User,
-  SystemSettings
+  SystemSettings,
+  Subscription,
+  Plan
 } = require('../src/models');
 
 function tokenFor(payload) {
@@ -38,6 +40,11 @@ describe('Multi-Shop Flow Integration Tests (FINDING-12 Consumer Slice)', () => 
     await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;').catch(() => {});
     try {
       await User.destroy({ where: { email: ['msf_owner@test.com', 'msf_admin@test.com', 'msf_member@test.com'] } });
+      const existingOrgs = await Organization.findAll({ where: { slug: ['msf-org-alpha', 'msf-org-beta'] } });
+      const existingOrgIds = existingOrgs.map(o => o.id);
+      if (existingOrgIds.length > 0) {
+        await Subscription.destroy({ where: { organizationId: existingOrgIds } });
+      }
       await Organization.destroy({ where: { slug: ['msf-org-alpha', 'msf-org-beta'] } });
     } finally {
       await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;').catch(() => {});
@@ -57,6 +64,28 @@ describe('Multi-Shop Flow Integration Tests (FINDING-12 Consumer Slice)', () => 
       status: 'active',
       currency: 'USD'
     });
+
+    const gfPlan = await Plan.findOne({ where: { code: 'grandfathered' } });
+    if (gfPlan) {
+      await Subscription.create({
+        organizationId: orgA.id,
+        planId: gfPlan.id,
+        status: 'active',
+        billingCycle: 'yearly',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date('2099-12-31 23:59:59'),
+        trialEndsAt: null
+      });
+      await Subscription.create({
+        organizationId: orgB.id,
+        planId: gfPlan.id,
+        status: 'active',
+        billingCycle: 'yearly',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date('2099-12-31 23:59:59'),
+        trialEndsAt: null
+      });
+    }
 
     // 2. Create existing shops under orgs
     shopA1 = await Shop.create({
