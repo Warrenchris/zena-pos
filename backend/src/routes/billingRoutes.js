@@ -1,11 +1,248 @@
 const express = require('express');
 const router = express.Router();
+const { Op } = require('sequelize');
 const { auth } = require('../middleware/auth');
 const { requireOrgOwner } = require('../middleware/requireOrgOwner');
 const billingService = require('../services/billingService');
 const billingPaymentService = require('../services/billingPaymentService');
 const entitlementService = require('../services/entitlementService');
-const { SubscriptionInvoice, sequelize } = require('../models');
+const {
+  Plan,
+  Subscription,
+  SubscriptionInvoice,
+  Shop,
+  OrganizationMembership,
+  Employee,
+  sequelize
+} = require('../models');
+
+/**
+ * GET /api/billing/plans
+ * Public endpoint returning all active public billing plans.
+ * Excludes internal/hidden 'grandfathered' tier.
+ */
+router.get('/plans', async (req, res) => {
+  try {
+    const plans = await Plan.findAll({
+      where: {
+        isActive: true,
+        code: { [Op.ne]: 'grandfathered' }
+      },
+      attributes: [
+        'id',
+        'name',
+        'code',
+        'priceMonthly',
+        'currency',
+        'maxShops',
+        'maxUsers',
+        'features'
+      ],
+      order: [['priceMonthly', 'ASC'], ['id', 'ASC']]
+    });
+
+    return res.status(200).json({ plans });
+  } catch (error) {
+    console.error('Error fetching billing plans:', error);
+    return res.status(500).json({ error: 'Failed to fetch billing plans.' });
+  }
+});
+
+/**
+ * GET /api/billing/subscription
+ * Returns the calling user's organization's active subscription, current plan details,
+ * and current quota consumption (active shops and active members).
+ * Access: Authenticated active organization member.
+ */
+router.get('/subscription', auth, async (req, res) => {
+  try {
+    let orgId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+    if (!orgId && req.user?.shopId) {
+      const callerShop = await Shop.findByPk(req.user.shopId, { attributes: ['organizationId'] });
+      orgId = callerShop?.organizationId || null;
+    }
+
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
+
+    // Verify caller belongs to this organization
+    const membershipWhere = {
+      organizationId: orgId,
+      status: 'active'
+    };
+    if (req.user?.isEmployee) {
+      membershipWhere.employeeId = req.user.id;
+    } else {
+      membershipWhere.userId = req.user?.id;
+    }
+
+    const membership = await OrganizationMembership.findOne({ where: membershipWhere });
+    if (!membership) {
+      let hasShopAccess = false;
+      if (req.shopId) {
+        const callerShop = await Shop.findOne({ where: { id: req.shopId, organizationId: orgId } });
+        if (callerShop) hasShopAccess = true;
+      }
+      if (!hasShopAccess) {
+        return res.status(403).json({ error: 'Access denied: user does not belong to this organization.' });
+      }
+    }
+
+    const subscription = await Subscription.findOne({
+      where: { organizationId: orgId },
+      include: [{
+        model: Plan,
+        attributes: [
+          'id',
+          'name',
+          'code',
+          'priceMonthly',
+          'currency',
+          'maxShops',
+          'maxUsers',
+          'features',
+          'isActive'
+        ]
+      }]
+    });
+
+    if (!subscription) {
+      return res.status(404).json({ error: 'Subscription not found for this organization.' });
+    }
+
+    // Days remaining in trial computation
+    let daysRemainingInTrial = null;
+    if (subscription.status === 'trialing' && subscription.trialEndsAt) {
+      const now = new Date();
+      const diffMs = new Date(subscription.trialEndsAt).getTime() - now.getTime();
+      daysRemainingInTrial = diffMs > 0 ? Math.ceil(diffMs / (24 * 60 * 60 * 1000)) : 0;
+    }
+
+    // Exact count of active shops (same query as shopController.js:createShop)
+    const currentActiveShopCount = await Shop.count({
+      where: { organizationId: orgId, active: true }
+    });
+
+    // Exact count of active members (same logic as employeeController.js:createEmployee)
+    const activeMemberships = await OrganizationMembership.findAll({
+      where: { organizationId: orgId, status: 'active' },
+      attributes: ['userId', 'employeeId']
+    });
+
+    const memberEmployeeIds = new Set(
+      activeMemberships.filter(m => m.employeeId).map(m => m.employeeId)
+    );
+
+    const orgShops = await Shop.findAll({
+      where: { organizationId: orgId },
+      attributes: ['id']
+    });
+    const shopIds = orgShops.map(s => s.id);
+
+    let unlinkedEmployeeCount = 0;
+    if (shopIds.length > 0) {
+      const activeEmployees = await Employee.findAll({
+        where: {
+          shopId: shopIds,
+          status: 'active'
+        },
+        attributes: ['id']
+      });
+      unlinkedEmployeeCount = activeEmployees.filter(e => !memberEmployeeIds.has(e.id)).length;
+    }
+
+    const currentActiveMemberCount = activeMemberships.length + unlinkedEmployeeCount;
+
+    const plan = subscription.Plan;
+    const isUnlimitedShops = plan.maxShops === -1;
+    const isUnlimitedUsers = plan.maxUsers === -1;
+    const isUnlimited = isUnlimitedShops && isUnlimitedUsers;
+
+    return res.status(200).json({
+      subscription: {
+        id: subscription.id,
+        organizationId: subscription.organizationId,
+        status: subscription.status,
+        billingCycle: subscription.billingCycle,
+        currentPeriodStart: subscription.currentPeriodStart,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        trialEndsAt: subscription.trialEndsAt,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        lastPaymentMethod: subscription.lastPaymentMethod,
+        lastPaymentDate: subscription.lastPaymentDate,
+        daysRemainingInTrial,
+        plan: {
+          id: plan.id,
+          name: plan.name,
+          code: plan.code,
+          priceMonthly: plan.priceMonthly,
+          currency: plan.currency,
+          maxShops: plan.maxShops,
+          maxUsers: plan.maxUsers,
+          features: plan.features,
+          isUnlimited
+        }
+      },
+      quotas: {
+        shops: {
+          current: currentActiveShopCount,
+          limit: plan.maxShops,
+          isUnlimited: isUnlimitedShops
+        },
+        users: {
+          current: currentActiveMemberCount,
+          limit: plan.maxUsers,
+          isUnlimited: isUnlimitedUsers
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching subscription:', error);
+    return res.status(500).json({ error: 'Failed to fetch subscription details.' });
+  }
+});
+
+/**
+ * GET /api/billing/invoices
+ * Returns paginated list of subscription renewal invoices for the calling organization.
+ * Access: Organization Owner ONLY.
+ */
+router.get('/invoices', auth, requireOrgOwner, async (req, res) => {
+  try {
+    const organizationId = req.organizationId;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const offset = (page - 1) * limit;
+
+    const { count, rows: invoices } = await SubscriptionInvoice.findAndCountAll({
+      where: { organizationId },
+      attributes: [
+        'id',
+        'invoiceNumber',
+        'amount',
+        'currency',
+        'status',
+        'paymentChannel',
+        'paidAt',
+        'createdAt'
+      ],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
+    });
+
+    return res.status(200).json({
+      invoices,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page
+    });
+  } catch (error) {
+    console.error('Error fetching subscription invoices:', error);
+    return res.status(500).json({ error: 'Failed to fetch subscription invoices.' });
+  }
+});
 
 /**
  * POST /api/billing/subscription/renew
