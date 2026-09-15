@@ -37,7 +37,46 @@ const updateMine = async (shopData) => {
   }
 };
 
+const getAccessibleShops = async () => {
+  try {
+    const response = await api.get('/api/shop/accessible');
+    return response.data;
+  } catch (error) {
+    const status = error.response?.status;
+    if (status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+      return null;
+    }
+    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
+      console.error('Error fetching accessible shops:', error);
+    }
+    throw error;
+  }
+};
+
+const createShop = async (payload) => {
+  try {
+    const response = await api.post('/api/shop', payload);
+    return response.data;
+  } catch (error) {
+    const status = error.response?.status;
+    if (status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+      return null;
+    }
+    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
+      console.error('Error creating shop:', error);
+    }
+    throw error;
+  }
+};
+
 export default {
   getMine,
   updateMine,
+  getAccessibleShops,
+  getAccessible: getAccessibleShops,
+  createShop,
 };
