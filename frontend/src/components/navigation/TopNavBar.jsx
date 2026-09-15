@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, Transition } from '@headlessui/react';
@@ -11,12 +11,15 @@ import {
   UserIcon,
   SunIcon,
   MoonIcon,
-  SparklesIcon
+  SparklesIcon,
+  CheckIcon,
+  PlusIcon
 } from '@heroicons/react/24/outline';
 import { ShoppingCartIcon } from '@heroicons/react/24/solid';
-import { fetchMyShop } from '../../store/slices/shopSlice';
-import { logout } from '../../store/slices/authSlice';
+import { fetchMyShop, fetchAccessibleShops } from '../../store/slices/shopSlice';
+import { logout, switchActiveShop } from '../../store/slices/authSlice';
 import NotificationDropdown from '../NotificationDropdown';
+import CreateBranchModal from '../CreateBranchModal';
 import { useTheme } from '../../providers/ThemeProvider';
 
 const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
@@ -24,9 +27,12 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
   const navigate = useNavigate();
   const { resolvedTheme, toggleTheme } = useTheme();
 
+  const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
+  const [switchingShopId, setSwitchingShopId] = useState(null);
+
   const user = useSelector((state) => state.auth?.user);
   const authShop = useSelector((state) => state.auth?.shop);
-  const { shop, loading } = useSelector((state) => state.shop || {});
+  const { shop, loading, accessibleShops = [], switching = false } = useSelector((state) => state.shop || {});
 
   const currentShop = shop || authShop || (user?.shop ? { name: user.shop.name } : null);
   const hasFetchedShopRef = useRef(false);
@@ -38,6 +44,36 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
       dispatch(fetchMyShop());
     }
   }, [dispatch, authShop, shop, loading, user]);
+
+  useEffect(() => {
+    if (user && accessibleShops.length === 0 && typeof fetchAccessibleShops === 'function') {
+      dispatch(fetchAccessibleShops());
+    }
+  }, [dispatch, user, accessibleShops.length]);
+
+  const handleSwitcherClick = () => {
+    if (user && typeof fetchAccessibleShops === 'function') {
+      dispatch(fetchAccessibleShops());
+    }
+  };
+
+  const handleSwitchShop = async (targetShopId) => {
+    if (switching || switchingShopId) return;
+    setSwitchingShopId(targetShopId);
+    try {
+      await dispatch(switchActiveShop(targetShopId)).unwrap();
+    } catch (err) {
+      console.error('Failed to switch active shop:', err);
+    } finally {
+      setSwitchingShopId(null);
+    }
+  };
+
+  const canCreateBranch = user?.orgRole === 'owner' || user?.orgRole === 'admin' || user?.role === 'admin';
+
+  const displayShops = accessibleShops.length > 0
+    ? accessibleShops
+    : (currentShop ? [{ ...currentShop, isCurrent: true }] : []);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -97,10 +133,15 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
           {/* Store / Workspace Switcher */}
           <div className="hidden sm:block relative">
             <Menu as="div" className="relative">
-              <Menu.Button className="h-9 flex items-center gap-2 px-3 border border-border-default rounded-xl bg-surface hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-primary/40 text-text-primary transition-all duration-150 text-small font-medium shadow-2xs">
+              <Menu.Button
+                disabled={switching}
+                onClick={handleSwitcherClick}
+                className={`h-9 flex items-center gap-2 px-3 border border-border-default rounded-xl bg-surface hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-primary/40 text-text-primary transition-all duration-150 text-small font-medium shadow-2xs ${switching ? 'opacity-75 cursor-not-allowed' : ''}`}
+                aria-label="Switch store workspace"
+              >
                 <BuildingStorefrontIcon className="h-4 w-4 text-primary" aria-hidden="true" />
-                <span className="max-w-[120px] truncate font-medium">
-                  {loading ? 'Loading...' : currentShop?.name || 'My Store'}
+                <span className="max-w-[130px] truncate font-medium">
+                  {switching ? 'Switching...' : (loading && !currentShop ? 'Loading...' : currentShop?.name || 'My Store')}
                 </span>
                 <ChevronDownIcon className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
               </Menu.Button>
@@ -112,19 +153,69 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
                 leaveFrom="transform scale-100 opacity-100"
                 leaveTo="transform scale-95 opacity-0"
               >
-                <Menu.Items className="absolute right-0 mt-2 w-64 origin-top-right rounded-2xl bg-surface border border-border-default shadow-modal p-1.5 z-50 focus:outline-none">
+                <Menu.Items className="absolute right-0 mt-2 w-72 origin-top-right rounded-2xl bg-surface border border-border-default shadow-modal p-1.5 z-50 focus:outline-none">
                   <div className="px-3.5 py-2.5 border-b border-border-default mb-1">
-                    <p className="text-caption font-semibold text-text-muted uppercase tracking-wider">Current Workspace</p>
-                    <p className="text-small font-semibold text-text-primary mt-0.5">{currentShop?.name || 'Default Store'}</p>
+                    <p className="text-caption font-semibold text-text-muted uppercase tracking-wider">Branches & Workspaces</p>
+                    <p className="text-small font-semibold text-text-primary mt-0.5 truncate">{currentShop?.name || 'Default Store'}</p>
                   </div>
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button className={`w-full text-left px-3 py-2 text-small rounded-xl flex items-center gap-2.5 ${active ? 'bg-surface-2 text-text-primary' : 'text-text-secondary'}`}>
-                        <BuildingStorefrontIcon className="h-4 w-4 text-primary" />
-                        <span>Manage Workspaces</span>
-                      </button>
-                    )}
-                  </Menu.Item>
+
+                  {/* List of Accessible Shops */}
+                  <div className="max-h-60 overflow-y-auto space-y-0.5 py-1">
+                    {displayShops.map((s) => {
+                      const isCurrent = Boolean(s.isCurrent || (currentShop && s.id === currentShop.id));
+                      const isTargetSwitching = switchingShopId === s.id;
+                      return (
+                        <Menu.Item key={s.id} disabled={isCurrent || switching}>
+                          {({ active }) => (
+                            <button
+                              type="button"
+                              onClick={() => !isCurrent && handleSwitchShop(s.id)}
+                              disabled={isCurrent || switching}
+                              className={`w-full text-left px-3 py-2 text-small rounded-xl flex items-center justify-between gap-2.5 transition-colors ${
+                                isCurrent
+                                  ? 'bg-primary/10 text-primary font-semibold cursor-default'
+                                  : active
+                                  ? 'bg-surface-2 text-text-primary'
+                                  : 'text-text-secondary hover:text-text-primary'
+                              } ${switching && !isTargetSwitching ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            >
+                              <div className="flex items-center gap-2.5 truncate">
+                                <BuildingStorefrontIcon className={`h-4 w-4 shrink-0 ${isCurrent ? 'text-primary' : 'text-text-muted'}`} />
+                                <span className="truncate">{s.name}</span>
+                              </div>
+                              {isCurrent && (
+                                <CheckIcon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                              )}
+                              {isTargetSwitching && (
+                                <span className="text-[11px] text-primary font-medium animate-pulse">Switching...</span>
+                              )}
+                            </button>
+                          )}
+                        </Menu.Item>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add Branch Action (Owner / Admin only) */}
+                  {canCreateBranch && (
+                    <div className="pt-1 border-t border-border-default mt-1">
+                      <Menu.Item disabled={switching}>
+                        {({ active }) => (
+                          <button
+                            type="button"
+                            onClick={() => setIsBranchModalOpen(true)}
+                            disabled={switching}
+                            className={`w-full text-left px-3 py-2 text-small rounded-xl flex items-center gap-2.5 transition-colors ${
+                              active ? 'bg-surface-2 text-primary font-semibold' : 'text-text-primary font-medium'
+                            } ${switching ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          >
+                            <PlusIcon className="h-4 w-4 text-primary shrink-0" />
+                            <span>Add Branch</span>
+                          </button>
+                        )}
+                      </Menu.Item>
+                    </div>
+                  )}
                 </Menu.Items>
               </Transition>
             </Menu>
@@ -201,6 +292,14 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
 
         </div>
       </div>
+
+      {/* Create Branch Modal */}
+      {isBranchModalOpen && (
+        <CreateBranchModal
+          isOpen={isBranchModalOpen}
+          onClose={() => setIsBranchModalOpen(false)}
+        />
+      )}
     </header>
   );
 };

@@ -62,6 +62,32 @@ export const getCurrentUser = createAsyncThunk(
   }
 )
 
+export const switchActiveShop = createAsyncThunk(
+  'auth/switchActiveShop',
+  async (shopId, { rejectWithValue, dispatch }) => {
+    try {
+      const response = await authAPI.switchShop(shopId);
+      const { token, user, shop } = response.data;
+      
+      const combinedUser = user ? { ...user, shop: shop || user.shop } : null;
+      dispatch(setCredentials({ user: combinedUser, token }));
+
+      if (typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
+
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        'Failed to switch active shop'
+      );
+    }
+  }
+);
+
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -122,6 +148,22 @@ const authSlice = createSlice({
           localStorage.removeItem('token')
         }
         state.error = action.payload || null
+      })
+      .addCase(switchActiveShop.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(switchActiveShop.fulfilled, (state, action) => {
+        state.loading = false
+        state.token = action.payload.token
+        state.shop = action.payload.shop
+        if (action.payload.user) {
+          state.user = { ...action.payload.user, shop: action.payload.shop }
+        }
+      })
+      .addCase(switchActiveShop.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload
       })
   },
 })

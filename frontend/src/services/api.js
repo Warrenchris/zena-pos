@@ -203,6 +203,7 @@ export const authAPI = {
   forgotPassword: (email) => api.post('/api/auth/forgot-password', { email }),
   resetPassword: (payload) => api.post('/api/auth/reset-password', payload),
   changePassword: (payload) => api.post('/api/auth/change-password', payload),
+  switchShop: (shopId) => api.post('/api/auth/switch-shop', { shopId }),
 };
 
 // Brands API
@@ -343,6 +344,8 @@ export const usersAPI = {
 export const shopAPI = {
   getMine: () => api.get('/api/shop/me'),
   updateMine: (payload) => api.put('/api/shop/me', payload),
+  getAccessible: () => api.get('/api/shop/accessible'),
+  create: (payload) => api.post('/api/shop', payload),
 };
 
 // Employees (admin only)

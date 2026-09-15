@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import shopService from '../../services/shop.service';
+import { switchActiveShop } from './authSlice';
 
 export const fetchMyShop = createAsyncThunk(
   'shop/fetchMyShop',
@@ -31,10 +32,46 @@ export const updateMyShop = createAsyncThunk(
   }
 );
 
+export const fetchAccessibleShops = createAsyncThunk(
+  'shop/fetchAccessibleShops',
+  async (_, { rejectWithValue }) => {
+    try {
+      const data = await shopService.getAccessibleShops();
+      return data;
+    } catch (error) {
+      return rejectWithValue({
+        message: error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch accessible shops',
+        status: error.response?.status,
+      });
+    }
+  }
+);
+
+export const createBranch = createAsyncThunk(
+  'shop/createBranch',
+  async (payload, { rejectWithValue, dispatch }) => {
+    try {
+      const data = await shopService.createShop(payload);
+      dispatch(fetchAccessibleShops());
+      return data;
+    } catch (error) {
+      return rejectWithValue({
+        message: error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to create branch',
+        code: error.response?.data?.code,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+    }
+  }
+);
+
 const initialState = {
   shop: null,
   loading: false,
   error: null,
+  accessibleShops: [],
+  switching: false,
+  creatingBranch: false,
 };
 
 const shopSlice = createSlice({
@@ -65,6 +102,49 @@ const shopSlice = createSlice({
       })
       .addCase(updateMyShop.rejected, (state, action) => {
         state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(fetchAccessibleShops.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchAccessibleShops.fulfilled, (state, action) => {
+        state.loading = false;
+        state.accessibleShops = action.payload?.shops || (Array.isArray(action.payload) ? action.payload : []);
+      })
+      .addCase(fetchAccessibleShops.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(createBranch.pending, (state) => {
+        state.creatingBranch = true;
+        state.error = null;
+      })
+      .addCase(createBranch.fulfilled, (state, action) => {
+        state.creatingBranch = false;
+        if (action.payload?.shop) {
+          const exists = state.accessibleShops.some(s => s.id === action.payload.shop.id);
+          if (!exists) {
+            state.accessibleShops.push({ ...action.payload.shop, isCurrent: false });
+          }
+        }
+      })
+      .addCase(createBranch.rejected, (state, action) => {
+        state.creatingBranch = false;
+        state.error = action.payload;
+      })
+      .addCase(switchActiveShop.pending, (state) => {
+        state.switching = true;
+        state.error = null;
+      })
+      .addCase(switchActiveShop.fulfilled, (state, action) => {
+        state.switching = false;
+        if (action.payload?.shop) {
+          state.shop = action.payload.shop;
+        }
+      })
+      .addCase(switchActiveShop.rejected, (state, action) => {
+        state.switching = false;
         state.error = action.payload;
       });
   },
