@@ -193,12 +193,24 @@ exports.login = async (req, res) => {
           }
         );
 
+    let orgRole = null;
+    if (!isEmployee) {
+      const orgId = user.Shop?.organizationId;
+      const membershipWhere = { userId: user.id, status: 'active' };
+      if (orgId) {
+        membershipWhere.organizationId = orgId;
+      }
+      const membership = await OrganizationMembership.findOne({ where: membershipWhere });
+      orgRole = membership?.orgRole || null;
+    }
+
     res.json({
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
+        orgRole,
         shopId: user.shopId,
         shop: user.Shop ? { id: user.Shop.id, name: user.Shop.name } : null,
       },
@@ -286,6 +298,7 @@ exports.getProfile = async (req, res) => {
         name: `${employee.firstName} ${employee.lastName}`,
         email: employee.email,
         role: 'employee',
+        orgRole: null,
         shopId: employee.shopId,
       };
 
@@ -297,12 +310,20 @@ exports.getProfile = async (req, res) => {
     // Regular user
     const user = await User.findByPk(userId, {
       attributes: { exclude: ['password'] },
-      include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone'] }]
+      include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone', 'organizationId'] }]
     });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    const orgId = req.organizationId || req.user.organizationId || user.Shop?.organizationId;
+    const membershipWhere = { userId: user.id, status: 'active' };
+    if (orgId) {
+      membershipWhere.organizationId = orgId;
+    }
+    const membership = await OrganizationMembership.findOne({ where: membershipWhere });
+    const orgRole = membership?.orgRole || null;
 
     // Normalize user response to match frontend expected shape { user, shop }
     const userProfile = {
@@ -310,6 +331,7 @@ exports.getProfile = async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      orgRole,
       shopId: user.shopId,
     };
 
@@ -458,6 +480,7 @@ exports.switchShop = async (req, res) => {
           name: `${emp.firstName} ${emp.lastName}`,
           email: emp.email,
           role: req.user.role || 'employee',
+          orgRole: null,
           shopId: targetShopId,
           organizationId: orgId
         };
@@ -470,6 +493,7 @@ exports.switchShop = async (req, res) => {
           name: u.name,
           email: u.email,
           role: u.role,
+          orgRole: membership.orgRole || null,
           shopId: targetShopId,
           organizationId: orgId
         };
@@ -480,6 +504,7 @@ exports.switchShop = async (req, res) => {
       userData = {
         id: req.user.id,
         role: req.user.role,
+        orgRole: req.user.isEmployee ? null : (membership?.orgRole || null),
         shopId: targetShopId,
         organizationId: orgId
       };

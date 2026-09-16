@@ -69,7 +69,7 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
     }
   };
 
-  const canCreateBranch = user?.orgRole === 'owner' || user?.orgRole === 'admin' || user?.role === 'admin';
+  const canCreateBranch = user?.orgRole === 'owner' || user?.orgRole === 'admin';
 
   const displayShops = accessibleShops.length > 0
     ? accessibleShops
