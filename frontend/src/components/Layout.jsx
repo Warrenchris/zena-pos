@@ -5,6 +5,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { logout } from '../store/slices/authSlice';
 import ModernSidebar from './ModernSidebar';
 import TopNavBar from './navigation/TopNavBar';
+import SubscriptionBanner from './SubscriptionBanner';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(

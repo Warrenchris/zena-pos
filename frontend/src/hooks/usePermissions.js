@@ -48,6 +48,7 @@ export const usePermissions = () => {
           { path: '/ai/insights', label: 'AI Insights' },
           { path: '/ai/finance', label: 'AI Finance' },
           { path: '/settings', label: 'Settings' },
+          { path: '/billing', label: 'Billing & Plans' },
           { path: '/reports', label: 'Reports' },
         ];
       case 'manager':
@@ -70,6 +71,7 @@ export const usePermissions = () => {
           // Managers can manage employees per role permissions
           { path: '/employees', label: 'Employees' },
           { path: '/settings', label: 'Settings' },
+          { path: '/billing', label: 'Billing & Plans' },
           { path: '/reports', label: 'Reports' },
         ];
       case 'cashier':
@@ -82,6 +84,7 @@ export const usePermissions = () => {
           { path: '/invoices', label: 'Invoices' },
           { path: '/sales/returns', label: 'Sales Return' },
           { path: '/settings', label: 'Settings' },
+          { path: '/billing', label: 'Billing & Plans' },
         ];
       default:
         return [];

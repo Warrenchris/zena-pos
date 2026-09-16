@@ -11,6 +11,7 @@ import brandsReducer from './slices/brandsSlice'
 import unitsReducer from './slices/unitsSlice'
 import notificationsReducer from './slices/notificationsSlice'
 import invoicesReducer from './slices/invoicesSlice'
+import billingReducer from './slices/billingSlice'
 
 export const store = configureStore({
   reducer: {
@@ -26,6 +27,7 @@ export const store = configureStore({
     units: unitsReducer,
     notifications: notificationsReducer,
     invoices: invoicesReducer,
+    billing: billingReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
