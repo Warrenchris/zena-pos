@@ -106,6 +106,7 @@ const ModernSidebar = ({
       title: 'Settings',
       items: [
         { name: 'Settings', path: '/settings', icon: CogIcon },
+        { name: 'Billing & Plans', path: '/billing', icon: CreditCardIcon },
         { name: 'User Access', path: '/admin/users', icon: UserIcon },
         { name: 'Company Profile', path: '/admin/company', icon: BuildingOfficeIcon },
       ]
@@ -132,7 +133,8 @@ const ModernSidebar = ({
     {
       title: 'Account',
       items: [
-        { name: 'Settings', path: '/settings', icon: CogIcon }
+        { name: 'Settings', path: '/settings', icon: CogIcon },
+        { name: 'Billing & Plans', path: '/billing', icon: CreditCardIcon },
       ]
     }
   ];

@@ -62,6 +62,7 @@ const SalesForecasting = safeLazy(() => import('./pages/SalesForecasting'));
 const FinancialAnalysis = safeLazy(() => import('./pages/FinancialAnalysis'));
 const Reports = safeLazy(() => import('./pages/Reports'));
 const Settings = safeLazy(() => import('./pages/Settings'));
+const Billing = safeLazy(() => import('./pages/Billing'));
 const Invoices = safeLazy(() => import('./pages/Invoices'));
 const Quotations = safeLazy(() => import('./pages/Quotations'));
 const Purchases = safeLazy(() => import('./pages/Purchases'));
@@ -212,6 +213,10 @@ export const routes = [
           {
             path: 'settings',
             element: <PrivateRoute><Settings /></PrivateRoute>
+          },
+          {
+            path: 'billing',
+            element: <PrivateRoute><Billing /></PrivateRoute>
           },
           {
             path: 'test-date-picker',
