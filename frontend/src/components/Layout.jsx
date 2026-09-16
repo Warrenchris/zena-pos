@@ -111,6 +111,7 @@ export default function Layout() {
           onMenuClick={() => setSidebarOpen(true)}
           isSidebarOpen={sidebarOpen}
         />
+        <SubscriptionBanner />
         <main id="main-content" className="flex-1 pb-12 safe-area-padding">
           <div className={location.pathname === '/pos' ? 'w-full px-3 sm:px-6' : 'app-shell app-shell--wide'}>
             <Outlet />
