@@ -25,7 +25,7 @@ async function requireOrgOwner(req, res, next) {
 
     const membership = await OrganizationMembership.findOne({ where: membershipWhere });
     if (!membership || membership.orgRole !== 'owner') {
-      return res.status(403).json({ error: 'Subscription renewal requires organization owner privileges.' });
+      return res.status(403).json({ error: 'This action requires organization owner privileges.' });
     }
 
     req.membership = membership;
