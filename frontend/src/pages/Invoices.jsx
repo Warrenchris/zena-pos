@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -7,7 +8,8 @@ import {
   PrinterIcon,
   ArrowPathIcon,
   XMarkIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  EyeIcon
 } from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -17,6 +19,19 @@ import { useCurrency } from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
 import { salesAPI } from '../services/api';
 import { invoicesAPI } from '../services/api/invoices';
+import {
+  fetchInvoices,
+  fetchInvoiceById,
+  setPage,
+  setFilters,
+  selectInvoices,
+  selectInvoicesLoading,
+  selectInvoicesError,
+  selectInvoicesTotal,
+  selectInvoicesPage,
+  selectInvoicesLimit,
+  selectInvoicesFilters,
+} from '../store/slices/invoicesSlice';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -252,21 +267,91 @@ function InvoiceCreateModal({ open, onClose, onCreated }) {
   );
 }
 
+const normalizeInvoice = (inv) => {
+  if (!inv) return null;
+  const customer = inv.customer || inv.client || inv.sale?.Customer || inv.sale?.customer || {};
+  const items = inv.items || inv.line_items || inv.sale_items || [];
+  const normalizedItems = Array.isArray(items)
+    ? items.map((it) => ({
+        name: it.name || it.product?.name || it.product_name || it.title || 'Product',
+        quantity: Number(it.quantity ?? 1),
+        price: Number(it.price ?? it.unitPrice ?? 0),
+      }))
+    : [];
+
+  const subtotal = inv.subtotal ?? inv.sub_total ?? 0;
+  const tax = inv.tax ?? 0;
+  const discount = inv.discount ?? 0;
+  const total = inv.total ?? inv.amount ?? (Number(subtotal) + Number(tax) - Number(discount));
+
+  return {
+    id: inv.id ?? inv.invoice_id,
+    invoiceNumber: inv.invoiceNumber || inv.invoice_no || inv.ref || '',
+    customerName: inv.customerName || inv.customer_name || customer.name || (inv.sale?.customerName) || WALK_IN_CUSTOMER_NAME,
+    dateIssued: inv.dateIssued || inv.createdAt || new Date().toISOString(),
+    status: inv.status || 'Paid',
+    items: normalizedItems,
+    subtotal: Number(subtotal) || 0,
+    tax: Number(tax) || 0,
+    discount: Number(discount) || 0,
+    total: Number(total) || 0,
+    paymentMethod: inv.paymentMethod || inv.sale?.paymentMethod || 'cash',
+    issuerName: inv.user?.name || inv.issuerName || 'System Admin',
+  };
+};
+
 export default function Invoices() {
+  const dispatch = useDispatch();
   const { format: formatCurrency } = useCurrency();
-  const { showToast } = useToast();
-  
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [invoices, setInvoices] = useState([]);
+  const toast = useToast();
+  const showToast = (type, message, title) => {
+    if (toast?.showToast) {
+      toast.showToast({ type, message, title: title || (type === 'error' ? 'Error' : 'Notification') });
+    }
+  };
+
+  const rawInvoices = useSelector(selectInvoices);
+  const loading = useSelector(selectInvoicesLoading);
+  const error = useSelector(selectInvoicesError);
+  const total = useSelector(selectInvoicesTotal);
+  const currentPage = useSelector(selectInvoicesPage);
+  const itemsPerPage = useSelector(selectInvoicesLimit);
+  const filters = useSelector(selectInvoicesFilters);
+
   const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState({ key: 'dateIssued', direction: 'desc' });
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [drawerLoading, setDrawerLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  
-  const itemsPerPage = 10;
+  const [searchInput, setSearchInput] = useState(filters.search || '');
+  const [sortConfig, setSortConfig] = useState({ key: 'dateIssued', direction: 'desc' });
+
+  // Debounced search to prevent spamming backend /api/invoices
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput !== filters.search) {
+        dispatch(setFilters({ search: searchInput }));
+        dispatch(setPage(1));
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput, filters.search, dispatch]);
+
+  const loadInvoices = useCallback(() => {
+    const params = {
+      page: currentPage,
+      limit: itemsPerPage,
+    };
+    if (filters.search && filters.search.trim()) {
+      params.search = filters.search.trim();
+    }
+    if (filters.status && filters.status !== 'all') {
+      params.status = filters.status;
+    }
+    dispatch(fetchInvoices(params));
+  }, [dispatch, currentPage, itemsPerPage, filters.search, filters.status]);
+
+  useEffect(() => {
+    loadInvoices();
+  }, [loadInvoices]);
 
   const getImageDataUrl = async (url) => {
     try {
@@ -350,16 +435,18 @@ export default function Invoices() {
     doc.setTextColor(0, 0, 0);
     doc.text('BILL TO:', margin, clientY);
     doc.setFont(undefined, 'normal');
-    doc.text(inv.Customer?.name || inv.customer?.name || inv.customerName || WALK_IN_CUSTOMER_NAME, margin, clientY + 14);
+    doc.text(inv.customerName || WALK_IN_CUSTOMER_NAME, margin, clientY + 14);
 
     const items = inv.items || [];
-    const tableBody = items.map((item, index) => [
-      index + 1,
-      item.name || 'Product',
-      item.quantity ?? 1,
-      formatCurrency(item.price ?? 0),
-      formatCurrency((item.price ?? 0) * (item.quantity ?? 1))
-    ]);
+    const tableBody = items.length > 0
+      ? items.map((item, index) => [
+          index + 1,
+          item.name || 'Product',
+          item.quantity ?? 1,
+          formatCurrency(item.price ?? 0),
+          formatCurrency((item.price ?? 0) * (item.quantity ?? 1))
+        ])
+      : [[1, 'Sale items', 1, formatCurrency(inv.subtotal || inv.total), formatCurrency(inv.subtotal || inv.total)]];
 
     doc.autoTable({
       startY: clientY + 60,
@@ -411,11 +498,25 @@ export default function Invoices() {
     return doc;
   };
 
+  const handleSelectInvoice = async (invoiceId) => {
+    try {
+      setDrawerLoading(true);
+      const result = await dispatch(fetchInvoiceById(invoiceId)).unwrap();
+      setSelectedInvoice(normalizeInvoice(result));
+    } catch {
+      showToast('error', 'Failed to load invoice details');
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
   const handleRowDownload = async (inv, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!inv) return;
     try {
-      const doc = await generatePdfDoc(inv);
+      // Use fetchInvoiceById to ensure complete line items for PDF
+      const fullData = await dispatch(fetchInvoiceById(inv.id)).unwrap();
+      const doc = await generatePdfDoc(normalizeInvoice(fullData));
       doc.save(`${inv.invoiceNumber || 'invoice'}.pdf`);
     } catch {
       showToast('error', 'Failed to generate invoice PDF');
@@ -426,90 +527,42 @@ export default function Invoices() {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!inv) return;
     try {
-      const doc = await generatePdfDoc(inv);
+      // Use fetchInvoiceById to ensure complete line items for print
+      const fullData = await dispatch(fetchInvoiceById(inv.id)).unwrap();
+      const doc = await generatePdfDoc(normalizeInvoice(fullData));
       doc.output('dataurlnewwindow');
     } catch {
       showToast('error', 'Failed to open invoice for printing');
     }
   };
 
-  const fetchInvoices = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const res = await invoicesAPI.getAll();
-      const raw = Array.isArray(res.data)
-        ? res.data
-        : (res.data?.invoices || res.data?.rows || []);
+  const normalizedInvoices = useMemo(() => {
+    const list = (Array.isArray(rawInvoices) ? rawInvoices : []).map(normalizeInvoice);
+    return list.sort((a, b) => {
+      const multiplier = sortConfig.direction === 'asc' ? 1 : -1;
+      if (sortConfig.key === 'dateIssued') {
+        return multiplier * (new Date(a.dateIssued) - new Date(b.dateIssued));
+      }
+      return multiplier * (a[sortConfig.key] > b[sortConfig.key] ? 1 : -1);
+    });
+  }, [rawInvoices, sortConfig]);
 
-      const normalize = (inv) => {
-        const customer = inv.customer || inv.client || {};
-        const items = inv.items || inv.line_items || inv.sale_items || [];
-        const normalizedItems = Array.isArray(items)
-          ? items.map((it) => ({
-              name: it.name || it.product_name || it.title || 'Product',
-              quantity: it.quantity ?? 1,
-              price: it.price ?? 0,
-            }))
-          : [];
-
-        const subtotal = inv.subtotal ?? inv.sub_total ?? 0;
-        const tax = inv.tax ?? 0;
-        const discount = inv.discount ?? 0;
-        const total = inv.total ?? inv.amount ?? subtotal + tax - discount;
-
-        return {
-          id: inv.id ?? inv.invoice_id,
-          invoiceNumber: inv.invoiceNumber || inv.invoice_no || inv.ref || '',
-          customerName: inv.customerName || inv.customer_name || customer.name || WALK_IN_CUSTOMER_NAME,
-          dateIssued: inv.dateIssued || inv.createdAt || new Date().toISOString(),
-          status: inv.status || 'Paid',
-          items: normalizedItems,
-          subtotal: Number(subtotal) || 0,
-          tax: Number(tax) || 0,
-          discount: Number(discount) || 0,
-          total: Number(total) || 0,
-          paymentMethod: inv.paymentMethod || 'cash',
-          issuerName: inv.issuerName || 'System Admin',
-        };
-      };
-
-      setInvoices(raw.map(normalize));
-    } catch (err) {
-      console.error('Error fetching invoices:', err);
-      setError('Failed to fetch invoices. Please check your network.');
-      setInvoices([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchInvoices();
-  }, []);
-
-  const filteredInvoices = useMemo(() => {
-    return invoices
-      .filter(inv => {
-        const matchesSearch = inv.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = filterStatus === 'all' || inv.status.toLowerCase() === filterStatus.toLowerCase();
-        return matchesSearch && matchesStatus;
-      })
-      .sort((a, b) => {
-        const multiplier = sortConfig.direction === 'asc' ? 1 : -1;
-        if (sortConfig.key === 'dateIssued') {
-          return multiplier * (new Date(a.dateIssued) - new Date(b.dateIssued));
-        }
-        return multiplier * (a[sortConfig.key] > b[sortConfig.key] ? 1 : -1);
-      });
-  }, [invoices, searchTerm, filterStatus, sortConfig]);
+  const totalPages = Math.ceil(total / itemsPerPage) || 1;
 
   const columns = [
     {
       key: 'invoiceNumber',
       label: 'Invoice #',
-      render: (val) => <span className="font-semibold text-text-primary">{val}</span>
+      render: (val, row) => (
+        <button
+          type="button"
+          onClick={() => handleSelectInvoice(row.id)}
+          className="font-semibold text-primary hover:text-primary-hover hover:underline text-left cursor-pointer"
+          title="View invoice details"
+        >
+          {val}
+        </button>
+      )
     },
     {
       key: 'customerName',
@@ -540,6 +593,13 @@ export default function Invoices() {
       label: 'Actions',
       render: (_, row) => (
         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => handleSelectInvoice(row.id)}
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+            title="View Details"
+          >
+            <EyeIcon className="h-4 w-4" />
+          </button>
           <button
             onClick={(e) => handleRowPrint(row, e)}
             className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
@@ -574,7 +634,7 @@ export default function Invoices() {
             variant="outline"
             size="md"
             leftIcon={ArrowPathIcon}
-            onClick={fetchInvoices}
+            onClick={loadInvoices}
           >
             Refresh
           </Button>
@@ -593,21 +653,21 @@ export default function Invoices() {
           <div className="flex-1">
             <Input
               type="search"
-              placeholder="Search by customer name or invoice number..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
+              placeholder="Search by invoice number..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               leftIcon={MagnifyingGlassIcon}
             />
+            <p className="text-caption text-text-muted mt-1">
+              Note: Search filters by invoice number on the server.
+            </p>
           </div>
           <div className="sm:w-48">
             <select
-              value={filterStatus}
+              value={filters.status || 'all'}
               onChange={(e) => {
-                setFilterStatus(e.target.value);
-                setCurrentPage(1);
+                dispatch(setFilters({ status: e.target.value }));
+                dispatch(setPage(1));
               }}
               className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
             >
@@ -620,23 +680,19 @@ export default function Invoices() {
         </div>
       </Card>
 
-      {/* Table */}
+      {/* Table with Server-Side Pagination */}
       <Table
         columns={columns}
-        data={filteredInvoices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+        data={normalizedInvoices}
         loading={loading}
         emptyTitle="No Invoices Found"
         emptyDescription="Once sales are completed, formal invoices will appear here."
-        onSelectRow={(id) => {
-          const inv = invoices.find(i => i.id === id);
-          if (inv) setSelectedInvoice(inv);
-        }}
         pagination={{
           currentPage,
-          totalPages: Math.ceil(filteredInvoices.length / itemsPerPage) || 1,
-          totalItems: filteredInvoices.length,
+          totalPages,
+          totalItems: total,
           pageSize: itemsPerPage,
-          onPageChange: (p) => setCurrentPage(p)
+          onPageChange: (p) => dispatch(setPage(p))
         }}
       />
 
@@ -653,7 +709,7 @@ export default function Invoices() {
       <InvoiceCreateModal
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onCreated={fetchInvoices}
+        onCreated={loadInvoices}
       />
     </div>
   );
