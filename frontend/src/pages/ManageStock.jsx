@@ -89,28 +89,37 @@ export default function ManageStock() {
       return;
     }
 
-    let newStock = selectedProduct.stockQuantity;
+    const currentStock = parseFloat(selectedProduct.stockQuantity || 0);
+    let delta = 0;
     if (adjustmentType === 'ADD') {
-      newStock += qty;
+      delta = qty;
     } else if (adjustmentType === 'REMOVE') {
-      newStock = Math.max(0, newStock - qty);
+      delta = -qty;
     } else if (adjustmentType === 'SET') {
-      newStock = qty;
+      delta = qty - currentStock;
+    }
+
+    if (delta === 0) {
+      setShowAdjustModal(false);
+      return;
+    }
+
+    const targetStock = currentStock + delta;
+    if (targetStock < 0) {
+      showToast({ type: 'error', title: 'Invalid Stock Level', message: 'Cannot reduce stock below zero.' });
+      return;
     }
 
     setSubmitting(true);
     try {
-      await api.put(`/api/products/${selectedProduct.id}`, {
-        ...selectedProduct,
-        stockQuantity: newStock,
-        categoryId: selectedProduct.categoryId || selectedProduct.CategoryId || selectedProduct.Category?.id || 1,
-        CategoryId: selectedProduct.categoryId || selectedProduct.CategoryId || selectedProduct.Category?.id || 1
+      await api.patch(`/api/products/${selectedProduct.id}/stock`, {
+        quantity: delta
       });
 
       showToast({
         type: 'success',
         title: 'Stock Updated',
-        message: `Updated stock for ${selectedProduct.name} to ${newStock} units (${reason}).`
+        message: `Updated stock for ${selectedProduct.name} to ${targetStock} units (${reason}).`
       });
 
       setShowAdjustModal(false);

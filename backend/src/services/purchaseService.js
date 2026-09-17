@@ -58,14 +58,20 @@ async function resolveSupplier({ shopId, organizationId: explicitOrgId, supplier
  * Atomically increases product inventory, recalculates weighted average cost,
  * and creates StockMovement records.
  */
-async function applyStockReceipt({ shopId, items, reference, userId }, transaction) {
+async function applyStockReceipt({ shopId, items, reference, userId, employeeId, organizationId }, transaction) {
   const stockDeltas = [];
 
-  // Resolve valid user ID for foreign key integrity
+  // Resolve valid user ID or employee ID for foreign key integrity
   let validUserId = null;
-  if (userId) {
-    const existingUser = await User.findByPk(userId, { attributes: ['id'], transaction });
-    if (existingUser) validUserId = existingUser.id;
+  let validEmployeeId = employeeId || null;
+
+  if (userId && !validEmployeeId) {
+    if (typeof userId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      validEmployeeId = userId;
+    } else {
+      const existingUser = await User.findByPk(userId, { attributes: ['id'], transaction });
+      if (existingUser) validUserId = existingUser.id;
+    }
   }
 
   for (const item of items) {
@@ -129,6 +135,7 @@ async function applyStockReceipt({ shopId, items, reference, userId }, transacti
       // Create StockMovement audit entry based on Inventory values
       await StockMovement.create({
         shopId,
+        organizationId: organizationId || product.organizationId,
         productId: product.id,
         quantity: qty,
         previousStock: prevStock,
@@ -136,7 +143,8 @@ async function applyStockReceipt({ shopId, items, reference, userId }, transacti
         type: 'PURCHASE_RECEIPT',
         reference: reference || null,
         notes: `Received via ${reference}`,
-        userId: validUserId
+        userId: validUserId,
+        employeeId: validEmployeeId
       }, { transaction });
 
       stockDeltas.push({
@@ -156,11 +164,17 @@ async function applyStockReceipt({ shopId, items, reference, userId }, transacti
 /**
  * Atomically reverses product inventory and creates reversal StockMovement records.
  */
-async function reverseStockReceipt({ shopId, items, reference, userId }, transaction) {
+async function reverseStockReceipt({ shopId, items, reference, userId, employeeId, organizationId }, transaction) {
   let validUserId = null;
-  if (userId) {
-    const existingUser = await User.findByPk(userId, { attributes: ['id'], transaction });
-    if (existingUser) validUserId = existingUser.id;
+  let validEmployeeId = employeeId || null;
+
+  if (userId && !validEmployeeId) {
+    if (typeof userId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      validEmployeeId = userId;
+    } else {
+      const existingUser = await User.findByPk(userId, { attributes: ['id'], transaction });
+      if (existingUser) validUserId = existingUser.id;
+    }
   }
 
   for (const item of items) {
@@ -198,6 +212,7 @@ async function reverseStockReceipt({ shopId, items, reference, userId }, transac
 
         await StockMovement.create({
           shopId,
+          organizationId: organizationId || product.organizationId,
           productId: product.id,
           quantity: -qty,
           previousStock: prevStock,
@@ -205,7 +220,8 @@ async function reverseStockReceipt({ shopId, items, reference, userId }, transac
           type: 'PURCHASE_REVERSAL',
           reference: reference || null,
           notes: `Reversal / cancellation of ${reference}`,
-          userId: validUserId
+          userId: validUserId,
+          employeeId: validEmployeeId
         }, { transaction });
       }
     }

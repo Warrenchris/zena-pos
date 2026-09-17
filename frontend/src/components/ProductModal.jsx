@@ -61,7 +61,7 @@ export default function ProductModal({ product, categories = [], onClose }) {
     if (!formData.cost || isNaN(parseFloat(formData.cost)) || parseFloat(formData.cost) < 0) {
       newErrors.cost = 'Valid cost is required';
     }
-    if (formData.stockQuantity === '' || isNaN(parseInt(formData.stockQuantity, 10)) || parseInt(formData.stockQuantity, 10) < 0) {
+    if (!product && (formData.stockQuantity === '' || isNaN(parseInt(formData.stockQuantity, 10)) || parseInt(formData.stockQuantity, 10) < 0)) {
       newErrors.stockQuantity = 'Valid stock quantity is required';
     }
     if (formData.reorderPoint === '' || isNaN(parseInt(formData.reorderPoint, 10)) || parseInt(formData.reorderPoint, 10) < 0) {
@@ -90,11 +90,14 @@ export default function ProductModal({ product, categories = [], onClose }) {
         description: formData.description.trim() || undefined,
         price: parseFloat(formData.price),
         cost: parseFloat(formData.cost),
-        stockQuantity: parseInt(formData.stockQuantity, 10),
         reorderPoint: parseInt(formData.reorderPoint, 10),
         categoryId: catId,
         CategoryId: catId
       };
+
+      if (!product) {
+        productData.stockQuantity = parseInt(formData.stockQuantity, 10) || 0;
+      }
 
       if (product) {
         await dispatch(updateProduct({ id: product.id, productData })).unwrap();
@@ -286,18 +289,26 @@ export default function ProductModal({ product, categories = [], onClose }) {
             {/* Stock Quantity */}
             <div>
               <label className="block text-small font-semibold text-text-secondary mb-1.5">
-                Stock Quantity <span className="text-danger">*</span>
+                {product ? 'Current Stock (Read-only)' : 'Initial Stock Quantity'} {!product && <span className="text-danger">*</span>}
               </label>
               <input
                 type="number"
                 name="stockQuantity"
                 value={formData.stockQuantity}
                 onChange={handleChange}
-                className={`w-full px-3.5 py-2.5 rounded-xl bg-surface-2/70 text-text-primary border ${
+                disabled={Boolean(product)}
+                className={`w-full px-3.5 py-2.5 rounded-xl ${
+                  product ? 'bg-surface-3/50 text-text-muted cursor-not-allowed border-border-default/50' : 'bg-surface-2/70 text-text-primary'
+                } border ${
                   errors.stockQuantity ? 'border-danger focus:ring-danger/30' : 'border-border-default focus:border-primary focus:ring-primary/40'
                 } focus:outline-none focus:ring-2 focus:bg-surface text-small placeholder-text-muted transition-colors`}
                 placeholder="0"
               />
+              {product && (
+                <p className="text-caption text-text-muted mt-1">
+                  Stock adjustments must be made via Manage Stock.
+                </p>
+              )}
               {errors.stockQuantity && (
                 <p className="text-danger text-caption font-medium mt-1 flex items-center gap-1">
                   <ExclamationCircleIcon className="h-3.5 w-3.5" />

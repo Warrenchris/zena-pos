@@ -1,12 +1,28 @@
 const { validationResult } = require('express-validator');
-const Category = require('../models/Category');
+const { Category, Shop } = require('../models');
+
+async function resolveTenantContext(req) {
+  const shopId = req.shopId || req.user?.shopId;
+  let organizationId = req.organizationId || req.user?.organizationId;
+  if (!organizationId && shopId) {
+    const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+    organizationId = shop?.organizationId;
+  }
+  return { shopId, organizationId };
+}
 
 // Get all categories
 exports.getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.findAll({
-      where: { active: true, shopId: req.user.shopId }
-    });
+    const { shopId, organizationId } = await resolveTenantContext(req);
+    const where = { active: true };
+    if (organizationId) {
+      where.organizationId = organizationId;
+    } else if (shopId) {
+      where.shopId = shopId;
+    }
+
+    const categories = await Category.findAll({ where });
     res.json(categories);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch categories' });
@@ -16,9 +32,15 @@ exports.getAllCategories = async (req, res) => {
 // Get category by ID
 exports.getCategoryById = async (req, res) => {
   try {
-    const category = await Category.findOne({
-      where: { id: req.params.id, active: true, shopId: req.user.shopId }
-    });
+    const { shopId, organizationId } = await resolveTenantContext(req);
+    const where = { id: req.params.id, active: true };
+    if (organizationId) {
+      where.organizationId = organizationId;
+    } else if (shopId) {
+      where.shopId = shopId;
+    }
+
+    const category = await Category.findOne({ where });
     
     if (!category) {
       return res.status(404).json({ error: 'Category not found' });
@@ -38,8 +60,14 @@ exports.createCategory = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const { shopId, organizationId } = await resolveTenantContext(req);
     const { name, description } = req.body;
-    const category = await Category.create({ name, description, shopId: req.user.shopId });
+    const category = await Category.create({
+      name,
+      description,
+      shopId,
+      organizationId
+    });
     res.status(201).json(category);
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -57,10 +85,16 @@ exports.updateCategory = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const { shopId, organizationId } = await resolveTenantContext(req);
     const { name, description } = req.body;
-    const category = await Category.findOne({
-      where: { id: req.params.id, active: true, shopId: req.user.shopId }
-    });
+    const where = { id: req.params.id, active: true };
+    if (organizationId) {
+      where.organizationId = organizationId;
+    } else if (shopId) {
+      where.shopId = shopId;
+    }
+
+    const category = await Category.findOne({ where });
 
     if (!category) {
       return res.status(404).json({ error: 'Category not found' });
@@ -79,9 +113,15 @@ exports.updateCategory = async (req, res) => {
 // Delete category (soft delete)
 exports.deleteCategory = async (req, res) => {
   try {
-    const category = await Category.findOne({
-      where: { id: req.params.id, active: true, shopId: req.user.shopId }
-    });
+    const { shopId, organizationId } = await resolveTenantContext(req);
+    const where = { id: req.params.id, active: true };
+    if (organizationId) {
+      where.organizationId = organizationId;
+    } else if (shopId) {
+      where.shopId = shopId;
+    }
+
+    const category = await Category.findOne({ where });
 
     if (!category) {
       return res.status(404).json({ error: 'Category not found' });

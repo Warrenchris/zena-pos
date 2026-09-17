@@ -536,13 +536,15 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
 
       await StockMovement.create({
         shopId,
+        organizationId: organizationId || product.organizationId,
         productId: product.id,
         quantity: -item.quantity,
         previousStock: prevStock,
         newStock: newStock,
         type: 'SALE',
         reference: invoiceNumber,
-        userId: resolvedUserId
+        userId: !user?.isEmployee ? resolvedUserId : null,
+        employeeId: user?.isEmployee ? user.id : null
       }, { transaction: t });
     }
 
@@ -1097,6 +1099,12 @@ exports.processRefund = async (req, res) => {
   const { items, managerApprovalId, adminOverride } = req.body;
   const refundedBy = String(req.user.id);
   const shopId = req.shopId || req.user.shopId;
+  let organizationId = req.organizationId || req.user?.organizationId;
+  if (!organizationId && shopId) {
+    const Shop = require('../models/Shop');
+    const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+    organizationId = shop?.organizationId;
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Refund items are required' });
@@ -1339,13 +1347,15 @@ exports.processRefund = async (req, res) => {
             await inventory.update({ stockQuantity: newStock }, { transaction: t });
             await StockMovement.create({
               shopId,
+              organizationId: organizationId || product?.organizationId,
               productId: item.productId,
               quantity: item.quantity,
               previousStock: prevStock,
               newStock: newStock,
               type: 'SALE_REFUND',
               reference: `REFUND-${sale.invoiceNumber || sale.id}`,
-              userId: (!req.user?.isEmployee && typeof req.user?.id === 'number') ? req.user.id : null
+              userId: (!req.user?.isEmployee && typeof req.user?.id === 'number') ? req.user.id : null,
+              employeeId: req.user?.isEmployee ? req.user.id : null
             }, { transaction: t });
           }
         } else if (disposition === 'damaged_writeoff') {

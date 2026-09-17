@@ -335,15 +335,18 @@ class EnhancedSaleService {
         await inventory.update({ stockQuantity: newStock }, { transaction: t });
 
         const validUserId = (!user?.isEmployee && typeof user?.id === 'number') ? user.id : null;
+        const validEmployeeId = user?.isEmployee ? user.id : null;
         await StockMovement.create({
           shopId,
+          organizationId: organizationId || product.organizationId,
           productId: product.id,
           quantity: -item.quantity,
           previousStock: prevStock,
           newStock: newStock,
           type: 'SALE',
           reference: invoiceNumber,
-          userId: validUserId
+          userId: validUserId,
+          employeeId: validEmployeeId
         }, { transaction: t });
       }
 

@@ -372,26 +372,45 @@ exports.createProduct = async (req, res) => {
       ? parseInt(reorderPoint, 10)
       : null;
 
-    if (!finalSku || !finalBarcode || finalReorderPoint === null) {
-      const settings = await SystemSettings.findOne({ where: { shopId } });
-      const skuPrefix = settings?.skuPrefix || 'SKU';
-      const barcodeFormat = settings?.barcodeFormat || 'EAN13';
-      const defaultLowStock = settings?.lowStockThreshold !== undefined ? settings.lowStockThreshold : 10;
+    const settings = await SystemSettings.findOne({ where: { shopId } });
+    const skuPrefix = settings?.skuPrefix || 'SKU';
+    const barcodeFormat = settings?.barcodeFormat || 'EAN13';
+    const defaultLowStock = settings?.lowStockThreshold !== undefined ? settings.lowStockThreshold : 10;
 
-      if (!finalSku) {
-        const count = await Product.count({ where: { shopId } });
-        finalSku = generateSKU(skuPrefix, count + 1);
-      }
-      if (!finalBarcode) {
-        finalBarcode = generateBarcode(barcodeFormat);
-      }
-      if (finalReorderPoint === null) {
-        finalReorderPoint = defaultLowStock;
-      }
+    if (finalReorderPoint === null) {
+      finalReorderPoint = defaultLowStock;
+    }
+
+    const isAutoSku = !finalSku;
+    const isAutoBarcode = !finalBarcode;
+
+    if (isAutoSku) {
+      const count = organizationId
+        ? await Product.count({ where: { organizationId } })
+        : await Product.count({ where: { shopId } });
+      finalSku = generateSKU(skuPrefix, count + 1);
+    }
+    if (isAutoBarcode) {
+      finalBarcode = generateBarcode(barcodeFormat);
     }
 
     const targetCategoryId = categoryId || CategoryId;
     const parsedCategoryId = targetCategoryId ? parseInt(targetCategoryId, 10) : null;
+
+    // Validate category tenant ownership
+    if (parsedCategoryId) {
+      const categoryWhere = { id: parsedCategoryId, active: true };
+      if (organizationId) {
+        categoryWhere.organizationId = organizationId;
+      } else if (shopId) {
+        categoryWhere.shopId = shopId;
+      }
+      const category = await Category.findOne({ where: categoryWhere });
+      if (!category) {
+        return res.status(400).json({ error: 'Invalid category for organization' });
+      }
+    }
+
     const initialStock = (stockQuantity !== undefined && stockQuantity !== null && stockQuantity !== '')
       ? parseFloat(stockQuantity)
       : 0;
@@ -400,47 +419,80 @@ exports.createProduct = async (req, res) => {
       : 10;
 
     let productWithCategory = null;
-    await sequelize.transaction(async (t) => {
-      // 1. Create master catalog Product entry
-      const product = await Product.create({
-        name,
-        sku: finalSku,
-        barcode: finalBarcode,
-        description,
-        price,
-        cost,
-        categoryId: parsedCategoryId,
-        CategoryId: parsedCategoryId,
-        expirationDate: expirationDate || null,
-        weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
-        shopId,
-        organizationId
-      }, { transaction: t });
+    const maxAttempts = (isAutoSku || isAutoBarcode) ? 3 : 1;
+    let attempt = 0;
 
-      // 2. Explicitly provision branch Inventory row (no model hooks)
-      if (shopId) {
-        await Inventory.create({
-          productId: product.id,
-          shopId,
-          stockQuantity: initialStock,
-          reorderPoint: initialReorder
-        }, { transaction: t });
+    while (attempt < maxAttempts) {
+      attempt++;
+      let currentSku = finalSku;
+      let currentBarcode = finalBarcode;
+
+      if (attempt > 1) {
+        if (isAutoSku) {
+          const currentCount = organizationId
+            ? await Product.count({ where: { organizationId } })
+            : await Product.count({ where: { shopId } });
+          currentSku = generateSKU(skuPrefix, currentCount + attempt + Math.floor(Math.random() * 100));
+        }
+        if (isAutoBarcode) {
+          currentBarcode = generateBarcode(barcodeFormat);
+        }
       }
 
-      productWithCategory = await Product.findOne({
-        where: { id: product.id },
-        include: [
-          { model: Category, attributes: ['id', 'name'] },
-          {
-            model: Inventory,
-            attributes: ['stockQuantity', 'reorderPoint', 'shopId'],
-            where: { shopId },
-            required: false
+      try {
+        await sequelize.transaction(async (t) => {
+          // 1. Create master catalog Product entry
+          const product = await Product.create({
+            name,
+            sku: currentSku,
+            barcode: currentBarcode,
+            description,
+            price,
+            cost,
+            categoryId: parsedCategoryId,
+            CategoryId: parsedCategoryId,
+            expirationDate: expirationDate || null,
+            weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
+            shopId,
+            organizationId
+          }, { transaction: t });
+
+          // 2. Explicitly provision branch Inventory row (no model hooks)
+          if (shopId) {
+            await Inventory.create({
+              productId: product.id,
+              shopId,
+              stockQuantity: initialStock,
+              reorderPoint: initialReorder
+            }, { transaction: t });
           }
-        ],
-        transaction: t
-      });
-    });
+
+          productWithCategory = await Product.findOne({
+            where: { id: product.id },
+            include: [
+              { model: Category, attributes: ['id', 'name'] },
+              {
+                model: Inventory,
+                attributes: ['stockQuantity', 'reorderPoint', 'shopId'],
+                where: { shopId },
+                required: false
+              }
+            ],
+            transaction: t
+          });
+        });
+
+        finalSku = currentSku;
+        finalBarcode = currentBarcode;
+        break; // Success!
+      } catch (err) {
+        if (err.name === 'SequelizeUniqueConstraintError' && attempt < maxAttempts && (isAutoSku || isAutoBarcode)) {
+          logger.warn(`[createProduct] Identifier collision on attempt ${attempt}. Retrying with fresh identifier...`);
+          continue;
+        }
+        throw err;
+      }
+    }
 
     if (shopId) {
       await invalidateShopProductCache(shopId);
@@ -513,32 +565,51 @@ exports.updateProduct = async (req, res) => {
     } = req.body;
 
     const targetCategoryId = categoryId || CategoryId;
-    const parsedCategoryId = (targetCategoryId !== undefined && targetCategoryId !== null && targetCategoryId !== '')
-      ? parseInt(targetCategoryId, 10)
-      : (product.categoryId || product.CategoryId);
+    let parsedCategoryId = undefined;
+    if (targetCategoryId !== undefined) {
+      parsedCategoryId = (targetCategoryId !== null && targetCategoryId !== '')
+        ? parseInt(targetCategoryId, 10)
+        : null;
 
-    await product.update({
+      // Validate category tenant ownership if category is being updated
+      if (parsedCategoryId) {
+        const categoryWhere = { id: parsedCategoryId, active: true };
+        if (organizationId) {
+          categoryWhere.organizationId = organizationId;
+        } else if (shopId) {
+          categoryWhere.shopId = shopId;
+        }
+        const category = await Category.findOne({ where: categoryWhere });
+        if (!category) {
+          return res.status(400).json({ error: 'Invalid category for organization' });
+        }
+      }
+    }
+
+    const updateFields = {
       name,
       sku,
       barcode,
       description,
       price,
       cost,
-      categoryId: parsedCategoryId,
-      CategoryId: parsedCategoryId,
       expirationDate: expirationDate || null,
       weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : product.weightGrams)
-    });
+    };
+    if (parsedCategoryId !== undefined) {
+      updateFields.categoryId = parsedCategoryId;
+      updateFields.CategoryId = parsedCategoryId;
+    }
 
-    if (shopId && (stockQuantity !== undefined || reorderPoint !== undefined)) {
+    await product.update(updateFields);
+
+    // Only update reorderPoint - stockQuantity mutations MUST go through stock adjustment API
+    if (shopId && (reorderPoint !== undefined && reorderPoint !== null && reorderPoint !== '')) {
       const inventory = await Inventory.findOne({
         where: { productId: product.id, shopId }
       });
       if (inventory) {
-        const invUpdates = {};
-        if (stockQuantity !== undefined) invUpdates.stockQuantity = stockQuantity;
-        if (reorderPoint !== undefined) invUpdates.reorderPoint = reorderPoint;
-        await inventory.update(invUpdates);
+        await inventory.update({ reorderPoint: parseInt(reorderPoint, 10) });
       }
     }
 
@@ -696,14 +767,17 @@ exports.updateStock = async (req, res) => {
       await inventory.update({ stockQuantity: newQuantity }, { transaction: t });
 
       // 5. Create StockMovement audit entry based on Inventory values
+      const isEmployee = Boolean(req.user?.isEmployee);
+      const employeeId = isEmployee ? (req.user?.id || req.user?.employeeId) : null;
       let validUserId = null;
-      if (req.user?.id) {
+      if (!isEmployee && req.user?.id) {
         const existingUser = await User.findByPk(req.user.id, { attributes: ['id'], transaction: t });
         if (existingUser) validUserId = existingUser.id;
       }
 
       await StockMovement.create({
         shopId,
+        organizationId: organizationId || product.organizationId,
         productId: product.id,
         quantity: delta,
         previousStock: prevStock,
@@ -711,7 +785,8 @@ exports.updateStock = async (req, res) => {
         type: 'ADJUSTMENT',
         reference: `MANUAL_ADJUSTMENT_${Date.now()}`,
         notes: `Manual stock adjustment of ${delta >= 0 ? '+' : ''}${delta}`,
-        userId: validUserId
+        userId: validUserId,
+        employeeId
       }, { transaction: t });
 
       resultProduct = await Product.findOne({

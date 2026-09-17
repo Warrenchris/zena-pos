@@ -63,6 +63,7 @@ const purchaseOrderRoutes = require('./routes/purchaseOrders');
 const supplierRoutes = require('./routes/suppliers');
 const permissionRoutes = require('./routes/permissions');
 const billingRoutes = require('./routes/billingRoutes');
+const transferRoutes = require('./routes/transfers');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -155,6 +156,7 @@ app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/transfers', transferRoutes);
 
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);
