@@ -322,7 +322,6 @@ export default function Invoices() {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchInput, setSearchInput] = useState(filters.search || '');
-  const [sortConfig, setSortConfig] = useState({ key: 'dateIssued', direction: 'desc' });
 
   // Debounced search to prevent spamming backend /api/invoices
   useEffect(() => {
@@ -537,15 +536,8 @@ export default function Invoices() {
   };
 
   const normalizedInvoices = useMemo(() => {
-    const list = (Array.isArray(rawInvoices) ? rawInvoices : []).map(normalizeInvoice);
-    return list.sort((a, b) => {
-      const multiplier = sortConfig.direction === 'asc' ? 1 : -1;
-      if (sortConfig.key === 'dateIssued') {
-        return multiplier * (new Date(a.dateIssued) - new Date(b.dateIssued));
-      }
-      return multiplier * (a[sortConfig.key] > b[sortConfig.key] ? 1 : -1);
-    });
-  }, [rawInvoices, sortConfig]);
+    return (Array.isArray(rawInvoices) ? rawInvoices : []).map(normalizeInvoice);
+  }, [rawInvoices]);
 
   const totalPages = Math.ceil(total / itemsPerPage) || 1;
 
@@ -623,7 +615,7 @@ export default function Invoices() {
     <div className="space-y-6">
       <PageHeader
         title="Invoices"
-        description="View, filter, print, and export all generated retail sales invoices."
+        description="View, filter, print, and export retail sales invoices (ordered most recent first)."
         primaryAction={{
           label: 'Create Invoice',
           icon: DocumentTextIcon,
@@ -687,6 +679,8 @@ export default function Invoices() {
         loading={loading}
         emptyTitle="No Invoices Found"
         emptyDescription="Once sales are completed, formal invoices will appear here."
+        selectedRows={selectedInvoice ? [selectedInvoice.id] : []}
+        onSelectRow={(id) => handleSelectInvoice(id)}
         pagination={{
           currentPage,
           totalPages,
