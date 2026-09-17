@@ -139,9 +139,10 @@ export function useQuota(quotaKey) {
       ? quotaData.limit
       : (planLimit !== undefined ? planLimit : 1);
 
+    const isSuspended = subscription?.status === 'suspended';
     const current = quotaData?.current !== undefined ? quotaData.current : 0;
-    const allowed = isUnlimited || current < limit;
-    const remaining = isUnlimited ? Infinity : Math.max(0, limit - current);
+    const allowed = !isSuspended && (isUnlimited || current < limit);
+    const remaining = isSuspended ? 0 : (isUnlimited ? Infinity : Math.max(0, limit - current));
 
     return {
       allowed,
