@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import BranchSwitcher from './navigation/BranchSwitcher';
 import { 
   HomeIcon,
   UserGroupIcon,
@@ -348,6 +349,13 @@ const ModernSidebar = ({
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
+
+        {/* Branch Switcher / Store Badge for Mobile & Sidebar */}
+        {(!isCollapsed || !isDesktop) && (
+          <div className="px-3 pt-3 pb-2 border-b border-border-default/60">
+            <BranchSwitcher variant="sidebar" />
+          </div>
+        )}
 
         {/* Navigation Groups Container */}
         <div className={`flex-1 overflow-y-auto scrollbar-thin space-y-2 ${isCollapsed && isDesktop ? 'px-2 py-3' : 'px-3 py-3'}`}>
