@@ -198,6 +198,7 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
         email: `susp-cashier-${ts}@example.com`,
         password: 'password123',
         position: 'cashier',
+        salary: 35000,
         shopId: suspShop.id,
         status: 'active'
       });
@@ -242,14 +243,15 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
     });
 
     afterAll(async () => {
+      await ActivityLog.destroy({ where: { shopId: suspShop.id } });
       await Product.destroy({ where: { organizationId: suspOrg.id } });
       await Category.destroy({ where: { organizationId: suspOrg.id } });
       await Subscription.destroy({ where: { organizationId: suspOrg.id } });
       await OrganizationMembership.destroy({ where: { organizationId: suspOrg.id } });
-      await Employee.destroy({ where: { id: suspCashier.id } });
-      await User.destroy({ where: { id: suspOwner.id } });
-      await Shop.destroy({ where: { id: suspShop.id } });
-      await Organization.destroy({ where: { id: suspOrg.id } });
+      if (suspCashier?.id) await Employee.destroy({ where: { id: suspCashier.id } });
+      if (suspOwner?.id) await User.destroy({ where: { id: suspOwner.id } });
+      if (suspShop?.id) await Shop.destroy({ where: { id: suspShop.id } });
+      if (suspOrg?.id) await Organization.destroy({ where: { id: suspOrg.id } });
     });
 
     test('POS Sale creation is rejected with 403 ORGANIZATION_SUSPENDED on suspended tenant', async () => {
@@ -607,7 +609,16 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
       ownerA = await User.create({ name: 'Owner A', email: `owner-a-${ts}@example.com`, password: 'password123', role: 'admin', shopId: shopA1.id });
       await OrganizationMembership.create({ organizationId: orgA.id, userId: ownerA.id, orgRole: 'owner', status: 'active' });
 
-      cashierA = await Employee.create({ firstName: 'Cashier', lastName: 'A', email: `cashier-a-${ts}@example.com`, password: 'password123', position: 'cashier', shopId: shopA1.id, status: 'active' });
+      cashierA = await Employee.create({
+        firstName: 'Cashier',
+        lastName: 'A',
+        email: `cashier-a-${ts}@example.com`,
+        password: 'password123',
+        position: 'cashier',
+        salary: 32000,
+        shopId: shopA1.id,
+        status: 'active'
+      });
       memberA = await OrganizationMembership.create({ organizationId: orgA.id, employeeId: cashierA.id, orgRole: 'member', status: 'active' });
 
       ownerAToken = generateToken({ id: ownerA.id, role: 'admin', shopId: shopA1.id, organizationId: orgA.id, isEmployee: false });
@@ -621,11 +632,16 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
 
     afterAll(async () => {
       await ShopAccess.destroy({ where: {} });
-      await OrganizationMembership.destroy({ where: { organizationId: [orgA.id, orgB.id] } });
-      await Employee.destroy({ where: { id: cashierA.id } });
-      await User.destroy({ where: { id: [ownerA.id, ownerB.id] } });
-      await Shop.destroy({ where: { organizationId: [orgA.id, orgB.id] } });
-      await Organization.destroy({ where: { id: [orgA.id, orgB.id] } });
+      if (orgA?.id && orgB?.id) {
+        await ActivityLog.destroy({ where: { shopId: [shopA1?.id, shopA2?.id, shopB?.id].filter(Boolean) } });
+        await OrganizationMembership.destroy({ where: { organizationId: [orgA.id, orgB.id] } });
+      }
+      if (cashierA?.id) await Employee.destroy({ where: { id: cashierA.id } });
+      if (ownerA?.id && ownerB?.id) await User.destroy({ where: { id: [ownerA.id, ownerB.id] } });
+      if (orgA?.id && orgB?.id) {
+        await Shop.destroy({ where: { organizationId: [orgA.id, orgB.id] } });
+        await Organization.destroy({ where: { id: [orgA.id, orgB.id] } });
+      }
     });
 
     test('Owner can grant branch access to member: POST /api/shops/:id/access', async () => {
@@ -727,6 +743,7 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
     });
 
     afterAll(async () => {
+      await ActivityLog.destroy({ where: { shopId: [shop1.id, shop2.id] } });
       await Subscription.destroy({ where: { organizationId: org.id } });
       await OrganizationMembership.destroy({ where: { organizationId: org.id } });
       await User.destroy({ where: { id: owner.id } });
