@@ -10,10 +10,12 @@ import {
   ArrowPathIcon,
   ExclamationTriangleIcon,
   CubeIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { lazy, Suspense } from 'react';
 import BusinessInsights from '../components/financial/BusinessInsights';
 import StatsGrid from '../components/dashboard/StatsGrid';
+import GettingStartedChecklist from '../components/dashboard/GettingStartedChecklist';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
@@ -50,6 +52,37 @@ export default function Dashboard() {
   const userId = user?.id;
   const userRole = user?.role;
   const userShopId = user?.shopId || user?.shop?.id;
+
+  // First-run onboarding checklist state
+  const orgId = user?.organizationId || user?.shop?.organizationId || userShopId || userId || 'default';
+  const dismissStorageKey = `zana_onboarding_dismissed_${orgId}`;
+
+  const [isChecklistDismissed, setIsChecklistDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(dismissStorageKey) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [showStandardDashboard, setShowStandardDashboard] = useState(false);
+
+  useEffect(() => {
+    try {
+      setIsChecklistDismissed(localStorage.getItem(dismissStorageKey) === 'true');
+    } catch {
+      setIsChecklistDismissed(false);
+    }
+  }, [dismissStorageKey]);
+
+  const handleDismissChecklist = useCallback(() => {
+    try {
+      localStorage.setItem(dismissStorageKey, 'true');
+    } catch (e) {
+      console.warn('Failed to save onboarding checklist dismissal to localStorage', e);
+    }
+    setIsChecklistDismissed(true);
+  }, [dismissStorageKey]);
 
   const formatLocalDate = (d) => {
     if (!d) return '';
@@ -248,6 +281,16 @@ export default function Dashboard() {
   const isLoading = salesLoading || customersLoading || productsLoading;
   const firstError = salesError || customersError || productsError;
 
+  // Detect first-run: store has no products AND no recorded sales
+  const hasLoadedInitialData = !salesLoading && !productsLoading;
+  const isFirstRun = Boolean(
+    hasLoadedInitialData &&
+    Array.isArray(products) &&
+    products.length === 0 &&
+    (Array.isArray(sales) ? sales.length === 0 : true) &&
+    (statistics ? Number(statistics.totalSales || 0) === 0 : true)
+  );
+
   // Allow the user to retry failed loads from the UI
   const retryAll = useCallback(() => {
     dispatch(fetchSalesStatistics());
@@ -339,6 +382,22 @@ export default function Dashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {isFirstRun && (
+              <Button
+                size="sm"
+                variant={isChecklistDismissed || showStandardDashboard ? 'secondary' : 'ghost'}
+                leftIcon={SparklesIcon}
+                onClick={() => {
+                  setIsChecklistDismissed(false);
+                  setShowStandardDashboard(false);
+                  try {
+                    localStorage.removeItem(dismissStorageKey);
+                  } catch {}
+                }}
+              >
+                Setup Guide
+              </Button>
+            )}
             <Button
               size="sm"
               variant="primary"
@@ -351,7 +410,7 @@ export default function Dashboard() {
               size="sm"
               variant="secondary"
               leftIcon={TagIcon}
-              onClick={() => navigate('/products/new')}
+              onClick={() => navigate('/products/create')}
             >
               Add Product
             </Button>
@@ -420,7 +479,42 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Enhanced Stats Grid */}
+      {/* First-Run Onboarding Checklist vs Standard Dashboard */}
+      {isFirstRun && !isChecklistDismissed && !showStandardDashboard ? (
+        <GettingStartedChecklist
+          products={products}
+          employees={employees}
+          user={user}
+          shop={user?.shop}
+          onDismiss={handleDismissChecklist}
+          onToggleStandardView={() => setShowStandardDashboard(true)}
+        />
+      ) : (
+        <>
+          {/* Standard dashboard preview banner for first-run stores */}
+          {isFirstRun && showStandardDashboard && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-primary/20 bg-primary/5 text-small">
+              <div className="flex items-center gap-2.5 text-text-primary">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                </span>
+                <span className="font-medium">
+                  Previewing standard dashboard. Charts and metrics will populate once you record sales and stock inventory.
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShowStandardDashboard(false)}
+                className="shrink-0"
+              >
+                ← Return to Setup Guide
+              </Button>
+            </div>
+          )}
+
+          {/* Enhanced Stats Grid */}
       <StatsGrid
         filter={dashboardFilter}
         period={period}
@@ -737,6 +831,8 @@ export default function Dashboard() {
           )}
         </Card.Body>
       </Card>
+        </>
+      )}
 
       {/* Sale Detail Modal */}
       <SaleDetailModal
