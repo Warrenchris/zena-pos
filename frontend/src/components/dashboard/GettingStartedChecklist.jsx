@@ -24,7 +24,7 @@ import Button from '../ui/Button';
  * Features:
  * 1. 3 action items: Add Products (-> /products/create), Configure Settings & Taxes (-> /settings), Add Staff Members (-> /employees).
  * 2. Real-data completion progress ("X of 3 steps completed") backed by store state.
- * 3. Scoped localStorage dismissal per-organization ID.
+ * 3. Scoped organization dismissal controlled via onDismiss prop.
  * 4. Manual toggle to preview standard dashboard.
  */
 export default function GettingStartedChecklist({
@@ -36,20 +36,9 @@ export default function GettingStartedChecklist({
   onToggleStandardView,
 }) {
   const navigate = useNavigate();
-  const authUser = useSelector((state) => state.auth?.user);
-  const authShop = useSelector((state) => state.auth?.shop);
   const settings = useSelector((state) => state.settings);
 
-  const effectiveUser = user || authUser;
-  const effectiveShop = shop || authShop || effectiveUser?.shop;
-
-  const orgId =
-    effectiveUser?.organizationId ||
-    effectiveShop?.organizationId ||
-    effectiveUser?.shopId ||
-    effectiveShop?.id ||
-    effectiveUser?.id ||
-    'default';
+  const effectiveShop = shop || user?.shop;
 
   // Step 1: Add Products (real-data check: products.length > 0)
   const isProductsCompleted = Array.isArray(products) && products.length > 0;
@@ -61,8 +50,7 @@ export default function GettingStartedChecklist({
     effectiveShop?.phone ||
     settings?.contactEmail ||
     (settings?.taxRate !== undefined && settings?.taxRate > 0) ||
-    (settings?.receiptHeader && settings?.receiptHeader.length > 0) ||
-    localStorage.getItem(`zana_settings_configured_${orgId}`) === 'true'
+    (settings?.receiptHeader && settings?.receiptHeader.length > 0)
   );
 
   // Step 3: Add Staff Members (real-data check: additional employees/cashiers present)
@@ -70,7 +58,7 @@ export default function GettingStartedChecklist({
     Array.isArray(employees) &&
     (employees.length > 1 ||
       employees.some(
-        (e) => (e.role && e.role !== 'admin') || String(e.id) !== String(effectiveUser?.id)
+        (e) => (e.role && e.role !== 'admin') || String(e.id) !== String(user?.id)
       ))
   );
 
@@ -111,11 +99,6 @@ export default function GettingStartedChecklist({
   const progressPercent = Math.round((completedCount / steps.length) * 100);
 
   const handleDismiss = () => {
-    try {
-      localStorage.setItem(`zana_onboarding_dismissed_${orgId}`, 'true');
-    } catch (e) {
-      console.warn('Failed to save onboarding checklist dismissal to localStorage', e);
-    }
     if (onDismiss) {
       onDismiss();
     }

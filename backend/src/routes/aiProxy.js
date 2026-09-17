@@ -217,6 +217,7 @@ router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
   const periods = req.body.periods || 30;
   const datesCount = Array.isArray(req.body.dates) ? req.body.dates.length : 0;
 
+  try {
     const orgId = req.organizationId || req.user?.organizationId;
     if (isOrg && orgId) {
       const featRes = await entitlementService.canUseFeature(orgId, 'org_insights');
