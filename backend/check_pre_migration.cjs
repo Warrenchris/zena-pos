@@ -6,33 +6,39 @@ const sequelize = require('./src/config/database');
 async function main() {
   await sequelize.authenticate();
   
-  // Check Employee.id column type for FK compatibility
+  // Check Employee.id charset
   const [empCols] = await sequelize.query(
-    "SELECT COLUMN_NAME, COLUMN_TYPE, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Employees' AND COLUMN_NAME='id'"
+    `SELECT COLUMN_TYPE, CHARACTER_SET_NAME, COLLATION_NAME 
+     FROM INFORMATION_SCHEMA.COLUMNS 
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Employees' AND COLUMN_NAME='id'`
   );
-  console.log('Employee.id column:', JSON.stringify(empCols));
-  
-  // Check if migration partially ran
-  const [catCols] = await sequelize.query(
-    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Categories' AND COLUMN_NAME='organizationId'"
-  );
-  console.log('Categories.organizationId exists:', catCols.length > 0);
+  console.log('Employee.id:', JSON.stringify(empCols));
 
-  const [dupes] = await sequelize.query(
-    `SELECT s.organizationId, c.name, COUNT(*) as cnt, GROUP_CONCAT(c.id) as ids
-     FROM Categories c JOIN Shops s ON s.id = c.shopId
-     GROUP BY s.organizationId, c.name HAVING cnt > 1`
+  // Categories indexes
+  const [catIdx] = await sequelize.query(
+    `SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME 
+     FROM INFORMATION_SCHEMA.STATISTICS 
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Categories'
+     ORDER BY INDEX_NAME, SEQ_IN_INDEX`
   );
-  
-  if (dupes.length > 0) {
-    console.log('DUPLICATES FOUND:', JSON.stringify(dupes, null, 2));
-    process.exit(1);
-  }
-  console.log('NO DUPLICATE category names per organization.');
+  console.log('Categories indexes:');
+  catIdx.forEach(r => console.log(`  ${r.INDEX_NAME} (${r.COLUMN_NAME}) unique=${!r.NON_UNIQUE}`));
 
-  const [[cc]] = await sequelize.query('SELECT COUNT(*) as c FROM Categories');
-  const [[sm]] = await sequelize.query('SELECT COUNT(*) as c FROM StockMovements');
-  console.log('Categories:', cc.c, 'StockMovements:', sm.c);
+  // Categories.organizationId details
+  const [orgCol] = await sequelize.query(
+    `SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_TYPE 
+     FROM INFORMATION_SCHEMA.COLUMNS 
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Categories' AND COLUMN_NAME='organizationId'`
+  );
+  console.log('Categories.organizationId:', JSON.stringify(orgCol));
+
+  // StockMovements columns
+  const [smCols] = await sequelize.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='StockMovements' 
+     AND COLUMN_NAME IN ('employeeId', 'organizationId')`
+  );
+  console.log('StockMovements extra columns:', JSON.stringify(smCols));
 
   process.exit(0);
 }

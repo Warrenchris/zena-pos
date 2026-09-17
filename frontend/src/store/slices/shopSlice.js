@@ -14,6 +14,15 @@ export const fetchMyShop = createAsyncThunk(
         status: error.response?.status,
       });
     }
+  },
+  {
+    condition: (params, { getState }) => {
+      const { shop, loading } = getState().shop;
+      if (params?.force) return true;
+      if (loading || shop) {
+        return false;
+      }
+    }
   }
 );
 
@@ -44,6 +53,15 @@ export const fetchAccessibleShops = createAsyncThunk(
         status: error.response?.status,
       });
     }
+  },
+  {
+    condition: (params, { getState }) => {
+      const { accessibleShops, loadingAccessible } = getState().shop;
+      if (params?.force) return true;
+      if (loadingAccessible || (accessibleShops && accessibleShops.length > 0)) {
+        return false;
+      }
+    }
   }
 );
 
@@ -52,7 +70,7 @@ export const createBranch = createAsyncThunk(
   async (payload, { rejectWithValue, dispatch }) => {
     try {
       const data = await shopService.createShop(payload);
-      dispatch(fetchAccessibleShops());
+      dispatch(fetchAccessibleShops({ force: true }));
       return data;
     } catch (error) {
       return rejectWithValue({
@@ -68,6 +86,7 @@ export const createBranch = createAsyncThunk(
 const initialState = {
   shop: null,
   loading: false,
+  loadingAccessible: false,
   error: null,
   accessibleShops: [],
   switching: false,
@@ -105,15 +124,15 @@ const shopSlice = createSlice({
         state.error = action.payload;
       })
       .addCase(fetchAccessibleShops.pending, (state) => {
-        state.loading = true;
+        state.loadingAccessible = true;
         state.error = null;
       })
       .addCase(fetchAccessibleShops.fulfilled, (state, action) => {
-        state.loading = false;
+        state.loadingAccessible = false;
         state.accessibleShops = action.payload?.shops || (Array.isArray(action.payload) ? action.payload : []);
       })
       .addCase(fetchAccessibleShops.rejected, (state, action) => {
-        state.loading = false;
+        state.loadingAccessible = false;
         state.error = action.payload;
       })
       .addCase(createBranch.pending, (state) => {

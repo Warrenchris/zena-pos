@@ -34,23 +34,27 @@ export default function BranchSwitcher({
   const currentShop = shop || authShop || (user?.shop ? { name: user.shop.name } : null);
   const hasFetchedShopRef = useRef(false);
 
+  // Only the primary 'topbar' variant triggers initial mount fetches.
+  // The 'sidebar' variant purely reads the already-fetched Redux state.
   useEffect(() => {
+    if (variant !== 'topbar') return;
     if (hasFetchedShopRef.current) return;
     if (user && !authShop && !shop && !loading) {
       hasFetchedShopRef.current = true;
       dispatch(fetchMyShop());
     }
-  }, [dispatch, authShop, shop, loading, user]);
+  }, [dispatch, authShop, shop, loading, user, variant]);
 
   useEffect(() => {
+    if (variant !== 'topbar') return;
     if (user && accessibleShops.length === 0) {
       dispatch(fetchAccessibleShops());
     }
-  }, [dispatch, user, accessibleShops.length]);
+  }, [dispatch, user, accessibleShops.length, variant]);
 
   const handleSwitcherClick = () => {
     if (user) {
-      dispatch(fetchAccessibleShops());
+      dispatch(fetchAccessibleShops({ force: true }));
     }
   };
 

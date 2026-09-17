@@ -26,9 +26,22 @@ const Category = sequelize.define('Category', {
       model: 'Shops',
       key: 'id'
     }
+  },
+  organizationId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Organizations',
+      key: 'id'
+    }
   }
 }, {
   indexes: [
+    {
+      unique: true,
+      fields: ['organizationId', 'name'],
+      name: 'unique_categories_org_name'
+    },
     {
       unique: true,
       fields: ['shopId', 'name'],

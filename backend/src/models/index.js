@@ -130,8 +130,10 @@ Supplier.hasMany(PurchaseOrder, { foreignKey: 'supplierId', as: 'purchaseOrders'
 StockMovement.belongsTo(Shop, { foreignKey: 'shopId' });
 StockMovement.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 StockMovement.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+StockMovement.belongsTo(Employee, { foreignKey: 'employeeId', as: 'employee' });
 Product.hasMany(StockMovement, { foreignKey: 'productId', as: 'stockMovements' });
 Shop.hasMany(StockMovement, { foreignKey: 'shopId' });
+Employee.hasMany(StockMovement, { foreignKey: 'employeeId', as: 'stockMovements' });
 
 // PurchaseItems associations
 Purchase.hasMany(PurchaseItem, { foreignKey: 'purchaseId', as: 'lineItems' });
@@ -172,6 +174,12 @@ ShopAccess.belongsTo(Shop, { foreignKey: 'shopId' });
 // Organization & Catalog / Inventory associations (FINDING-12 Phase 3)
 Organization.hasMany(Product, { foreignKey: 'organizationId' });
 Product.belongsTo(Organization, { foreignKey: 'organizationId' });
+
+Organization.hasMany(Category, { foreignKey: 'organizationId' });
+Category.belongsTo(Organization, { foreignKey: 'organizationId' });
+
+Organization.hasMany(StockMovement, { foreignKey: 'organizationId' });
+StockMovement.belongsTo(Organization, { foreignKey: 'organizationId' });
 
 Shop.hasMany(Inventory, { foreignKey: 'shopId' });
 Inventory.belongsTo(Shop, { foreignKey: 'shopId' });

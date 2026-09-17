@@ -42,6 +42,22 @@ const StockMovement = sequelize.define('StockMovement', {
   userId: {
     type: DataTypes.INTEGER,
     allowNull: true
+  },
+  employeeId: {
+    type: DataTypes.CHAR(36),
+    allowNull: true,
+    references: {
+      model: 'Employees',
+      key: 'id'
+    }
+  },
+  organizationId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'Organizations',
+      key: 'id'
+    }
   }
 }, {
   tableName: 'StockMovements',
