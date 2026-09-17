@@ -4,7 +4,7 @@ const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
 const {
-  Shop, Category, Product, Sale, SaleItem, User, PendingPayment, Organization
+  Shop, Category, Product, Inventory, Sale, SaleItem, User, PendingPayment, Organization
 } = require('../src/models');
 const SalePayment = require('../src/models/SalePayment');
 const axios = require('axios');
@@ -46,29 +46,52 @@ describe('SEC-01: M-Pesa Security & Cryptographic Callback Authentication', () =
       });
     }
 
-    // Find or create Category
-    category = await Category.findOne({ where: { shopId: 1 } });
-    if (!category) {
-      category = await Category.create({
+    const orgId = shop.organizationId || 1;
+
+    [category] = await Category.findOrCreate({
+      where: { shopId: shop.id },
+      defaults: {
         name: 'Security Test Category',
-        shopId: 1
-      });
-    }
+        shopId: shop.id
+      }
+    });
 
     // Find or create Product
-    product = await Product.findOne({ where: { shopId: 1, name: 'Security Test Item' } });
+    product = await Product.findOne({ where: { shopId: shop.id, name: 'Security Test Item' } });
     if (!product) {
       product = await Product.create({
         name: 'Security Test Item',
+        sku: `SKU-SEC01-${Date.now()}`,
+        barcode: `BARCODE-SEC01-${Date.now()}`,
         price: 50.00,
-        costPrice: 20.00,
-        stockQuantity: 100,
+        cost: 20.00,
         categoryId: category.id,
-        shopId: 1
+        shopId: shop.id,
+        organizationId: orgId,
+        active: true
+      });
+
+      await Inventory.findOrCreate({
+        where: { productId: product.id, shopId: shop.id },
+        defaults: {
+          stockQuantity: 100,
+          reorderPoint: 5
+        }
       });
     }
 
-    userToken = tokenFor({ id: 999, role: 'admin', shopId: 1 });
+    await User.findOrCreate({
+      where: { id: 999 },
+      defaults: {
+        name: 'SEC01 Admin',
+        email: 'sec01admin@example.com',
+        password: 'Password123!',
+        role: 'admin',
+        shopId: shop.id
+      }
+    });
+
+    userToken = tokenFor({ id: 999, role: 'admin', shopId: shop.id });
   });
 
   afterAll(async () => {
