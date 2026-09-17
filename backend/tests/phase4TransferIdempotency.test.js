@@ -23,6 +23,15 @@ function tokenFor(payload) {
   });
 }
 
+async function createProductHelper(data) {
+  const rand = Math.floor(Math.random() * 1000000);
+  return await Product.create({
+    sku: `SKU-${Date.now()}-${rand}`,
+    barcode: `BC-${Date.now()}-${rand}`,
+    ...data
+  });
+}
+
 describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () => {
   let orgA, orgB;
   let shopA1, shopA2, shopB1, shopB2;
@@ -134,7 +143,7 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
   // Test 1: Same Idempotency-Key Sequential Replay
   // ==========================================================================
   test('1. Sequential replay with same Idempotency-Key returns original result, mutates stock once, and creates exactly 2 movements', async () => {
-    const prodA = await Product.create({
+    const prodA = await createProductHelper({
       name: 'Sequential Item',
       price: 150,
       cost: 80,
@@ -214,7 +223,7 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
   // Test 2: Same Idempotency-Key Concurrent Replay
   // ==========================================================================
   test('2. Concurrent requests with same Idempotency-Key commit exactly once and return the identical transfer reference', async () => {
-    const prodA = await Product.create({
+    const prodA = await createProductHelper({
       name: 'Concurrent Item',
       price: 200,
       cost: 100,
@@ -276,7 +285,7 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
   // Test 3: Same Key With Different Transfer Payload Rejection
   // ==========================================================================
   test('3. Reusing same Idempotency-Key with different parameters is rejected with 422 and does not mutate inventory', async () => {
-    const prodA = await Product.create({
+    const prodA = await createProductHelper({
       name: 'Payload Item',
       price: 100,
       cost: 50,
@@ -329,7 +338,7 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
   // Test 4: Same Key Across Different Organizations
   // ==========================================================================
   test('4. Same Idempotency-Key used by different organizations does not collide or replay cross-tenant data', async () => {
-    const prodA = await Product.create({
+    const prodA = await createProductHelper({
       name: 'Org A Item',
       price: 100,
       cost: 50,
@@ -338,7 +347,7 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
       active: true
     });
 
-    const prodB = await Product.create({
+    const prodB = await createProductHelper({
       name: 'Org B Item',
       price: 100,
       cost: 50,
@@ -401,7 +410,7 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
   // Test 5: Failed Transfer Does Not Consume Idempotency Key
   // ==========================================================================
   test('5. Transactional failure (insufficient stock) does not leave a consumed idempotency record and key can be reused', async () => {
-    const prodA = await Product.create({
+    const prodA = await createProductHelper({
       name: 'Limited Item',
       price: 300,
       cost: 150,
@@ -433,11 +442,11 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
     const record = await StockTransfer.findOne({ where: { organizationId: orgA.id, idempotencyKey: key } });
     expect(record).toBeNull();
 
-    // Now send a valid transfer (5 units) using a new key (or the same key)
+    // Now send a valid transfer (5 units) using the same key
     const validRes = await request(app)
       .post('/api/transfers')
       .set('Authorization', tokenA)
-      .set('Idempotency-Key', `key-valid-followup-${Date.now()}`)
+      .set('Idempotency-Key', key)
       .send({
         sourceShopId: shopA1.id,
         destinationShopId: shopA2.id,
@@ -456,7 +465,7 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
   // Test 6: Database Constraint Enforcement on StockMovement.organizationId
   // ==========================================================================
   test('6. StockMovement.organizationId cannot be NULL at database level', async () => {
-    const prodA = await Product.create({
+    const prodA = await createProductHelper({
       name: 'Constraint Item',
       price: 100,
       cost: 50,
