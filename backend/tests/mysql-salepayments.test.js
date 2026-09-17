@@ -296,6 +296,7 @@ describe('MySQL + SalePayments Integration Tests', () => {
   // ===================================================================
   test('TEST M.9 — M-Pesa callback creates sale with paymentReference', async () => {
     const checkoutRequestId = 'ws_CO_TEST_M9';
+    const callbackToken = 'test_token_m9_hex64chars1234567890abcdef1234567890abcdef1234567890';
 
     await PendingPayment.create({
       checkoutRequestId,
@@ -305,6 +306,7 @@ describe('MySQL + SalePayments Integration Tests', () => {
       paymentChannel: 'mpesa',
       shopId: 1,
       saleData: {
+        callbackToken,
         items: [{ productId: product.id, quantity: 1, price: 15.00 }],
         total: 15.00,
         paymentAmount: 15.00,
@@ -330,7 +332,7 @@ describe('MySQL + SalePayments Integration Tests', () => {
     };
 
     await request(app)
-      .post('/api/mpesa/callback')
+      .post(`/api/mpesa/callback?token=${callbackToken}`)
       .send(callbackPayload)
       .expect(200);
 

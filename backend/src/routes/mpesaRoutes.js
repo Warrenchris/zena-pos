@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const { auth } = require('../middleware/auth');
 const mpesaService = require('../services/mpesaService');
 const { PendingPayment, Sale } = require('../models');
@@ -15,17 +16,22 @@ router.post('/initiate', auth, async (req, res) => {
       return res.status(400).json({ error: 'Phone number, amount, and order ID are required.' });
     }
 
-    // Call Daraja API to get CheckoutRequestID
+    // Generate single-use cryptographically random verification token
+    const callbackToken = crypto.randomBytes(32).toString('hex');
+
+    // Call Daraja API to get CheckoutRequestID with callback verification token in CallBackURL
     const checkoutRequestId = await mpesaService.initiateStkPush({
       phone,
       amount,
       orderId,
-      shopId
+      shopId,
+      callbackToken
     });
 
-    // Enrich saleData with user context for finalization on callback
+    // Enrich saleData with user context and callback verification token
     const enrichedSaleData = {
       ...saleData,
+      callbackToken,
       paymentMethod: 'mobile',
       paymentAmount: parseFloat(amount),
       userId: !req.user.isEmployee ? req.user.id : null,
@@ -51,9 +57,14 @@ router.post('/initiate', auth, async (req, res) => {
   }
 });
 
-// POST /api/mpesa/callback (unauthenticated - called directly by Safaricom)
+// POST /api/mpesa/callback (unauthenticated - called directly by Safaricom with single-use query token)
 router.post('/callback', async (req, res) => {
   try {
+    const token = req.query.token;
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized callback: missing verification token.' });
+    }
+
     const verification = mpesaService.verifyCallback(req.body);
     const { checkoutRequestId, resultCode, amount, mpesaReceiptNumber } = verification;
 
@@ -65,12 +76,25 @@ router.post('/callback', async (req, res) => {
       return res.status(404).json({ error: 'Pending payment not found.' });
     }
 
-    // Check if already processed
+    // Authenticate callback: verification token must match single-use token in pending payment
+    const expectedToken = pendingPayment.saleData?.callbackToken;
+    if (!expectedToken || token !== expectedToken) {
+      console.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for POS payment ${checkoutRequestId}. Provided: ${token}`);
+      return res.status(401).json({ error: 'Unauthorized callback: invalid verification token.' });
+    }
+
+    // Check if already processed (Idempotency)
     if (pendingPayment.status !== 'pending') {
-      return res.json({ message: 'Callback already processed.' });
+      return res.status(200).json({ message: 'Callback already processed.' });
     }
 
     if (resultCode === 0) {
+      // Validate paid amount against requested amount
+      if (Number(amount) < Number(pendingPayment.amount)) {
+        await pendingPayment.update({ status: 'failed' });
+        return res.status(400).json({ error: 'Paid amount is less than pending payment amount.' });
+      }
+
       const saleData = pendingPayment.saleData || {};
       saleData.paymentReference = mpesaReceiptNumber;
       saleData.paymentProvider = 'mpesa';

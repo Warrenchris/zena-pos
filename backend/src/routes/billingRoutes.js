@@ -279,7 +279,6 @@ router.post('/subscription/renew', auth, requireOrgOwner, async (req, res) => {
         invoiceNumber: invoice.invoiceNumber,
         amount: invoice.amount,
         currency: invoice.currency,
-        checkoutRequestId: initiationResult.checkoutRequestId,
         customerMessage: initiationResult.customerMessage
       });
     } else {
@@ -309,9 +308,14 @@ router.post('/subscription/renew', auth, requireOrgOwner, async (req, res) => {
 /**
  * POST /api/billing/mpesa/callback
  * Safaricom Daraja STK Push Callback webhook.
- * Public endpoint called directly by Safaricom.
+ * Public endpoint called directly by Safaricom with single-use query token.
  */
 router.post('/mpesa/callback', async (req, res) => {
+  const token = req.query.token;
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized callback: missing verification token.' });
+  }
+
   const stkCallback = req.body?.Body?.stkCallback;
   if (!stkCallback) {
     return res.status(400).json({ error: 'Invalid Safaricom callback payload structure.' });
@@ -337,6 +341,14 @@ router.post('/mpesa/callback', async (req, res) => {
     if (!invoice) {
       await t.rollback();
       return res.status(404).json({ error: 'Subscription invoice not found for this CheckoutRequestID.' });
+    }
+
+    // Authenticate callback: verification token must match single-use token stored in invoice metadata
+    const expectedToken = invoice.metadata?.callbackToken;
+    if (!expectedToken || token !== expectedToken) {
+      await t.rollback();
+      console.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for invoice ${invoice.invoiceNumber}. Provided: ${token}`);
+      return res.status(401).json({ error: 'Unauthorized callback: invalid verification token.' });
     }
 
     // Idempotency check: Already confirmed invoices must NOT extend the period twice
@@ -401,6 +413,21 @@ router.post('/mpesa/callback', async (req, res) => {
 
       await t.commit();
       return res.status(400).json({ error: 'Paid amount does not match invoice amount.' });
+    }
+
+    // In production / non-test environments, perform secondary status query check if credentials are configured
+    if (process.env.NODE_ENV !== 'test' && process.env.MPESA_CONSUMER_KEY) {
+      try {
+        const queryStatus = await billingPaymentService.queryMpesaStkPushStatus({ checkoutRequestId });
+        if (queryStatus && queryStatus.ResultCode && String(queryStatus.ResultCode) !== '0') {
+          invoice.status = 'failed';
+          await invoice.save({ transaction: t });
+          await t.commit();
+          return res.status(400).json({ error: 'M-Pesa status query indicated unsuccessful payment.' });
+        }
+      } catch (queryErr) {
+        console.warn('Daraja status query verification warning:', queryErr.message);
+      }
     }
 
     // Process confirmed renewal and extend subscription

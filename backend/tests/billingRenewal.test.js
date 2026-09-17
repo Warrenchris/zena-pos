@@ -165,7 +165,7 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.channel).toBe('mpesa');
-      expect(res.body.checkoutRequestId).toBe(MOCK_CHECKOUT_ID);
+      expect(res.body.checkoutRequestId).toBeUndefined();
 
       const invoice = await SubscriptionInvoice.findOne({
         where: { paymentReference: MOCK_CHECKOUT_ID }
@@ -173,11 +173,50 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
       expect(invoice).not.toBeNull();
       expect(invoice.status).toBe('pending');
       expect(invoice.paymentChannel).toBe('mpesa');
+      expect(invoice.metadata?.callbackToken).toBeDefined();
     });
   });
 
-  describe('Verification 4: M-Pesa Webhook Success Path', () => {
-    it('should confirm invoice, extend subscription period, create ActivityLog, and invalidate Redis cache', async () => {
+  describe('Verification 4: M-Pesa Webhook Security & Success Path', () => {
+    it('should reject callback with missing verification token with 401', async () => {
+      const payload = {
+        Body: {
+          stkCallback: {
+            CheckoutRequestID: MOCK_CHECKOUT_ID,
+            ResultCode: 0,
+            CallbackMetadata: { Item: [] }
+          }
+        }
+      };
+
+      const res = await request(app)
+        .post('/api/billing/mpesa/callback')
+        .send(payload);
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toMatch(/missing verification token/i);
+    });
+
+    it('should reject callback with invalid verification token with 401', async () => {
+      const payload = {
+        Body: {
+          stkCallback: {
+            CheckoutRequestID: MOCK_CHECKOUT_ID,
+            ResultCode: 0,
+            CallbackMetadata: { Item: [] }
+          }
+        }
+      };
+
+      const res = await request(app)
+        .post('/api/billing/mpesa/callback?token=forged_unauthorized_token_12345')
+        .send(payload);
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toMatch(/invalid verification token/i);
+    });
+
+    it('should confirm invoice, extend subscription period, create ActivityLog, and invalidate Redis cache with valid token', async () => {
       // Warm up entitlement cache
       await entitlementService.canUseFeature(org.id, 'org_insights');
       const cacheKey = `cache:entitlements:org:${org.id}`;
@@ -187,6 +226,9 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
       const invoice = await SubscriptionInvoice.findOne({
         where: { paymentReference: MOCK_CHECKOUT_ID }
       });
+      const validToken = invoice.metadata?.callbackToken;
+      expect(validToken).toBeDefined();
+
       const subBefore = await Subscription.findOne({ where: { id: invoice.subscriptionId } });
       const initialEnd = new Date(subBefore.currentPeriodEnd);
 
@@ -210,7 +252,7 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
       };
 
       const res = await request(app)
-        .post('/api/billing/mpesa/callback')
+        .post(`/api/billing/mpesa/callback?token=${validToken}`)
         .send(payload);
 
       expect(res.status).toBe(200);
@@ -250,6 +292,7 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
       const invoice = await SubscriptionInvoice.findOne({
         where: { paymentReference: MOCK_CHECKOUT_ID }
       });
+      const validToken = invoice.metadata?.callbackToken;
       const subBefore = await Subscription.findByPk(invoice.subscriptionId);
       const periodEndBefore = subBefore.currentPeriodEnd;
 
@@ -269,7 +312,7 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
       };
 
       const res = await request(app)
-        .post('/api/billing/mpesa/callback')
+        .post(`/api/billing/mpesa/callback?token=${validToken}`)
         .send(payload);
 
       expect(res.status).toBe(200);
@@ -283,7 +326,9 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
     it('should reject callback when paid amount is less than invoice amount', async () => {
       const mismatchInvoice = await billingService.generateRenewalInvoice(org.id, starterPlan.id, 'monthly');
       const mismatchCheckoutId = 'ws_CO_MISMATCH_999999999';
+      const mismatchToken = 'mismatch_token_64chars_abcdef1234567890abcdef1234567890abcdef12345678';
       mismatchInvoice.paymentReference = mismatchCheckoutId;
+      mismatchInvoice.metadata = { callbackToken: mismatchToken };
       await mismatchInvoice.save();
 
       const payload = {
@@ -302,7 +347,7 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
       };
 
       const res = await request(app)
-        .post('/api/billing/mpesa/callback')
+        .post(`/api/billing/mpesa/callback?token=${mismatchToken}`)
         .send(payload);
 
       expect(res.status).toBe(400);

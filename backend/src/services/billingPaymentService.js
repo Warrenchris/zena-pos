@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 
 /**
  * Format phone number to Safaricom standard format (254XXXXXXXXX)
@@ -77,6 +78,20 @@ async function initiateMpesaRenewal({ phone, invoice, organizationId }) {
   const formattedPhone = formatPhoneNumber(phone);
   const roundedAmount = Math.round(parseFloat(invoice.amount));
 
+  // Generate single-use cryptographically random verification token
+  const callbackToken = crypto.randomBytes(32).toString('hex');
+  invoice.metadata = {
+    ...(invoice.metadata || {}),
+    callbackToken
+  };
+
+  let targetCallbackUrl = callbackUrl;
+  if (targetCallbackUrl.includes('?')) {
+    targetCallbackUrl += `&token=${callbackToken}`;
+  } else {
+    targetCallbackUrl += `?token=${callbackToken}`;
+  }
+
   const env = process.env.MPESA_ENV === 'production' ? 'api' : 'sandbox';
   const url = `https://${env}.safaricom.co.ke/mpesa/stkpush/v1/processrequest`;
 
@@ -89,7 +104,7 @@ async function initiateMpesaRenewal({ phone, invoice, organizationId }) {
     PartyA: formattedPhone,
     PartyB: shortcode,
     PhoneNumber: formattedPhone,
-    CallBackURL: callbackUrl,
+    CallBackURL: targetCallbackUrl,
     AccountReference: invoice.invoiceNumber.substring(0, 12),
     TransactionDesc: `Renewal ${invoice.invoiceNumber}`
   };
@@ -119,6 +134,45 @@ async function initiateMpesaRenewal({ phone, invoice, organizationId }) {
   } catch (error) {
     console.error('Daraja STK Push error for subscription renewal:', error.response?.data || error.message);
     throw new Error(error.response?.data?.errorMessage || error.message || 'Failed to initiate M-Pesa STK Push.');
+  }
+}
+
+/**
+ * Queries Safaricom Daraja STK Push Query API to verify status independently of webhook
+ */
+async function queryMpesaStkPushStatus({ checkoutRequestId }) {
+  if (!checkoutRequestId) {
+    throw new Error('CheckoutRequestID is required to query STK Push status.');
+  }
+
+  const config = getMpesaBillingConfig();
+  const accessToken = await getOAuthToken();
+
+  const { shortcode, passkey } = config;
+  const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+  const password = Buffer.from(shortcode + passkey + timestamp).toString('base64');
+
+  const env = process.env.MPESA_ENV === 'production' ? 'api' : 'sandbox';
+  const url = `https://${env}.safaricom.co.ke/mpesa/stkpushquery/v1/query`;
+
+  const payload = {
+    BusinessShortCode: shortcode,
+    Password: password,
+    Timestamp: timestamp,
+    CheckoutRequestID: checkoutRequestId
+  };
+
+  try {
+    const response = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Daraja STK Push Query error:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.errorMessage || error.message || 'Failed to query M-Pesa STK Push status.');
   }
 }
 
@@ -183,5 +237,6 @@ module.exports = {
   getMpesaBillingConfig,
   getOAuthToken,
   initiateMpesaRenewal,
-  initiateCardRenewal
+  initiateCardRenewal,
+  queryMpesaStkPushStatus
 };

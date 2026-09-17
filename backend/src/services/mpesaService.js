@@ -73,7 +73,7 @@ async function getOAuthToken(shopId) {
 /**
  * Initiate Daraja STK Push request
  */
-async function initiateStkPush({ phone, amount, orderId, shopId }) {
+async function initiateStkPush({ phone, amount, orderId, shopId, callbackToken }) {
   const config = await getMpesaConfig(shopId);
   const accessToken = await getOAuthToken(shopId);
   
@@ -88,6 +88,11 @@ async function initiateStkPush({ phone, amount, orderId, shopId }) {
   const formattedPhone = formatPhoneNumber(phone);
   const roundedAmount = Math.round(parseFloat(amount));
 
+  let targetCallbackUrl = callbackUrl;
+  if (callbackToken) {
+    targetCallbackUrl += targetCallbackUrl.includes('?') ? `&token=${callbackToken}` : `?token=${callbackToken}`;
+  }
+
   const env = process.env.MPESA_ENV === 'production' ? 'api' : 'sandbox';
   const url = `https://${env}.safaricom.co.ke/mpesa/stkpush/v1/processrequest`;
 
@@ -100,7 +105,7 @@ async function initiateStkPush({ phone, amount, orderId, shopId }) {
     PartyA: formattedPhone,
     PartyB: shortcode,
     PhoneNumber: formattedPhone,
-    CallBackURL: callbackUrl,
+    CallBackURL: targetCallbackUrl,
     AccountReference: String(orderId).substring(0, 12),
     TransactionDesc: `Order ${orderId}`
   };
@@ -158,9 +163,53 @@ function verifyCallback(payload) {
   };
 }
 
+/**
+ * Queries Safaricom Daraja STK Push Query API to verify status independently of callback
+ */
+async function queryStkPushStatus({ checkoutRequestId, shopId }) {
+  if (!checkoutRequestId) {
+    throw new Error('CheckoutRequestID is required.');
+  }
+
+  const config = await getMpesaConfig(shopId);
+  const accessToken = await getOAuthToken(shopId);
+
+  const { shortcode, passkey } = config;
+  if (!shortcode || !passkey) {
+    throw new Error('M-Pesa credentials not configured for STK query.');
+  }
+
+  const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+  const password = Buffer.from(shortcode + passkey + timestamp).toString('base64');
+
+  const env = process.env.MPESA_ENV === 'production' ? 'api' : 'sandbox';
+  const url = `https://${env}.safaricom.co.ke/mpesa/stkpushquery/v1/query`;
+
+  const payload = {
+    BusinessShortCode: shortcode,
+    Password: password,
+    Timestamp: timestamp,
+    CheckoutRequestID: checkoutRequestId
+  };
+
+  try {
+    const response = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Daraja STK Push Query error:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.errorMessage || error.message || 'Failed to query M-Pesa STK Push status.');
+  }
+}
+
 module.exports = {
   initiateStkPush,
   verifyCallback,
   formatPhoneNumber,
-  getOAuthToken
+  getOAuthToken,
+  queryStkPushStatus
 };
