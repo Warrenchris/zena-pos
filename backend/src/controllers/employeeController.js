@@ -11,6 +11,7 @@ const sequelize = require('../config/database');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 const entitlementService = require('../services/entitlementService');
 const { sendUpgradePrompt } = require('../utils/upgradePrompt');
+const staffCreationService = require('../services/staffCreationService');
 
 // Get all employees and shop staff
 exports.getAllEmployees = async (req, res) => {
@@ -231,104 +232,67 @@ exports.getEmployeeById = async (req, res) => {
 
 // Create new employee
 exports.createEmployee = async (req, res) => {
-  const transaction = await sequelize.transaction();
-  
   try {
     const validationError = validateEmployee(req.body);
     if (validationError) {
-      await transaction.rollback();
       return res.status(400).json({ error: validationError });
     }
 
-    // Resolve organization context
-    let orgId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
-    if (!orgId && req.user?.shopId) {
-      const callerShop = await Shop.findByPk(req.user.shopId, { attributes: ['organizationId'] });
-      orgId = callerShop?.organizationId || null;
-    }
+    const { employee } = await staffCreationService.createStaffMember({
+      actor: req.user,
+      body: req.body,
+      reqOrgId: req.organizationId
+    });
 
-    if (orgId) {
-      // Count active members:
-      // Count OrganizationMemberships with status 'active' (covering Users and Employees with memberships)
-      // Plus any active Employees in the organization's shops not already represented in OrganizationMembership
-      const activeMemberships = await OrganizationMembership.findAll({
-        where: { organizationId: orgId, status: 'active' },
-        attributes: ['userId', 'employeeId']
-      });
-
-      const memberEmployeeIds = new Set(
-        activeMemberships.filter(m => m.employeeId).map(m => m.employeeId)
-      );
-
-      const orgShops = await Shop.findAll({
-        where: { organizationId: orgId },
-        attributes: ['id']
-      });
-      const shopIds = orgShops.map(s => s.id);
-
-      let unlinkedEmployeeCount = 0;
-      if (shopIds.length > 0) {
-        const activeEmployees = await Employee.findAll({
-          where: {
-            shopId: shopIds,
-            status: 'active'
-          },
-          attributes: ['id']
-        });
-        unlinkedEmployeeCount = activeEmployees.filter(e => !memberEmployeeIds.has(e.id)).length;
-      }
-
-      const currentActiveMemberCount = activeMemberships.length + unlinkedEmployeeCount;
-
-      const quotaResult = await entitlementService.checkQuota(orgId, 'maxUsers', currentActiveMemberCount);
-      if (!quotaResult.allowed) {
-        await transaction.rollback();
-        const { plan } = await entitlementService.getOrganizationEntitlements(orgId);
-        return sendUpgradePrompt(res, {
-          type: 'quota',
-          key: 'maxUsers',
-          current: currentActiveMemberCount,
-          limit: quotaResult.limit,
-          currentPlan: plan,
-          requiredPlan: 'growth',
-          reason: quotaResult.reason
-        });
-      }
-    }
-
-    // Check if email already exists in either Users or Employees
-    const existingUser = await User.findOne({ where: { email: req.body.email } });
-    const existingEmployee = await Employee.findOne({ where: { email: req.body.email } });
-    
-    if (existingUser || existingEmployee) {
-      await transaction.rollback();
-      return res.status(400).json({ error: 'Email already exists' });
-    }
-
-    // Create employee record
-    // Force shopId from token, ignore any client-sent shopId
-    const payload = { ...req.body, shopId: req.user.shopId };
-    const employee = await Employee.create(payload, { transaction });
-
-    await transaction.commit();
-    res.status(201).json(employee);
+    return res.status(201).json(employee);
   } catch (error) {
-    console.error('Error creating employee:', error);
-    await transaction.rollback();
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.status(400).json({ error: 'Email already exists' });
+    if (error.isUpgradePrompt && error.promptData) {
+      return sendUpgradePrompt(res, error.promptData);
     }
-    res.status(500).json({ error: 'Failed to create employee' });
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        error: error.message,
+        ...(error.code ? { code: error.code } : {})
+      });
+    }
+    console.error('Error creating employee:', error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({ error: 'Email already exists', code: 'DUPLICATE_EMAIL' });
+    }
+    return res.status(500).json({ error: 'Failed to create employee' });
   }
 };
 
 // Update employee
 exports.updateEmployee = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
-    // Add the ID to the payload for validation
-    const payload = { ...req.body, id: req.params.id };
-    const validationError = validateEmployee(payload);
+    const employee = await Employee.findOne({
+      where: { id: req.params.id, shopId: req.user.shopId },
+      transaction
+    });
+
+    if (!employee) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Merge existing employee with request body for validation of partial updates
+    const mergedPayload = {
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      email: employee.email,
+      position: employee.position,
+      status: employee.status,
+      salary: employee.salary,
+      hireDate: employee.hireDate,
+      ...req.body,
+      id: req.params.id
+    };
+
+    const validationError = validateEmployee(mergedPayload);
     if (validationError) {
+      await transaction.rollback();
       return res.status(400).json({ error: validationError });
     }
 
@@ -337,21 +301,31 @@ exports.updateEmployee = async (req, res) => {
       delete req.body.password;
     }
 
-    const [updated] = await Employee.update(req.body, {
-      where: { id: req.params.id, shopId: req.user.shopId },
-      individualHooks: true // This ensures password hashing hooks are run
+    await employee.update(req.body, {
+      transaction,
+      individualHooks: true // Ensures password hashing hooks are run
     });
 
-    if (!updated) {
-      return res.status(404).json({ error: 'Employee not found' });
+    // Sync OrganizationMembership status if employee status updated
+    if (req.body.status) {
+      const membershipStatus = req.body.status === 'active' ? 'active' : 'suspended';
+      const membership = await OrganizationMembership.findOne({
+        where: { employeeId: employee.id },
+        transaction
+      });
+      if (membership) {
+        membership.status = membershipStatus;
+        await membership.save({ transaction });
+      }
     }
 
-    const updatedEmployee = await Employee.findOne({ where: { id: req.params.id, shopId: req.user.shopId } });
-    res.json(updatedEmployee);
+    await transaction.commit();
+    res.json(employee);
   } catch (error) {
+    await transaction.rollback();
     console.error('Error updating employee:', error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.status(400).json({ error: 'Email already exists' });
+      return res.status(400).json({ error: 'Email already exists', code: 'DUPLICATE_EMAIL' });
     }
     res.status(500).json({ error: 'Failed to update employee' });
   }
@@ -359,17 +333,30 @@ exports.updateEmployee = async (req, res) => {
 
 // Delete employee
 exports.deleteEmployee = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
-    const deleted = await Employee.destroy({
-      where: { id: req.params.id, shopId: req.user.shopId }
+    const employee = await Employee.findOne({
+      where: { id: req.params.id, shopId: req.user.shopId },
+      transaction
     });
 
-    if (!deleted) {
+    if (!employee) {
+      await transaction.rollback();
       return res.status(404).json({ error: 'Employee not found' });
     }
 
+    // Clean up associated OrganizationMembership and ShopAccess
+    await OrganizationMembership.destroy({
+      where: { employeeId: employee.id },
+      transaction
+    });
+
+    await employee.destroy({ transaction });
+    await transaction.commit();
+
     res.status(204).send();
   } catch (error) {
+    await transaction.rollback();
     console.error('Error deleting employee:', error);
     res.status(500).json({ error: 'Failed to delete employee' });
   }

@@ -85,17 +85,38 @@ describe('Multi-tenant isolation', () => {
     expect([...shopIdsB].every(id => id === 2)).toBe(true);
   });
 
-  test('Create employee forces shopId from token', async () => {
+  test('Create employee rejects foreign shopId', async () => {
     const payload = {
       firstName: 'Tenant',
       lastName: 'Isolation',
-      email: `tenant_isolation_${Date.now()}@example.com`,
+      email: `tenant_foreign_${Date.now()}@example.com`,
       position: 'cashier',
       status: 'active',
       hireDate: new Date().toISOString(),
       salary: 1000,
       password: 'Passw0rd!',
       shopId: 999
+    };
+
+    const res = await request(app)
+      .post('/api/employees')
+      .set('Authorization', shopAToken)
+      .send(payload)
+      .expect(403);
+
+    expect(res.body.code).toBe('SHOP_ACCESS_DENIED');
+  });
+
+  test('Create employee without shopId defaults to token shopId', async () => {
+    const payload = {
+      firstName: 'Tenant',
+      lastName: 'Default',
+      email: `tenant_default_${Date.now()}@example.com`,
+      position: 'cashier',
+      status: 'active',
+      hireDate: new Date().toISOString(),
+      salary: 1000,
+      password: 'Passw0rd!'
     };
 
     const create = await request(app)

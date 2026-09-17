@@ -26,8 +26,8 @@ router.get('/', auth, checkRole(['admin', 'manager', 'cashier']), getAllEmployee
 // Get employee by ID (admin or self)
 router.get('/:id', auth, checkAdminOrSelf, getEmployeeById);
 
-// Create new employee (admin only) – shopId forced from token
-router.post('/', auth, checkRole(['admin']), ensureShopIsolation, createEmployee);
+// Create new employee (admin only) – tenant validated and branch authorized
+router.post('/', auth, checkRole(['admin']), createEmployee);
 
 // Update employee (admin only) – tenant scoped and shopId forced
 router.put('/:id', auth, checkRole(['admin']), ensureShopIsolation, updateEmployee);

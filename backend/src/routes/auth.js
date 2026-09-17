@@ -29,11 +29,7 @@ router.post(
     body('password')
       .isLength({ min: 6 })
       .withMessage('Password must be at least 6 characters long'),
-    body('role')
-      .optional()
-      .isIn(['admin', 'cashier', 'manager'])
-      .withMessage('Invalid role')
-    ,
+    body('role').optional(),
     body('shop.name').notEmpty().withMessage('Shop name is required')
   ],
   authController.register

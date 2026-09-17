@@ -19,10 +19,12 @@ exports.register = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, password, role, shop } = req.body;
+    const { name, email, password, shop } = req.body;
+    const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    const userExists = await User.findOne({ where: { email } });
-    if (userExists) {
+    const userExists = await User.findOne({ where: { email: normalizedEmail } });
+    const empExists = await Employee.findOne({ where: { email: normalizedEmail } });
+    if (userExists || empExists) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
@@ -53,11 +55,12 @@ exports.register = async (req, res) => {
         }, { transaction: t });
       }
 
+      // AUT-01: Initial self-registered tenant creator is authoritatively 'admin'
       const createdUser = await User.create({
         name,
-        email,
+        email: normalizedEmail,
         password,
-        role: role || 'admin',
+        role: 'admin',
         shopId: newShop?.id,
       }, { transaction: t });
 
@@ -194,15 +197,16 @@ exports.login = async (req, res) => {
         );
 
     let orgRole = null;
-    if (!isEmployee) {
-      const orgId = user.Shop?.organizationId;
-      const membershipWhere = { userId: user.id, status: 'active' };
-      if (orgId) {
-        membershipWhere.organizationId = orgId;
-      }
-      const membership = await OrganizationMembership.findOne({ where: membershipWhere });
-      orgRole = membership?.orgRole || null;
+    const orgId = user.Shop?.organizationId;
+    const membershipWhere = {
+      status: 'active',
+      ...(isEmployee ? { employeeId: user.id } : { userId: user.id })
+    };
+    if (orgId) {
+      membershipWhere.organizationId = orgId;
     }
+    const membership = await OrganizationMembership.findOne({ where: membershipWhere });
+    orgRole = membership?.orgRole || (isEmployee ? 'member' : null);
 
     res.json({
       user: {
@@ -285,12 +289,20 @@ exports.getProfile = async (req, res) => {
       // If token belongs to an employee, fetch from Employee model
       const employee = await Employee.findByPk(userId, {
         attributes: { exclude: ['password'] },
-        include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone'] }]
+        include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone', 'organizationId'] }]
       });
 
       if (!employee) {
         return res.status(404).json({ error: 'Employee not found' });
       }
+
+      const empOrgId = req.organizationId || req.user.organizationId || employee.Shop?.organizationId;
+      const empMembershipWhere = { employeeId: employee.id, status: 'active' };
+      if (empOrgId) {
+        empMembershipWhere.organizationId = empOrgId;
+      }
+      const empMembership = await OrganizationMembership.findOne({ where: empMembershipWhere });
+      const empOrgRole = empMembership?.orgRole || 'member';
 
       // Normalize response similar to User and match frontend shape { user, shop }
       const userProfile = {
@@ -298,7 +310,7 @@ exports.getProfile = async (req, res) => {
         name: `${employee.firstName} ${employee.lastName}`,
         email: employee.email,
         role: 'employee',
-        orgRole: null,
+        orgRole: empOrgRole,
         shopId: employee.shopId,
       };
 

@@ -199,6 +199,14 @@ export const routes = [
             element: <PrivateRoute><Employees /></PrivateRoute>
           },
           {
+            path: 'admin/users',
+            element: <PrivateRoute><Employees /></PrivateRoute>
+          },
+          {
+            path: 'users',
+            element: <PrivateRoute><Employees /></PrivateRoute>
+          },
+          {
             path: 'my-sales',
             element: <PrivateRoute><MySales /></PrivateRoute>
           },
