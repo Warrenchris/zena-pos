@@ -37,7 +37,8 @@ function sendUpgradePrompt(res, {
       : `Feature "${key}" requires a higher plan tier.`),
     code: code || defaultCode,
     currentPlan: currentPlan?.code || currentPlan?.name || (typeof currentPlan === 'string' ? currentPlan : null),
-    requiredPlan: requiredPlan || 'growth'
+    requiredPlan: requiredPlan || 'growth',
+    upgradeRequired: true
   };
 
   if (type === 'quota') {

@@ -304,7 +304,9 @@ router.post('/subscription/renew', auth, requireOrgOwner, async (req, res) => {
       return res.status(error.statusCode).json({
         error: error.message,
         ...(error.code ? { code: error.code } : {}),
-        ...(error.details ? error.details : {})
+        ...(error.details ? error.details : {}),
+        ...(error.shops ? { shops: error.shops } : {}),
+        ...(error.users ? { users: error.users } : {})
       });
     }
     console.error('Subscription renewal initiation error:', error);

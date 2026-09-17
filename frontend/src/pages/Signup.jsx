@@ -42,7 +42,14 @@ export default function Signup() {
       dispatch(setCredentials(res.data))
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to sign up')
+      const data = err?.response?.data;
+      let errorMsg = 'Failed to sign up';
+      if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        errorMsg = data.errors.map((e) => e.msg).filter(Boolean).join(', ') || errorMsg;
+      } else if (data?.error) {
+        errorMsg = data.error;
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false)
     }
@@ -94,6 +101,8 @@ export default function Signup() {
                 type="password"
                 label="Password"
                 required
+                minLength={6}
+                helperText="Must be at least 6 characters long"
                 placeholder="Choose a strong password"
                 value={form.password}
                 onChange={onChange}

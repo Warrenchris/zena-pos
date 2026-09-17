@@ -229,14 +229,17 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
 
       category = await Category.create({
         name: `Susp Category ${ts}`,
-        organizationId: suspOrg.id
+        organizationId: suspOrg.id,
+        shopId: suspShop.id
       });
       product = await Product.create({
         name: `Susp Product ${ts}`,
+        sku: `SKU-SUSP-${ts}`,
         price: 100.0,
         cost: 60.0,
         categoryId: category.id,
-        organizationId: suspOrg.id
+        organizationId: suspOrg.id,
+        shopId: suspShop.id
       });
 
       await entitlementService.invalidateOrgEntitlements(suspOrg.id);
@@ -623,16 +626,38 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
 
       ownerAToken = generateToken({ id: ownerA.id, role: 'admin', shopId: shopA1.id, organizationId: orgA.id, isEmployee: false });
 
+      await Subscription.create({
+        organizationId: orgA.id,
+        planId: growthPlan.id,
+        status: 'active',
+        billingCycle: 'monthly',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 3600 * 1000)
+      });
+
       // Org B
       orgB = await Organization.create({ name: `Org B ${ts}`, slug: `org-b-${ts}`, status: 'active' });
       shopB = await Shop.create({ name: `Shop B ${ts}`, organizationId: orgB.id, active: true });
       ownerB = await User.create({ name: 'Owner B', email: `owner-b-${ts}@example.com`, password: 'password123', role: 'admin', shopId: shopB.id });
       await OrganizationMembership.create({ organizationId: orgB.id, userId: ownerB.id, orgRole: 'owner', status: 'active' });
+
+      await Subscription.create({
+        organizationId: orgB.id,
+        planId: starterPlan.id,
+        status: 'active',
+        billingCycle: 'monthly',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 3600 * 1000)
+      });
+
+      await entitlementService.invalidateOrgEntitlements(orgA.id);
+      await entitlementService.invalidateOrgEntitlements(orgB.id);
     });
 
     afterAll(async () => {
       await ShopAccess.destroy({ where: {} });
       if (orgA?.id && orgB?.id) {
+        await Subscription.destroy({ where: { organizationId: [orgA.id, orgB.id] } });
         await ActivityLog.destroy({ where: { shopId: [shopA1?.id, shopA2?.id, shopB?.id].filter(Boolean) } });
         await OrganizationMembership.destroy({ where: { organizationId: [orgA.id, orgB.id] } });
       }

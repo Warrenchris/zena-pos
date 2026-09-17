@@ -10,6 +10,7 @@ const emailService = require('../services/emailService');
 const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const Shop = require('../models/Shop');
 const { sequelize, Organization, OrganizationMembership, ShopAccess, Subscription, Plan } = require('../models');
+const { buildAuthPayload } = require('../utils/serializeAuthResponse');
 const logger = require('../utils/logger');
 
 exports.register = async (req, res) => {
@@ -95,7 +96,7 @@ exports.register = async (req, res) => {
         }
       }
 
-      return { user: createdUser, createdShop: newShop };
+      return { user: createdUser, createdShop: newShop, createdOrg };
     });
 
     const token = jwt.sign(
@@ -103,7 +104,7 @@ exports.register = async (req, res) => {
         id: user.id, 
         role: user.role, 
         shopId: createdShop?.id,
-        organizationId: createdShop?.organizationId || null,
+        organizationId: createdOrg?.id || createdShop?.organizationId || null,
         isEmployee: false
       },
       getPrivateKey(),
@@ -113,11 +114,15 @@ exports.register = async (req, res) => {
       }
     );
 
+    const authPayload = buildAuthPayload({
+      user,
+      shop: createdShop,
+      orgRole: createdOrg ? 'owner' : null,
+      organizationId: createdOrg?.id || createdShop?.organizationId || null
+    });
+
     res.status(201).json({
-      user: {
-        ...user.toJSON(),
-        shop: createdShop
-      },
+      ...authPayload,
       token
     });
   } catch (error) {
@@ -140,12 +145,12 @@ exports.login = async (req, res) => {
     }
 
     // First try to find a user
-    let user = await User.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name', 'organizationId'] }] });
+    let user = await User.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone', 'organizationId', 'kraPin'] }] });
     let isEmployee = false;
     
     // If no user found, try to find an employee
     if (!user) {
-      const employee = await Employee.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name', 'organizationId'] }] });
+      const employee = await Employee.findOne({ where: { email }, include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone', 'organizationId', 'kraPin'] }] });
       if (employee) {
         const isValidPassword = await employee.validatePassword(password);
         if (isValidPassword && employee.status === 'active') {
@@ -232,17 +237,17 @@ exports.login = async (req, res) => {
       }
     }
 
+    const authPayload = buildAuthPayload({
+      user: isEmployee ? null : user,
+      employee: isEmployee ? user : null,
+      shop: user.Shop,
+      orgRole,
+      organizationId: orgId,
+      subscriptionStatus
+    });
+
     res.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        orgRole,
-        shopId: user.shopId,
-        shop: user.Shop ? { id: user.Shop.id, name: user.Shop.name } : null,
-        subscriptionStatus
-      },
+      ...authPayload,
       token
     });
       } catch (error) {
@@ -314,7 +319,7 @@ exports.getProfile = async (req, res) => {
       // If token belongs to an employee, fetch from Employee model
       const employee = await Employee.findByPk(userId, {
         attributes: { exclude: ['password'] },
-        include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone', 'organizationId'] }]
+        include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone', 'organizationId', 'kraPin'] }]
       });
 
       if (!employee) {
@@ -329,25 +334,20 @@ exports.getProfile = async (req, res) => {
       const empMembership = await OrganizationMembership.findOne({ where: empMembershipWhere });
       const empOrgRole = empMembership?.orgRole || 'member';
 
-      // Normalize response similar to User and match frontend shape { user, shop }
-      const userProfile = {
-        id: employee.id,
-        name: `${employee.firstName} ${employee.lastName}`,
-        email: employee.email,
-        role: 'employee',
+      const payload = buildAuthPayload({
+        employee,
+        shop: employee.Shop,
         orgRole: empOrgRole,
-        shopId: employee.shopId,
-      };
+        organizationId: empOrgId
+      });
 
-      const shop = employee.Shop ? { id: employee.Shop.id, name: employee.Shop.name, address: employee.Shop.address, phone: employee.Shop.phone } : null;
-
-      return res.json({ user: userProfile, shop });
+      return res.json(payload);
     }
 
     // Regular user
     const user = await User.findByPk(userId, {
       attributes: { exclude: ['password'] },
-      include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone', 'organizationId'] }]
+      include: [{ model: Shop, attributes: ['id', 'name', 'address', 'phone', 'organizationId', 'kraPin'] }]
     });
 
     if (!user) {
@@ -362,19 +362,14 @@ exports.getProfile = async (req, res) => {
     const membership = await OrganizationMembership.findOne({ where: membershipWhere });
     const orgRole = membership?.orgRole || null;
 
-    // Normalize user response to match frontend expected shape { user, shop }
-    const userProfile = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
+    const payload = buildAuthPayload({
+      user,
+      shop: user.Shop,
       orgRole,
-      shopId: user.shopId,
-    };
+      organizationId: orgId
+    });
 
-    const shop = user.Shop ? { id: user.Shop.id, name: user.Shop.name, address: user.Shop.address, phone: user.Shop.phone } : null;
-
-    res.json({ user: userProfile, shop });
+    res.json(payload);
   } catch (error) {
     logger.error('Error in getProfile:', error);
     res.status(500).json({ error: 'Server error' });
@@ -508,55 +503,26 @@ exports.switchShop = async (req, res) => {
     );
 
     // Fetch user/employee info to match login response structure
-    let userData = null;
+    let userEntity = null;
+    let employeeEntity = null;
     if (req.user.isEmployee) {
-      const emp = await Employee.findByPk(req.user.id);
-      if (emp) {
-        userData = {
-          id: emp.id,
-          name: `${emp.firstName} ${emp.lastName}`,
-          email: emp.email,
-          role: req.user.role || 'employee',
-          orgRole: null,
-          shopId: targetShopId,
-          organizationId: orgId
-        };
-      }
+      employeeEntity = await Employee.findByPk(req.user.id);
     } else {
-      const u = await User.findByPk(req.user.id);
-      if (u) {
-        userData = {
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role,
-          orgRole: membership.orgRole || null,
-          shopId: targetShopId,
-          organizationId: orgId
-        };
-      }
+      userEntity = await User.findByPk(req.user.id);
     }
 
-    if (!userData) {
-      userData = {
-        id: req.user.id,
-        role: req.user.role,
-        orgRole: req.user.isEmployee ? null : (membership?.orgRole || null),
-        shopId: targetShopId,
-        organizationId: orgId
-      };
-    }
+    const authPayload = buildAuthPayload({
+      user: userEntity,
+      employee: employeeEntity,
+      shop,
+      orgRole: membership.orgRole,
+      organizationId: orgId
+    });
 
     return res.status(200).json({
       message: 'Switched active shop successfully',
       token,
-      user: userData,
-      shop: {
-        id: shop.id,
-        name: shop.name,
-        address: shop.address,
-        phone: shop.phone
-      }
+      ...authPayload
     });
   } catch (error) {
     logger.error('switchShop error:', error);

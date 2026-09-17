@@ -54,7 +54,7 @@ export default function Dashboard() {
   const userShopId = user?.shopId || user?.shop?.id;
 
   // First-run onboarding checklist state
-  const orgId = user?.organizationId || user?.shop?.organizationId || userShopId || userId || 'default';
+  const orgId = user?.organizationId || 'default';
   const dismissStorageKey = `zana_onboarding_dismissed_${orgId}`;
 
   const [isChecklistDismissed, setIsChecklistDismissed] = useState(() => {

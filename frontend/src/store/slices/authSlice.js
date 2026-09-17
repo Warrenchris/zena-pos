@@ -14,7 +14,7 @@ export const login = createAsyncThunk(
   async (credentials, { rejectWithValue, dispatch }) => {
     try {
       const response = await authAPI.login(credentials)
-      const { token, user } = response.data
+      const { token, user, shop } = response.data
       
       // Store token
       localStorage.setItem('token', token)
@@ -25,17 +25,25 @@ export const login = createAsyncThunk(
         return {
           token,
           user: profileResponse.data.user,
-          shop: profileResponse.data.shop
+          shop: profileResponse.data.shop || profileResponse.data.user?.shop || null
         }
       } catch (profileError) {
-        // If profile fetch fails, return basic user info
-        return { token, user }
+        // If profile fetch fails, return basic user info with shop
+        return {
+          token,
+          user,
+          shop: shop || user?.shop || null
+        }
       }
     } catch (error) {
-      return rejectWithValue(
-        error?.response?.data?.error ||
-        'Invalid email or password'
-      )
+      const data = error?.response?.data;
+      let errorMsg = 'Invalid email or password';
+      if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        errorMsg = data.errors.map((e) => e.msg).filter(Boolean).join(', ') || errorMsg;
+      } else if (data?.error) {
+        errorMsg = data.error;
+      }
+      return rejectWithValue(errorMsg);
     }
   }
 )
@@ -120,7 +128,7 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.loading = false
         state.user = action.payload.user
-        state.shop = action.payload.user?.shop || null
+        state.shop = action.payload.shop || action.payload.user?.shop || null
         state.token = action.payload.token
       })
       .addCase(login.rejected, (state, action) => {

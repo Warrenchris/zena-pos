@@ -62,6 +62,7 @@ async function generateRenewalInvoice(organizationId, planId, billingCycle = nul
   if (!plan) {
     const err = new Error(`Plan with ID ${targetPlanId} not found.`);
     err.statusCode = 404;
+    err.code = 'PLAN_NOT_FOUND';
     throw err;
   }
 
@@ -69,7 +70,7 @@ async function generateRenewalInvoice(organizationId, planId, billingCycle = nul
   if (!plan.isActive || plan.code === 'grandfathered') {
     const err = new Error('The selected plan is not available for public subscription or renewal.');
     err.statusCode = 400;
-    err.code = 'INVALID_PLAN_SELECTION';
+    err.code = 'INVALID_PLAN';
     throw err;
   }
 
@@ -83,6 +84,10 @@ async function generateRenewalInvoice(organizationId, planId, billingCycle = nul
       const err = new Error(`Cannot switch to ${plan.name} plan: organization currently has ${activeShopsCount} active branches, but ${plan.name} allows a maximum of ${plan.maxShops}. Please deactivate excess branches before downgrading.`);
       err.statusCode = 409;
       err.code = 'PLAN_RESOURCE_CONFLICT';
+      err.shops = {
+        limit: plan.maxShops,
+        active: activeShopsCount
+      };
       err.details = {
         resource: 'shops',
         limit: plan.maxShops,
@@ -124,6 +129,10 @@ async function generateRenewalInvoice(organizationId, planId, billingCycle = nul
       const err = new Error(`Cannot switch to ${plan.name} plan: organization currently has ${activeUsersCount} active team members, but ${plan.name} allows a maximum of ${plan.maxUsers}. Please deactivate excess team members before downgrading.`);
       err.statusCode = 409;
       err.code = 'PLAN_RESOURCE_CONFLICT';
+      err.users = {
+        limit: plan.maxUsers,
+        active: activeUsersCount
+      };
       err.details = {
         resource: 'users',
         limit: plan.maxUsers,
