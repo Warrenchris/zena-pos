@@ -36,6 +36,17 @@ const Category = sequelize.define('Category', {
     }
   }
 }, {
+  hooks: {
+    beforeValidate: async (category) => {
+      if (!category.organizationId && category.shopId) {
+        const Shop = sequelize.models.Shop || require('./Shop');
+        const shop = await Shop.findByPk(category.shopId);
+        if (shop && shop.organizationId) {
+          category.organizationId = shop.organizationId;
+        }
+      }
+    }
+  },
   indexes: [
     {
       unique: true,

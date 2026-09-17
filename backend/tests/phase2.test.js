@@ -164,6 +164,7 @@ describe('Phase 2 Remediation Tests', () => {
   // TEST 2.2 — M-Pesa callback confirms sale
   test('TEST 2.2 — M-Pesa callback confirms sale', async () => {
     const checkoutRequestId = 'ws_CO_TEST_2.2';
+    const callbackToken = 'test_token_phase2_2';
     const invBefore = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
     const initialStock = parseFloat(invBefore.stockQuantity);
 
@@ -175,6 +176,7 @@ describe('Phase 2 Remediation Tests', () => {
       paymentChannel: 'mpesa',
       shopId: 1,
       saleData: {
+        callbackToken,
         items: [{ productId: product.id, quantity: 2, price: 10.00 }],
         total: 20.00,
         paymentAmount: 20.00,
@@ -200,7 +202,7 @@ describe('Phase 2 Remediation Tests', () => {
     };
 
     await request(app)
-      .post('/api/mpesa/callback')
+      .post(`/api/mpesa/callback?token=${callbackToken}`)
       .send(callbackPayload)
       .expect(200);
 
@@ -218,6 +220,7 @@ describe('Phase 2 Remediation Tests', () => {
   // TEST 2.3 — M-Pesa callback failure leaves sale uncreated
   test('TEST 2.3 — M-Pesa callback failure leaves sale uncreated', async () => {
     const checkoutRequestId = 'ws_CO_TEST_2.3';
+    const callbackToken = 'test_token_phase2_3';
     const initialSaleCount = await Sale.count();
     const invBefore = await Inventory.findOne({ where: { productId: product.id, shopId: 1 } });
     const initialStock = parseFloat(invBefore.stockQuantity);
@@ -230,6 +233,7 @@ describe('Phase 2 Remediation Tests', () => {
       paymentChannel: 'mpesa',
       shopId: 1,
       saleData: {
+        callbackToken,
         items: [{ productId: product.id, quantity: 1, price: 10.00 }],
         total: 10.00,
         paymentAmount: 10.00,
@@ -249,7 +253,7 @@ describe('Phase 2 Remediation Tests', () => {
     };
 
     await request(app)
-      .post('/api/mpesa/callback')
+      .post(`/api/mpesa/callback?token=${callbackToken}`)
       .send(callbackPayload)
       .expect(200);
 
