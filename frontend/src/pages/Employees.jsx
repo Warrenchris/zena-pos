@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { 
   PlusIcon,
   PencilIcon,
@@ -8,11 +9,14 @@ import {
   MagnifyingGlassIcon,
   ChartBarIcon,
   ClockIcon,
-  EyeIcon
+  EyeIcon,
+  SparklesIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { employeesAPI, reportsAPI, activityAPI, usersAPI } from '../services/api';
 import EmployeeDetailsCard from '../components/EmployeeDetailsCard';
 import useCurrency from '../hooks/useCurrency';
+import { useToast } from '../components/Toast';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -22,11 +26,21 @@ import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 
 export default function Employees() {
+  const navigate = useNavigate();
   const { format: formatCurrency } = useCurrency();
+  const toast = useToast();
+  const showToast = (type, message, title) => {
+    if (toast?.showToast) {
+      toast.showToast({ type, message, title: title || (type === 'error' ? 'Error' : 'Notification') });
+    }
+  };
   const { user } = useSelector((state) => state.auth);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [modalError, setModalError] = useState('');
+  const [quotaError, setQuotaError] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -137,8 +151,23 @@ export default function Employees() {
       );
   }, [employees, query, statusFilter]);
 
+  const handleCloseModal = () => {
+    if (saving) return;
+    setFormOpen(false);
+    setQuotaError(null);
+    setModalError('');
+  };
+
+  const handleFormChange = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (modalError) setModalError('');
+    if (quotaError) setQuotaError(null);
+  };
+
   const openCreate = () => {
     setEditing(null);
+    setQuotaError(null);
+    setModalError('');
     setForm({
       firstName: '', lastName: '', email: '', phone: '', position: '',
       status: 'active', hireDate: new Date().toISOString().slice(0, 10), salary: '',
@@ -149,6 +178,8 @@ export default function Employees() {
 
   const openEdit = (emp) => {
     setEditing(emp);
+    setQuotaError(null);
+    setModalError('');
     setForm({
       firstName: emp.firstName || '',
       lastName: emp.lastName || '',
@@ -166,21 +197,49 @@ export default function Employees() {
 
   const save = async (e) => {
     e.preventDefault();
+    setModalError('');
+    setQuotaError(null);
     try {
+      setSaving(true);
       const payload = {
         ...form,
         salary: Number(form.salary)
       };
       if (editing) {
         await employeesAPI.update(editing.id, payload);
+        showToast('success', 'Employee profile updated successfully.', 'Staff Updated');
       } else {
         await employeesAPI.create(payload);
+        showToast('success', 'New employee registered successfully.', 'Staff Created');
       }
       if (!mountedRef.current) return;
-      setFormOpen(false);
+      handleCloseModal();
       await load();
-    } catch (e) {
-      setError(e?.response?.data?.error || 'Failed to save employee');
+    } catch (err) {
+      const errData = err?.response?.data;
+      const isQuotaExceeded =
+        errData?.code === 'QUOTA_EXCEEDED' ||
+        (err?.response?.status === 403 && errData?.code === 'QUOTA_EXCEEDED');
+
+      if (isQuotaExceeded) {
+        setQuotaError({
+          message:
+            errData?.error ||
+            'Staff user limit reached for your current plan. Upgrade required.',
+          currentPlan: errData?.currentPlan,
+          requiredPlan: errData?.requiredPlan,
+          limit: errData?.limit,
+          current: errData?.current,
+        });
+      } else {
+        setModalError(
+          errData?.error ||
+          err?.message ||
+          'Failed to save employee. Please check your input and try again.'
+        );
+      }
+    } finally {
+      if (mountedRef.current) setSaving(false);
     }
   };
 
@@ -446,24 +505,77 @@ export default function Employees() {
       {/* Create / Edit Employee Modal */}
       <Modal
         isOpen={formOpen}
-        onClose={() => setFormOpen(false)}
+        onClose={handleCloseModal}
         title={editing ? 'Edit Employee Account' : 'Register New Employee'}
         description="Fill in staff profile details and access permissions."
       >
         <form onSubmit={save} className="space-y-4">
+          {/* Quota Exceeded Alert Banner */}
+          {quotaError && (
+            <div
+              role="alert"
+              className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 space-y-2"
+            >
+              <div className="flex items-start gap-2.5">
+                <SparklesIcon className="h-5 w-5 shrink-0 mt-0.5 text-amber-500" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-small font-bold text-amber-700 dark:text-amber-300">
+                      Staff Limit Reached {quotaError.limit ? `(${quotaError.limit} max)` : ''}
+                    </h4>
+                    {quotaError.requiredPlan && (
+                      <span className="text-caption font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 uppercase tracking-wide">
+                        Requires {quotaError.requiredPlan}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-caption mt-1 leading-relaxed font-medium">
+                    {quotaError.message}
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="primary"
+                      onClick={() => {
+                        handleCloseModal();
+                        navigate('/billing');
+                      }}
+                    >
+                      Upgrade Plan
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* In-Modal General Error Banner */}
+          {modalError && (
+            <div
+              role="alert"
+              className="p-3.5 rounded-xl bg-danger/10 border border-danger/30 text-danger text-small flex items-start gap-2.5"
+            >
+              <ExclamationTriangleIcon className="h-5 w-5 shrink-0 mt-0.5 text-danger" />
+              <span className="font-medium">{modalError}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="First Name"
               required
+              disabled={saving}
               value={form.firstName}
-              onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+              onChange={(e) => handleFormChange('firstName', e.target.value)}
               placeholder="First name"
             />
             <Input
               label="Last Name"
               required
+              disabled={saving}
               value={form.lastName}
-              onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+              onChange={(e) => handleFormChange('lastName', e.target.value)}
               placeholder="Last name"
             />
           </div>
@@ -472,8 +584,9 @@ export default function Employees() {
             label="Email Address"
             type="email"
             required
+            disabled={saving}
             value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            onChange={(e) => handleFormChange('email', e.target.value)}
             placeholder="employee@zana.com"
           />
 
@@ -481,8 +594,9 @@ export default function Employees() {
             label="Password"
             type="password"
             required={!editing}
+            disabled={saving}
             value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            onChange={(e) => handleFormChange('password', e.target.value)}
             placeholder={editing ? 'Leave blank to keep existing password' : 'Enter account password'}
           />
 
@@ -490,16 +604,18 @@ export default function Employees() {
             <Input
               label="Phone Number"
               type="tel"
+              disabled={saving}
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              onChange={(e) => handleFormChange('phone', e.target.value)}
               placeholder="+254 700 000000"
             />
             <div>
               <label className="block text-small font-semibold text-text-primary mb-1.5">Position Role</label>
               <select
                 required
+                disabled={saving}
                 value={form.position}
-                onChange={(e) => setForm({ ...form, position: e.target.value })}
+                onChange={(e) => handleFormChange('position', e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
               >
                 <option value="">Select a position</option>
@@ -514,8 +630,9 @@ export default function Employees() {
             <div>
               <label className="block text-small font-semibold text-text-primary mb-1.5">Status</label>
               <select
+                disabled={saving}
                 value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                onChange={(e) => handleFormChange('status', e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border-default text-text-primary text-body focus:ring-2 focus:ring-primary/30"
               >
                 <option value="active">Active</option>
@@ -526,25 +643,27 @@ export default function Employees() {
               label="Hire Date"
               type="date"
               required
+              disabled={saving}
               value={form.hireDate}
-              onChange={(e) => setForm({ ...form, hireDate: e.target.value })}
+              onChange={(e) => handleFormChange('hireDate', e.target.value)}
             />
             <Input
               label="Salary"
               type="number"
               step="0.01"
               required
+              disabled={saving}
               value={form.salary}
-              onChange={(e) => setForm({ ...form, salary: e.target.value })}
+              onChange={(e) => handleFormChange('salary', e.target.value)}
               placeholder="0.00"
             />
           </div>
 
           <div className="flex gap-3 justify-end pt-4 border-t border-border-default">
-            <Button variant="outline" type="button" onClick={() => setFormOpen(false)}>
+            <Button variant="outline" type="button" onClick={handleCloseModal} disabled={saving}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button variant="primary" type="submit" loading={saving} disabled={saving}>
               {editing ? 'Update Employee' : 'Create Employee'}
             </Button>
           </div>
