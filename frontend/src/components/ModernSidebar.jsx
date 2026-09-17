@@ -12,7 +12,6 @@ import {
   FolderIcon,
   BuildingStorefrontIcon,
   ScaleIcon,
-  SwatchIcon,
   ArchiveBoxIcon,
   ShoppingCartIcon,
   GiftIcon,
@@ -29,7 +28,6 @@ import {
   BanknotesIcon,
   DocumentTextIcon,
   ArrowUturnLeftIcon,
-  DocumentIcon,
   ChartBarIcon,
   ChevronLeftIcon,
   ChevronRightIcon as CollapseRightIcon
@@ -61,7 +59,6 @@ const ModernSidebar = ({
         { name: 'Sales Orders', path: '/sales', icon: BanknotesIcon },
         { name: 'Invoices', path: '/invoices', icon: DocumentTextIcon },
         { name: 'Sales Returns', path: '/sales/returns', icon: ArrowUturnLeftIcon },
-        { name: 'Quotations', path: '/quotations', icon: DocumentIcon },
       ]
     },
     {
@@ -73,7 +70,6 @@ const ModernSidebar = ({
         { name: 'Sub Categories', path: '/categories/sub', icon: FolderIcon },
         { name: 'Brands', path: '/brands', icon: BuildingStorefrontIcon },
         { name: 'Units', path: '/units', icon: ScaleIcon },
-        { name: 'Variants', path: '/variants', icon: SwatchIcon },
         { name: 'Stock Management', path: '/stock/manage', icon: ArchiveBoxIcon },
       ]
     },
