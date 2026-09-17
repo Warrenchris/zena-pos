@@ -23,6 +23,8 @@ exports.createTransfer = async (req, res) => {
       organizationId = shop?.organizationId;
     }
 
+    const idempotencyKey = req.header('Idempotency-Key') || req.header('idempotency-key') || req.body.idempotencyKey;
+
     const result = await stockTransferService.executeStockTransfer({
       sourceShopId,
       destinationShopId,
@@ -30,7 +32,8 @@ exports.createTransfer = async (req, res) => {
       quantity,
       notes,
       user: req.user,
-      organizationId
+      organizationId,
+      idempotencyKey
     });
 
     try {

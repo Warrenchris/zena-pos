@@ -36,6 +36,7 @@ const Inventory = require('./Inventory');
 const Plan = require('./Plan');
 const Subscription = require('./Subscription');
 const SubscriptionInvoice = require('./SubscriptionInvoice');
+const StockTransfer = require('./StockTransfer');
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -198,6 +199,15 @@ SubscriptionInvoice.belongsTo(Subscription, { foreignKey: 'subscriptionId' });
 SubscriptionInvoice.belongsTo(Organization, { foreignKey: 'organizationId' });
 SubscriptionInvoice.belongsTo(Plan, { foreignKey: 'planId' });
 
+// StockTransfer associations
+StockTransfer.belongsTo(Organization, { foreignKey: 'organizationId' });
+Organization.hasMany(StockTransfer, { foreignKey: 'organizationId' });
+StockTransfer.belongsTo(Shop, { foreignKey: 'sourceShopId', as: 'sourceShop' });
+StockTransfer.belongsTo(Shop, { foreignKey: 'destinationShopId', as: 'destinationShop' });
+StockTransfer.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+StockTransfer.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+StockTransfer.belongsTo(Employee, { foreignKey: 'employeeId', as: 'employee' });
+
 // Export models and sequelize instance
 module.exports = {
   sequelize,
@@ -235,6 +245,8 @@ module.exports = {
   Inventory,
   Plan,
   Subscription,
-  SubscriptionInvoice
+  SubscriptionInvoice,
+  StockTransfer
 };
+
 

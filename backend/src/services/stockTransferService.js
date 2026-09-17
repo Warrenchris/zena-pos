@@ -1,4 +1,5 @@
-const { sequelize, Product, Inventory, Shop, StockMovement, User, Employee } = require('../models');
+const crypto = require('crypto');
+const { sequelize, Product, Inventory, Shop, StockMovement, User, Employee, StockTransfer } = require('../models');
 const { invalidateShopProductCache } = require('./productCache');
 const logger = require('../utils/logger');
 
@@ -16,6 +17,7 @@ class TransferError extends Error {
 /**
  * Execute an atomic stock transfer between two shops in the same organization.
  * Uses deterministic row locking to prevent deadlocks under high concurrency.
+ * Supports tenant-scoped durable idempotency via Idempotency-Key.
  */
 async function executeStockTransfer({
   sourceShopId,
@@ -24,7 +26,8 @@ async function executeStockTransfer({
   quantity,
   notes,
   user,
-  organizationId
+  organizationId,
+  idempotencyKey
 }) {
   const srcId = parseInt(sourceShopId, 10);
   const dstId = parseInt(destinationShopId, 10);
@@ -52,6 +55,39 @@ async function executeStockTransfer({
 
   if (!resolvedOrgId) {
     throw new TransferError('Organization context is required for stock transfers.', 403);
+  }
+
+  // Clean and normalize idempotencyKey
+  const cleanIdempotencyKey = (typeof idempotencyKey === 'string' && idempotencyKey.trim().length > 0)
+    ? idempotencyKey.trim().slice(0, 255)
+    : null;
+
+  // Canonical payload hash to detect parameter changes on key reuse
+  const canonicalPayload = {
+    sourceShopId: srcId,
+    destinationShopId: dstId,
+    productId: prodId,
+    quantity: transferQty
+  };
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify(canonicalPayload)).digest('hex');
+
+  // Idempotency: Pre-transaction check for sequential replayed request
+  if (cleanIdempotencyKey) {
+    const existingTransfer = await StockTransfer.findOne({
+      where: {
+        organizationId: resolvedOrgId,
+        idempotencyKey: cleanIdempotencyKey
+      }
+    });
+
+    if (existingTransfer) {
+      if (existingTransfer.requestHash !== requestHash) {
+        throw new TransferError('Idempotency key was already used with different transfer parameters.', 422);
+      }
+      return typeof existingTransfer.responsePayload === 'string'
+        ? JSON.parse(existingTransfer.responsePayload)
+        : existingTransfer.responsePayload;
+    }
   }
 
   // 2. Validate both shops belong to the caller's organization
@@ -94,115 +130,173 @@ async function executeStockTransfer({
 
   let transferResult = null;
 
-  // 5. Atomic transaction with deterministic row locking to prevent deadlocks
-  await sequelize.transaction(async (t) => {
-    // Sort shop IDs so locks are always acquired in identical global ascending order
-    const firstShopId = Math.min(srcId, dstId);
-    const secondShopId = Math.max(srcId, dstId);
+  try {
+    // 5. Atomic transaction with deterministic row locking to prevent deadlocks
+    await sequelize.transaction(async (t) => {
+      // Re-check idempotency inside transaction if key provided
+      if (cleanIdempotencyKey) {
+        const txExisting = await StockTransfer.findOne({
+          where: {
+            organizationId: resolvedOrgId,
+            idempotencyKey: cleanIdempotencyKey
+          },
+          transaction: t
+        });
+        if (txExisting) {
+          if (txExisting.requestHash !== requestHash) {
+            throw new TransferError('Idempotency key was already used with different transfer parameters.', 422);
+          }
+          transferResult = typeof txExisting.responsePayload === 'string'
+            ? JSON.parse(txExisting.responsePayload)
+            : txExisting.responsePayload;
+          return;
+        }
+      }
 
-    // Lock first inventory row
-    let firstInv = await Inventory.findOne({
-      where: { productId: prodId, shopId: firstShopId },
-      lock: t.LOCK.UPDATE,
-      transaction: t
-    });
-    if (!firstInv) {
-      firstInv = await Inventory.create({
+      // Sort shop IDs so locks are always acquired in identical global ascending order
+      const firstShopId = Math.min(srcId, dstId);
+      const secondShopId = Math.max(srcId, dstId);
+
+      // Lock first inventory row
+      let firstInv = await Inventory.findOne({
+        where: { productId: prodId, shopId: firstShopId },
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+      if (!firstInv) {
+        firstInv = await Inventory.create({
+          productId: prodId,
+          shopId: firstShopId,
+          stockQuantity: 0,
+          reorderPoint: 10
+        }, { transaction: t });
+      }
+
+      // Lock second inventory row
+      let secondInv = await Inventory.findOne({
+        where: { productId: prodId, shopId: secondShopId },
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+      if (!secondInv) {
+        secondInv = await Inventory.create({
+          productId: prodId,
+          shopId: secondShopId,
+          stockQuantity: 0,
+          reorderPoint: 10
+        }, { transaction: t });
+      }
+
+      const srcInv = (firstShopId === srcId) ? firstInv : secondInv;
+      const dstInv = (firstShopId === dstId) ? firstInv : secondInv;
+
+      const currentSourceStock = parseFloat(srcInv.stockQuantity || 0);
+      const currentDestStock = parseFloat(dstInv.stockQuantity || 0);
+
+      // Verify sufficient stock at source
+      if (currentSourceStock < transferQty) {
+        throw new TransferError(
+          `Insufficient stock at ${sourceShop.name}. Available: ${currentSourceStock}, Requested: ${transferQty}`,
+          409
+        );
+      }
+
+      const newSourceStock = Math.round((currentSourceStock - transferQty) * 100) / 100;
+      const newDestStock = Math.round((currentDestStock + transferQty) * 100) / 100;
+
+      // Mutate inventory quantities
+      await srcInv.update({ stockQuantity: newSourceStock }, { transaction: t });
+      await dstInv.update({ stockQuantity: newDestStock }, { transaction: t });
+
+      // Paired StockMovements
+      // Source movement (negative quantity)
+      await StockMovement.create({
+        shopId: srcId,
+        organizationId: resolvedOrgId,
         productId: prodId,
-        shopId: firstShopId,
-        stockQuantity: 0,
-        reorderPoint: 10
+        quantity: -transferQty,
+        previousStock: currentSourceStock,
+        newStock: newSourceStock,
+        type: 'TRANSFER',
+        reference,
+        notes: notes
+          ? `Transferred to ${destinationShop.name}: ${notes}`
+          : `Transferred to ${destinationShop.name}`,
+        userId: validUserId,
+        employeeId
       }, { transaction: t });
-    }
 
-    // Lock second inventory row
-    let secondInv = await Inventory.findOne({
-      where: { productId: prodId, shopId: secondShopId },
-      lock: t.LOCK.UPDATE,
-      transaction: t
-    });
-    if (!secondInv) {
-      secondInv = await Inventory.create({
+      // Destination movement (positive quantity)
+      await StockMovement.create({
+        shopId: dstId,
+        organizationId: resolvedOrgId,
         productId: prodId,
-        shopId: secondShopId,
-        stockQuantity: 0,
-        reorderPoint: 10
+        quantity: transferQty,
+        previousStock: currentDestStock,
+        newStock: newDestStock,
+        type: 'TRANSFER',
+        reference,
+        notes: notes
+          ? `Transferred from ${sourceShop.name}: ${notes}`
+          : `Transferred from ${sourceShop.name}`,
+        userId: validUserId,
+        employeeId
       }, { transaction: t });
+
+      transferResult = {
+        reference,
+        productId: prodId,
+        productName: product.name,
+        sku: product.sku,
+        quantity: transferQty,
+        sourceShopId: srcId,
+        sourceShopName: sourceShop.name,
+        destinationShopId: dstId,
+        destinationShopName: destinationShop.name,
+        sourceNewStock: newSourceStock,
+        destinationNewStock: newDestStock,
+        status: 'COMPLETED',
+        notes: notes || null,
+        transferredAt: new Date()
+      };
+
+      // Persist durable StockTransfer record participating in the same transaction
+      await StockTransfer.create({
+        organizationId: resolvedOrgId,
+        idempotencyKey: cleanIdempotencyKey,
+        requestHash,
+        reference,
+        sourceShopId: srcId,
+        destinationShopId: dstId,
+        productId: prodId,
+        quantity: transferQty,
+        notes: notes || null,
+        responsePayload: transferResult,
+        status: 'COMPLETED',
+        userId: validUserId,
+        employeeId
+      }, { transaction: t });
+    });
+  } catch (err) {
+    // If unique constraint collision happened on (organizationId, idempotencyKey) due to concurrent duplicate
+    if (cleanIdempotencyKey && (err.name === 'SequelizeUniqueConstraintError' || err.message?.includes('unique_stock_transfers_org_idempotency_key') || err.parent?.code === 'ER_DUP_ENTRY')) {
+      const concurrentCommitted = await StockTransfer.findOne({
+        where: {
+          organizationId: resolvedOrgId,
+          idempotencyKey: cleanIdempotencyKey
+        }
+      });
+      if (concurrentCommitted) {
+        if (concurrentCommitted.requestHash !== requestHash) {
+          throw new TransferError('Idempotency key was already used with different transfer parameters.', 422);
+        }
+        return typeof concurrentCommitted.responsePayload === 'string'
+          ? JSON.parse(concurrentCommitted.responsePayload)
+          : concurrentCommitted.responsePayload;
+      }
     }
-
-    const srcInv = (firstShopId === srcId) ? firstInv : secondInv;
-    const dstInv = (firstShopId === dstId) ? firstInv : secondInv;
-
-    const currentSourceStock = parseFloat(srcInv.stockQuantity || 0);
-    const currentDestStock = parseFloat(dstInv.stockQuantity || 0);
-
-    // Verify sufficient stock at source
-    if (currentSourceStock < transferQty) {
-      throw new TransferError(
-        `Insufficient stock at ${sourceShop.name}. Available: ${currentSourceStock}, Requested: ${transferQty}`,
-        409
-      );
-    }
-
-    const newSourceStock = Math.round((currentSourceStock - transferQty) * 100) / 100;
-    const newDestStock = Math.round((currentDestStock + transferQty) * 100) / 100;
-
-    // Mutate inventory quantities
-    await srcInv.update({ stockQuantity: newSourceStock }, { transaction: t });
-    await dstInv.update({ stockQuantity: newDestStock }, { transaction: t });
-
-    // Paired StockMovements
-    // Source movement (negative quantity)
-    await StockMovement.create({
-      shopId: srcId,
-      organizationId: resolvedOrgId,
-      productId: prodId,
-      quantity: -transferQty,
-      previousStock: currentSourceStock,
-      newStock: newSourceStock,
-      type: 'TRANSFER',
-      reference,
-      notes: notes
-        ? `Transferred to ${destinationShop.name}: ${notes}`
-        : `Transferred to ${destinationShop.name}`,
-      userId: validUserId,
-      employeeId
-    }, { transaction: t });
-
-    // Destination movement (positive quantity)
-    await StockMovement.create({
-      shopId: dstId,
-      organizationId: resolvedOrgId,
-      productId: prodId,
-      quantity: transferQty,
-      previousStock: currentDestStock,
-      newStock: newDestStock,
-      type: 'TRANSFER',
-      reference,
-      notes: notes
-        ? `Transferred from ${sourceShop.name}: ${notes}`
-        : `Transferred from ${sourceShop.name}`,
-      userId: validUserId,
-      employeeId
-    }, { transaction: t });
-
-    transferResult = {
-      reference,
-      productId: prodId,
-      productName: product.name,
-      sku: product.sku,
-      quantity: transferQty,
-      sourceShopId: srcId,
-      sourceShopName: sourceShop.name,
-      destinationShopId: dstId,
-      destinationShopName: destinationShop.name,
-      sourceNewStock: newSourceStock,
-      destinationNewStock: newDestStock,
-      status: 'COMPLETED',
-      notes: notes || null,
-      transferredAt: new Date()
-    };
-  });
+    throw err;
+  }
 
   // 6. Invalidate caches for both shops post-commit
   try {

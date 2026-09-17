@@ -53,7 +53,7 @@ const StockMovement = sequelize.define('StockMovement', {
   },
   organizationId: {
     type: DataTypes.INTEGER,
-    allowNull: true,
+    allowNull: false,
     references: {
       model: 'Organizations',
       key: 'id'
