@@ -558,7 +558,7 @@ describe('Sub-Phase 6c: Entitlement Wiring & Subscription Registration', () => {
     expect(insightsRes.status).toBe(403);
     expect(insightsRes.body.code).toBe('SUBSCRIPTION_SUSPENDED');
 
-    // 4. ZERO SALES BLOCKING INVARIANT: Sale creation SUCCEEDS!
+    // 4. Phase 5 P0-02 Hardening: Sale creation is blocked on suspended org with 403 ORGANIZATION_SUSPENDED
     const product = await Product.create({
       name: `Test Product Susp ${ts}`,
       sku: `SKU-SUSP-${ts}`,
@@ -594,8 +594,8 @@ describe('Sub-Phase 6c: Entitlement Wiring & Subscription Registration', () => {
         amountPaid: 100
       });
 
-    expect(saleRes.status).toBe(201);
-    expect(saleRes.body.id || saleRes.body.sale?.id).toBeDefined();
+    expect(saleRes.status).toBe(403);
+    expect(saleRes.body.code).toBe('ORGANIZATION_SUSPENDED');
 
     // Teardown
     const saleId = saleRes.body.id || saleRes.body.sale?.id;

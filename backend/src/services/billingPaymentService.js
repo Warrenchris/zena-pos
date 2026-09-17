@@ -69,19 +69,6 @@ async function initiateMpesaRenewal({ phone, invoice, organizationId }) {
     throw new Error('Invoice is required for M-Pesa renewal.');
   }
 
-  if (process.env.NODE_ENV === 'test') {
-    const checkoutRequestId = 'ws_CO_TEST_' + Date.now();
-    invoice.paymentChannel = 'mpesa';
-    invoice.paymentReference = checkoutRequestId;
-    await invoice.save();
-
-    return {
-      checkoutRequestId,
-      invoiceNumber: invoice.invoiceNumber,
-      customerMessage: 'Success. Request accepted for processing'
-    };
-  }
-
   const config = getMpesaBillingConfig();
   const accessToken = await getOAuthToken();
 
