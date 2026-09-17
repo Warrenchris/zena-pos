@@ -2,7 +2,7 @@ import api from './api';
 
 /**
  * Billing Service
- * Handles API communication for plans, subscriptions, and billing invoices.
+ * Handles API communication for plans, subscriptions, renewals, and billing invoices.
  */
 
 const getPlans = async () => {
@@ -61,8 +61,30 @@ const getInvoices = async ({ page = 1, limit = 10 } = {}) => {
   }
 };
 
+const renewSubscription = async ({ channel = 'mpesa', phone, planId }) => {
+  const response = await api.post('/api/billing/subscription/renew', {
+    channel,
+    phone,
+    planId
+  });
+  return response.data;
+};
+
+const cancelSubscription = async () => {
+  const response = await api.post('/api/billing/subscription/cancel');
+  return response.data;
+};
+
+const reactivateSubscription = async () => {
+  const response = await api.post('/api/billing/subscription/reactivate');
+  return response.data;
+};
+
 export default {
   getPlans,
   getSubscription,
   getInvoices,
+  renewSubscription,
+  cancelSubscription,
+  reactivateSubscription,
 };

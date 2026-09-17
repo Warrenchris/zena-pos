@@ -177,7 +177,7 @@ async function createStaffMember({ actor, body = {}, reqOrgId = null }) {
       throw err;
     }
 
-    if (org.status !== 'active') {
+    if (!['active', 'trialing'].includes(org.status)) {
       const err = new Error('Organization is inactive.');
       err.statusCode = 403;
       err.code = 'ORGANIZATION_INACTIVE';

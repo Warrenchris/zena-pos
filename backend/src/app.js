@@ -64,6 +64,7 @@ const supplierRoutes = require('./routes/suppliers');
 const permissionRoutes = require('./routes/permissions');
 const billingRoutes = require('./routes/billingRoutes');
 const transferRoutes = require('./routes/transfers');
+const organizationRoutes = require('./routes/organizationRoutes');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -134,6 +135,8 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/shop', shopRoutes);
+app.use('/api/shops', shopRoutes);
+app.use('/api/organizations', organizationRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/reports', reportsRoutes);

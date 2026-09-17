@@ -1,7 +1,7 @@
 'use strict';
 
 const { validationResult } = require('express-validator');
-const { User, Employee } = require('../models');
+const { User, Employee, OrganizationMembership, sequelize } = require('../models');
 const staffCreationService = require('../services/staffCreationService');
 const { sendUpgradePrompt } = require('../utils/upgradePrompt');
 
@@ -96,17 +96,40 @@ exports.create = async (req, res) => {
 };
 
 exports.updateRole = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const { id } = req.params;
     const { role, active } = req.body;
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
 
     if (isUuid) {
-      const emp = await Employee.findOne({ where: { id, shopId: req.user.shopId } });
-      if (!emp) return res.status(404).json({ error: 'User not found' });
+      const emp = await Employee.findOne({
+        where: { id, shopId: req.user.shopId },
+        transaction
+      });
+      if (!emp) {
+        await transaction.rollback();
+        return res.status(404).json({ error: 'User not found' });
+      }
+
       if (role) emp.position = role;
       if (active !== undefined) emp.status = active ? 'active' : 'inactive';
-      await emp.save();
+      await emp.save({ transaction });
+
+      // Synchronize OrganizationMembership
+      if (active !== undefined) {
+        const membershipStatus = active ? 'active' : 'suspended';
+        const membership = await OrganizationMembership.findOne({
+          where: { employeeId: emp.id },
+          transaction
+        });
+        if (membership) {
+          membership.status = membershipStatus;
+          await membership.save({ transaction });
+        }
+      }
+
+      await transaction.commit();
       return res.json({
         id: emp.id,
         name: `${emp.firstName} ${emp.lastName}`,
@@ -117,13 +140,36 @@ exports.updateRole = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ where: { id, shopId: req.user.shopId } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const user = await User.findOne({
+      where: { id, shopId: req.user.shopId },
+      transaction
+    });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     if (role) user.role = role;
     if (active !== undefined) user.active = active;
-    await user.save();
+    await user.save({ transaction });
+
+    // Synchronize OrganizationMembership
+    if (active !== undefined) {
+      const membershipStatus = active ? 'active' : 'suspended';
+      const membership = await OrganizationMembership.findOne({
+        where: { userId: user.id },
+        transaction
+      });
+      if (membership) {
+        membership.status = membershipStatus;
+        await membership.save({ transaction });
+      }
+    }
+
+    await transaction.commit();
     res.json(user);
   } catch (err) {
+    await transaction.rollback();
     console.error('Error in userController.updateRole:', err);
     res.status(500).json({ error: 'Failed to update user role' });
   }

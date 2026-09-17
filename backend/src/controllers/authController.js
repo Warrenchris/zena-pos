@@ -43,7 +43,7 @@ exports.register = async (req, res) => {
         createdOrg = await Organization.create({
           name: shop.name,
           slug,
-          status: 'active',
+          status: 'trialing',
           currency: 'KES'
         }, { transaction: t });
 
@@ -197,6 +197,7 @@ exports.login = async (req, res) => {
         );
 
     let orgRole = null;
+    let subscriptionStatus = null;
     const orgId = user.Shop?.organizationId;
     const membershipWhere = {
       status: 'active',
@@ -208,6 +209,29 @@ exports.login = async (req, res) => {
     const membership = await OrganizationMembership.findOne({ where: membershipWhere });
     orgRole = membership?.orgRole || (isEmployee ? 'member' : null);
 
+    // Resolve authoritative subscription status if organization exists
+    if (orgId) {
+      try {
+        const entitlementService = require('../services/entitlementService');
+        const entitlements = await entitlementService.getOrganizationEntitlements(orgId);
+        if (entitlements?.subscription) {
+          subscriptionStatus = entitlementService.getEffectiveSubscriptionStatus(entitlements.subscription);
+          if (subscriptionStatus === 'suspended' || subscriptionStatus === 'canceled') {
+            // Block non-owner/non-admin employees from operational login
+            if (orgRole !== 'owner' && user.role !== 'admin') {
+              return res.status(403).json({
+                error: 'Organization subscription is suspended. Contact the organization owner for renewal.',
+                code: 'ORGANIZATION_SUSPENDED',
+                isSuspended: true
+              });
+            }
+          }
+        }
+      } catch (subErr) {
+        logger.warn('Failed to evaluate subscription status on login:', subErr.message);
+      }
+    }
+
     res.json({
       user: {
         id: user.id,
@@ -217,6 +241,7 @@ exports.login = async (req, res) => {
         orgRole,
         shopId: user.shopId,
         shop: user.Shop ? { id: user.Shop.id, name: user.Shop.name } : null,
+        subscriptionStatus
       },
       token
     });

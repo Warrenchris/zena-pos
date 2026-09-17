@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   CreditCardIcon,
@@ -10,6 +10,10 @@ import {
   ClockIcon,
   SparklesIcon,
   CalendarDaysIcon,
+  ExclamationTriangleIcon,
+  PhoneIcon,
+  XMarkIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
@@ -18,7 +22,15 @@ import Button from '../components/ui/Button';
 import Table from '../components/ui/Table';
 import Spinner from '../components/ui/Spinner';
 import { formatDateLong, formatDateShort } from '../utils/formatters';
-import { fetchPlans, fetchSubscription, fetchInvoices } from '../store/slices/billingSlice';
+import {
+  fetchPlans,
+  fetchSubscription,
+  fetchInvoices,
+  renewSubscription,
+  cancelSubscription,
+  reactivateSubscription,
+  resetRenewalState
+} from '../store/slices/billingSlice';
 
 const parseFeatures = (features) => {
   if (!features) return [];
@@ -83,11 +95,19 @@ export default function Billing() {
     quotas,
     invoices,
     invoicesPagination,
+    renewal,
+    actionLoading,
     loading,
     error,
   } = useSelector((state) => state.billing);
 
   const isOwner = user?.orgRole === 'owner';
+
+  // Modal State
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [paymentChannel, setPaymentChannel] = useState('mpesa');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   useEffect(() => {
     dispatch(fetchSubscription());
@@ -109,6 +129,49 @@ export default function Billing() {
     if (isOwner) {
       dispatch(fetchInvoices({ page: newPage, limit: 10 }));
     }
+  };
+
+  const openRenewalModal = (plan) => {
+    setSelectedPlan(plan);
+    dispatch(resetRenewalState());
+  };
+
+  const closeRenewalModal = () => {
+    setSelectedPlan(null);
+    dispatch(resetRenewalState());
+    handleRefresh();
+  };
+
+  const handleInitiatePayment = async (e) => {
+    e.preventDefault();
+    if (!selectedPlan) return;
+
+    if (paymentChannel === 'mpesa' && !phoneNumber.trim()) {
+      return;
+    }
+
+    const resultAction = await dispatch(renewSubscription({
+      channel: paymentChannel,
+      phone: phoneNumber.trim(),
+      planId: selectedPlan.id
+    }));
+
+    if (renewSubscription.fulfilled.match(resultAction)) {
+      if (resultAction.payload?.redirectUrl) {
+        window.location.href = resultAction.payload.redirectUrl;
+      }
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    await dispatch(cancelSubscription());
+    setShowCancelModal(false);
+    handleRefresh();
+  };
+
+  const handleReactivateSubscription = async () => {
+    await dispatch(reactivateSubscription());
+    handleRefresh();
   };
 
   const currentPlan = subscription?.plan;
@@ -194,7 +257,74 @@ export default function Billing() {
         }
       />
 
-      {/* Global Billing Errors */}
+      {/* Subscription Status Alerts */}
+      {subscription?.status === 'suspended' && (
+        <div role="alert" className="p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <ExclamationTriangleIcon className="h-6 w-6 shrink-0" />
+            <div>
+              <p className="font-bold text-small">Subscription Suspended</p>
+              <p className="text-caption text-danger/90">
+                Operational POS and catalog activities are locked. Please renew to restore full branch access.
+              </p>
+            </div>
+          </div>
+          {isOwner && currentPlan && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => openRenewalModal(currentPlan)}
+            >
+              Pay Now & Restore Access
+            </Button>
+          )}
+        </div>
+      )}
+
+      {subscription?.status === 'past_due' && (
+        <div role="alert" className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <ClockIcon className="h-6 w-6 shrink-0 text-amber-500" />
+            <div>
+              <p className="font-bold text-small">Payment Past Due (Grace Period Active)</p>
+              <p className="text-caption">
+                Your subscription renewal is pending. Operational services remain available during the grace period.
+              </p>
+            </div>
+          </div>
+          {isOwner && currentPlan && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => openRenewalModal(currentPlan)}
+            >
+              Settle Invoice
+            </Button>
+          )}
+        </div>
+      )}
+
+      {subscription?.cancelAtPeriodEnd && (
+        <div role="alert" className="p-4 rounded-xl bg-surface-2 border border-border-default text-text-secondary flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <ClockIcon className="h-5 w-5 shrink-0 text-text-muted" />
+            <p className="text-small">
+              Subscription cancellation scheduled for <strong className="text-text-primary">{subscription.currentPeriodEnd ? formatDateLong(subscription.currentPeriodEnd) : 'end of period'}</strong>.
+            </p>
+          </div>
+          {isOwner && (
+            <Button
+              variant="outline"
+              size="sm"
+              loading={actionLoading.reactivate}
+              onClick={handleReactivateSubscription}
+            >
+              Reactivate Subscription
+            </Button>
+          )}
+        </div>
+      )}
+
       {error.subscription && (
         <div role="alert" className="p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger text-small">
           {error.subscription}
@@ -248,55 +378,85 @@ export default function Billing() {
                   </span>
                   <span className="font-semibold text-primary">
                     {subscription.daysRemainingInTrial !== null && subscription.daysRemainingInTrial !== undefined
-                      ? `${subscription.daysRemainingInTrial} days remaining`
+                      ? `${subscription.daysRemainingInTrial} day(s) remaining`
                       : 'Active Trial'}
                   </span>
                 </div>
               )}
 
-              {subscription?.currentPeriodEnd && (
+              <div className="flex items-center justify-between">
+                <span className="text-text-muted">
+                  {subscription?.status === 'trialing' ? 'Trial Ends' : 'Current Period End'}
+                </span>
+                <span className="font-medium text-text-primary">
+                  {subscription?.currentPeriodEnd ? formatDateLong(subscription.currentPeriodEnd) : '—'}
+                </span>
+              </div>
+
+              {subscription?.lastPaymentMethod && (
                 <div className="flex items-center justify-between">
-                  <span className="text-text-muted">Current Period Ends</span>
-                  <span className="font-medium text-text-primary">
-                    {formatDateLong(subscription.currentPeriodEnd)}
+                  <span className="text-text-muted">Last Payment Method</span>
+                  <span className="font-medium text-text-primary uppercase text-caption">
+                    {subscription.lastPaymentMethod}
                   </span>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-border-default/60">
-            <span className="text-caption text-text-muted">
-              Organization ID: <span className="font-mono text-text-secondary">{subscription?.organizationId || '—'}</span>
-            </span>
-          </div>
+          {isOwner && (
+            <div className="pt-4 border-t border-border-default/60 mt-4 flex items-center justify-between gap-2">
+              {currentPlan && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => openRenewalModal(currentPlan)}
+                >
+                  {subscription?.status === 'trialing' ? 'Activate Commercial Plan' : 'Renew Subscription'}
+                </Button>
+              )}
+              {!subscription?.cancelAtPeriodEnd && subscription?.status === 'active' && (
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(true)}
+                  className="text-caption text-text-muted hover:text-danger underline transition-colors px-2 py-1 shrink-0"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          )}
         </Card>
 
-        {/* Shops Quota Card */}
+        {/* Quota 1: Branch Seats */}
         <Card variant="default" className="p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-primary/10 text-primary">
-                  <BuildingStorefrontIcon className="h-5 w-5" />
-                </div>
-                <h3 className="text-h3 font-semibold text-text-primary">Branches / Shops</h3>
+              <div className="p-2 rounded-xl bg-surface-2 text-text-primary">
+                <BuildingStorefrontIcon className="h-5 w-5" />
               </div>
-              <span className="text-caption font-bold px-2 py-0.5 rounded-md bg-surface-2 text-text-secondary">
-                {isShopsUnlimited ? 'Unlimited' : `${shopUsagePercent}%`}
+              <span className="text-caption font-semibold uppercase tracking-wider text-text-muted">
+                Resource Allocation
               </span>
             </div>
 
-            <div className="my-3">
-              <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-small text-text-muted">Active Branches</span>
-                <span className="text-h3 font-bold text-text-primary">{shopUsageDisplay}</span>
+            <h3 className="text-h3 font-bold text-text-primary tracking-tight">Branch Seats</h3>
+            <p className="text-small text-text-muted mt-0.5">Physical store locations provisioned</p>
+
+            <div className="mt-6">
+              <div className="flex items-baseline justify-between mb-2">
+                <span className="text-3xl font-extrabold text-text-primary tracking-tight">
+                  {shopCurrent}
+                </span>
+                <span className="text-small text-text-muted font-medium">
+                  {isShopsUnlimited ? 'Unlimited branches' : `of ${shopLimit} maximum`}
+                </span>
               </div>
 
-              {/* Progress Bar */}
               <div className="w-full h-2.5 bg-surface-2 rounded-full overflow-hidden">
                 {isShopsUnlimited ? (
-                  <div className="h-full bg-emerald-500 rounded-full w-full opacity-60" />
+                  <div className="h-full w-full bg-primary/20 rounded-full" />
                 ) : (
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
@@ -304,7 +464,7 @@ export default function Billing() {
                         ? 'bg-danger'
                         : shopUsagePercent >= 80
                         ? 'bg-amber-500'
-                        : 'bg-primary'
+                        : 'bg-emerald-500'
                     }`}
                     style={{ width: `${shopUsagePercent}%` }}
                   />
@@ -315,36 +475,39 @@ export default function Billing() {
 
           <p className="text-caption text-text-muted mt-4 pt-3 border-t border-border-default/60">
             {isShopsUnlimited
-              ? 'Your plan includes unlimited store branches with cross-branch visibility.'
-              : `${Math.max(0, (shopLimit || 0) - shopCurrent)} branch slot(s) remaining on your current plan.`}
+              ? 'Your organization is licensed for unlimited operational retail branches.'
+              : `${Math.max(0, (shopLimit || 0) - shopCurrent)} branch seat(s) remaining on your current plan.`}
           </p>
         </Card>
 
-        {/* Team Members Quota Card */}
+        {/* Quota 2: User / Employee Seats */}
         <Card variant="default" className="p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <UserGroupIcon className="h-5 w-5" />
-                </div>
-                <h3 className="text-h3 font-semibold text-text-primary">Team Members</h3>
+              <div className="p-2 rounded-xl bg-surface-2 text-text-primary">
+                <UserGroupIcon className="h-5 w-5" />
               </div>
-              <span className="text-caption font-bold px-2 py-0.5 rounded-md bg-surface-2 text-text-secondary">
-                {isUsersUnlimited ? 'Unlimited' : `${userUsagePercent}%`}
+              <span className="text-caption font-semibold uppercase tracking-wider text-text-muted">
+                Seat Allocation
               </span>
             </div>
 
-            <div className="my-3">
-              <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-small text-text-muted">Active Users & Employees</span>
-                <span className="text-h3 font-bold text-text-primary">{userUsageDisplay}</span>
+            <h3 className="text-h3 font-bold text-text-primary tracking-tight">Staff & Admin Seats</h3>
+            <p className="text-small text-text-muted mt-0.5">Total active accounts and employees</p>
+
+            <div className="mt-6">
+              <div className="flex items-baseline justify-between mb-2">
+                <span className="text-3xl font-extrabold text-text-primary tracking-tight">
+                  {userCurrent}
+                </span>
+                <span className="text-small text-text-muted font-medium">
+                  {isUsersUnlimited ? 'Unlimited seats' : `of ${userLimit} maximum`}
+                </span>
               </div>
 
-              {/* Progress Bar */}
               <div className="w-full h-2.5 bg-surface-2 rounded-full overflow-hidden">
                 {isUsersUnlimited ? (
-                  <div className="h-full bg-emerald-500 rounded-full w-full opacity-60" />
+                  <div className="h-full w-full bg-primary/20 rounded-full" />
                 ) : (
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
@@ -452,23 +615,19 @@ export default function Billing() {
                   </div>
 
                   <div className="pt-4 border-t border-border-default/60">
-                    {isCurrent ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="w-full py-2.5 px-4 rounded-xl text-small font-semibold bg-primary/10 text-primary border border-primary/20 cursor-default"
+                    {isOwner ? (
+                      <Button
+                        variant={isCurrent ? 'outline' : 'primary'}
+                        size="md"
+                        className="w-full"
+                        onClick={() => openRenewalModal(plan)}
                       >
-                        Active Plan
-                      </button>
+                        {isCurrent ? 'Renew Current Plan' : `Switch to ${plan.name}`}
+                      </Button>
                     ) : (
-                      <button
-                        type="button"
-                        disabled
-                        className="w-full py-2.5 px-4 rounded-xl text-small font-semibold bg-surface-2 text-text-muted cursor-not-allowed border border-border-default"
-                        title="Plan switching will be available in an upcoming release"
-                      >
-                        Available Tier
-                      </button>
+                      <div className="text-center py-2 text-caption text-text-muted">
+                        {isCurrent ? 'Active Organization Plan' : 'Contact Owner to Switch'}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -517,6 +676,179 @@ export default function Billing() {
           </div>
         )}
       </div>
+
+      {/* Renewal / Upgrade Modal */}
+      {selectedPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fadeIn">
+          <div className="bg-surface border border-border-default rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={closeRenewalModal}
+              className="absolute top-4 right-4 text-text-muted hover:text-text-primary p-1 rounded-lg"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+
+            <h3 className="text-h3 font-bold text-text-primary mb-1">
+              {currentPlan?.id === selectedPlan.id ? 'Renew Subscription' : `Switch to ${selectedPlan.name}`}
+            </h3>
+            <p className="text-small text-text-secondary mb-4">
+              Amount due: <strong className="text-text-primary">{selectedPlan.currency || 'KES'} {Number(selectedPlan.priceMonthly || 0).toLocaleString()}</strong> for 1 month renewal.
+            </p>
+
+            {/* Conflict Warning if Downgrade Conflict */}
+            {renewal.error?.code === 'PLAN_RESOURCE_CONFLICT' && (
+              <div className="p-3 mb-4 rounded-xl bg-danger/10 border border-danger/30 text-danger text-small">
+                <p className="font-bold mb-1">Resource Limit Conflict</p>
+                <p className="text-caption mb-2">
+                  Cannot switch to {selectedPlan.name} because your organization exceeds the new limits:
+                </p>
+                {renewal.error.details?.shops && (
+                  <p className="text-caption">
+                    • Branches: {renewal.error.details.shops.active} active (limit: {renewal.error.details.shops.limit})
+                  </p>
+                )}
+                {renewal.error.details?.users && (
+                  <p className="text-caption">
+                    • Team Members: {renewal.error.details.users.active} active (limit: {renewal.error.details.users.limit})
+                  </p>
+                )}
+                <p className="text-caption mt-2 italic">
+                  Please deactivate excess branches or members before initiating this downgrade.
+                </p>
+              </div>
+            )}
+
+            {renewal.error && renewal.error.code !== 'PLAN_RESOURCE_CONFLICT' && (
+              <div className="p-3 mb-4 rounded-xl bg-danger/10 border border-danger/30 text-danger text-small">
+                {renewal.error.message || 'Payment initiation failed. Please try again.'}
+              </div>
+            )}
+
+            {renewal.success ? (
+              <div className="py-6 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto">
+                  <CheckCircleIcon className="h-8 w-8" />
+                </div>
+                <h4 className="font-bold text-text-primary">STK Push Sent!</h4>
+                <p className="text-small text-text-secondary">
+                  Please check your phone ({phoneNumber}) and enter your M-Pesa PIN to complete the transaction.
+                </p>
+                <Button variant="primary" size="md" onClick={closeRenewalModal} className="mt-4 w-full">
+                  Done
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleInitiatePayment} className="space-y-4">
+                <div>
+                  <label className="block text-caption font-semibold text-text-secondary mb-2">
+                    Select Payment Method
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentChannel('mpesa')}
+                      className={`p-3 rounded-xl border text-small font-semibold flex items-center justify-center gap-2 transition-all ${
+                        paymentChannel === 'mpesa'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border-default bg-surface-2 text-text-secondary'
+                      }`}
+                    >
+                      <PhoneIcon className="h-4 w-4" />
+                      M-Pesa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentChannel('card')}
+                      className={`p-3 rounded-xl border text-small font-semibold flex items-center justify-center gap-2 transition-all ${
+                        paymentChannel === 'card'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border-default bg-surface-2 text-text-secondary'
+                      }`}
+                    >
+                      <CreditCardIcon className="h-4 w-4" />
+                      Card
+                    </button>
+                  </div>
+                </div>
+
+                {paymentChannel === 'mpesa' && (
+                  <div>
+                    <label className="block text-caption font-semibold text-text-secondary mb-1">
+                      M-Pesa Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 0712345678 or 254712345678"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface-2 text-text-primary text-small focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <p className="text-caption text-text-muted mt-1">
+                      An STK push prompt will appear on this handset.
+                    </p>
+                  </div>
+                )}
+
+                <div className="pt-2 flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="md"
+                    className="w-1/2"
+                    onClick={closeRenewalModal}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="md"
+                    className="w-1/2"
+                    loading={renewal.loading}
+                  >
+                    Pay Now
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fadeIn">
+          <div className="bg-surface border border-border-default rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+            <h3 className="text-h3 font-bold text-text-primary mb-2">
+              Cancel Subscription?
+            </h3>
+            <p className="text-small text-text-secondary mb-5">
+              Your subscription will remain active until the end of your billing cycle on {subscription?.currentPeriodEnd ? formatDateShort(subscription.currentPeriodEnd) : 'current period end'}. You can reactivate anytime before then.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="md"
+                className="w-1/2"
+                onClick={() => setShowCancelModal(false)}
+              >
+                Keep Active
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                className="w-1/2"
+                loading={actionLoading.cancel}
+                onClick={handleCancelSubscription}
+              >
+                Confirm Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,11 +4,13 @@ const router = express.Router();
 const saleController = require('../controllers/saleController');
 const { auth, checkRole } = require('../middleware/auth');
 const { checkPermission } = require('../middleware/rolePermissions');
+const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const { Sale } = require('../models');
 const { validateRequest, validateDateRange } = require('../middleware/validators');
 
-// All routes require authentication
+// All routes require authentication and active subscription
 router.use(auth);
+router.use(requireActiveSubscription());
 
 // Validation middleware
 const validateSale = [

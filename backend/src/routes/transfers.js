@@ -1,11 +1,13 @@
 const express = require('express');
 const { body } = require('express-validator');
 const { auth, checkRole } = require('../middleware/auth');
+const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const transferController = require('../controllers/transferController');
 
 const router = express.Router();
 
 router.use(auth);
+router.use(requireActiveSubscription());
 
 const validateTransfer = [
   body('sourceShopId')

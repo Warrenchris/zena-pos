@@ -80,29 +80,35 @@ const validateStockUpdate = [
     .withMessage('Quantity must be an integer')
 ];
 
+const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
+
 // Routes
 router.get('/batch', auth, productController.getProductsBatch);
 router.get('/', auth, productController.getAllProducts);
 router.get('/:id', auth, productController.getProductById);
 router.post('/', 
   auth, 
+  requireActiveSubscription(),
   checkRole(['admin', 'manager']), 
   validateProduct,
   productController.createProduct
 );
 router.put('/:id', 
   auth, 
+  requireActiveSubscription(),
   checkRole(['admin', 'manager']), 
   validateProduct,
   productController.updateProduct
 );
 router.delete('/:id', 
   auth, 
+  requireActiveSubscription(),
   checkRole(['admin']), 
   productController.deleteProduct
 );
 router.patch('/:id/stock', 
   auth, 
+  requireActiveSubscription(),
   checkRole(['admin', 'manager', 'cashier']), 
   validateStockUpdate,
   productController.updateStock

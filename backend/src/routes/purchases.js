@@ -3,6 +3,7 @@ const router = express.Router();
 const { Purchase, PurchaseItem, Product, Supplier, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { auth, checkRole } = require('../middleware/auth');
+const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const { logActivity } = require('../middleware/logger');
 const {
   resolveSupplier,
@@ -12,8 +13,9 @@ const {
   invalidateShopProductCache
 } = require('../services/purchaseService');
 
-// All routes require authentication
+// All routes require authentication and active subscription
 router.use(auth);
+router.use(requireActiveSubscription());
 
 // Helper to generate reference numbers
 const generateRefNo = async () => {

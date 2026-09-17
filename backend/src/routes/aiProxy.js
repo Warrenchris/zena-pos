@@ -8,13 +8,16 @@ const NodeCache = require('node-cache');
 const router = express.Router();
 const { auth, checkRole } = require('../middleware/auth');
 const requireOrgAdmin = require('../middleware/requireOrgAdmin');
+const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
+const entitlementService = require('../services/entitlementService');
+const { sendUpgradePrompt } = require('../utils/upgradePrompt');
 require('dotenv').config();
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 const forecastCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
-function buildForecastCacheKey(shopId, requestBody, periods, model = 'prophet') {
+function buildForecastCacheKey(orgId, shopId, requestBody, periods, model = 'prophet') {
   const dataHash = crypto
     .createHash('sha256')
     .update(JSON.stringify({
@@ -25,7 +28,7 @@ function buildForecastCacheKey(shopId, requestBody, periods, model = 'prophet') 
     }))
     .digest('hex')
     .substring(0, 16);
-  return `forecast:${shopId}:${model}:${periods}:${dataHash}`;
+  return `forecast:org:${orgId || 'no-org'}:shop:${shopId}:${model}:${periods}:${dataHash}`;
 }
 
 function buildOrgForecastCacheKey(organizationId, requestBody, periods, model = 'prophet') {
@@ -115,6 +118,7 @@ router.get('/status', async (req, res) => {
 });
 
 router.use(auth);
+router.use(requireActiveSubscription());
 
 router.use('/forward/api/forecasting', aiRateLimiter);
 router.use('/forward/api/insights', aiRateLimiter);
@@ -137,7 +141,7 @@ router.delete('/cache/:shopId', checkRole(['admin']), (req, res) => {
   if (parseInt(shopId, 10) !== userShopId) {
     return res.status(403).json({ error: 'Access denied: cannot clear cache for another shop' });
   }
-  const keys = forecastCache.keys().filter((key) => key.startsWith(`forecast:${shopId}:`));
+  const keys = forecastCache.keys().filter((key) => key.includes(`:shop:${shopId}:`));
   keys.forEach((key) => forecastCache.del(key));
   return res.json({ message: 'Forecast cache cleared', keysCleared: keys.length });
 });
@@ -145,11 +149,27 @@ router.delete('/cache/:shopId', checkRole(['admin']), (req, res) => {
 router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
   try {
     const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
+    const orgId = req.organizationId || req.user?.organizationId;
     const shopId = req.shopId || req.user?.shopId;
+
+    if (isOrg && orgId) {
+      const featRes = await entitlementService.canUseFeature(orgId, 'org_insights');
+      if (!featRes.allowed) {
+        const { plan } = await entitlementService.getOrganizationEntitlements(orgId);
+        return sendUpgradePrompt(res, {
+          type: 'feature',
+          key: 'org_insights',
+          currentPlan: plan,
+          requiredPlan: 'growth',
+          reason: featRes.reason || 'Organization-level forecasting requires Growth or Pro plan.'
+        });
+      }
+    }
+
     const periods = req.query.periods || req.body.periods || 30;
-    const cacheKey = (isOrg && (req.organizationId || req.user?.organizationId))
-      ? buildOrgForecastCacheKey(req.organizationId || req.user?.organizationId, req.body, periods, 'prophet')
-      : buildForecastCacheKey(shopId, req.body, periods, 'prophet');
+    const cacheKey = (isOrg && orgId)
+      ? buildOrgForecastCacheKey(orgId, req.body, periods, 'prophet')
+      : buildForecastCacheKey(orgId, shopId, req.body, periods, 'prophet');
     const cached = forecastCache.get(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });
@@ -197,10 +217,24 @@ router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
   const periods = req.body.periods || 30;
   const datesCount = Array.isArray(req.body.dates) ? req.body.dates.length : 0;
 
-  try {
-    const cacheKey = (isOrg && (req.organizationId || req.user?.organizationId))
-      ? buildOrgForecastCacheKey(req.organizationId || req.user?.organizationId, req.body, periods, 'rf')
-      : buildForecastCacheKey(shopId, req.body, periods, 'rf');
+    const orgId = req.organizationId || req.user?.organizationId;
+    if (isOrg && orgId) {
+      const featRes = await entitlementService.canUseFeature(orgId, 'org_insights');
+      if (!featRes.allowed) {
+        const { plan } = await entitlementService.getOrganizationEntitlements(orgId);
+        return sendUpgradePrompt(res, {
+          type: 'feature',
+          key: 'org_insights',
+          currentPlan: plan,
+          requiredPlan: 'growth',
+          reason: featRes.reason || 'Organization-level forecasting requires Growth or Pro plan.'
+        });
+      }
+    }
+
+    const cacheKey = (isOrg && orgId)
+      ? buildOrgForecastCacheKey(orgId, req.body, periods, 'rf')
+      : buildForecastCacheKey(orgId, shopId, req.body, periods, 'rf');
     const cached = forecastCache.get(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });

@@ -46,6 +46,53 @@ export const fetchInvoices = createAsyncThunk(
   }
 );
 
+export const renewSubscription = createAsyncThunk(
+  'billing/renewSubscription',
+  async ({ channel, phone, planId }, { rejectWithValue }) => {
+    try {
+      const data = await billingService.renewSubscription({ channel, phone, planId });
+      return data;
+    } catch (error) {
+      return rejectWithValue({
+        message: error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to initiate renewal',
+        code: error.response?.data?.code,
+        details: error.response?.data?.shops ? error.response?.data : null,
+        status: error.response?.status,
+      });
+    }
+  }
+);
+
+export const cancelSubscription = createAsyncThunk(
+  'billing/cancelSubscription',
+  async (_, { rejectWithValue }) => {
+    try {
+      const data = await billingService.cancelSubscription();
+      return data;
+    } catch (error) {
+      return rejectWithValue({
+        message: error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to cancel subscription',
+        status: error.response?.status,
+      });
+    }
+  }
+);
+
+export const reactivateSubscription = createAsyncThunk(
+  'billing/reactivateSubscription',
+  async (_, { rejectWithValue }) => {
+    try {
+      const data = await billingService.reactivateSubscription();
+      return data;
+    } catch (error) {
+      return rejectWithValue({
+        message: error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to reactivate subscription',
+        status: error.response?.status,
+      });
+    }
+  }
+);
+
 const initialState = {
   plans: [],
   subscription: null,
@@ -55,6 +102,16 @@ const initialState = {
     total: 0,
     totalPages: 1,
     currentPage: 1,
+  },
+  renewal: {
+    loading: false,
+    success: false,
+    error: null,
+    data: null,
+  },
+  actionLoading: {
+    cancel: false,
+    reactivate: false,
   },
   loading: {
     plans: false,
@@ -77,6 +134,15 @@ const billingSlice = createSlice({
         plans: null,
         subscription: null,
         invoices: null,
+      };
+      state.renewal.error = null;
+    },
+    resetRenewalState: (state) => {
+      state.renewal = {
+        loading: false,
+        success: false,
+        error: null,
+        data: null,
       };
     },
   },
@@ -128,9 +194,53 @@ const billingSlice = createSlice({
       .addCase(fetchInvoices.rejected, (state, action) => {
         state.loading.invoices = false;
         state.error.invoices = action.payload?.message || 'Failed to load billing invoices';
+      })
+
+      // renewSubscription
+      .addCase(renewSubscription.pending, (state) => {
+        state.renewal.loading = true;
+        state.renewal.error = null;
+        state.renewal.success = false;
+      })
+      .addCase(renewSubscription.fulfilled, (state, action) => {
+        state.renewal.loading = false;
+        state.renewal.success = true;
+        state.renewal.data = action.payload;
+      })
+      .addCase(renewSubscription.rejected, (state, action) => {
+        state.renewal.loading = false;
+        state.renewal.error = action.payload || { message: 'Renewal failed' };
+      })
+
+      // cancelSubscription
+      .addCase(cancelSubscription.pending, (state) => {
+        state.actionLoading.cancel = true;
+      })
+      .addCase(cancelSubscription.fulfilled, (state, action) => {
+        state.actionLoading.cancel = false;
+        if (state.subscription) {
+          state.subscription.cancelAtPeriodEnd = true;
+        }
+      })
+      .addCase(cancelSubscription.rejected, (state) => {
+        state.actionLoading.cancel = false;
+      })
+
+      // reactivateSubscription
+      .addCase(reactivateSubscription.pending, (state) => {
+        state.actionLoading.reactivate = true;
+      })
+      .addCase(reactivateSubscription.fulfilled, (state, action) => {
+        state.actionLoading.reactivate = false;
+        if (state.subscription) {
+          state.subscription.cancelAtPeriodEnd = false;
+        }
+      })
+      .addCase(reactivateSubscription.rejected, (state) => {
+        state.actionLoading.reactivate = false;
       });
   },
 });
 
-export const { clearBillingErrors } = billingSlice.actions;
+export const { clearBillingErrors, resetRenewalState } = billingSlice.actions;
 export default billingSlice.reducer;

@@ -300,8 +300,59 @@ router.post('/subscription/renew', auth, requireOrgOwner, async (req, res) => {
       });
     }
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        error: error.message,
+        ...(error.code ? { code: error.code } : {}),
+        ...(error.details ? error.details : {})
+      });
+    }
     console.error('Subscription renewal initiation error:', error);
     return res.status(500).json({ error: error.message || 'Failed to initiate subscription renewal.' });
+  }
+});
+
+/**
+ * POST /api/billing/subscription/cancel
+ * Schedules subscription cancellation at period end.
+ * Access Control: Organization Owner ONLY.
+ */
+router.post('/subscription/cancel', auth, requireOrgOwner, async (req, res) => {
+  try {
+    const organizationId = req.organizationId;
+    const subscription = await billingService.cancelSubscription(organizationId);
+    return res.status(200).json({
+      message: 'Subscription will cancel at the end of the current billing period.',
+      subscription
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    console.error('Error canceling subscription:', error);
+    return res.status(500).json({ error: 'Failed to cancel subscription.' });
+  }
+});
+
+/**
+ * POST /api/billing/subscription/reactivate
+ * Reactivates a subscription pending cancellation.
+ * Access Control: Organization Owner ONLY.
+ */
+router.post('/subscription/reactivate', auth, requireOrgOwner, async (req, res) => {
+  try {
+    const organizationId = req.organizationId;
+    const subscription = await billingService.reactivateSubscription(organizationId);
+    return res.status(200).json({
+      message: 'Subscription successfully reactivated.',
+      subscription
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    console.error('Error reactivating subscription:', error);
+    return res.status(500).json({ error: 'Failed to reactivate subscription.' });
   }
 });
 

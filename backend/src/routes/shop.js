@@ -1,6 +1,9 @@
+'use strict';
+
 const express = require('express');
 const { body } = require('express-validator');
 const { auth, checkRole } = require('../middleware/auth');
+const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const controller = require('../controllers/shopController');
 
 const router = express.Router();
@@ -29,8 +32,17 @@ const validateCreateShop = [
 ];
 
 router.get('/accessible', controller.getAccessibleShops);
-router.post('/', validateCreateShop, controller.createShop);
+router.post('/', requireActiveSubscription(), validateCreateShop, controller.createShop);
 router.get('/me', controller.getMine);
 router.put('/me', checkRole(['admin', 'manager']), controller.updateMine);
+
+// Reversible branch lifecycle (P2-04)
+router.patch('/:id/deactivate', requireActiveSubscription(), controller.deactivateShop);
+router.patch('/:id/activate', requireActiveSubscription(), controller.activateShop);
+
+// Owner-controlled branch delegation (P1-03)
+router.get('/:id/access', controller.getShopAccess);
+router.post('/:id/access', requireActiveSubscription(), controller.grantShopAccess);
+router.delete('/:id/access/:membershipId', requireActiveSubscription(), controller.revokeShopAccess);
 
 module.exports = router;
