@@ -21,6 +21,7 @@ import { logout, switchActiveShop } from '../../store/slices/authSlice';
 import NotificationDropdown from '../NotificationDropdown';
 import CreateBranchModal from '../CreateBranchModal';
 import { useTheme } from '../../providers/ThemeProvider';
+import { useEntitlement, useQuota } from '../../hooks/useEntitlement';
 
 const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
   const dispatch = useDispatch();
@@ -70,6 +71,15 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
   };
 
   const canCreateBranch = user?.orgRole === 'owner' || user?.orgRole === 'admin';
+  const { allowed: hasMultiShop, loading: entitlementLoading } = useEntitlement('multi_shop');
+  const { allowed: hasShopQuota, current: shopCount, limit: shopLimit } = useQuota('shops');
+
+  const isBranchLocked = !entitlementLoading && (!hasMultiShop || !hasShopQuota);
+  const branchLockReason = !hasMultiShop
+    ? 'Multi-branch feature requires Growth plan or higher'
+    : !hasShopQuota
+    ? `Branch limit reached (${shopCount}/${shopLimit}). Upgrade to add more.`
+    : null;
 
   const displayShops = accessibleShops.length > 0
     ? accessibleShops
@@ -201,17 +211,43 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
                     <div className="pt-1 border-t border-border-default mt-1">
                       <Menu.Item disabled={switching}>
                         {({ active }) => (
-                          <button
-                            type="button"
-                            onClick={() => setIsBranchModalOpen(true)}
-                            disabled={switching}
-                            className={`w-full text-left px-3 py-2 text-small rounded-xl flex items-center gap-2.5 transition-colors ${
-                              active ? 'bg-surface-2 text-primary font-semibold' : 'text-text-primary font-medium'
-                            } ${switching ? 'opacity-60 cursor-not-allowed' : ''}`}
-                          >
-                            <PlusIcon className="h-4 w-4 text-primary shrink-0" />
-                            <span>Add Branch</span>
-                          </button>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isBranchLocked) {
+                                  navigate('/billing');
+                                } else {
+                                  setIsBranchModalOpen(true);
+                                }
+                              }}
+                              disabled={switching}
+                              className={`w-full text-left px-3 py-2 text-small rounded-xl flex items-center justify-between gap-2.5 transition-colors ${
+                                isBranchLocked
+                                  ? 'text-text-muted hover:bg-surface-2 hover:text-text-secondary cursor-pointer'
+                                  : active
+                                  ? 'bg-surface-2 text-primary font-semibold'
+                                  : 'text-text-primary font-medium'
+                              } ${switching ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              title={branchLockReason || 'Add a new branch'}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <PlusIcon className={`h-4 w-4 shrink-0 ${isBranchLocked ? 'text-text-muted' : 'text-primary'}`} />
+                                <span>Add Branch</span>
+                              </div>
+                              {isBranchLocked && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                  <SparklesIcon className="h-3 w-3" />
+                                  Upgrade
+                                </span>
+                              )}
+                            </button>
+                            {isBranchLocked && branchLockReason && (
+                              <p className="px-3 pb-1 text-[11px] text-text-muted leading-tight">
+                                {branchLockReason}
+                              </p>
+                            )}
+                          </div>
                         )}
                       </Menu.Item>
                     </div>
