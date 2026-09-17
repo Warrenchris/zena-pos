@@ -93,12 +93,77 @@ async function getOrganizationEntitlements(organizationId) {
 }
 
 /**
+ * Computes the authoritative effective subscription status based on timestamp cutoffs.
+ * Ensures the system is resilient against scheduler delays or stale Redis cache entries.
+ *
+ * Lifecycle Rules:
+ * - Grandfathered tier: always 'active'.
+ * - 'suspended' / 'canceled': remains unchanged.
+ * - 'trialing':
+ *     - now < trialEndsAt => 'trialing' (fully entitled)
+ *     - now >= trialEndsAt and now <= trialEndsAt + 7d => 'past_due' (grace period)
+ *     - now > trialEndsAt + 7d => 'suspended' (restricted)
+ * - 'active':
+ *     - now <= currentPeriodEnd => 'active'
+ *     - now > currentPeriodEnd and now <= currentPeriodEnd + 7d => 'past_due' (grace period)
+ *     - now > currentPeriodEnd + 7d => 'suspended' (restricted)
+ * - 'past_due':
+ *     - now <= gracePeriodCutoff => 'past_due'
+ *     - now > gracePeriodCutoff => 'suspended'
+ */
+function getEffectiveSubscriptionStatus(subscription, asOf = new Date()) {
+  if (!subscription) return null;
+  const now = new Date(asOf);
+
+  // Grandfathered tier is permanently immune to expiration
+  const planCode = subscription.Plan?.code || subscription.plan?.code;
+  if (planCode === 'grandfathered') {
+    return 'active';
+  }
+
+  const rawStatus = subscription.status;
+  if (rawStatus === 'suspended') {
+    return 'suspended';
+  }
+
+  // Grace period duration: 7 days in ms
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+  if (rawStatus === 'trialing') {
+    const trialEnd = new Date(subscription.trialEndsAt || subscription.currentPeriodEnd);
+    if (now >= trialEnd) {
+      const graceCutoff = new Date(trialEnd.getTime() + SEVEN_DAYS_MS);
+      return now > graceCutoff ? 'suspended' : 'past_due';
+    }
+    return 'trialing';
+  }
+
+  if (rawStatus === 'active') {
+    const periodEnd = new Date(subscription.currentPeriodEnd);
+    // Ignore year 2090+ dates for sanity
+    if (periodEnd.getFullYear() < 2090 && now > periodEnd) {
+      const graceCutoff = new Date(periodEnd.getTime() + SEVEN_DAYS_MS);
+      return now > graceCutoff ? 'suspended' : 'past_due';
+    }
+    return 'active';
+  }
+
+  if (rawStatus === 'past_due') {
+    const refEnd = new Date(subscription.currentPeriodEnd || subscription.trialEndsAt);
+    const graceCutoff = new Date(refEnd.getTime() + SEVEN_DAYS_MS);
+    return now > graceCutoff ? 'suspended' : 'past_due';
+  }
+
+  return rawStatus;
+}
+
+/**
  * Checks if a specific feature flag is granted for an organization.
  * Returns { allowed: boolean, reason?: string }
  *
  * Edge Cases Handled Explicitly:
  * 1. Missing subscription row -> Default-DENY with explicit error reason.
- * 2. Suspended status -> DENY (gated admin features locked).
+ * 2. Suspended status (or expired trial beyond grace) -> DENY.
  * 3. Grandfathered tier (-1 quotas, all features) -> ALLOW.
  */
 async function canUseFeature(organizationId, featureKey) {
@@ -112,8 +177,11 @@ async function canUseFeature(organizationId, featureKey) {
     );
   }
 
+  // Authoritative lifecycle state evaluation
+  const effectiveStatus = getEffectiveSubscriptionStatus(subscription);
+
   // Growth-gated state: administrative features blocked if suspended
-  if (subscription.status === 'suspended') {
+  if (effectiveStatus === 'suspended') {
     return createEntitlementResult(
       false,
       'Subscription is suspended due to non-payment. Gated administrative features are locked.'
@@ -154,10 +222,21 @@ async function checkQuota(organizationId, quotaKey, currentCount) {
     );
   }
 
-  if (subscription.status === 'suspended') {
+  // Authoritative lifecycle state evaluation
+  const effectiveStatus = getEffectiveSubscriptionStatus(subscription);
+
+  if (effectiveStatus === 'suspended') {
     return createEntitlementResult(
       false,
       'Subscription is suspended. Expanding resources is locked.',
+      { limit: plan[quotaKey] ?? 0, current: currentCount }
+    );
+  }
+
+  if (effectiveStatus === 'past_due') {
+    return createEntitlementResult(
+      false,
+      'Subscription payment is past due. Expanding resources is locked until renewal.',
       { limit: plan[quotaKey] ?? 0, current: currentCount }
     );
   }
@@ -197,6 +276,7 @@ async function invalidateOrgEntitlements(organizationId) {
 
 module.exports = {
   getOrganizationEntitlements,
+  getEffectiveSubscriptionStatus,
   canUseFeature,
   checkQuota,
   invalidateOrgEntitlements

@@ -5,6 +5,8 @@ const {
   Plan,
   Organization,
   Shop,
+  OrganizationMembership,
+  Employee,
   sequelize
 } = require('../models');
 const { logActivity } = require('../middleware/logger');
@@ -38,27 +40,131 @@ async function logBillingActivity({ organizationId, action, invoiceId, details }
 
 /**
  * Generates a pending SubscriptionInvoice for an organization renewal or upgrade.
- * Does NOT touch the Subscription row yet (that happens upon confirmed payment).
+ * Validates plan availability, prevents unauthorized grandfathered selection,
+ * checks downgrade resource conflicts, and reuses recent pending invoices.
  */
 async function generateRenewalInvoice(organizationId, planId, billingCycle = null) {
   if (!organizationId) {
-    throw new Error('Organization ID is required to generate renewal invoice.');
+    const err = new Error('Organization ID is required to generate renewal invoice.');
+    err.statusCode = 400;
+    throw err;
   }
 
   const subscription = await Subscription.findOne({ where: { organizationId } });
   if (!subscription) {
-    throw new Error(`No subscription found for organization ${organizationId}.`);
+    const err = new Error(`No subscription found for organization ${organizationId}.`);
+    err.statusCode = 404;
+    throw err;
   }
 
-  const targetPlanId = planId || subscription.planId;
+  const targetPlanId = planId ? parseInt(planId, 10) : subscription.planId;
   const plan = await Plan.findByPk(targetPlanId);
   if (!plan) {
-    throw new Error(`Plan with ID ${targetPlanId} not found.`);
+    const err = new Error(`Plan with ID ${targetPlanId} not found.`);
+    err.statusCode = 404;
+    throw err;
+  }
+
+  // P1-02: Plan Security - validate plan is active and not grandfathered
+  if (!plan.isActive || plan.code === 'grandfathered') {
+    const err = new Error('The selected plan is not available for public subscription or renewal.');
+    err.statusCode = 400;
+    err.code = 'INVALID_PLAN_SELECTION';
+    throw err;
+  }
+
+  // P1-05: Downgrade Reconciliation - check if active resources exceed target plan limits
+  if (targetPlanId !== subscription.planId) {
+    const activeShopsCount = await Shop.count({
+      where: { organizationId, active: true }
+    });
+
+    if (plan.maxShops !== -1 && activeShopsCount > plan.maxShops) {
+      const err = new Error(`Cannot switch to ${plan.name} plan: organization currently has ${activeShopsCount} active branches, but ${plan.name} allows a maximum of ${plan.maxShops}. Please deactivate excess branches before downgrading.`);
+      err.statusCode = 409;
+      err.code = 'PLAN_RESOURCE_CONFLICT';
+      err.details = {
+        resource: 'shops',
+        limit: plan.maxShops,
+        active: activeShopsCount
+      };
+      throw err;
+    }
+
+    const activeMemberships = await OrganizationMembership.findAll({
+      where: { organizationId, status: 'active' },
+      attributes: ['userId', 'employeeId']
+    });
+
+    const memberEmployeeIds = new Set(
+      activeMemberships.filter(m => m.employeeId).map(m => m.employeeId)
+    );
+
+    const orgShops = await Shop.findAll({
+      where: { organizationId },
+      attributes: ['id']
+    });
+    const shopIds = orgShops.map(s => s.id);
+
+    let unlinkedEmployeeCount = 0;
+    if (shopIds.length > 0) {
+      const activeEmployees = await Employee.findAll({
+        where: {
+          shopId: shopIds,
+          status: 'active'
+        },
+        attributes: ['id']
+      });
+      unlinkedEmployeeCount = activeEmployees.filter(e => !memberEmployeeIds.has(e.id)).length;
+    }
+
+    const activeUsersCount = activeMemberships.length + unlinkedEmployeeCount;
+
+    if (plan.maxUsers !== -1 && activeUsersCount > plan.maxUsers) {
+      const err = new Error(`Cannot switch to ${plan.name} plan: organization currently has ${activeUsersCount} active team members, but ${plan.name} allows a maximum of ${plan.maxUsers}. Please deactivate excess team members before downgrading.`);
+      err.statusCode = 409;
+      err.code = 'PLAN_RESOURCE_CONFLICT';
+      err.details = {
+        resource: 'users',
+        limit: plan.maxUsers,
+        active: activeUsersCount
+      };
+      throw err;
+    }
   }
 
   const cycle = billingCycle || subscription.billingCycle || 'monthly';
   const monthlyPrice = parseFloat(plan.priceMonthly);
   const amount = cycle === 'yearly' ? monthlyPrice * 12 : monthlyPrice;
+
+  // Invoice Spam / Idempotency Prevention: Reuse existing pending invoice if created within the last 1 hour for same plan & cycle
+  const existingPendingInvoice = await SubscriptionInvoice.findOne({
+    where: {
+      organizationId,
+      planId: plan.id,
+      status: 'pending',
+      amount,
+      createdAt: {
+        [Op.gte]: new Date(Date.now() - 60 * 60 * 1000)
+      }
+    },
+    order: [['createdAt', 'DESC']]
+  });
+
+  if (existingPendingInvoice) {
+    return existingPendingInvoice;
+  }
+
+  // Supersede older pending invoices for different plans
+  await SubscriptionInvoice.update(
+    { status: 'failed' },
+    {
+      where: {
+        organizationId,
+        status: 'pending'
+      }
+    }
+  );
 
   // Established invoice numbering format: INV-SUB-{timestamp}-{organizationId}
   const invoiceNumber = `INV-SUB-${Date.now()}-${organizationId}`;
@@ -136,6 +242,7 @@ async function processConfirmedRenewal({
   subscription.planId = invoice.planId;
   subscription.currentPeriodStart = isCurrentlyActive ? subscription.currentPeriodStart : now;
   subscription.currentPeriodEnd = newPeriodEnd;
+  subscription.cancelAtPeriodEnd = false;
   subscription.lastPaymentMethod = paymentMethod;
   subscription.lastPaymentDate = now;
   await subscription.save({ transaction });
@@ -163,7 +270,7 @@ async function processConfirmedRenewal({
 }
 
 /**
- * Scheduled check: Transitions expired active subscriptions to past_due,
+ * Scheduled check: Transitions expired trialing and active subscriptions to past_due,
  * and past_due subscriptions exceeding the 7-day grace period to suspended.
  * Grandfathered subscriptions (year 2099) are strictly immune and never affected.
  */
@@ -174,7 +281,51 @@ async function checkAndTransitionExpiredSubscriptions(asOfDate = new Date()) {
   let transitionedToPastDue = 0;
   let transitionedToSuspended = 0;
 
-  // 1. Find active subscriptions that expired (excluding grandfathered: currentPeriodEnd in 2099)
+  // 1. P0-01: Find trialing subscriptions that expired (trialEndsAt < currentDate)
+  const expiredTrials = await Subscription.findAll({
+    where: {
+      status: 'trialing',
+      [Op.or]: [
+        { trialEndsAt: { [Op.lt]: currentDate } },
+        { currentPeriodEnd: { [Op.lt]: currentDate } }
+      ]
+    },
+    include: [{ model: Plan, where: { code: { [Op.ne]: 'grandfathered' } } }]
+  });
+
+  for (const sub of expiredTrials) {
+    const t = await sequelize.transaction();
+    try {
+      const trialEnd = new Date(sub.trialEndsAt || sub.currentPeriodEnd);
+      const isPastGrace = trialEnd < gracePeriodCutoff;
+      const targetStatus = isPastGrace ? 'suspended' : 'past_due';
+
+      await sub.update({ status: targetStatus }, { transaction: t });
+      await Organization.update(
+        { status: targetStatus },
+        { where: { id: sub.organizationId }, transaction: t }
+      );
+      await logBillingActivity({
+        organizationId: sub.organizationId,
+        action: isPastGrace ? 'SUBSCRIPTION_TRANSITIONED_SUSPENDED' : 'SUBSCRIPTION_TRANSITIONED_PAST_DUE',
+        invoiceId: null,
+        details: `Trial expired at ${trialEnd.toISOString()}. Transitioned to ${targetStatus}.`
+      }, t);
+      await t.commit();
+      await entitlementService.invalidateOrgEntitlements(sub.organizationId);
+
+      if (isPastGrace) {
+        transitionedToSuspended++;
+      } else {
+        transitionedToPastDue++;
+      }
+    } catch (err) {
+      await t.rollback();
+      console.error(`Failed to transition expired trial subscription ${sub.id}:`, err);
+    }
+  }
+
+  // 2. Find active subscriptions that expired (excluding grandfathered: currentPeriodEnd in 2099)
   const expiredActiveSubscriptions = await Subscription.findAll({
     where: {
       status: 'active',
@@ -210,7 +361,7 @@ async function checkAndTransitionExpiredSubscriptions(asOfDate = new Date()) {
     }
   }
 
-  // 2. Find past_due subscriptions that exceeded 7-day grace period
+  // 3. Find past_due subscriptions that exceeded 7-day grace period
   const expiredGraceSubscriptions = await Subscription.findAll({
     where: {
       status: 'past_due',
@@ -251,9 +402,83 @@ async function checkAndTransitionExpiredSubscriptions(asOfDate = new Date()) {
   };
 }
 
+/**
+ * Schedules subscription cancellation at current period end.
+ */
+async function cancelSubscription(organizationId, transaction = null) {
+  if (!organizationId) {
+    const err = new Error('Organization ID is required.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const subscription = await Subscription.findOne({
+    where: { organizationId },
+    transaction
+  });
+
+  if (!subscription) {
+    const err = new Error('Subscription not found.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  subscription.cancelAtPeriodEnd = true;
+  await subscription.save({ transaction });
+
+  await logBillingActivity({
+    organizationId,
+    action: 'SUBSCRIPTION_CANCELLATION_SCHEDULED',
+    invoiceId: null,
+    details: `Subscription cancellation scheduled for period end: ${subscription.currentPeriodEnd}`
+  }, transaction);
+
+  await entitlementService.invalidateOrgEntitlements(organizationId);
+
+  return subscription;
+}
+
+/**
+ * Reactivates auto-renewal for a subscription scheduled for cancellation.
+ */
+async function reactivateSubscription(organizationId, transaction = null) {
+  if (!organizationId) {
+    const err = new Error('Organization ID is required.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const subscription = await Subscription.findOne({
+    where: { organizationId },
+    transaction
+  });
+
+  if (!subscription) {
+    const err = new Error('Subscription not found.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  subscription.cancelAtPeriodEnd = false;
+  await subscription.save({ transaction });
+
+  await logBillingActivity({
+    organizationId,
+    action: 'SUBSCRIPTION_REACTIVATED',
+    invoiceId: null,
+    details: `Subscription auto-renewal reactivated for period end: ${subscription.currentPeriodEnd}`
+  }, transaction);
+
+  await entitlementService.invalidateOrgEntitlements(organizationId);
+
+  return subscription;
+}
+
 module.exports = {
   generateRenewalInvoice,
   processConfirmedRenewal,
   checkAndTransitionExpiredSubscriptions,
+  cancelSubscription,
+  reactivateSubscription,
   logBillingActivity
 };
