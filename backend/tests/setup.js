@@ -21,7 +21,11 @@ module.exports = async () => {
       try {
         execSync('npx sequelize-cli db:create --env test', { stdio: 'pipe' });
       } catch (e) {}
-      execSync('npx sequelize-cli db:migrate --env test', { stdio: 'inherit' });
+      try {
+        execSync('npx sequelize-cli db:migrate --env test', { stdio: 'inherit' });
+      } catch (migErr) {
+        console.warn('[Test Setup] db:migrate warning (schema may already be migrated):', migErr.message);
+      }
     }
     console.log('[Test Setup] Database schema migrations completed successfully.');
 

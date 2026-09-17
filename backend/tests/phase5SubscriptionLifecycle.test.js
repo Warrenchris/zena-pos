@@ -16,7 +16,8 @@ const {
   OrganizationMembership,
   ShopAccess,
   SubscriptionInvoice,
-  ActivityLog
+  ActivityLog,
+  SystemSettings
 } = require('../src/models');
 const entitlementService = require('../src/services/entitlementService');
 const billingService = require('../src/services/billingService');
@@ -423,6 +424,12 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
       expect(totalActive).toBe(3);
 
       // Cleanup
+      const orgShops = await Shop.findAll({ where: { organizationId: org.id }, attributes: ['id'] });
+      const shopIds = orgShops.map(s => s.id);
+      if (shopIds.length > 0) {
+        await ActivityLog.destroy({ where: { shopId: shopIds } });
+        await SystemSettings.destroy({ where: { shopId: shopIds } });
+      }
       await ShopAccess.destroy({ where: {} });
       await Shop.destroy({ where: { organizationId: org.id } });
       await Subscription.destroy({ where: { id: sub.id } });
@@ -866,6 +873,12 @@ describe('Phase 5 — Subscription Lifecycle, Entitlement, Billing & Multi-Tenan
       await Subscription.destroy({ where: { organizationId: orgId } });
       await OrganizationMembership.destroy({ where: { organizationId: orgId } });
       await User.destroy({ where: { id: res.body.user.id } });
+      const regShops = await Shop.findAll({ where: { organizationId: orgId }, attributes: ['id'] });
+      const regShopIds = regShops.map(s => s.id);
+      if (regShopIds.length > 0) {
+        await ActivityLog.destroy({ where: { shopId: regShopIds } });
+        await SystemSettings.destroy({ where: { shopId: regShopIds } });
+      }
       await Shop.destroy({ where: { organizationId: orgId } });
       await Organization.destroy({ where: { id: orgId } });
     });

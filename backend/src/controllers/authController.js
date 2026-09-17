@@ -30,7 +30,7 @@ exports.register = async (req, res) => {
     }
 
     // Atomic transaction: Organization, Shop, User, OrganizationMembership, and Subscription
-    const { user, createdShop } = await sequelize.transaction(async (t) => {
+    const { user, createdShop, createdOrg } = await sequelize.transaction(async (t) => {
       let createdOrg = null;
       let newShop = null;
 

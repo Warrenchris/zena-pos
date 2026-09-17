@@ -17,7 +17,7 @@ const logger = require('../utils/logger');
  * - Attaches req.subscription, req.plan, and req.effectiveSubscriptionStatus for downstream use.
  */
 function requireActiveSubscription(options = {}) {
-  const { allowPastDue = true } = options;
+  const { allowPastDue = true, suspendedCode = 'ORGANIZATION_SUSPENDED' } = options;
 
   return async (req, res, next) => {
     try {
@@ -56,7 +56,7 @@ function requireActiveSubscription(options = {}) {
       if (effectiveStatus === 'suspended') {
         return res.status(403).json({
           error: 'Organization subscription is suspended. Please settle outstanding invoices to restore access.',
-          code: 'ORGANIZATION_SUSPENDED',
+          code: suspendedCode,
           isSuspended: true
         });
       }

@@ -32,17 +32,17 @@ const validateCreateShop = [
 ];
 
 router.get('/accessible', controller.getAccessibleShops);
-router.post('/', requireActiveSubscription(), validateCreateShop, controller.createShop);
+router.post('/', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), validateCreateShop, controller.createShop);
 router.get('/me', controller.getMine);
 router.put('/me', checkRole(['admin', 'manager']), controller.updateMine);
 
 // Reversible branch lifecycle (P2-04)
-router.patch('/:id/deactivate', requireActiveSubscription(), controller.deactivateShop);
-router.patch('/:id/activate', requireActiveSubscription(), controller.activateShop);
+router.patch('/:id/deactivate', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.deactivateShop);
+router.patch('/:id/activate', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.activateShop);
 
 // Owner-controlled branch delegation (P1-03)
 router.get('/:id/access', controller.getShopAccess);
-router.post('/:id/access', requireActiveSubscription(), controller.grantShopAccess);
-router.delete('/:id/access/:membershipId', requireActiveSubscription(), controller.revokeShopAccess);
+router.post('/:id/access', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.grantShopAccess);
+router.delete('/:id/access/:membershipId', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.revokeShopAccess);
 
 module.exports = router;
