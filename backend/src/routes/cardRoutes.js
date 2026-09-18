@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
+const sequelize = require('../config/database');
 const cardPaymentService = require('../services/cardPaymentService');
 const { PendingPayment } = require('../models');
 const saleController = require('../controllers/saleController');
@@ -25,9 +26,10 @@ router.post('/initiate', auth, async (req, res) => {
       shopId
     });
 
-    const { paymentReference, redirectUrl } = paymentResult;
+    const paymentReference = paymentResult.paymentReference;
+    const redirectUrl = paymentResult.redirectUrl;
 
-    // Enrich saleData with user context for finalization on verify
+    // Enrich saleData with user context
     const enrichedSaleData = {
       ...saleData,
       paymentMethod: 'card',
@@ -67,55 +69,84 @@ router.post('/verify', auth, async (req, res) => {
     const verificationResult = await cardPaymentService.verifyPayment(reference);
 
     if (!verificationResult.verified) {
-      // Find pending payment and update to failed
-      const pendingPayment = await PendingPayment.findOne({
-        where: { checkoutRequestId: reference, paymentChannel: 'card', shopId: req.shopId || req.user?.shopId }
+      // Find pending payment and update to failed under lock
+      await sequelize.transaction(async (t) => {
+        const pendingPayment = await PendingPayment.findOne({
+          where: { checkoutRequestId: reference, paymentChannel: 'card', shopId: req.shopId || req.user?.shopId },
+          lock: t.LOCK.UPDATE,
+          transaction: t
+        });
+        if (pendingPayment && pendingPayment.status === 'pending') {
+          await pendingPayment.update({ status: 'failed' }, { transaction: t });
+        }
       });
-      if (pendingPayment && pendingPayment.status === 'pending') {
-        await pendingPayment.update({ status: 'failed' });
-      }
       return res.status(400).json({ error: 'Card payment verification failed or payment declined.' });
     }
 
-    // Find pending payment
-    const pendingPayment = await PendingPayment.findOne({
-      where: { checkoutRequestId: reference, paymentChannel: 'card', shopId: req.shopId || req.user?.shopId }
-    });
-
-    if (!pendingPayment) {
-      return res.status(404).json({ error: 'Pending payment record not found.' });
-    }
-
-    // Check if already processed
-    if (pendingPayment.status === 'confirmed') {
-      return res.json({ message: 'Payment already verified and sale created.' });
-    }
-
-    await pendingPayment.update({ status: 'confirmed' });
-
     let completeSale = null;
-    if (pendingPayment.saleData) {
-      const saleData = pendingPayment.saleData;
+    let alreadyConfirmed = false;
+
+    await sequelize.transaction(async (t) => {
+      // Find pending payment under exclusive row lock
+      const pendingPayment = await PendingPayment.findOne({
+        where: { checkoutRequestId: reference, paymentChannel: 'card', shopId: req.shopId || req.user?.shopId },
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+
+      if (!pendingPayment) {
+        const err = new Error('Pending payment record not found.');
+        err.statusCode = 404;
+        throw err;
+      }
+
+      // Check if already processed (Idempotency under lock)
+      if (pendingPayment.status === 'confirmed') {
+        alreadyConfirmed = true;
+        return;
+      }
+
+      if (pendingPayment.status === 'failed') {
+        const err = new Error('Payment already failed.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const saleData = pendingPayment.saleData || {};
       saleData.paymentReference = verificationResult.gatewayRef;
       saleData.paymentProvider = 'card';
       saleData.paymentNotes = `Card payment verified. Gateway Ref: ${verificationResult.gatewayRef}`;
 
-      const userContext = {
-        id: saleData.employeeId || saleData.userId,
-        isEmployee: saleData.isEmployee
-      };
+      if (saleData && Array.isArray(saleData.items) && saleData.items.length > 0) {
+        const userContext = {
+          id: saleData.employeeId || saleData.userId,
+          isEmployee: saleData.isEmployee
+        };
 
-      completeSale = await saleController.createSaleInternal(
-        saleData,
-        pendingPayment.shopId,
-        userContext
-      );
+        completeSale = await saleController.createSaleInternal(
+          saleData,
+          pendingPayment.shopId,
+          userContext,
+          null,
+          t
+        );
+      }
+
+      await pendingPayment.update({ 
+        status: 'confirmed',
+        saleData
+      }, { transaction: t });
+    });
+
+    if (alreadyConfirmed) {
+      return res.json({ message: 'Payment already verified and sale created.' });
     }
 
     res.json({ verified: true, sale: completeSale });
   } catch (error) {
     console.error('Card verification error:', error);
-    res.status(500).json({ error: error.message || 'Failed to verify card payment.' });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ error: error.message || 'Failed to verify card payment.' });
   }
 });
 

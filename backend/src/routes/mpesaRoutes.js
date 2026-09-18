@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { auth } = require('../middleware/auth');
+const sequelize = require('../config/database');
 const mpesaService = require('../services/mpesaService');
 const { PendingPayment, Sale } = require('../models');
 const saleController = require('../controllers/saleController');
@@ -68,64 +69,83 @@ router.post('/callback', async (req, res) => {
     const verification = mpesaService.verifyCallback(req.body);
     const { checkoutRequestId, resultCode, amount, mpesaReceiptNumber } = verification;
 
-    const pendingPayment = await PendingPayment.findOne({
-      where: { checkoutRequestId }
-    });
+    let callbackHandledResult = null;
 
-    if (!pendingPayment) {
-      return res.status(404).json({ error: 'Pending payment not found.' });
-    }
-
-    // Authenticate callback: verification token must match single-use token in pending payment
-    const expectedToken = pendingPayment.saleData?.callbackToken;
-    if (!expectedToken || token !== expectedToken) {
-      console.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for POS payment ${checkoutRequestId}. Provided: ${token}`);
-      return res.status(401).json({ error: 'Unauthorized callback: invalid verification token.' });
-    }
-
-    // Check if already processed (Idempotency)
-    if (pendingPayment.status !== 'pending') {
-      return res.status(200).json({ message: 'Callback already processed.' });
-    }
-
-    if (resultCode === 0) {
-      // Validate paid amount against requested amount
-      if (Number(amount) < Number(pendingPayment.amount)) {
-        await pendingPayment.update({ status: 'failed' });
-        return res.status(400).json({ error: 'Paid amount is less than pending payment amount.' });
-      }
-
-      const saleData = pendingPayment.saleData || {};
-      saleData.paymentReference = mpesaReceiptNumber;
-      saleData.paymentProvider = 'mpesa';
-      saleData.paymentNotes = `M-Pesa STK Push confirmed. Receipt: ${mpesaReceiptNumber}`;
-
-      await pendingPayment.update({ 
-        status: 'confirmed',
-        saleData
+    await sequelize.transaction(async (t) => {
+      const pendingPayment = await PendingPayment.findOne({
+        where: { checkoutRequestId },
+        lock: t.LOCK.UPDATE,
+        transaction: t
       });
 
-      // Create the sale using extracted logic ONLY if it's a standard checkout (contains items)
-      if (saleData && Array.isArray(saleData.items) && saleData.items.length > 0) {
-        const userContext = {
-          id: saleData.employeeId || saleData.userId,
-          isEmployee: saleData.isEmployee
-        };
-
-        await saleController.createSaleInternal(
-          saleData,
-          pendingPayment.shopId,
-          userContext
-        );
+      if (!pendingPayment) {
+        const err = new Error('Pending payment not found.');
+        err.statusCode = 404;
+        throw err;
       }
-    } else {
-      await pendingPayment.update({ status: 'failed' });
-    }
 
-    res.json({ message: 'Callback processed successfully.' });
+      // Authenticate callback: verification token must match single-use token in pending payment
+      const expectedToken = pendingPayment.saleData?.callbackToken;
+      if (!expectedToken || token !== expectedToken) {
+        console.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for POS payment ${checkoutRequestId}. Provided: ${token}`);
+        const err = new Error('Unauthorized callback: invalid verification token.');
+        err.statusCode = 401;
+        throw err;
+      }
+
+      // Check if already processed (Idempotency under pessimistic lock)
+      if (pendingPayment.status !== 'pending') {
+        callbackHandledResult = { statusCode: 200, body: { message: 'Callback already processed.' } };
+        return;
+      }
+
+      if (resultCode === 0) {
+        // Validate paid amount against requested amount
+        if (Number(amount) < Number(pendingPayment.amount)) {
+          await pendingPayment.update({ status: 'failed' }, { transaction: t });
+          const err = new Error('Paid amount is less than pending payment amount.');
+          err.statusCode = 400;
+          throw err;
+        }
+
+        const saleData = pendingPayment.saleData || {};
+        saleData.paymentReference = mpesaReceiptNumber;
+        saleData.paymentProvider = 'mpesa';
+        saleData.paymentNotes = `M-Pesa STK Push confirmed. Receipt: ${mpesaReceiptNumber}`;
+
+        // Create the sale using extracted logic ONLY if it's a standard checkout (contains items)
+        if (saleData && Array.isArray(saleData.items) && saleData.items.length > 0) {
+          const userContext = {
+            id: saleData.employeeId || saleData.userId,
+            isEmployee: saleData.isEmployee
+          };
+
+          await saleController.createSaleInternal(
+            saleData,
+            pendingPayment.shopId,
+            userContext,
+            null,
+            t
+          );
+        }
+
+        await pendingPayment.update({ 
+          status: 'confirmed',
+          saleData
+        }, { transaction: t });
+
+        callbackHandledResult = { statusCode: 200, body: { message: 'Callback processed successfully.' } };
+      } else {
+        await pendingPayment.update({ status: 'failed' }, { transaction: t });
+        callbackHandledResult = { statusCode: 200, body: { message: 'Payment failed callback recorded.' } };
+      }
+    });
+
+    res.status(callbackHandledResult.statusCode).json(callbackHandledResult.body);
   } catch (error) {
     console.error('M-Pesa callback handling error:', error);
-    res.status(500).json({ error: error.message || 'Failed to process callback.' });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ error: error.message || 'Failed to process callback.' });
   }
 });
 
