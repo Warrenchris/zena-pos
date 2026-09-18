@@ -301,10 +301,24 @@ exports.updateEmployee = async (req, res) => {
       delete req.body.password;
     }
 
+    const previousPosition = employee.position;
+
     await employee.update(req.body, {
       transaction,
       individualHooks: true // Ensures password hashing hooks are run
     });
+
+    // Sync OrganizationMembership orgRole if employee position updated
+    if (req.body.position && req.body.position !== previousPosition) {
+      const membership = await OrganizationMembership.findOne({
+        where: { employeeId: employee.id },
+        transaction
+      });
+      if (membership) {
+        membership.orgRole = staffCreationService.positionToOrgRole(req.body.position, req.body.role);
+        await membership.save({ transaction });
+      }
+    }
 
     // Sync OrganizationMembership status if employee status updated
     if (req.body.status) {

@@ -735,5 +735,51 @@ describe('Phase 3: User Creation, Tenant Membership & Quota Integrity', () => {
       const membership = await OrganizationMembership.findOne({ where: { employeeId: empId } });
       expect(membership).toBeNull();
     });
+
+    test('Position changes sync OrganizationMembership.orgRole (promotion and demotion)', async () => {
+      const ts = Date.now();
+      const createRes = await request(app)
+        .post('/api/employees')
+        .set('Authorization', tokenA1)
+        .send({
+          firstName: 'Promo',
+          lastName: 'Test',
+          email: `promo_test_${ts}@test.com`,
+          position: 'cashier',
+          status: 'active',
+          password: 'Password123!',
+          salary: 12000
+        })
+        .expect(201);
+
+      const empId = createRes.body.id;
+
+      // Initial membership check: cashier should be 'member'
+      let membership = await OrganizationMembership.findOne({ where: { employeeId: empId } });
+      expect(membership).not.toBeNull();
+      expect(membership.orgRole).toBe('member');
+
+      // Promote to admin
+      const promoteRes = await request(app)
+        .put(`/api/employees/${empId}`)
+        .set('Authorization', tokenA1)
+        .send({ position: 'admin' })
+        .expect(200);
+
+      expect(promoteRes.body.position).toBe('admin');
+      membership = await OrganizationMembership.findOne({ where: { employeeId: empId } });
+      expect(membership.orgRole).toBe('admin');
+
+      // Demote back to cashier
+      const demoteRes = await request(app)
+        .put(`/api/employees/${empId}`)
+        .set('Authorization', tokenA1)
+        .send({ position: 'cashier' })
+        .expect(200);
+
+      expect(demoteRes.body.position).toBe('cashier');
+      membership = await OrganizationMembership.findOne({ where: { employeeId: empId } });
+      expect(membership.orgRole).toBe('member');
+    });
   });
 });

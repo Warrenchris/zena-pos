@@ -9,6 +9,11 @@ function isValidEmail(email) {
   return /.+@.+\..+/.test(String(email || '').toLowerCase());
 }
 
+function positionToOrgRole(position, role = null) {
+  const posLower = String(position || '').trim().toLowerCase();
+  return (posLower === 'admin' || role === 'admin') ? 'admin' : 'member';
+}
+
 /**
  * Authoritative staff creation service.
  * Enforces:
@@ -253,8 +258,7 @@ async function createStaffMember({ actor, body = {}, reqOrgId = null }) {
     }, { transaction: t });
 
     // Step B: Insert OrganizationMembership record
-    const posLower = position.toLowerCase();
-    const newOrgRole = (posLower === 'admin' || body.role === 'admin') ? 'admin' : 'member';
+    const newOrgRole = positionToOrgRole(position, body.role);
 
     const membership = await OrganizationMembership.create({
       organizationId: orgId,
@@ -299,5 +303,6 @@ async function createStaffMember({ actor, body = {}, reqOrgId = null }) {
 
 module.exports = {
   createStaffMember,
-  isValidEmail
+  isValidEmail,
+  positionToOrgRole
 };
