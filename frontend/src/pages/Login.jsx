@@ -100,8 +100,8 @@ export default function Login() {
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/10 via-surface-1 to-surface-0 border-r border-border-default p-12 flex-col justify-between relative overflow-hidden">
         <div className="relative z-10">
-          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-8 shadow-glow">
-            <img src="/react.svg" alt="Zana POS" className="w-8 h-8" />
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-8 shadow-sm">
+            <img src="/logo.svg" alt="Zana POS" className="w-12 h-12 rounded-xl" />
           </div>
           <h1 className="text-display font-bold text-text-primary mb-4">Welcome to Zana POS</h1>
           <p className="text-h4 text-text-secondary font-normal">Your complete financial operating system for modern retail</p>

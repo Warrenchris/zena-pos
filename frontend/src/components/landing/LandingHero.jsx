@@ -27,7 +27,7 @@ export default function LandingHero() {
               Get started
             </Link>
             <a
-              href="#features"
+              href="#how-it-works"
               className="text-text-secondary hover:text-text-primary font-medium flex items-center justify-center gap-1.5 transition-colors duration-150 px-6 py-3 w-full sm:w-auto"
             >
               See how it works

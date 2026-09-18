@@ -38,8 +38,8 @@ describe('Zana POS Landing Page', () => {
     expect(screen.getAllByRole('link', { name: /sign in/i })[0]).toBeInTheDocument();
   });
 
-  test('renders capabilities and business types sections', () => {
-    render(
+  test('renders capabilities and business types sections with industries anchor', () => {
+    const { container } = render(
       <MemoryRouter>
         <LandingPage />
       </MemoryRouter>
@@ -48,6 +48,8 @@ describe('Zana POS Landing Page', () => {
     expect(screen.getByText(/Everything your business needs\. Nothing it doesn't\./i)).toBeInTheDocument();
     expect(screen.getByText(/Built for real business\./i)).toBeInTheDocument();
     expect(screen.getByText(/Questions & answers\./i)).toBeInTheDocument();
+    expect(container.querySelector('#industries')).toBeInTheDocument();
+    expect(container.querySelector('#how-it-works')).toBeInTheDocument();
   });
 
   test('renders feature stories for sales, inventory, and reports', () => {
@@ -60,5 +62,35 @@ describe('Zana POS Landing Page', () => {
     expect(screen.getByText(/Sell faster\./i)).toBeInTheDocument();
     expect(screen.getByText(/Know what's on your shelves\./i)).toBeInTheDocument();
     expect(screen.getByText(/Stop guessing\./i)).toBeInTheDocument();
+  });
+
+  test('renders commercial pricing tiers and billing options', () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Transparent Pricing/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Starter$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Growth$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Pro$/i)).toBeInTheDocument();
+    expect(screen.getByText(/1,500/i)).toBeInTheDocument();
+    expect(screen.getByText(/3,500/i)).toBeInTheDocument();
+    expect(screen.getByText(/7,500/i)).toBeInTheDocument();
+    expect(screen.getByText(/Save 15%/i)).toBeInTheDocument();
+  });
+
+  test('renders trust proof metrics and payment methods', () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/99.9%/i)).toBeInTheDocument();
+    expect(screen.getByText(/< 2.1s/i)).toBeInTheDocument();
+    expect(screen.getByText(/M-Pesa STK Integration/i)).toBeInTheDocument();
+    expect(screen.getByText(/Safaricom M-Pesa STK Push/i)).toBeInTheDocument();
   });
 });

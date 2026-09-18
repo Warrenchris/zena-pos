@@ -40,7 +40,7 @@ export default function LandingNavbar() {
               </div>
 
               {/* Center-right: Nav links (Desktop) */}
-              <div className="hidden md:flex md:items-center md:space-x-8">
+              <div className="hidden lg:flex lg:items-center lg:space-x-7">
                 <a
                   href="#features"
                   className="text-text-secondary hover:text-text-primary text-small font-medium transition-colors duration-150"
@@ -48,18 +48,36 @@ export default function LandingNavbar() {
                   Features
                 </a>
                 <a
+                  href="#how-it-works"
+                  className="text-text-secondary hover:text-text-primary text-small font-medium transition-colors duration-150"
+                >
+                  How it works
+                </a>
+                <a
+                  href="#industries"
+                  className="text-text-secondary hover:text-text-primary text-small font-medium transition-colors duration-150"
+                >
+                  Industries
+                </a>
+                <a
                   href="#pricing"
                   className="text-text-secondary hover:text-text-primary text-small font-medium transition-colors duration-150"
                 >
                   Pricing
                 </a>
+                <a
+                  href="#faq"
+                  className="text-text-secondary hover:text-text-primary text-small font-medium transition-colors duration-150"
+                >
+                  FAQ
+                </a>
               </div>
 
               {/* Right: Actions (Desktop) */}
-              <div className="hidden md:flex md:items-center md:space-x-6">
+              <div className="hidden lg:flex lg:items-center lg:space-x-4">
                 <Link
                   to="/login"
-                  className="text-text-secondary hover:text-text-primary text-small font-medium transition-colors duration-150"
+                  className="text-text-secondary hover:text-text-primary text-small font-medium transition-colors duration-150 px-2 py-1"
                 >
                   Sign in
                 </Link>
@@ -72,7 +90,7 @@ export default function LandingNavbar() {
               </div>
 
               {/* Mobile menu button */}
-              <div className="flex items-center md:hidden">
+              <div className="flex items-center lg:hidden">
                 <Disclosure.Button className="inline-flex items-center justify-center p-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface focus:outline-none transition-colors duration-150">
                   <span className="sr-only">Open main menu</span>
                   {open ? (
@@ -86,21 +104,42 @@ export default function LandingNavbar() {
           </Container>
 
           {/* Mobile menu */}
-          <Disclosure.Panel className="md:hidden border-t border-border-default bg-app">
+          <Disclosure.Panel className="lg:hidden border-t border-border-default bg-app">
             <div className="px-4 pt-2 pb-6 space-y-1 shadow-lg">
               <Disclosure.Button
                 as="a"
                 href="#features"
-                className="block px-3 py-3 rounded-md text-base font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors duration-150"
+                className="block px-3 py-2.5 rounded-md text-base font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors duration-150"
               >
                 Features
               </Disclosure.Button>
               <Disclosure.Button
                 as="a"
+                href="#how-it-works"
+                className="block px-3 py-2.5 rounded-md text-base font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors duration-150"
+              >
+                How it works
+              </Disclosure.Button>
+              <Disclosure.Button
+                as="a"
+                href="#industries"
+                className="block px-3 py-2.5 rounded-md text-base font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors duration-150"
+              >
+                Industries
+              </Disclosure.Button>
+              <Disclosure.Button
+                as="a"
                 href="#pricing"
-                className="block px-3 py-3 rounded-md text-base font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors duration-150"
+                className="block px-3 py-2.5 rounded-md text-base font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors duration-150"
               >
                 Pricing
+              </Disclosure.Button>
+              <Disclosure.Button
+                as="a"
+                href="#faq"
+                className="block px-3 py-2.5 rounded-md text-base font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors duration-150"
+              >
+                FAQ
               </Disclosure.Button>
               <div className="border-t border-border-default pt-4 pb-2 mt-4 space-y-3">
                 <Disclosure.Button
@@ -113,7 +152,7 @@ export default function LandingNavbar() {
                 <Disclosure.Button
                   as={Link}
                   to="/signup"
-                  className="block px-3 py-2 text-center rounded-xl text-base font-semibold bg-primary text-white hover:bg-primary-hover shadow-sm transition-all duration-150 active:scale-[0.98]"
+                  className="block px-3 py-2.5 text-center rounded-xl text-base font-semibold bg-primary text-white hover:bg-primary-hover shadow-sm transition-all duration-150 active:scale-[0.98]"
                 >
                   Get started
                 </Disclosure.Button>

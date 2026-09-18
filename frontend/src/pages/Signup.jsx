@@ -60,8 +60,8 @@ export default function Signup() {
       <div className="max-w-2xl w-full">
         <Card variant="elevated" className="p-8">
           <div className="text-center mb-8">
-            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-4 shadow-glow">
-              <img src="/react.svg" alt="Zana POS" className="w-8 h-8" />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+              <img src="/logo.svg" alt="Zana POS" className="w-12 h-12 rounded-xl" />
             </div>
             <h2 className="text-h2 font-bold text-text-primary">Create your account</h2>
             <p className="text-body text-text-secondary mt-1">Set up your account and register your business workspace</p>

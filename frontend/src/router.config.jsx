@@ -87,6 +87,8 @@ const SubCategories = safeLazy(() => import('./pages/SubCategories'));
 const Pos = safeLazy(() => import('./pages/CashierDashboard'));
 const CreateProduct = safeLazy(() => import('./pages/CreateProduct'));
 const LandingPage = safeLazy(() => import('./components/landing/LandingPage'));
+const TermsOfService = safeLazy(() => import('./pages/TermsOfService'));
+const PrivacyPolicy = safeLazy(() => import('./pages/PrivacyPolicy'));
 
 const HomeRoute = () => {
   const { token, user } = useSelector((state) => state.auth);
@@ -117,6 +119,14 @@ export const routes = [
       {
         path: 'signup',
         element: <Signup />
+      },
+      {
+        path: 'terms',
+        element: <TermsOfService />
+      },
+      {
+        path: 'privacy',
+        element: <PrivacyPolicy />
       },
       {
         path: 'toast-example',

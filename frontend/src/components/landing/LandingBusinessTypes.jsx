@@ -46,7 +46,7 @@ export default function LandingBusinessTypes() {
   ];
 
   return (
-    <section className="py-24 bg-surface-0">
+    <section id="industries" className="py-24 bg-surface-0">
       <Container>
         <SectionHeading 
           eyebrow="Industries" 
