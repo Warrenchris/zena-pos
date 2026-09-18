@@ -96,7 +96,11 @@ const initialState = {
 const shopSlice = createSlice({
   name: 'shop',
   initialState,
-  reducers: {},
+  reducers: {
+    clearShopError: (state) => {
+      state.error = null;
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(fetchMyShop.pending, (state) => {
@@ -169,4 +173,5 @@ const shopSlice = createSlice({
   },
 });
 
+export const { clearShopError } = shopSlice.actions;
 export default shopSlice.reducer;

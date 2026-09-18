@@ -3,7 +3,6 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const app = require('../src/app');
 const { User, Shop, Organization, OrganizationMembership } = require('../src/models');
-const { getPrivateKey } = require('../src/controllers/authController');
 
 describe('ITEM 1: Token Purpose Enforcement in Auth Middleware (SEC-03 completion)', () => {
   let org;
@@ -43,7 +42,7 @@ describe('ITEM 1: Token Purpose Enforcement in Auth Middleware (SEC-03 completio
       status: 'active'
     });
 
-    const privateKey = getPrivateKey();
+    const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
     // Mint genuine reset token (as forgotPassword does)
     const resetJti = crypto.randomUUID();

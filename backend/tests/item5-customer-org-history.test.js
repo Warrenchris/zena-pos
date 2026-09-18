@@ -12,7 +12,6 @@ const {
   SaleItem,
   OrganizationMembership
 } = require('../src/models');
-const { getPrivateKey } = require('../src/controllers/authController');
 
 describe('ITEM 5: Aggregate customer history across organization (ISO-03)', () => {
   let org;
@@ -30,7 +29,7 @@ describe('ITEM 5: Aggregate customer history across organization (ISO-03)', () =
 
   beforeAll(async () => {
     const timestamp = Date.now();
-    const privateKey = getPrivateKey();
+    const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
     org = await Organization.create({
       name: `Org CustTest ${timestamp}`,

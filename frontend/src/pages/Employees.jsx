@@ -17,6 +17,7 @@ import { employeesAPI, reportsAPI, activityAPI, usersAPI } from '../services/api
 import EmployeeDetailsCard from '../components/EmployeeDetailsCard';
 import useCurrency from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
+import { useQuota } from '../hooks/useEntitlement';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -28,6 +29,12 @@ import Modal from '../components/ui/Modal';
 export default function Employees() {
   const navigate = useNavigate();
   const { format: formatCurrency } = useCurrency();
+  const { allowed: hasUserQuota, current: userCount, limit: userLimit, loading: quotaLoading } = useQuota('users');
+  const isUserLocked = !quotaLoading && !hasUserQuota;
+  const userLockReason = !hasUserQuota
+    ? `Staff limit reached (${userCount}/${userLimit}). Upgrade to add more.`
+    : null;
+
   const toast = useToast();
   const showToast = (type, message, title) => {
     if (toast?.showToast) {
@@ -170,6 +177,10 @@ export default function Employees() {
   };
 
   const openCreate = () => {
+    if (isUserLocked) {
+      navigate('/billing');
+      return;
+    }
     setEditing(null);
     setQuotaError(null);
     setModalError('');
@@ -359,9 +370,19 @@ export default function Employees() {
         title="Employee Management"
         description="Manage staff accounts, roles, salaries, and performance activity."
         primaryAction={{
-          label: 'New Employee',
+          label: (
+            <span className="flex items-center gap-2" title={userLockReason || 'Add Employee'}>
+              <span>Add Employee</span>
+              {isUserLocked && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <SparklesIcon className="h-3 w-3" />
+                  Upgrade
+                </span>
+              )}
+            </span>
+          ),
           icon: PlusIcon,
-          onClick: openCreate
+          onClick: isUserLocked ? () => navigate('/billing') : openCreate
         }}
         secondaryActions={
           <div className="flex items-center gap-2 bg-surface-2/60 p-1 rounded-xl border border-border-default">
