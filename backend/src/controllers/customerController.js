@@ -6,6 +6,7 @@ const { parseDate } = require('../utils/dateUtils');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
+const Shop = require('../models/Shop');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 // Get all customers with pagination and search
@@ -52,8 +53,11 @@ exports.getAllCustomers = async (req, res) => {
 exports.getCustomerById = async (req, res) => {
   try {
     const { id } = req.params;
-    const organizationId = req.organizationId || req.user?.organizationId;
-    const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+    if (!organizationId && (req.shopId || req.user?.shopId)) {
+      const callerShop = await Shop.findByPk(req.shopId || req.user?.shopId, { attributes: ['organizationId'] });
+      organizationId = callerShop?.organizationId || null;
+    }
 
     const customer = await Customer.findOne({
       where: { id, active: true, organizationId }
@@ -63,17 +67,25 @@ exports.getCustomerById = async (req, res) => {
       return res.status(404).json({ error: 'Customer not found' });
     }
 
+    // Resolve all shops in the organization to aggregate customer history org-wide (ISO-03)
+    const orgShops = await Shop.findAll({
+      where: { organizationId },
+      attributes: ['id']
+    });
+    const orgShopIds = orgShops.map(s => s.id);
+    const shopCondition = orgShopIds.length > 0 ? { [Op.in]: orgShopIds } : -1;
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
     const activeSaleCondition = {
       customerId: customer.id,
-      shopId,
+      shopId: shopCondition,
       ...NON_CANCELLED_SALE_FILTER
     };
 
-    // 1. Spending Stats (live aggregate)
+    // 1. Spending Stats (live aggregate across all shops in org)
     const salesStats = await Sale.findOne({
       where: activeSaleCondition,
       attributes: [
@@ -91,9 +103,9 @@ exports.getCustomerById = async (req, res) => {
     const firstOrderDate = salesStats?.firstOrderDate || null;
     const lastOrderDate = salesStats?.lastOrderDate || customer.lastVisit || null;
 
-    // 2. Paginated Order History
+    // 2. Paginated Order History across all shops in org
     const { count: orderCount, rows: sales } = await Sale.findAndCountAll({
-      where: { customerId: customer.id, shopId },
+      where: { customerId: customer.id, shopId: shopCondition },
       order: [['createdAt', 'DESC']],
       limit,
       offset,

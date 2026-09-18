@@ -9,10 +9,11 @@ import {
   PlusIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline';
-import { fetchMyShop, fetchAccessibleShops } from '../../store/slices/shopSlice';
+import { fetchMyShop, fetchAccessibleShops, clearShopError } from '../../store/slices/shopSlice';
 import { switchActiveShop } from '../../store/slices/authSlice';
 import { useEntitlement, useQuota } from '../../hooks/useEntitlement';
 import CreateBranchModal from '../CreateBranchModal';
+import { useToast } from '../Toast';
 
 export default function BranchSwitcher({
   variant = 'topbar',
@@ -22,12 +23,26 @@ export default function BranchSwitcher({
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  let showToast = () => {};
+  try {
+    const toast = useToast();
+    if (toast?.showToast) {
+      showToast = toast.showToast;
+    }
+  } catch (_) {
+    showToast = (opts) => {
+      if (typeof window !== 'undefined' && window.showToast) {
+        window.showToast(opts);
+      }
+    };
+  }
+
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [switchingShopId, setSwitchingShopId] = useState(null);
 
   const user = useSelector((state) => state.auth?.user);
   const authShop = useSelector((state) => state.auth?.shop);
-  const { shop, loading, accessibleShops = [], switching = false } = useSelector(
+  const { shop, loading, accessibleShops = [], switching = false, error: shopError } = useSelector(
     (state) => state.shop || {}
   );
 
@@ -70,6 +85,23 @@ export default function BranchSwitcher({
       setSwitchingShopId(null);
     }
   };
+
+  useEffect(() => {
+    if (shopError) {
+      const message =
+        typeof shopError === 'string'
+          ? shopError
+          : shopError?.message || shopError?.error || 'Failed to perform shop operation.';
+
+      showToast({
+        type: 'error',
+        title: 'Branch Error',
+        message,
+      });
+
+      dispatch(clearShopError());
+    }
+  }, [shopError, dispatch]);
 
   const canCreateBranch = user?.orgRole === 'owner' || user?.orgRole === 'admin';
   const { allowed: hasMultiShop, loading: entitlementLoading } = useEntitlement('multi_shop');

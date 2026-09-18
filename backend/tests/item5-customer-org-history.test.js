@@ -133,6 +133,7 @@ describe('ITEM 5: Aggregate customer history across organization (ISO-03)', () =
 
     await SaleItem.create({
       saleId: saleA.id,
+      shopId: shopA.id,
       productId: product1.id,
       quantity: 2,
       price: 500,
@@ -152,6 +153,7 @@ describe('ITEM 5: Aggregate customer history across organization (ISO-03)', () =
 
     await SaleItem.create({
       saleId: saleB.id,
+      shopId: shopB.id,
       productId: product1.id,
       quantity: 3,
       price: 500,
@@ -160,6 +162,7 @@ describe('ITEM 5: Aggregate customer history across organization (ISO-03)', () =
 
     await SaleItem.create({
       saleId: saleB.id,
+      shopId: shopB.id,
       productId: product2.id,
       quantity: 1,
       price: 1500,
@@ -168,9 +171,10 @@ describe('ITEM 5: Aggregate customer history across organization (ISO-03)', () =
   });
 
   afterAll(async () => {
-    if (saleA) {
-      await SaleItem.destroy({ where: { saleId: [saleA.id, saleB.id] } }).catch(() => {});
-      await Sale.destroy({ where: { id: [saleA.id, saleB.id] } }).catch(() => {});
+    const saleIds = [saleA?.id, saleB?.id].filter(Boolean);
+    if (saleIds.length > 0) {
+      await SaleItem.destroy({ where: { saleId: saleIds } }).catch(() => {});
+      await Sale.destroy({ where: { id: saleIds } }).catch(() => {});
     }
     if (product1) await Product.destroy({ where: { id: [product1.id, product2.id] } }).catch(() => {});
     if (customer) await Customer.destroy({ where: { id: customer.id } }).catch(() => {});
