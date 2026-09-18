@@ -156,29 +156,20 @@ router.post('/verify', auth, async (req, res) => {
     // 2. Call external gateway verification (performed outside database transaction)
     const verificationResult = await cardPaymentService.verifyPayment(cleanRef);
 
+    let verificationError = null;
     let completeSale = null;
     let alreadyConfirmed = false;
 
     // 3. Pessimistic row-locked database settlement
     await sequelize.transaction(async (t) => {
-      const lockedPending = await PendingPayment.findOne({
-        where: { id: pendingPayment.id },
+      const lockedPending = await PendingPayment.findByPk(pendingPayment.id, {
         lock: t.LOCK.UPDATE,
-        transaction: t,
-        include: [{
-          model: Shop,
-          attributes: ['id', 'organizationId'],
-          include: [{
-            model: Organization,
-            attributes: ['id', 'currency']
-          }]
-        }]
+        transaction: t
       });
 
       if (!lockedPending) {
-        const err = new Error('Pending payment record not found.');
-        err.statusCode = 404;
-        throw err;
+        verificationError = { statusCode: 404, message: 'Pending payment record not found.' };
+        return;
       }
 
       // Concurrency check under exclusive row lock: Did another request settle this payment?
@@ -188,17 +179,15 @@ router.post('/verify', auth, async (req, res) => {
       }
 
       if (lockedPending.status === 'failed') {
-        const err = new Error('Payment already failed.');
-        err.statusCode = 400;
-        throw err;
+        verificationError = { statusCode: 400, message: 'Payment already failed.' };
+        return;
       }
 
       // Check external gateway verification success
       if (!verificationResult || !verificationResult.verified) {
         await lockedPending.update({ status: 'failed' }, { transaction: t });
-        const err = new Error('Card payment verification failed or payment declined.');
-        err.statusCode = 400;
-        throw err;
+        verificationError = { statusCode: 400, message: 'Card payment verification failed or payment declined.' };
+        return;
       }
 
       // FIN-01: Deterministic Monetary Amount Validation (exact cents comparison)
@@ -218,15 +207,14 @@ router.post('/verify', auth, async (req, res) => {
             }
           }
         }, { transaction: t });
-        const err = new Error('Payment amount mismatch: verified amount does not match expected payment amount.');
-        err.statusCode = 400;
-        throw err;
+        verificationError = { statusCode: 400, message: 'Payment amount mismatch: verified amount does not match expected payment amount.' };
+        return;
       }
 
       // FIN-01: Currency Validation
       const expectedCurrency = (
         lockedPending.saleData?.currency ||
-        lockedPending.Shop?.Organization?.currency ||
+        pendingPayment.Shop?.Organization?.currency ||
         'KES'
       ).toUpperCase();
       const gatewayCurrency = String(verificationResult.currency || '').toUpperCase();
@@ -244,14 +232,14 @@ router.post('/verify', auth, async (req, res) => {
             }
           }
         }, { transaction: t });
-        const err = new Error('Payment currency mismatch: verified currency does not match expected payment currency.');
-        err.statusCode = 400;
-        throw err;
+        verificationError = { statusCode: 400, message: 'Payment currency mismatch: verified currency does not match expected payment currency.' };
+        return;
       }
 
       // Settle sale and update inventory atomically
       const saleData = lockedPending.saleData || {};
       saleData.paymentReference = verificationResult.gatewayRef || cleanRef;
+      saleData.idempotencyKey = cleanRef;
       saleData.paymentProvider = 'card';
       saleData.paymentNotes = `Card payment verified. Gateway Ref: ${verificationResult.gatewayRef || cleanRef}`;
 
@@ -275,6 +263,10 @@ router.post('/verify', auth, async (req, res) => {
         saleData
       }, { transaction: t });
     });
+
+    if (verificationError) {
+      return res.status(verificationError.statusCode).json({ error: verificationError.message });
+    }
 
     if (alreadyConfirmed) {
       return res.status(200).json({
