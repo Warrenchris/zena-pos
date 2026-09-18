@@ -8,6 +8,7 @@ const Organization = require('../models/Organization');
 
 const STATUS_CACHE_TTL = 300; // 5 minutes for active status
 const TOMBSTONE_CACHE_TTL = 86400; // 24 hours for inactive/suspended status
+const inMemoryCutoffs = new Map();
 
 const tokenRevocationService = {
   /**
@@ -44,6 +45,94 @@ const tokenRevocationService = {
       logger.warn(`[AUTH-01] Redis error checking revoked token ${jti}:`, err.message);
     }
     return false;
+  },
+
+  /**
+   * Revoke all existing session tokens for a user or employee (AUTH-02, AUTH-03).
+   * Sets a cutoff timestamp (in seconds). Any token issued at or before this cutoff is invalid.
+   */
+  async revokeAllUserTokens(id, isEmployee, cutoff = null) {
+    if (!id) return;
+    const cutoffSec = cutoff !== null ? Number(cutoff) : Math.floor(Date.now() / 1000);
+    const key = `revoked_tokens_cutoff:${isEmployee ? 'employee' : 'user'}:${id}`;
+
+    // In-memory cache for fallback & tests
+    inMemoryCutoffs.set(key, cutoffSec);
+
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.setex(key, TOMBSTONE_CACHE_TTL, String(cutoffSec));
+        logger.info(`[AUTH-02/03] All tokens for ${isEmployee ? 'employee' : 'user'} ${id} revoked before cutoff ${cutoffSec}.`);
+      }
+    } catch (err) {
+      logger.warn(`[AUTH-02/03] Redis error revoking user tokens for ${id}:`, err.message);
+    }
+  },
+
+  /**
+   * Check if a token for a user/employee was issued before the revocation cutoff (AUTH-02, AUTH-03).
+   */
+  async isUserTokenRevoked(id, isEmployee, iat) {
+    if (!id || iat === undefined || iat === null) return false;
+    const key = `revoked_tokens_cutoff:${isEmployee ? 'employee' : 'user'}:${id}`;
+    let cutoff = null;
+
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        const val = await redisClient.get(key);
+        if (val !== null && val !== undefined) {
+          cutoff = Number(val);
+        }
+      }
+    } catch (err) {
+      logger.warn(`[AUTH-02/03] Redis error checking user token cutoff for ${id}:`, err.message);
+    }
+
+    // Fall back to in-memory cache if Redis didn't return a value
+    if (cutoff === null && inMemoryCutoffs.has(key)) {
+      cutoff = inMemoryCutoffs.get(key);
+    }
+
+    if (cutoff !== null) {
+      return Number(iat) <= cutoff;
+    }
+    return false;
+  },
+
+  /**
+   * Get the current revocation cutoff timestamp for a user/employee, if any.
+   */
+  async getUserTokenCutoff(id, isEmployee) {
+    if (!id) return null;
+    const key = `revoked_tokens_cutoff:${isEmployee ? 'employee' : 'user'}:${id}`;
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        const val = await redisClient.get(key);
+        if (val !== null && val !== undefined) return Number(val);
+      }
+    } catch (err) {
+      logger.warn(`[AUTH-02/03] Redis error getting token cutoff for ${id}:`, err.message);
+    }
+    if (inMemoryCutoffs.has(key)) {
+      return inMemoryCutoffs.get(key);
+    }
+    return null;
+  },
+
+  /**
+   * Clear in-memory and Redis cutoff (primarily for testing cleanup).
+   */
+  async clearUserTokenCutoff(id, isEmployee) {
+    if (!id) return;
+    const key = `revoked_tokens_cutoff:${isEmployee ? 'employee' : 'user'}:${id}`;
+    inMemoryCutoffs.delete(key);
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.del(key);
+      }
+    } catch (err) {
+      // ignore
+    }
   },
 
   /**
