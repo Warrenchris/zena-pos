@@ -12,6 +12,7 @@ const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 const entitlementService = require('../services/entitlementService');
 const { sendUpgradePrompt } = require('../utils/upgradePrompt');
 const staffCreationService = require('../services/staffCreationService');
+const tokenRevocationService = require('../services/tokenRevocationService');
 
 // Get all employees and shop staff
 exports.getAllEmployees = async (req, res) => {
@@ -334,6 +335,11 @@ exports.updateEmployee = async (req, res) => {
     }
 
     await transaction.commit();
+
+    if (req.body.status) {
+      await tokenRevocationService.setUserStatus(employee.id, true, req.body.status);
+    }
+
     res.json(employee);
   } catch (error) {
     await transaction.rollback();
@@ -367,6 +373,8 @@ exports.deleteEmployee = async (req, res) => {
 
     await employee.destroy({ transaction });
     await transaction.commit();
+
+    await tokenRevocationService.setUserStatus(employee.id, true, 'inactive');
 
     res.status(204).send();
   } catch (error) {

@@ -55,6 +55,11 @@ Sale.hasMany(SaleItem, { foreignKey: 'saleId' });
 Product.hasMany(SaleItem, { foreignKey: 'productId' });
 
 Expense.belongsTo(User, { as: 'recordedBy', foreignKey: 'userId' });
+Expense.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+User.hasMany(Expense, { foreignKey: 'userId' });
+Employee.hasMany(Expense, { foreignKey: 'employeeId' });
+Expense.belongsTo(Organization, { foreignKey: 'organizationId' });
+Organization.hasMany(Expense, { foreignKey: 'organizationId' });
 
 // Shop associations: each user belongs to a shop; shop has many users
 const UserModel = User; // keep naming explicit
@@ -112,6 +117,11 @@ Employee.hasMany(SalePayment, { foreignKey: 'processedBy', as: 'payments' });
 
 // Invoice associations
 Invoice.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+Invoice.belongsTo(Employee, { foreignKey: 'employeeId', as: 'employee' });
+Invoice.belongsTo(Organization, { foreignKey: 'organizationId', as: 'organization' });
+User.hasMany(Invoice, { foreignKey: 'userId' });
+Employee.hasMany(Invoice, { foreignKey: 'employeeId' });
+Organization.hasMany(Invoice, { foreignKey: 'organizationId' });
 Invoice.belongsTo(Shop, { foreignKey: 'shopId', as: 'shop' });
 Invoice.belongsTo(Sale, { foreignKey: 'saleId', as: 'sale' });
 Sale.hasMany(Invoice, { foreignKey: 'saleId', as: 'invoices' });

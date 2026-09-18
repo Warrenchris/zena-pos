@@ -52,6 +52,30 @@ const Expense = sequelize.define('Expense', {
       model: 'Shops',
       key: 'id'
     }
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'Users',
+      key: 'id'
+    }
+  },
+  employeeId: {
+    type: DataTypes.STRING(36),
+    allowNull: true,
+    references: {
+      model: 'Employees',
+      key: 'id'
+    }
+  },
+  organizationId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'Organizations',
+      key: 'id'
+    }
   }
 });
 

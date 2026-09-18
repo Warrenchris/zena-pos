@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const Expense = require('../models/Expense');
 const User = require('../models/User');
+const Employee = require('../models/Employee');
 const sequelize = require('../config/database');
 const { parseDate } = require('../utils/dateUtils');
 
@@ -27,12 +28,20 @@ exports.getAllExpenses = async (req, res) => {
 
     const expenses = await Expense.findAndCountAll({
       where: whereClause,
-      include: [{
-        model: User,
-        as: 'recordedBy',
-        attributes: ['id', 'name', 'email'],
-        where: { shopId: req.user.shopId }
-      }],
+      include: [
+        {
+          model: User,
+          as: 'recordedBy',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        },
+        {
+          model: Employee,
+          as: 'employee',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: false
+        }
+      ],
       order: [['date', 'DESC']],
       limit,
       offset
@@ -54,12 +63,20 @@ exports.getExpenseById = async (req, res) => {
   try {
     const expense = await Expense.findOne({
       where: { id: req.params.id, shopId: req.user.shopId },
-      include: [{
-        model: User,
-        as: 'recordedBy',
-        attributes: ['id', 'name', 'email'],
-        where: { shopId: req.user.shopId }
-      }]
+      include: [
+        {
+          model: User,
+          as: 'recordedBy',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        },
+        {
+          model: Employee,
+          as: 'employee',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: false
+        }
+      ]
     });
 
     if (!expense) {
@@ -90,6 +107,10 @@ exports.createExpense = async (req, res) => {
       notes
     } = req.body;
 
+    const resolvedUserId = !req.user.isEmployee ? req.user.id : null;
+    const resolvedEmployeeId = req.user.isEmployee ? req.user.id : null;
+    const resolvedOrgId = req.organizationId || req.user?.organizationId || null;
+
     const expense = await Expense.create({
       description,
       amount,
@@ -98,16 +119,27 @@ exports.createExpense = async (req, res) => {
       paymentMethod,
       reference,
       notes,
-      userId: req.user.id,
+      userId: resolvedUserId,
+      employeeId: resolvedEmployeeId,
+      organizationId: resolvedOrgId,
       shopId: req.user.shopId
     });
 
     const expenseWithUser = await Expense.findByPk(expense.id, {
-      include: [{
-        model: User,
-        as: 'recordedBy',
-        attributes: ['id', 'name', 'email']
-      }]
+      include: [
+        {
+          model: User,
+          as: 'recordedBy',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        },
+        {
+          model: Employee,
+          as: 'employee',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: false
+        }
+      ]
     });
 
     res.status(201).json(expenseWithUser);

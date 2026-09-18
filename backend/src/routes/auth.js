@@ -64,6 +64,7 @@ router.post(
 
 router.get('/profile', auth, authController.getProfile);
 router.post('/change-password', auth, authController.changePassword);
+router.post('/logout', auth, authController.logout);
 router.post(
   '/switch-shop',
   auth,

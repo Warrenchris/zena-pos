@@ -21,6 +21,14 @@ Invoice.init({
     type: DataTypes.INTEGER,
     allowNull: true,
   },
+  employeeId: {
+    type: DataTypes.STRING(36),
+    allowNull: true,
+  },
+  organizationId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   shopId: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -92,6 +100,14 @@ Invoice.associate = (models) => {
   Invoice.belongsTo(models.User, {
     foreignKey: 'userId',
     as: 'user'
+  });
+  Invoice.belongsTo(models.Employee, {
+    foreignKey: 'employeeId',
+    as: 'employee'
+  });
+  Invoice.belongsTo(models.Organization, {
+    foreignKey: 'organizationId',
+    as: 'organization'
   });
   Invoice.belongsTo(models.Shop, {
     foreignKey: 'shopId',

@@ -20,7 +20,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@ant-design/charts": "^2.6.4",
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
@@ -35,10 +34,9 @@
     "multer": "^2.2.0",
     "mysql2": "^3.15.0",
     "node-cache": "^5.1.2",
-    "nodemailer": "^6.9.7",
+    "nodemailer": "^6.10.0",
     "pdfkit": "^0.14.0",
-    "sequelize": "^6.37.7",
-    "sqlite3": "^5.1.7"
+    "sequelize": "^6.37.7"
   },
   "devDependencies": {
     "eslint": "^9.35.0",

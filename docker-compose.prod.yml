@@ -1,0 +1,120 @@
+# Production Docker Compose for Zana POS
+# Usage: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+services:
+  # MySQL Production Database
+  mysql:
+    image: mysql:8.0
+    container_name: zana-mysql-prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-zana_pos}
+      MYSQL_USER: ${DB_USER:-zana_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_prod_data:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=caching_sha2_password
+      --max_connections=300
+      --innodb_buffer_pool_size=512M
+      --innodb_log_file_size=128M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - zana-internal-net
+
+  # Redis Production Cache
+  redis:
+    image: redis:7-alpine
+    container_name: zana-redis-prod
+    volumes:
+      - redis_prod_data:/data
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-zana_secure_redis_pwd}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-zana_secure_redis_pwd}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - zana-internal-net
+
+  # Backend Production Service (Node.js)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: zana-backend-prod
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-zana_pos}
+      DB_USER: ${DB_USER:-zana_app}
+      DB_PASS: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-zana_secure_redis_pwd}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-2h}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8000}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - zana-internal-net
+
+  # Frontend Production Service (Static Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: zana-frontend-prod
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - zana-internal-net
+
+volumes:
+  mysql_prod_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+
+networks:
+  zana-internal-net:
+    driver: bridge

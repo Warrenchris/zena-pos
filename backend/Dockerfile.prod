@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+FROM node:18-alpine AS base
+
+# Install necessary build tools for native addons if needed
+RUN apk add --no-cache python3 make g++ wget curl
+
+WORKDIR /app
+
+# Install production dependencies only
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Copy source code
+COPY . .
+
+# Set environment
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Use non-root node user
+USER node
+
+EXPOSE 5000
+
+# Container healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO- http://localhost:5000/health || exit 1
+
+# Start production server directly with node
+CMD ["node", "src/server.js"]

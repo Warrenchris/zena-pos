@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Invoice, InvoiceItem, Sale, SaleItem, User, Shop, Product } = require('../models');
+const { Invoice, InvoiceItem, Sale, SaleItem, User, Employee, Shop, Product } = require('../models');
 const PDFDocument = require('pdfkit');
 const { formatCurrency } = require('../utils/currency');
 
@@ -23,7 +23,11 @@ exports.getInvoices = async (req, res) => {
     const offset = (page - 1) * limit;
     const { count, rows } = await Invoice.findAndCountAll({
       where,
-      include: [ { model: User, as: 'user' }, { model: Shop, as: 'shop' } ],
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
+        { model: Employee, as: 'employee', attributes: ['id', 'firstName', 'lastName', 'email'] },
+        { model: Shop, as: 'shop' }
+      ],
       order: [['createdAt','DESC']],
       limit,
       offset
@@ -41,7 +45,8 @@ exports.getInvoiceById = async (req, res) => {
     const invoice = await Invoice.findOne({
       where: { id: req.params.id, ...shopWhere(req) },
       include: [
-        { model: User, as: 'user' },
+        { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
+        { model: Employee, as: 'employee', attributes: ['id', 'firstName', 'lastName', 'email'] },
         { model: Shop, as: 'shop' },
         { model: InvoiceItem, as: 'items', include: [{ model: Product, as: 'product' }] },
         { model: Sale, as: 'sale' },
@@ -70,11 +75,17 @@ exports.createInvoice = async (req, res) => {
     const discount = sale.discount ?? 0;
     const total = sale.total ?? 0;
 
+    const resolvedUserId = !req.user.isEmployee ? req.user.id : null;
+    const resolvedEmployeeId = req.user.isEmployee ? req.user.id : null;
+    const resolvedOrgId = req.organizationId || req.user?.organizationId || sale.organizationId || null;
+
     // Create Invoice
     const invoice = await Invoice.create({
       invoiceNumber,
       saleId,
-      userId: req.user.id,
+      userId: resolvedUserId,
+      employeeId: resolvedEmployeeId,
+      organizationId: resolvedOrgId,
       shopId: req.user.shopId,
       subtotal,
       tax,
@@ -105,12 +116,14 @@ exports.createInvoice = async (req, res) => {
     const result = await Invoice.findOne({
       where: { id: invoice.id },
       include: [
-        { model: User, as: 'user' },
+        { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
+        { model: Employee, as: 'employee', attributes: ['id', 'firstName', 'lastName', 'email'] },
         { model: Shop, as: 'shop' },
         { model: InvoiceItem, as: 'items', include: [{ model: Product, as: 'product' }] },
         { model: Sale, as: 'sale' },
       ],
     });
+
     res.status(201).json(result);
   } catch (error) {
     console.error('Error creating invoice:', error);

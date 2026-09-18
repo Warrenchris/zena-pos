@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const tokenRevocationService = require('../services/tokenRevocationService');
 
 const auth = async (req, res, next) => {
   try {
@@ -11,6 +12,23 @@ const auth = async (req, res, next) => {
 
     const publicKey = (process.env.JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n');
     const decoded = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+
+    // 1. Check if token JTI has been explicitly revoked (AUTH-01)
+    if (decoded.jti) {
+      const isRevoked = await tokenRevocationService.isTokenRevoked(decoded.jti);
+      if (isRevoked) {
+        return res.status(401).json({ error: 'Token has been revoked. Please log in again.' });
+      }
+    }
+
+    // 2. Check active user/employee status (AUTH-01)
+    if (decoded.id) {
+      const userStatus = await tokenRevocationService.getUserStatus(decoded.id, !!decoded.isEmployee);
+      if (userStatus === 'inactive') {
+        return res.status(401).json({ error: 'Account is deactivated or terminated.' });
+      }
+    }
+
     req.user = decoded;
     req.shopId = decoded.shopId;
 
@@ -26,6 +44,32 @@ const auth = async (req, res, next) => {
       }
     } else {
       req.organizationId = null;
+    }
+
+    // 3. Check organization suspension status (AUTH-01)
+    if (req.organizationId) {
+      const orgStatus = await tokenRevocationService.getOrgStatus(req.organizationId);
+      if (orgStatus === 'suspended' || orgStatus === 'canceled') {
+        const fullPath = ((req.baseUrl || '') + (req.path || '')).toLowerCase();
+        const origUrl = (req.originalUrl || '').split('?')[0].toLowerCase();
+        const isBillingRecovery = fullPath.startsWith('/api/billing') || 
+                                  origUrl.startsWith('/api/billing') ||
+                                  fullPath.startsWith('/api/organizations') ||
+                                  origUrl.startsWith('/api/organizations') ||
+                                  fullPath.startsWith('/api/auth/logout') ||
+                                  origUrl.startsWith('/api/auth/logout') ||
+                                  fullPath.startsWith('/api/auth/profile') ||
+                                  origUrl.startsWith('/api/auth/profile');
+
+        // Only allow owner/admin to access billing recovery endpoints when organization is suspended
+        if (!isBillingRecovery || (decoded.role !== 'admin' && decoded.orgRole !== 'owner')) {
+          return res.status(403).json({
+            error: 'Organization subscription is suspended. Contact the organization owner for renewal.',
+            code: 'ORGANIZATION_SUSPENDED',
+            isSuspended: true
+          });
+        }
+      }
     }
 
     // If token is expired, return 401

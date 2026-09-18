@@ -4,6 +4,7 @@ const { validationResult } = require('express-validator');
 const { User, Employee, OrganizationMembership, sequelize } = require('../models');
 const staffCreationService = require('../services/staffCreationService');
 const { sendUpgradePrompt } = require('../utils/upgradePrompt');
+const tokenRevocationService = require('../services/tokenRevocationService');
 
 /**
  * Legacy userController.
@@ -130,6 +131,11 @@ exports.updateRole = async (req, res) => {
       }
 
       await transaction.commit();
+
+      if (active !== undefined) {
+        await tokenRevocationService.setUserStatus(emp.id, true, active ? 'active' : 'inactive');
+      }
+
       return res.json({
         id: emp.id,
         name: `${emp.firstName} ${emp.lastName}`,
@@ -167,6 +173,11 @@ exports.updateRole = async (req, res) => {
     }
 
     await transaction.commit();
+
+    if (active !== undefined) {
+      await tokenRevocationService.setUserStatus(user.id, false, active ? 'active' : 'inactive');
+    }
+
     res.json(user);
   } catch (err) {
     await transaction.rollback();

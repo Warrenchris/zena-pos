@@ -8,10 +8,12 @@ const emailService = require('../services/emailService');
 
 // Helper to retrieve private key dynamically
 const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+const crypto = require('crypto');
 const Shop = require('../models/Shop');
 const { sequelize, Organization, OrganizationMembership, ShopAccess, Subscription, Plan } = require('../models');
 const { buildAuthPayload } = require('../utils/serializeAuthResponse');
 const logger = require('../utils/logger');
+const tokenRevocationService = require('../services/tokenRevocationService');
 
 exports.register = async (req, res) => {
   try {
@@ -99,13 +101,15 @@ exports.register = async (req, res) => {
       return { user: createdUser, createdShop: newShop, createdOrg };
     });
 
+    const jti = crypto.randomUUID();
     const token = jwt.sign(
       { 
         id: user.id, 
         role: user.role, 
         shopId: createdShop?.id,
         organizationId: createdOrg?.id || createdShop?.organizationId || null,
-        isEmployee: false
+        isEmployee: false,
+        jti
       },
       getPrivateKey(),
       { 
@@ -186,13 +190,15 @@ exports.login = async (req, res) => {
     }
 
       try {
+        const jti = crypto.randomUUID();
         const token = jwt.sign(
           { 
             id: user.id, 
             role: user.role, 
             shopId: user.shopId,
             organizationId: user.Shop?.organizationId || null,
-            isEmployee: !!user.isEmployee
+            isEmployee: !!user.isEmployee,
+            jti
           },
           getPrivateKey(),
           { 
@@ -270,8 +276,9 @@ exports.forgotPassword = async (req, res) => {
       return res.json({ message: 'If the email exists, a reset link has been sent.' });
     }
     // Create a short-lived token
+    const jti = crypto.randomUUID();
     const token = jwt.sign(
-      { id: user.id },
+      { id: user.id, purpose: 'password_reset', jti },
       getPrivateKey(),
       { 
         algorithm: 'RS256',
@@ -300,13 +307,35 @@ exports.resetPassword = async (req, res) => {
   try {
     const { token, password } = req.body;
     const decoded = jwt.verify(token, getPrivateKey(), { algorithms: ['RS256'] });
+    if (decoded.purpose !== 'password_reset') {
+      return res.status(400).json({ error: 'Invalid token purpose' });
+    }
+    if (decoded.jti && await tokenRevocationService.isTokenRevoked(decoded.jti)) {
+      return res.status(400).json({ error: 'Reset token has already been used or revoked' });
+    }
     const user = await User.findByPk(decoded.id);
     if (!user) return res.status(400).json({ error: 'Invalid token' });
     user.password = password;
     await user.save();
+    if (decoded.jti) {
+      await tokenRevocationService.revokeToken(decoded.jti, decoded.exp);
+    }
     return res.json({ message: 'Password updated successfully' });
   } catch (error) {
     return res.status(400).json({ error: 'Invalid or expired token' });
+  }
+};
+
+// Revoke access token on logout
+exports.logout = async (req, res) => {
+  try {
+    if (req.user?.jti) {
+      await tokenRevocationService.revokeToken(req.user.jti, req.user.exp);
+    }
+    return res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    logger.error('Logout error:', err);
+    return res.status(500).json({ error: 'Failed to logout' });
   }
 };
 
@@ -487,13 +516,15 @@ exports.switchShop = async (req, res) => {
     // ZERO DATABASE WRITES — hard design invariant (no create, update, delete)
 
     // 4. Mint new RS256 JWT with the same claim shape as login
+    const jti = crypto.randomUUID();
     const token = jwt.sign(
       {
         id: req.user.id,
         role: req.user.role,
         shopId: targetShopId,
         organizationId: orgId,
-        isEmployee: !!req.user.isEmployee
+        isEmployee: !!req.user.isEmployee,
+        jti
       },
       getPrivateKey(),
       {
