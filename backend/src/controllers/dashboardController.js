@@ -34,16 +34,20 @@ const dashboardController = {
       const { start, end } = getValidatedDates(req);
       const shopId = req.user.shopId;
 
-      const [salesStats, customerStats] = await Promise.all([
-        Sale.findAll({
+      const [currentSaleMetrics, customerCount] = await Promise.all([
+        Sale.findOne({
           where: {
             shopId,
             ...NON_CANCELLED_SALE_FILTER,
             createdAt: { [Op.between]: [start, end] }
           },
-          include: [{ model: SaleItem }]
+          attributes: [
+            [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+            [sequelize.fn('SUM', sequelize.col('total')), 'total']
+          ],
+          raw: true
         }),
-        Customer.findAndCountAll({
+        Customer.count({
           where: {
             shopId,
             createdAt: { [Op.between]: [start, end] }
@@ -51,45 +55,47 @@ const dashboardController = {
         })
       ]);
 
-      // Calculate sales metrics
-      const totalIncome = salesStats.reduce((sum, sale) =>
-        sum + sale.total, 0);
-
-      const totalTransactions = salesStats.length;
+      // Calculate sales metrics from aggregates
+      const totalIncome = Number(currentSaleMetrics?.total || 0);
+      const totalTransactions = Number(currentSaleMetrics?.count || 0);
 
       // Calculate previous period metrics for comparison
       const prevStart = new Date(start);
       prevStart.setDate(prevStart.getDate() - (end - start) / (1000 * 60 * 60 * 24));
 
-      const prevSales = await Sale.findAll({
-        where: {
-          shopId,
-          ...NON_CANCELLED_SALE_FILTER,
-          createdAt: { [Op.between]: [prevStart, start] }
-        }
-      });
+      const [prevSaleMetrics, prevCustomerCount] = await Promise.all([
+        Sale.findOne({
+          where: {
+            shopId,
+            ...NON_CANCELLED_SALE_FILTER,
+            createdAt: { [Op.between]: [prevStart, start] }
+          },
+          attributes: [
+            [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+            [sequelize.fn('SUM', sequelize.col('total')), 'total']
+          ],
+          raw: true
+        }),
+        Customer.count({
+          where: {
+            shopId,
+            createdAt: { [Op.between]: [prevStart, start] }
+          }
+        })
+      ]);
 
-      const prevIncome = prevSales.reduce((sum, sale) =>
-        sum + sale.total, 0);
-
-      const prevTransactions = prevSales.length;
+      const prevIncome = Number(prevSaleMetrics?.total || 0);
+      const prevTransactions = Number(prevSaleMetrics?.count || 0);
 
       // Calculate growth percentages
-      const prevCustomerCount = await Customer.count({
-        where: {
-          shopId,
-          createdAt: { [Op.between]: [prevStart, start] }
-        }
-      });
-
       const incomeGrowth = calculateGrowth(totalIncome, prevIncome);
       const transactionGrowth = calculateGrowth(totalTransactions, prevTransactions);
-      const customerGrowth = calculateGrowth(customerStats.count, prevCustomerCount);
+      const customerGrowth = calculateGrowth(customerCount, prevCustomerCount);
 
       res.json({
         totalIncome,
         totalSales: totalTransactions,
-        totalCustomers: customerStats.count,
+        totalCustomers: customerCount,
         totalTransactions,
         incomeGrowth,
         salesGrowth: transactionGrowth,
@@ -118,7 +124,9 @@ const dashboardController = {
           ...NON_CANCELLED_SALE_FILTER,
           createdAt: { [Op.between]: [start, end] }
         },
-        order: [['createdAt', 'ASC']]
+        attributes: ['id', 'createdAt', 'total'],
+        order: [['createdAt', 'ASC']],
+        raw: true
       });
 
       const revenueData = sales.reduce((acc, sale) => {

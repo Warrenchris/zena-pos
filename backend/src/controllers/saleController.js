@@ -277,7 +277,7 @@ exports.createSale = async (req, res) => {
   }
 };
 
-exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
+exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existingTransaction = null) => {
   let organizationId = orgId || user?.organizationId || saleData.organizationId;
   if (!organizationId && shopId) {
     const Shop = require('../models/Shop');
@@ -364,7 +364,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
     }
   }
 
-  const saleResult = await sequelize.transaction(async (t) => {
+  const executeSaleCreation = async (t) => {
     let subtotal = 0;
     const lockedProducts = [];
     const saleItems = [];
@@ -622,7 +622,11 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null) => {
     }
 
     return { sale, invoiceNumber, total };
-  });
+  };
+
+  const saleResult = existingTransaction
+    ? await executeSaleCreation(existingTransaction)
+    : await sequelize.transaction(executeSaleCreation);
 
   const { sale, invoiceNumber, total } = saleResult;
 
@@ -853,9 +857,9 @@ exports.getSalesStatistics = async (req, res) => {
 
     console.log('Where clause:', whereClause);
 
-    // First, let's check if there are any sales at all
-    const allSales = await Sale.findAll({ where: { shopId: req.user.shopId } });
-    console.log('All sales for shopId', req.user.shopId, ':', allSales.length);
+    // Check count of total sales for shop
+    const allSalesCount = await Sale.count({ where: { shopId: req.user.shopId } });
+    console.log('All sales for shopId', req.user.shopId, ':', allSalesCount);
 
     const [totalSales, totalRevenue, averageTicket] = await Promise.all([
       Sale.count({ where: whereClause }),
