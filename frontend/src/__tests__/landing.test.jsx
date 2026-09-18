@@ -88,9 +88,9 @@ describe('Zana POS Landing Page', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/99.9%/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/99.9%/i)[0]).toBeInTheDocument();
     expect(screen.getByText(/< 2.1s/i)).toBeInTheDocument();
     expect(screen.getByText(/M-Pesa STK Integration/i)).toBeInTheDocument();
-    expect(screen.getByText(/Safaricom M-Pesa STK Push/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Safaricom M-Pesa STK Push/i)[0]).toBeInTheDocument();
   });
 });
