@@ -26,6 +26,18 @@ const auth = async (req, res, next) => {
       }
     }
 
+    // 1b. Check if token was issued prior to password change/reset cutoff (AUTH-02, AUTH-03)
+    if (decoded.id && decoded.iat) {
+      const isRevokedByCutoff = await tokenRevocationService.isUserTokenRevoked(
+        decoded.id,
+        !!decoded.isEmployee,
+        decoded.iat
+      );
+      if (isRevokedByCutoff) {
+        return res.status(401).json({ error: 'Token has been revoked due to password change. Please log in again.' });
+      }
+    }
+
     // 2. Check active user/employee status (AUTH-01)
     if (decoded.id) {
       const userStatus = await tokenRevocationService.getUserStatus(decoded.id, !!decoded.isEmployee);

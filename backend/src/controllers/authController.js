@@ -191,6 +191,9 @@ exports.login = async (req, res) => {
 
       try {
         const jti = crypto.randomUUID();
+        const cutoff = await tokenRevocationService.getUserTokenCutoff(user.id, !!user.isEmployee);
+        const nowSec = Math.floor(Date.now() / 1000);
+        const iat = cutoff !== null ? Math.max(nowSec, cutoff + 1) : nowSec;
         const token = jwt.sign(
           { 
             id: user.id, 
@@ -198,7 +201,8 @@ exports.login = async (req, res) => {
             shopId: user.shopId,
             organizationId: user.Shop?.organizationId || null,
             isEmployee: !!user.isEmployee,
-            jti
+            jti,
+            iat
           },
           getPrivateKey(),
           { 
@@ -313,13 +317,29 @@ exports.resetPassword = async (req, res) => {
     if (decoded.jti && await tokenRevocationService.isTokenRevoked(decoded.jti)) {
       return res.status(400).json({ error: 'Reset token has already been used or revoked' });
     }
-    const user = await User.findByPk(decoded.id);
-    if (!user) return res.status(400).json({ error: 'Invalid token' });
-    user.password = password;
-    await user.save();
+
+    let account = null;
+    let isEmployee = !!decoded.isEmployee;
+    if (isEmployee) {
+      account = await Employee.findByPk(decoded.id);
+    } else {
+      account = await User.findByPk(decoded.id);
+      if (!account) {
+        account = await Employee.findByPk(decoded.id);
+        if (account) isEmployee = true;
+      }
+    }
+
+    if (!account) return res.status(400).json({ error: 'Invalid token' });
+    account.password = password;
+    await account.save();
     if (decoded.jti) {
       await tokenRevocationService.revokeToken(decoded.jti, decoded.exp);
     }
+
+    // AUTH-03: Invalidate all existing active sessions for this account upon password reset
+    await tokenRevocationService.revokeAllUserTokens(account.id, isEmployee);
+
     return res.json({ message: 'Password updated successfully' });
   } catch (error) {
     return res.status(400).json({ error: 'Invalid or expired token' });
@@ -443,6 +463,9 @@ exports.changePassword = async (req, res) => {
     // Set new password (beforeUpdate hook will hash it)
     account.password = newPassword;
     await account.save();
+
+    // AUTH-02: Invalidate all existing active sessions for this account upon password change
+    await tokenRevocationService.revokeAllUserTokens(userId, isEmployee);
 
     return res.json({
       success: true,
