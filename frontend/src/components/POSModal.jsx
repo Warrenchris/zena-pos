@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { XMarkIcon, ShoppingBagIcon, TrashIcon, UserIcon, CreditCardIcon, BanknotesIcon } from '@heroicons/react/24/outline';
 import { createSale } from '../store/slices/salesSlice';
@@ -9,6 +10,7 @@ import useCurrency from '../hooks/useCurrency';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 
 export default function POSModal({ products = [], customers = [], onClose }) {
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const { format } = useCurrency();
   const [cart, setCart] = useState([]);
@@ -193,7 +195,20 @@ export default function POSModal({ products = [], customers = [], onClose }) {
 
           {/* Products Grid */}
           <div className="flex-1 overflow-y-auto scrollbar-thin grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 pr-1">
-            {filteredProducts.length === 0 ? (
+            {products.length === 0 ? (
+              <div className="col-span-full py-12 text-center flex flex-col items-center justify-center">
+                <p className="text-text-muted mb-3">No products yet — add your first product to start selling</p>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (onClose) onClose();
+                    navigate('/products/create');
+                  }}
+                >
+                  Add Product
+                </Button>
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <div className="col-span-full py-12 text-center text-text-muted">
                 No matching products found
               </div>
