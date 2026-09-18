@@ -157,9 +157,17 @@ api.interceptors.response.use(
       
       // Only redirect to login if we get multiple 401s
       // or if it's a login-related endpoint
-      const isAuthEndpoint = error.config.url.includes('/auth/');
+      const isAuthEndpoint = error.config?.url ? error.config.url.includes('/auth/') : false;
+      const hasAuthHeader = Boolean(
+        error.config?.headers?.Authorization ||
+        (typeof error.config?.headers?.get === 'function' && error.config.headers.get('Authorization'))
+      );
+
       if (unauthorized401Count >= MAX_401_COUNT || isAuthEndpoint) {
         localStorage.removeItem('token');
+        if (hasAuthHeader) {
+          localStorage.setItem('sessionExpiredMessage', 'Your session expired — please log in again.');
+        }
         window.location.href = '/login';
       }
     }

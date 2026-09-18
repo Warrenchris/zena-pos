@@ -40,6 +40,19 @@ export default function Login() {
 
   const [loginError, setLoginError] = useState(null)
 
+  // Check for session expired message on mount
+  useEffect(() => {
+    try {
+      const msg = localStorage.getItem('sessionExpiredMessage')
+      if (msg) {
+        setLoginError(msg)
+        localStorage.removeItem('sessionExpiredMessage')
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoginError(null)
