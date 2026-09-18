@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import shopReducer from '../store/slices/shopSlice';
 import authReducer from '../store/slices/authSlice';
 import billingReducer from '../store/slices/billingSlice';
+import settingsReducer from '../store/slices/settingsSlice';
 import BranchSwitcher from '../components/navigation/BranchSwitcher';
 import Employees from '../pages/Employees';
 import { ToastProvider } from '../components/Toast';
@@ -39,6 +40,7 @@ function createTestStore(preloadedState = {}) {
     auth: authReducer,
     shop: shopReducer,
     billing: billingReducer,
+    settings: settingsReducer,
   });
   return configureStore({
     reducer: rootReducer,
@@ -113,7 +115,7 @@ describe('ITEM 6 & ITEM 7: Frontend Quota UX and BranchSwitcher Toast Verificati
             { id: 1, name: 'Main Branch' },
             { id: 2, name: 'Branch 2' },
           ],
-          error: 'Access denied to target branch.',
+          error: null,
         },
       });
 
@@ -127,10 +129,18 @@ describe('ITEM 6 & ITEM 7: Frontend Quota UX and BranchSwitcher Toast Verificati
         </Provider>
       );
 
+      // Dispatch switchActiveShop.rejected or fetchAccessibleShops.rejected error
+      act(() => {
+        store.dispatch({
+          type: 'auth/switchActiveShop/rejected',
+          payload: 'Access denied to target branch.',
+        });
+      });
+
       // Verify toast with error message is displayed
       expect(await screen.findByText('Access denied to target branch.')).toBeInTheDocument();
 
-      // Verify error in Redux store was cleared so it does not persist stale
+      // Verify error in Redux store was cleared so it does not persist stale across re-renders
       expect(store.getState().shop.error).toBeNull();
     });
   });

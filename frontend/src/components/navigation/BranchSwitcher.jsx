@@ -23,19 +23,20 @@ export default function BranchSwitcher({
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  let showToast = () => {};
+  let toast;
   try {
-    const toast = useToast();
-    if (toast?.showToast) {
-      showToast = toast.showToast;
-    }
+    toast = useToast();
   } catch (_) {
-    showToast = (opts) => {
-      if (typeof window !== 'undefined' && window.showToast) {
-        window.showToast(opts);
-      }
-    };
+    toast = null;
   }
+
+  const showToast = (opts) => {
+    if (toast?.showToast) {
+      toast.showToast(opts);
+    } else if (typeof window !== 'undefined' && window.showToast) {
+      window.showToast(opts);
+    }
+  };
 
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [switchingShopId, setSwitchingShopId] = useState(null);
