@@ -2,11 +2,17 @@ import axios from 'axios';
 import { logger, loggerInterceptor } from '../utils/logger';
 
 // Safely read Vite / Node env var without throwing in browser (where
-// `process` is undefined). In tests/process envs this will pick up
-// process.env.VITE_API_URL; otherwise fall back to localhost.
-const rawUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
-  || (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL)
-  || 'http://localhost:3000';
+// `process` is undefined) or in Jest (where `import.meta` is not parsed by Babel).
+const rawUrl =
+  (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) ||
+  (() => {
+    try {
+      return (new Function('return import.meta.env?.VITE_API_URL'))();
+    } catch {
+      return null;
+    }
+  })() ||
+  'http://localhost:3000';
 const baseURL = rawUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
 logger.info('🚀 API Service initialized with baseURL:', baseURL);
@@ -135,6 +141,81 @@ api.interceptors.request.use((config) => {
 let unauthorized401Count = 0;
 const MAX_401_COUNT = 3; // Maximum number of 401s before forcing logout
 
+/**
+ * Safely decode a JWT payload client-side without external dependencies.
+ * Returns null on malformed tokens. Never exposes private secrets or signatures.
+ */
+function decodeJwtPayload(token) {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    if (typeof atob === 'function') {
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } else if (typeof Buffer !== 'undefined') {
+      return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Explicit terminal auth endpoints where retrying/tolerance makes no sense (initial login / registration
+ * failures). A 401 on these endpoints immediately surfaces without retry tolerance.
+ * Mid-session authenticated endpoints (/api/auth/switch-shop, /api/auth/profile, etc.) are excluded
+ * and receive standard 3-strikes tolerance.
+ */
+const TERMINAL_AUTH_PATHS = new Set([
+  '/api/auth/login',
+  '/auth/login',
+  '/api/auth/register',
+  '/auth/register',
+]);
+
+function isTerminalAuthEndpoint(url) {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const path = url.startsWith('http') ? new URL(url).pathname : url.split('?')[0];
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    return TERMINAL_AUTH_PATHS.has(normalized.replace(/\/+$/, ''));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mid-session auth endpoints where diagnostic logging is captured on 401 failure.
+ */
+const DIAGNOSTIC_AUTH_PATHS = new Set([
+  '/api/auth/switch-shop',
+  '/auth/switch-shop',
+  '/api/auth/profile',
+  '/auth/profile',
+]);
+
+function isDiagnosticAuthEndpoint(url) {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const path = url.startsWith('http') ? new URL(url).pathname : url.split('?')[0];
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    return DIAGNOSTIC_AUTH_PATHS.has(normalized.replace(/\/+$/, ''));
+  } catch {
+    return false;
+  }
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -155,15 +236,47 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       unauthorized401Count++;
       
-      // Only redirect to login if we get multiple 401s
-      // or if it's a login-related endpoint
-      const isAuthEndpoint = error.config?.url ? error.config.url.includes('/auth/') : false;
+      // ITEM 2: Diagnostic logging on mid-session failure paths (switch-shop, profile)
+      if (isDiagnosticAuthEndpoint(error.config?.url)) {
+        const authHeader =
+          error.config?.headers?.Authorization ||
+          (typeof error.config?.headers?.get === 'function' && error.config.headers.get('Authorization'));
+        const requestToken = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '') : null;
+        const currentStoredToken =
+          typeof window !== 'undefined' && window.localStorage ? localStorage.getItem('token') : null;
+
+        const requestPayload = decodeJwtPayload(requestToken);
+        const storedPayload = decodeJwtPayload(currentStoredToken);
+        const matchesStored = Boolean(
+          requestToken && currentStoredToken && requestToken === currentStoredToken
+        );
+
+        const diagnostic = {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          responseBody: error.response.data,
+          url: error.config?.url,
+          requestTokenJti: requestPayload?.jti || null,
+          storedTokenJti: storedPayload?.jti || null,
+          tokenRelation: matchesStored ? 'matches_current_storage' : 'differs_from_current_storage',
+          requestTokenExp: requestPayload?.exp ? new Date(requestPayload.exp * 1000).toISOString() : null,
+          requestTokenIat: requestPayload?.iat ? new Date(requestPayload.iat * 1000).toISOString() : null,
+          requestTokenShopId: requestPayload?.shopId ?? null,
+        };
+
+        console.error('🚨 [Auth Diagnostic] 401 Unauthorized encountered on mid-session auth endpoint:', diagnostic);
+        logger.error('🚨 [Auth Diagnostic] 401 Unauthorized encountered on mid-session auth endpoint:', diagnostic);
+      }
+
+      // ITEM 1: Only terminal auth endpoints (login, register) bypass the 401 tolerance count.
+      // Mid-session authenticated endpoints (switch-shop, profile, etc.) are granted the standard 3-strikes tolerance.
+      const isTerminalAuth = isTerminalAuthEndpoint(error.config?.url);
       const hasAuthHeader = Boolean(
         error.config?.headers?.Authorization ||
         (typeof error.config?.headers?.get === 'function' && error.config.headers.get('Authorization'))
       );
 
-      if (unauthorized401Count >= MAX_401_COUNT || isAuthEndpoint) {
+      if (unauthorized401Count >= MAX_401_COUNT || isTerminalAuth) {
         localStorage.removeItem('token');
         if (hasAuthHeader) {
           localStorage.setItem('sessionExpiredMessage', 'Your session expired — please log in again.');
