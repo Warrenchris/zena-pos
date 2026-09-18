@@ -80,6 +80,7 @@ describe('Phase 6A: Release Blocker Remediation Verification Suite', () => {
       password: 'password123',
       position: 'cashier',
       role: 'cashier',
+      salary: 30000,
       status: 'active',
       shopId: shopA.id
     });
@@ -115,6 +116,7 @@ describe('Phase 6A: Release Blocker Remediation Verification Suite', () => {
       password: 'password123',
       position: 'cashier',
       role: 'cashier',
+      salary: 30000,
       status: 'active',
       shopId: shopB.id
     });
@@ -157,7 +159,7 @@ describe('Phase 6A: Release Blocker Remediation Verification Suite', () => {
       sku: `SKU-A1-${ts}`,
       barcode: `BC-A1-${ts}`,
       price: 150.00,
-      costPrice: 100.00,
+      cost: 100.00,
       shopId: shopA.id,
       organizationId: orgA.id,
       active: true
@@ -175,7 +177,7 @@ describe('Phase 6A: Release Blocker Remediation Verification Suite', () => {
       sku: `SKU-A2-${ts}`,
       barcode: `BC-A2-${ts}`,
       price: 250.00,
-      costPrice: 180.00,
+      cost: 180.00,
       shopId: shopA.id,
       organizationId: orgA.id,
       active: true
@@ -193,7 +195,7 @@ describe('Phase 6A: Release Blocker Remediation Verification Suite', () => {
       sku: `SKU-B1-${ts}`,
       barcode: `BC-B1-${ts}`,
       price: 300.00,
-      costPrice: 200.00,
+      cost: 200.00,
       shopId: shopB.id,
       organizationId: orgB.id,
       active: true
