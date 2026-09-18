@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { User, Employee, Shop, Organization } = require('../models');
+const { User, Employee, Shop, Organization } = require('../src/models');
 const tokenRevocationService = require('../src/services/tokenRevocationService');
 
 function tokenFor(payload) {
