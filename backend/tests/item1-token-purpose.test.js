@@ -16,6 +16,7 @@ describe('ITEM 1: Token Purpose Enforcement in Auth Middleware (SEC-03 completio
     const timestamp = Date.now();
     org = await Organization.create({
       name: `Org Token ${timestamp}`,
+      slug: `org-token-${timestamp}`,
       status: 'active'
     });
 
