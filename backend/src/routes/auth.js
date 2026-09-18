@@ -20,9 +20,20 @@ const authLimiter = rateLimit({
   keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${(req.body && req.body.email) || ''}`,
 });
 
+// Dedicated limiter for registration keyed strictly by IP (partial SEC-02 mitigation)
+// Conservative cap of 5 registrations per hour per IP.
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many registration attempts from this IP address. Please try again later.' },
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+});
+
 router.post(
   '/register',
-  authLimiter,
+  registerLimiter,
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
     body('email').isEmail().withMessage('Please enter a valid email'),

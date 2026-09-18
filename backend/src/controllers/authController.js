@@ -289,12 +289,12 @@ exports.forgotPassword = async (req, res) => {
     const resetBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const resetUrl = `${resetBaseUrl}/reset-password?token=${token}`;
 
-    try {
-      await emailService.sendPasswordReset({ to: user.email, resetUrl });
-    } catch (emailError) {
-      // Never leak whether the email actually sent; log server-side only, and never log the token itself.
-      logger.error('Failed to send password reset email:', emailError.message);
-    }
+    // Dispatch email asynchronously without awaiting to prevent response timing enumeration (SEC-04)
+    emailService.sendPasswordReset({ to: user.email, resetUrl })
+      .catch((emailError) => {
+        // Never leak whether the email actually sent; log server-side only, and never log the token itself.
+        logger.error('Failed to send password reset email:', emailError.message);
+      });
 
     return res.json({ message: 'If the email exists, a reset link has been sent.' });
   } catch (error) {

@@ -13,6 +13,11 @@ const auth = async (req, res, next) => {
     const publicKey = (process.env.JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n');
     const decoded = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
 
+    // Reject tokens with non-session purpose (SEC-03 completion)
+    if (decoded.purpose === 'password_reset') {
+      return res.status(401).json({ error: 'Invalid token purpose: reset tokens cannot be used for session authentication.' });
+    }
+
     // 1. Check if token JTI has been explicitly revoked (AUTH-01)
     if (decoded.jti) {
       const isRevoked = await tokenRevocationService.isTokenRevoked(decoded.jti);
