@@ -49,20 +49,16 @@ const auth = async (req, res, next) => {
     // 3. Check organization suspension status (AUTH-01)
     if (req.organizationId) {
       const orgStatus = await tokenRevocationService.getOrgStatus(req.organizationId);
+      if (orgStatus === 'deleted') {
+        return res.status(403).json({
+          error: 'Organization has been deactivated or deleted.',
+          code: 'ORGANIZATION_DELETED',
+          isDeleted: true
+        });
+      }
       if (orgStatus === 'suspended' || orgStatus === 'canceled') {
-        const fullPath = ((req.baseUrl || '') + (req.path || '')).toLowerCase();
-        const origUrl = (req.originalUrl || '').split('?')[0].toLowerCase();
-        const isBillingRecovery = fullPath.startsWith('/api/billing') || 
-                                  origUrl.startsWith('/api/billing') ||
-                                  fullPath.startsWith('/api/organizations') ||
-                                  origUrl.startsWith('/api/organizations') ||
-                                  fullPath.startsWith('/api/auth/logout') ||
-                                  origUrl.startsWith('/api/auth/logout') ||
-                                  fullPath.startsWith('/api/auth/profile') ||
-                                  origUrl.startsWith('/api/auth/profile');
-
-        // Only allow owner/admin to access billing recovery endpoints when organization is suspended
-        if (!isBillingRecovery || (decoded.role !== 'admin' && decoded.orgRole !== 'owner')) {
+        const isEmployeeOrMember = decoded.isEmployee || (decoded.role !== 'admin' && decoded.orgRole !== 'owner');
+        if (isEmployeeOrMember) {
           return res.status(403).json({
             error: 'Organization subscription is suspended. Contact the organization owner for renewal.',
             code: 'ORGANIZATION_SUSPENDED',

@@ -88,6 +88,11 @@ export default function Employees() {
 
       const empEmails = new Set(empList.map(e => e.email?.toLowerCase()).filter(Boolean));
       
+      // NOTE: Bug documented for future reference:
+      // Position casing mismatch: `u.role` is capitalized here ('Admin' vs lowercase select option values),
+      // whereas the employee edit form select options expect lowercase values ('admin', 'cashier').
+      // Since editing of User-tier accounts is disabled below, this is currently benign,
+      // but should be normalized if User editing is ever re-introduced.
       const formattedUsers = userList
         .filter(u => !empEmails.has(u.email?.toLowerCase()))
         .map(u => ({
@@ -177,6 +182,7 @@ export default function Employees() {
   };
 
   const openEdit = (emp) => {
+    if (emp?.isUserAccount) return;
     setEditing(emp);
     setQuotaError(null);
     setModalError('');
@@ -244,6 +250,7 @@ export default function Employees() {
   };
 
   const remove = async (emp) => {
+    if (emp?.isUserAccount) return;
     if (!window.confirm(`Delete ${emp.firstName} ${emp.lastName}?`)) return;
     try {
       await employeesAPI.delete(emp.id);
@@ -262,7 +269,16 @@ export default function Employees() {
           className="cursor-pointer hover:opacity-80 group"
           onClick={() => setSelected(emp)}
         >
-          <div className="font-semibold text-text-primary text-body group-hover:text-primary group-hover:underline">{emp.firstName} {emp.lastName}</div>
+          <div className="flex items-center gap-2">
+            <span className={`font-semibold text-body group-hover:text-primary group-hover:underline ${
+              emp.isUserAccount ? 'text-text-secondary' : 'text-text-primary'
+            }`}>
+              {emp.firstName} {emp.lastName}
+            </span>
+            {emp.isUserAccount && (
+              <Badge variant="neutral" size="sm">User Account</Badge>
+            )}
+          </div>
           <div className="text-caption text-text-muted">{emp.position || 'Staff'}</div>
         </div>
       )
@@ -309,16 +325,26 @@ export default function Employees() {
             <EyeIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={() => openEdit(emp)}
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
-            title="Edit Employee"
+            onClick={() => !emp.isUserAccount && openEdit(emp)}
+            disabled={emp.isUserAccount}
+            className={`p-1.5 rounded-lg transition-colors ${
+              emp.isUserAccount
+                ? 'text-text-muted/40 cursor-not-allowed opacity-50'
+                : 'text-text-muted hover:text-text-primary hover:bg-surface-2'
+            }`}
+            title={emp.isUserAccount ? "User accounts cannot be edited from staff roster" : "Edit Employee"}
           >
             <PencilIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={() => remove(emp)}
-            className="p-1.5 rounded-lg text-danger hover:bg-danger/10 transition-colors"
-            title="Delete Employee"
+            onClick={() => !emp.isUserAccount && remove(emp)}
+            disabled={emp.isUserAccount}
+            className={`p-1.5 rounded-lg transition-colors ${
+              emp.isUserAccount
+                ? 'text-text-muted/40 cursor-not-allowed opacity-50'
+                : 'text-danger hover:bg-danger/10'
+            }`}
+            title={emp.isUserAccount ? "User accounts cannot be deleted from staff roster" : "Delete Employee"}
           >
             <TrashIcon className="h-4 w-4" />
           </button>
