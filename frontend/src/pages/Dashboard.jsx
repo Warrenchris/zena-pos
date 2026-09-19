@@ -4,8 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import forecastingService from '../services/forecasting.service';
 import {
   ShoppingBagIcon,
-  UsersIcon,
-  TagIcon,
   ChartBarIcon,
   ArrowPathIcon,
   ExclamationTriangleIcon,
@@ -392,36 +390,14 @@ export default function Dashboard() {
                   setShowStandardDashboard(false);
                   try {
                     localStorage.removeItem(dismissStorageKey);
-                  } catch {}
+                  } catch {
+                    /* ignore storage errors */
+                  }
                 }}
               >
                 Setup Guide
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="primary"
-              leftIcon={ShoppingBagIcon}
-              onClick={() => navigate('/pos')}
-            >
-              New Sale
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              leftIcon={TagIcon}
-              onClick={() => navigate('/products/create')}
-            >
-              Add Product
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              leftIcon={UsersIcon}
-              onClick={() => navigate('/customers/new')}
-            >
-              Add Customer
-            </Button>
             <Button
               size="sm"
               variant="secondary"

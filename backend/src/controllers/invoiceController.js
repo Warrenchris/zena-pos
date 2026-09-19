@@ -162,15 +162,11 @@ exports.deleteInvoice = async (req, res) => {
 // Generate PDF
 exports.generatePDF = async (req, res) => {
   try {
-    const invoice = await Invoice.findByPk(req.params.id);
+    const where = req.user?.role === 'super_admin' ? { id: req.params.id } : { id: req.params.id, ...shopWhere(req) };
+    const invoice = await Invoice.findOne({ where });
 
     if (!invoice) {
       return res.status(404).json({ error: 'Invoice not found' });
-    }
-
-    // Check permission
-    if (req.user?.role !== 'super_admin' && invoice.shopId !== req.user.shopId) {
-      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Create PDF document

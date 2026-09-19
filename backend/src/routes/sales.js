@@ -284,28 +284,9 @@ router.get('/:saleId/payments',
   saleController.getSalePayments
 );
 
-// Get specific sale - Scoped to shop for cashiers/employees
+// Get specific sale - Scoped to shop for authorized roles
 router.get('/:id',
-  async (req, res, next) => {
-    // Admin and managers can view sales
-    if (req.user.role === 'admin' || req.user.role === 'manager') {
-      return next();
-    }
-    // Cashiers and employees can view sales belonging to their assigned shop
-    if (req.user.role === 'cashier' || req.user.role === 'employee') {
-      const sale = await Sale.findOne({
-        where: {
-          id: req.params.id,
-          shopId: req.user.shopId
-        }
-      });
-      if (sale) {
-        return next();
-      }
-      return res.status(403).json({ error: 'Access denied to this sale' });
-    }
-    return res.status(403).json({ error: 'Access denied' });
-  },
+  checkRole(['admin', 'manager', 'cashier', 'employee']),
   saleController.getSaleById
 );
 

@@ -214,8 +214,9 @@ exports.deleteSale = async (req, res) => {
 // Get sale by ID
 exports.getSaleById = async (req, res) => {
   try {
+    const shopId = req.shopId || req.user?.shopId;
     const sale = await Sale.findOne({
-      where: { id: req.params.id, shopId: req.user.shopId },
+      where: { id: req.params.id, shopId },
       attributes: {
         exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
       },
@@ -1167,15 +1168,11 @@ exports.processRefund = async (req, res) => {
   try {
     // Validate sale exists and belongs to shopId
     const sale = await Sale.findOne({
-      where: { id: saleId }
+      where: { id: saleId, shopId }
     });
 
     if (!sale) {
       return res.status(404).json({ error: 'Sale not found' });
-    }
-
-    if (sale.shopId !== shopId) {
-      return res.status(403).json({ error: 'Access denied: cross-shop refund' });
     }
 
     // Fetch system settings for return policy & approval thresholds
