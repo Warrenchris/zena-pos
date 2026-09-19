@@ -93,6 +93,14 @@ const SaleRefund = sequelize.define('SaleRefund', {
     {
       name: 'idx_refunds_status',
       fields: ['status']
+    },
+    {
+      name: 'idx_sale_refunds_shop_createdAt',
+      fields: ['shopId', 'createdAt']
+    },
+    {
+      name: 'idx_sale_refunds_product_id',
+      fields: ['productId']
     }
   ]
 });

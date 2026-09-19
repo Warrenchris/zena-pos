@@ -61,7 +61,13 @@ const StockMovement = sequelize.define('StockMovement', {
   }
 }, {
   tableName: 'StockMovements',
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    {
+      name: 'idx_stockmovements_org_createdAt',
+      fields: ['organizationId', 'createdAt']
+    }
+  ]
 });
 
 module.exports = StockMovement;

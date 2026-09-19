@@ -84,6 +84,10 @@ Invoice.init({
       unique: true,
       fields: ['shopId', 'invoiceNumber'],
       name: 'unique_invoices_shop_invoice_number'
+    },
+    {
+      name: 'idx_invoices_shop_createdAt',
+      fields: ['shopId', 'createdAt']
     }
   ]
 });

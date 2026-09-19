@@ -61,6 +61,12 @@ const Employee = sequelize.define('Employee', {
   }
 }, {
   timestamps: true,
+  indexes: [
+    {
+      name: 'idx_employees_shop_createdAt',
+      fields: ['shopId', 'createdAt']
+    }
+  ],
   hooks: {
     beforeCreate: async (employee) => {
       if (employee.password && !isBcryptHash(employee.password)) {
