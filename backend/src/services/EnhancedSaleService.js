@@ -13,6 +13,7 @@ const logger = require('../utils/logger');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 const { invalidateShopProductCache } = require('./productCache');
+const { normalizeIdempotencyKey, generateSaleFingerprint, isIdempotencyUniqueError } = require('../utils/idempotencyUtils');
 
 class EnhancedSaleService {
   constructor() {
@@ -125,15 +126,26 @@ class EnhancedSaleService {
       throw err;
     }
 
+    const rawIdempotencyKey = req.header('Idempotency-Key') || req.header('idempotency-key') || body.idempotencyKey;
+    const cleanIdempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
+    const requestHash = generateSaleFingerprint({ ...body, payments, paymentMethod: 'split' }, shopId);
+
     // Idempotency check: if a sale with this key already exists, return it
     // as-is rather than creating a duplicate. Checked before opening a
     // transaction so a retried/duplicate request short-circuits immediately.
-    if (idempotencyKey) {
+    if (cleanIdempotencyKey) {
       const existingSale = await Sale.findOne({
-        where: { idempotencyKey, shopId },
+        where: { idempotencyKey: cleanIdempotencyKey, shopId },
         include: this.defaultIncludes
       });
       if (existingSale) {
+        const existingHash = existingSale.metadata?.requestHash;
+        if (existingHash && existingHash !== requestHash) {
+          const err = new Error('The idempotency key was already used with a different request.');
+          err.statusCode = 409;
+          err.code = 'IDEMPOTENCY_KEY_REUSED';
+          throw err;
+        }
         return existingSale;
       }
     }
@@ -315,7 +327,8 @@ class EnhancedSaleService {
         shopId,
         metadata: {
           discountReason: discountReason || null,
-          discountApprovedBy: discountRequiresApproval(discountType, discountValue) ? verifiedApproverName : null
+          discountApprovedBy: discountRequiresApproval(discountType, discountValue) ? verifiedApproverName : null,
+          requestHash
         }
       }, { transaction: t });
 
@@ -457,6 +470,22 @@ class EnhancedSaleService {
         await t.rollback();
       } catch (rollbackErr) {
         // Ignore rollback failure to let the original error propagate
+      }
+      if (cleanIdempotencyKey && isIdempotencyUniqueError(error)) {
+        const concurrentSale = await Sale.findOne({
+          where: { idempotencyKey: cleanIdempotencyKey, shopId },
+          include: this.defaultIncludes
+        });
+        if (concurrentSale) {
+          const existingHash = concurrentSale.metadata?.requestHash;
+          if (existingHash && existingHash !== requestHash) {
+            const conflictErr = new Error('The idempotency key was already used with a different request.');
+            conflictErr.statusCode = 409;
+            conflictErr.code = 'IDEMPOTENCY_KEY_REUSED';
+            throw conflictErr;
+          }
+          return concurrentSale;
+        }
       }
       throw error;
     }

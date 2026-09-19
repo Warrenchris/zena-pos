@@ -1031,7 +1031,10 @@ export default function CashierDashboard() {
     setProcessingPayment(true);
     setPaymentError(null);
 
-    const idempotencyKey = generateUUID();
+    const idempotencyKey = currentSale.idempotencyKey || generateUUID();
+    if (!currentSale.idempotencyKey) {
+      currentSale.idempotencyKey = idempotencyKey;
+    }
 
     // A single manager credential authorizes every discount in this sale —
     // pulled from whichever discount (cart-level takes priority, else the
@@ -1077,8 +1080,10 @@ export default function CashierDashboard() {
     };
 
     try {
-      // Call API
-      const response = await api.post('/api/sales', saleData);
+      // Call API with Idempotency-Key header
+      const response = await api.post('/api/sales', saleData, {
+        headers: { 'Idempotency-Key': idempotencyKey }
+      });
 
       // Success — snapshot sale data for receipt screen before resetting
       const changeDue = Math.max(0, parseFloat(currentSale.paymentAmount) - currentSale.total);

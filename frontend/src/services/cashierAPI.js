@@ -31,9 +31,13 @@ export const cashierAPI = {
       params: { period }
     }),
 
-  // Create a new sale
-  createSale: (saleData) =>
-    api.post('/api/sales', saleData),
+  // Create a new sale with idempotency key
+  createSale: (saleData, idempotencyKey) => {
+    const key = idempotencyKey || saleData?.idempotencyKey;
+    return api.post('/api/sales', saleData, {
+      headers: key ? { 'Idempotency-Key': key } : {}
+    });
+  },
     
   // Get available products (read-only)
   getProducts: async (params) => {

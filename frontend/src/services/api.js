@@ -386,7 +386,12 @@ export const salesAPI = {
   getAll: (params) =>
     api.get('/api/sales', { params }),
   getById: (id) => api.get(`/api/sales/${id}`),
-  create: (saleData) => api.post('/api/sales', saleData),
+  create: (saleData, idempotencyKey) => {
+    const key = idempotencyKey || saleData?.idempotencyKey;
+    return api.post('/api/sales', saleData, {
+      headers: key ? { 'Idempotency-Key': key } : {}
+    });
+  },
   updatePaymentStatus: (id, paymentStatus) =>
     api.put(`/api/sales/${id}/payment-status`, { paymentStatus }),
   getStatistics: (params) =>

@@ -20,6 +20,37 @@ const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
 const { invalidateShopProductCache } = require('../services/productCache');
+const { normalizeIdempotencyKey, generateSaleFingerprint, isIdempotencyUniqueError } = require('../utils/idempotencyUtils');
+
+const fetchCompleteSaleByIdempotencyKey = async (idempotencyKey, shopId) => {
+  return Sale.findOne({
+    where: {
+      idempotencyKey,
+      shopId
+    },
+    attributes: {
+      exclude: ['UserId', 'CustomerId']
+    },
+    include: [
+      {
+        model: SaleItem,
+        include: [{
+          model: Product,
+          attributes: ['id', 'name', 'sku', 'price']
+        }]
+      },
+      {
+        model: Customer,
+        attributes: ['id', 'name', 'email', 'phone', 'location', 'loyaltyPoints']
+      },
+      {
+        model: Employee,
+        attributes: ['id', 'firstName', 'lastName', 'email'],
+        as: 'Employee'
+      }
+    ]
+  });
+};
 
 // Get all sales with pagination
 exports.getAllSales = async (req, res) => {
@@ -260,12 +291,27 @@ exports.createSale = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const rawKey = req.header('Idempotency-Key') || req.header('idempotency-key') || req.body?.idempotencyKey;
+    const idempotencyKey = normalizeIdempotencyKey(rawKey);
+
     const shopId = req.shopId || req.user.shopId;
     const organizationId = req.organizationId || req.user?.organizationId;
-    const completeSale = await exports.createSaleInternal(req.body, shopId, req.user, organizationId);
+    const salePayload = {
+      ...req.body,
+      idempotencyKey
+    };
+
+    const completeSale = await exports.createSaleInternal(salePayload, shopId, req.user, organizationId);
 
     res.status(201).json(completeSale);
   } catch (error) {
+    if (error.code === 'IDEMPOTENCY_KEY_REUSED' || error.statusCode === 409) {
+      return res.status(409).json({
+        code: error.code || 'IDEMPOTENCY_KEY_REUSED',
+        message: error.message || 'The idempotency key was already used with a different request.',
+        error: error.message || 'The idempotency key was already used with a different request.'
+      });
+    }
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({ error: 'Invoice number conflict. Please retry the sale.' });
     }
@@ -329,37 +375,21 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
   });
   const cartDiscountNeedsApproval = discountRequiresApproval(discountType, discountValue);
 
-  // Idempotency check: if sale with this idempotencyKey already exists, return it immediately
-  if (idempotencyKey) {
-    const existingSale = await Sale.findOne({
-      where: {
-        idempotencyKey,
-        shopId
-      },
-      attributes: {
-        exclude: ['UserId', 'CustomerId']
-      },
-      include: [
-        {
-          model: SaleItem,
-          include: [{
-            model: Product,
-            attributes: ['id', 'name', 'sku', 'price']
-          }]
-        },
-        {
-          model: Customer,
-          attributes: ['id', 'name', 'email', 'phone', 'location', 'loyaltyPoints']
-        },
-        {
-          model: Employee,
-          attributes: ['id', 'firstName', 'lastName', 'email'],
-          as: 'Employee'
-        }
-      ]
-    });
+  const cleanIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+  const requestHash = generateSaleFingerprint(saleData, shopId);
+
+  // Idempotency check: if sale with this idempotencyKey already exists, verify fingerprint and return immediately
+  if (cleanIdempotencyKey) {
+    const existingSale = await fetchCompleteSaleByIdempotencyKey(cleanIdempotencyKey, shopId);
 
     if (existingSale) {
+      const existingHash = existingSale.metadata?.requestHash;
+      if (existingHash && existingHash !== requestHash) {
+        const err = new Error('The idempotency key was already used with a different request.');
+        err.statusCode = 409;
+        err.code = 'IDEMPOTENCY_KEY_REUSED';
+        throw err;
+      }
       return existingSale;
     }
   }
@@ -505,6 +535,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
         discountReason: discountReason || null,
         discountApprovedBy: cartDiscountNeedsApproval ? verifiedApproverName : null,
         managerApprovalId: verifiedApproverName ? managerApprovalId : null,
+        requestHash,
         ...(saleData.metadata || {})
       }
     }, { transaction: t });
@@ -624,9 +655,28 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     return { sale, invoiceNumber, total };
   };
 
-  const saleResult = existingTransaction
-    ? await executeSaleCreation(existingTransaction)
-    : await sequelize.transaction(executeSaleCreation);
+  let saleResult = null;
+  try {
+    saleResult = existingTransaction
+      ? await executeSaleCreation(existingTransaction)
+      : await sequelize.transaction(executeSaleCreation);
+  } catch (err) {
+    // If unique constraint collision happened on (shopId, idempotencyKey) due to concurrent duplicate
+    if (cleanIdempotencyKey && isIdempotencyUniqueError(err)) {
+      const concurrentSale = await fetchCompleteSaleByIdempotencyKey(cleanIdempotencyKey, shopId);
+      if (concurrentSale) {
+        const existingHash = concurrentSale.metadata?.requestHash;
+        if (existingHash && existingHash !== requestHash) {
+          const conflictErr = new Error('The idempotency key was already used with a different request.');
+          conflictErr.statusCode = 409;
+          conflictErr.code = 'IDEMPOTENCY_KEY_REUSED';
+          throw conflictErr;
+        }
+        return concurrentSale;
+      }
+    }
+    throw err;
+  }
 
   const { sale, invoiceNumber, total } = saleResult;
 

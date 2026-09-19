@@ -299,8 +299,13 @@ export default function PaymentModal({
       const managerApprovalId = approvalSource ? approvalSource.managerApprovalId : null;
       const managerPassword = approvalSource ? approvalSource.managerPassword : null;
 
+      const splitIdempotencyKey = currentSale.idempotencyKey || generateUUID();
+      if (!currentSale.idempotencyKey) {
+        currentSale.idempotencyKey = splitIdempotencyKey;
+      }
+
       const saleData = {
-        idempotencyKey: generateUUID(),
+        idempotencyKey: splitIdempotencyKey,
         managerApprovalId,
         managerPassword,
         items: currentSale.items.map(item => ({
@@ -327,7 +332,9 @@ export default function PaymentModal({
         }))
       };
 
-      const response = await api.post('/api/sales/split', saleData);
+      const response = await api.post('/api/sales/split', saleData, {
+        headers: { 'Idempotency-Key': splitIdempotencyKey }
+      });
       onPaymentSuccess(response.data);
     } catch (err) {
       console.error('Split sale submission failed:', err);
