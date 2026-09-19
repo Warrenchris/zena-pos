@@ -262,11 +262,11 @@ exports.getSalePayments = async (req, res) => {
   try {
     const { saleId } = req.params;
     const shopId = req.shopId || req.user.shopId;
-    
+
     const sale = await Sale.findOne({
       where: { id: saleId, shopId }
     });
-    
+
     if (!sale) {
       return res.status(404).json({ error: 'Sale not found' });
     }
@@ -1186,8 +1186,8 @@ exports.processRefund = async (req, res) => {
     // Return Window Eligibility Check
     const daysSinceSale = (new Date() - new Date(sale.createdAt)) / (1000 * 60 * 60 * 24);
     if (daysSinceSale > returnWindowDays && !adminOverride && req.user.role !== 'admin') {
-      return res.status(400).json({ 
-        error: `Return window expired. Sales older than ${returnWindowDays} days require administrator override.` 
+      return res.status(400).json({
+        error: `Return window expired. Sales older than ${returnWindowDays} days require administrator override.`
       });
     }
 
@@ -1234,8 +1234,8 @@ exports.processRefund = async (req, res) => {
       const availableQty = saleItem.quantity - prevQty;
 
       if (item.quantity > availableQty) {
-        return res.status(400).json({ 
-          error: `Cannot refund ${item.quantity} units of product ${item.productId}. Only ${availableQty} units available for refund.` 
+        return res.status(400).json({
+          error: `Cannot refund ${item.quantity} units of product ${item.productId}. Only ${availableQty} units available for refund.`
         });
       }
 
@@ -1254,7 +1254,7 @@ exports.processRefund = async (req, res) => {
       const lineQuantity = saleItem.quantity || 1;
       const lineSubtotal = parseFloat(saleItem.subtotal || (parseFloat(saleItem.unitPrice || saleItem.price || saleItem.originalPrice || 0) * lineQuantity));
       const lineDiscount = parseFloat(saleItem.discount || 0);
-      
+
       const netLineAmount = Math.max(0, lineSubtotal - lineDiscount);
       const netUnitPrice = netLineAmount / lineQuantity;
 
@@ -1275,8 +1275,8 @@ exports.processRefund = async (req, res) => {
 
     if (totalRefundAmount > maxUnapproved && req.user.role !== 'admin') {
       if (!managerApprovalId) {
-        return res.status(403).json({ 
-          error: `Refund total (${totalRefundAmount} KSh) exceeds unapproved threshold (${maxUnapproved} KSh). Manager approval & password credentials are required.` 
+        return res.status(403).json({
+          error: `Refund total (${totalRefundAmount} KSh) exceeds unapproved threshold (${maxUnapproved} KSh). Manager approval & password credentials are required.`
         });
       }
 
@@ -1333,7 +1333,7 @@ exports.processRefund = async (req, res) => {
 
     try {
       const createdRefunds = [];
-      
+
       for (const item of itemsWithNetPrice) {
         const disposition = ['restock', 'damaged_writeoff', 'return_to_supplier'].includes(item.disposition)
           ? item.disposition
@@ -1343,7 +1343,7 @@ exports.processRefund = async (req, res) => {
         const reasonCode = validReasonCodes.includes(item.reasonCode)
           ? item.reasonCode
           : (validReasonCodes.includes(item.reason) ? item.reason : 'OTHER');
-        
+
         const reasonNotes = item.reasonNotes || item.reason || 'Customer Return';
 
         // a. Insert row into SaleRefunds
@@ -1461,7 +1461,7 @@ exports.processRefund = async (req, res) => {
       }
 
       const saleStatus = allFullyRefunded ? 'refunded' : 'partial_refund';
-      
+
       // Update Sales.saleStatus
       await sale.update({ saleStatus }, { transaction: t });
 
@@ -1594,7 +1594,11 @@ exports.getAllReturns = async (req, res) => {
   const shopId = req.shopId || req.user.shopId;
 
   try {
-    const refunds = await SaleRefund.findAll({
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const offset = (page - 1) * limit;
+
+    const { count, rows: refunds } = await SaleRefund.findAndCountAll({
       where: { shopId },
       include: [
         {
@@ -1608,7 +1612,9 @@ exports.getAllReturns = async (req, res) => {
           attributes: ['id', 'invoiceNumber', 'customerName', 'total', 'paymentMethod', 'createdAt']
         }
       ],
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
     });
 
     const userIds = [];
@@ -1666,6 +1672,24 @@ exports.getAllReturns = async (req, res) => {
         sale: r.sale
       };
     });
+
+    const totalPages = Math.ceil(count / limit) || 1;
+    res.set('X-Total-Count', String(count));
+    res.set('X-Page', String(page));
+    res.set('X-Limit', String(limit));
+    res.set('X-Total-Pages', String(totalPages));
+
+    if (req.query.format === 'paginated') {
+      return res.json({
+        data: formattedRefunds,
+        pagination: {
+          total: count,
+          page,
+          limit,
+          totalPages
+        }
+      });
+    }
 
     res.json(formattedRefunds);
   } catch (error) {

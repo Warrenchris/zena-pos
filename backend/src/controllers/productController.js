@@ -49,10 +49,17 @@ exports.getAllProducts = async (req, res) => {
 
     const isDefaultQuery = !search && !categoryId && !availability && !minPrice && !maxPrice;
     const cacheKey = `products:shop:${shopId}`;
+    const pageCacheKey = `products:shop:${shopId}:p:${numericPage}:s:${numericPageSize}`;
 
     if (isDefaultQuery) {
       try {
-        const cachedData = redisClient.status === 'ready' ? await redisClient.get(cacheKey) : null;
+        let cachedData = redisClient.status === 'ready' ? await redisClient.get(pageCacheKey) : null;
+        if (cachedData) {
+          logger.debug(`Product catalogue page cache HIT for shop: ${shopId}, page: ${numericPage}`);
+          return res.json(JSON.parse(cachedData));
+        }
+
+        cachedData = redisClient.status === 'ready' ? await redisClient.get(cacheKey) : null;
         if (cachedData) {
           const cachedResult = JSON.parse(cachedData);
           const totalPages = Math.ceil(cachedResult.count / numericPageSize) || 1;
@@ -72,7 +79,7 @@ exports.getAllProducts = async (req, res) => {
         logger.warn(`Redis error fetching product cache for shop ${shopId}:`, err);
       }
 
-      logger.debug(`Product catalogue cache MISS for shop: ${shopId}, querying database`);
+      logger.debug(`Product catalogue cache MISS for shop: ${shopId}, querying database with pagination`);
       try {
         const catalogWhere = { active: true };
         if (organizationId) {
@@ -81,7 +88,7 @@ exports.getAllProducts = async (req, res) => {
           catalogWhere.shopId = shopId;
         }
 
-        const allProducts = await Product.findAndCountAll({
+        const pageResult = await Product.findAndCountAll({
           where: catalogWhere,
           include: [
             { model: Category, attributes: ['id', 'name'], required: false },
@@ -93,32 +100,34 @@ exports.getAllProducts = async (req, res) => {
             }
           ],
           order: [['createdAt', 'DESC']],
+          limit: numericPageSize,
+          offset,
           distinct: true,
         });
 
-        const formattedRows = allProducts.rows.map(p => formatProductWithInventory(p));
+        const formattedRows = pageResult.rows.map(p => formatProductWithInventory(p));
+        const totalPages = Math.ceil(pageResult.count / numericPageSize) || 1;
+        const responseData = {
+          products: formattedRows,
+          searchType: 'exact',
+          pagination: {
+            currentPage: numericPage,
+            totalPages,
+            total: pageResult.count,
+          },
+        };
 
         try {
           if (redisClient.status === 'ready') {
-            await redisClient.setex(cacheKey, 600, JSON.stringify({ count: allProducts.count, rows: formattedRows }));
+            await redisClient.setex(pageCacheKey, 300, JSON.stringify(responseData));
           }
         } catch (err) {
           logger.warn(`Redis error caching products for shop ${shopId}:`, err);
         }
 
-        const totalPages = Math.ceil(allProducts.count / numericPageSize) || 1;
-        const paginatedProducts = formattedRows.slice(offset, offset + numericPageSize);
-        return res.json({
-          products: paginatedProducts,
-          searchType: 'exact',
-          pagination: {
-            currentPage: numericPage,
-            totalPages,
-            total: allProducts.count,
-          },
-        });
+        return res.json(responseData);
       } catch (error) {
-        console.error('Error fetching all products on cache miss:', error);
+        console.error('Error fetching paginated products on cache miss:', error);
       }
     }
 
@@ -323,11 +332,11 @@ exports.getProductById = async (req, res) => {
         }
       ]
     });
-    
+
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
-    
+
     res.json(formatProductWithInventory(product));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch product' });
@@ -842,7 +851,7 @@ exports.getProductsBatch = async (req, res) => {
       organizationId = shop?.organizationId;
     }
     const { ids } = req.query;
-    
+
     let idArray = [];
     if (typeof ids === 'string') {
       idArray = ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id) && id > 0);
