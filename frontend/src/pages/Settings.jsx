@@ -39,6 +39,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 import RolePermissionMatrix from '../components/RolePermissionMatrix';
+import PrinterSettingsPanel from '../components/printing/PrinterSettingsPanel';
 
 const Settings = () => {
   const dispatch = useDispatch();
@@ -966,34 +967,7 @@ const Settings = () => {
         </label>
       </div>
 
-      <div>
-        <label className="block text-small font-semibold text-text-primary mb-1.5">
-          Printer Type
-        </label>
-        <select
-          value={formData.printerType || 'browser'}
-          onChange={(e) => handleInputChange('printerType', e.target.value)}
-          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-        >
-          <option value="browser" className="bg-surface text-text-primary">Browser Print Dialog</option>
-          <option value="thermal" className="bg-surface text-text-primary">Thermal POS Printer (ESC/POS)</option>
-        </select>
-      </div>
-
-      {formData.printerType === 'thermal' && (
-        <div>
-          <label className="block text-small font-semibold text-text-primary mb-1.5">
-            Printer IP Address / Port
-          </label>
-          <input
-            type="text"
-            value={formData.printerIP || ''}
-            onChange={(e) => handleInputChange('printerIP', e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-            placeholder="e.g. 192.168.1.100:9100"
-          />
-        </div>
-      )}
+      <PrinterSettingsPanel />
     </div>
   );
 

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useSelector } from 'react-redux';
 import {
   CheckCircleIcon,
   PrinterIcon,
@@ -7,6 +8,8 @@ import {
 } from '@heroicons/react/24/outline';
 import useCurrency from '../hooks/useCurrency';
 import Button from './ui/Button';
+import { printReceipt } from '../printing';
+import PrinterSettingsModal from './printing/PrinterSettingsModal';
 
 /**
  * SaleCompleteModal — Post-payment receipt/confirmation screen.
@@ -20,6 +23,8 @@ import Button from './ui/Button';
  */
 export default function SaleCompleteModal({ completedSale, onNewSale, onClose }) {
   const { format: formatCurrency } = useCurrency();
+  const shop = useSelector((state) => state.shop?.shop);
+  const [showPrinterSettings, setShowPrinterSettings] = useState(false);
 
   if (!completedSale) return null;
 
@@ -30,8 +35,7 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
     total = 0,
     paymentMethod = 'cash',
     paymentAmount = 0,
-    change = 0,
-    notes
+    change = 0
   } = completedSale;
 
   const invoiceNumber = serverData?.invoiceNumber || serverData?.id || 'N/A';
@@ -41,8 +45,24 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
 
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop });
+    if (!window.showToast) return;
+    if (!result.ok) {
+      window.showToast({
+        type: 'error',
+        title: 'Could not print receipt',
+        message: result.error || 'Check the printer and try again.',
+        duration: 5000
+      });
+    } else if (result.fellBack) {
+      window.showToast({
+        type: 'warning',
+        title: 'Printed with browser printing',
+        message: 'Your printer could not be reached, so the system print dialog was used.',
+        duration: 5000
+      });
+    }
   };
 
   const handleEmailReceipt = () => {
@@ -65,37 +85,9 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
         className="bg-surface border border-border-default rounded-3xl shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[95vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Print-only receipt. Hidden on screen (see .print-only in index.css);
-            this is the ONLY element visible when window.print() runs — the
-            @media print rule hides everything else in the document by id,
-            so the sidebar/header/product grid behind this modal never print. */}
-        <div id="pos-receipt-print-area" className="print-only">
-          <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#000', padding: '12px' }}>
-            <p style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>RECEIPT</p>
-            <p style={{ textAlign: 'center' }}>Invoice #{invoiceNumber}</p>
-            <p>------------------------------</p>
-            <p>Customer: {customer?.name || 'Walk-in Customer'}</p>
-            <p>Payment: {isSplit ? 'Split Tender' : paymentMethod}</p>
-            <p>------------------------------</p>
-            {items.map((item, index) => (
-              <p key={item.id || index}>
-                {item.name} x{item.quantity} — {formatCurrency(parseFloat(item.price || 0) * item.quantity)}
-              </p>
-            ))}
-            <p>------------------------------</p>
-            <p>Subtotal: {formatCurrency(subtotal)}</p>
-            {subtotal !== total && <p>Discount: -{formatCurrency(subtotal - total)}</p>}
-            <p style={{ fontWeight: 'bold' }}>Total: {formatCurrency(total)}</p>
-            {isCash && (
-              <>
-                <p>Amount Received: {formatCurrency(parseFloat(paymentAmount || 0))}</p>
-                {change > 0 && <p>Change Due: {formatCurrency(change)}</p>}
-              </>
-            )}
-            {notes && <p>Notes: {notes}</p>}
-            <p style={{ textAlign: 'center', marginTop: '8px' }}>Thank you for your business!</p>
-          </div>
-        </div>
+        {/* Rendered inside this container on purpose: React events from the portaled dialog bubble
+            here, where stopPropagation keeps them from hitting the backdrop's onClose. */}
+        <PrinterSettingsModal isOpen={showPrinterSettings} onClose={() => setShowPrinterSettings(false)} />
 
         {/* Success Header */}
         <div className="text-center space-y-2 pb-3 border-b border-border-default">
@@ -205,6 +197,13 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
               </Button>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => setShowPrinterSettings(true)}
+            className="self-center text-caption text-text-muted hover:text-text-primary underline underline-offset-2 transition-colors"
+          >
+            Printer settings
+          </button>
           <Button
             type="button"
             variant="primary"

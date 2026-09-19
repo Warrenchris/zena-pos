@@ -1,0 +1,1470 @@
+diff --git a/frontend/src/__tests__/sale-complete-print.test.jsx b/frontend/src/__tests__/sale-complete-print.test.jsx
+new file mode 100644
+index 0000000..ec6b711
+--- /dev/null
++++ b/frontend/src/__tests__/sale-complete-print.test.jsx
+@@ -0,0 +1,82 @@
++import React from 'react';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { Provider } from 'react-redux';
++import { configureStore, combineReducers } from '@reduxjs/toolkit';
++import authReducer from '../store/slices/authSlice';
++import shopReducer from '../store/slices/shopSlice';
++import settingsReducer from '../store/slices/settingsSlice';
++import SaleCompleteModal from '../components/SaleCompleteModal';
++import { printReceipt } from '../printing';
++
++jest.mock('../printing', () => ({ printReceipt: jest.fn() }));
++
++const shop = { name: 'Mama Njeri Supermarket', address: 'Moi Avenue', phone: '0700 000 000', kraPin: 'P000000000X' };
++
++const completedSale = {
++  serverData: { invoiceNumber: 'INV-77' },
++  items: [{ id: 1, name: 'Sugar', price: 150, quantity: 2 }],
++  customer: { name: 'Jane' },
++  total: 300,
++  paymentMethod: 'cash',
++  paymentAmount: 500,
++  change: 200,
++};
++
++function renderModal() {
++  const store = configureStore({
++    reducer: combineReducers({ auth: authReducer, shop: shopReducer, settings: settingsReducer }),
++    preloadedState: { shop: { ...shopReducer(undefined, { type: '@@init' }), shop } },
++  });
++  return render(
++    <Provider store={store}>
++      <SaleCompleteModal completedSale={completedSale} onNewSale={jest.fn()} onClose={jest.fn()} />
++    </Provider>
++  );
++}
++
++beforeEach(() => {
++  printReceipt.mockReset();
++  window.showToast = jest.fn();
++});
++
++afterEach(() => {
++  delete window.showToast;
++});
++
++describe('SaleCompleteModal printing', () => {
++  it('prints through the printing service with the shop as receipt header', async () => {
++    printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: false });
++    renderModal();
++
++    fireEvent.click(screen.getByText('Print Receipt'));
++
++    await waitFor(() => expect(printReceipt).toHaveBeenCalledTimes(1));
++    const [sale, options] = printReceipt.mock.calls[0];
++    expect(sale).toBe(completedSale);
++    expect(options.business).toEqual(shop);
++    expect(options.formatMoney(150)).toContain('150');
++    expect(window.showToast).not.toHaveBeenCalled();
++  });
++
++  it('warns the cashier when it had to fall back to browser printing', async () => {
++    printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: true, error: 'not paired' });
++    renderModal();
++    fireEvent.click(screen.getByText('Print Receipt'));
++    await waitFor(() => expect(window.showToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' })));
++  });
++
++  it('shows an error toast when printing fails, without blocking the sale screen', async () => {
++    printReceipt.mockResolvedValue({ ok: false, adapterId: null, fellBack: false, error: 'no printer' });
++    renderModal();
++    fireEvent.click(screen.getByText('Print Receipt'));
++    await waitFor(() =>
++      expect(window.showToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'no printer' }))
++    );
++    expect(screen.getByText('New Sale')).toBeInTheDocument();
++  });
++
++  it('no longer renders the old whole-page print area', () => {
++    renderModal();
++    expect(document.getElementById('pos-receipt-print-area')).toBeNull();
++  });
++});
+diff --git a/frontend/src/components/SaleCompleteModal.jsx b/frontend/src/components/SaleCompleteModal.jsx
+index 521de01..ffb884d 100644
+--- a/frontend/src/components/SaleCompleteModal.jsx
++++ b/frontend/src/components/SaleCompleteModal.jsx
+@@ -1,4 +1,5 @@
+ import React from 'react';
++import { useSelector } from 'react-redux';
+ import {
+   CheckCircleIcon,
+   PrinterIcon,
+@@ -7,6 +8,7 @@ import {
+ } from '@heroicons/react/24/outline';
+ import useCurrency from '../hooks/useCurrency';
+ import Button from './ui/Button';
++import { printReceipt } from '../printing';
+ 
+ /**
+  * SaleCompleteModal — Post-payment receipt/confirmation screen.
+@@ -20,6 +22,7 @@ import Button from './ui/Button';
+  */
+ export default function SaleCompleteModal({ completedSale, onNewSale, onClose }) {
+   const { format: formatCurrency } = useCurrency();
++  const shop = useSelector((state) => state.shop?.shop);
+ 
+   if (!completedSale) return null;
+ 
+@@ -30,8 +33,7 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
+     total = 0,
+     paymentMethod = 'cash',
+     paymentAmount = 0,
+-    change = 0,
+-    notes
++    change = 0
+   } = completedSale;
+ 
+   const invoiceNumber = serverData?.invoiceNumber || serverData?.id || 'N/A';
+@@ -41,8 +43,24 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
+ 
+   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+ 
+-  const handlePrint = () => {
+-    window.print();
++  const handlePrint = async () => {
++    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop });
++    if (!window.showToast) return;
++    if (!result.ok) {
++      window.showToast({
++        type: 'error',
++        title: 'Could not print receipt',
++        message: result.error || 'Check the printer and try again.',
++        duration: 5000
++      });
++    } else if (result.fellBack) {
++      window.showToast({
++        type: 'warning',
++        title: 'Printed with browser printing',
++        message: 'Your printer could not be reached, so the system print dialog was used.',
++        duration: 5000
++      });
++    }
+   };
+ 
+   const handleEmailReceipt = () => {
+@@ -65,38 +83,6 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
+         className="bg-surface border border-border-default rounded-3xl shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[95vh] overflow-y-auto"
+         onClick={(e) => e.stopPropagation()}
+       >
+-        {/* Print-only receipt. Hidden on screen (see .print-only in index.css);
+-            this is the ONLY element visible when window.print() runs — the
+-            @media print rule hides everything else in the document by id,
+-            so the sidebar/header/product grid behind this modal never print. */}
+-        <div id="pos-receipt-print-area" className="print-only">
+-          <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#000', padding: '12px' }}>
+-            <p style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>RECEIPT</p>
+-            <p style={{ textAlign: 'center' }}>Invoice #{invoiceNumber}</p>
+-            <p>------------------------------</p>
+-            <p>Customer: {customer?.name || 'Walk-in Customer'}</p>
+-            <p>Payment: {isSplit ? 'Split Tender' : paymentMethod}</p>
+-            <p>------------------------------</p>
+-            {items.map((item, index) => (
+-              <p key={item.id || index}>
+-                {item.name} x{item.quantity} — {formatCurrency(parseFloat(item.price || 0) * item.quantity)}
+-              </p>
+-            ))}
+-            <p>------------------------------</p>
+-            <p>Subtotal: {formatCurrency(subtotal)}</p>
+-            {subtotal !== total && <p>Discount: -{formatCurrency(subtotal - total)}</p>}
+-            <p style={{ fontWeight: 'bold' }}>Total: {formatCurrency(total)}</p>
+-            {isCash && (
+-              <>
+-                <p>Amount Received: {formatCurrency(parseFloat(paymentAmount || 0))}</p>
+-                {change > 0 && <p>Change Due: {formatCurrency(change)}</p>}
+-              </>
+-            )}
+-            {notes && <p>Notes: {notes}</p>}
+-            <p style={{ textAlign: 'center', marginTop: '8px' }}>Thank you for your business!</p>
+-          </div>
+-        </div>
+-
+         {/* Success Header */}
+         <div className="text-center space-y-2 pb-3 border-b border-border-default">
+           <div className="mx-auto w-14 h-14 rounded-full bg-success/15 flex items-center justify-center">
+diff --git a/frontend/src/printing/__tests__/browserPrintAdapter.test.js b/frontend/src/printing/__tests__/browserPrintAdapter.test.js
+new file mode 100644
+index 0000000..181e6f3
+--- /dev/null
++++ b/frontend/src/printing/__tests__/browserPrintAdapter.test.js
+@@ -0,0 +1,86 @@
++import { browserPrintAdapter } from '../adapters/browserPrintAdapter';
++
++const job = { html: () => '<html><body>receipt</body></html>' };
++
++/** Make the next created <iframe> report a controllable contentWindow. */
++function stubIframe(fakeWindow) {
++  const realCreate = document.createElement.bind(document);
++  let created = null;
++  jest.spyOn(document, 'createElement').mockImplementation((tag, ...rest) => {
++    const el = realCreate(tag, ...rest);
++    if (tag === 'iframe') {
++      Object.defineProperty(el, 'contentWindow', { value: fakeWindow });
++      created = el;
++    }
++    return el;
++  });
++  return () => created;
++}
++
++afterEach(() => {
++  jest.restoreAllMocks();
++  jest.useRealTimers();
++  document.body.innerHTML = '';
++});
++
++describe('browserPrintAdapter', () => {
++  it('is supported wherever window.print exists', () => {
++    expect(browserPrintAdapter.id).toBe('browser');
++    expect(browserPrintAdapter.isSupported()).toBe(true);
++  });
++
++  it('prints the receipt HTML from a hidden iframe, then removes it after printing', async () => {
++    const listeners = {};
++    const fakeWindow = {
++      focus: jest.fn(),
++      print: jest.fn(),
++      addEventListener: (type, fn) => {
++        listeners[type] = fn;
++      },
++    };
++    const getIframe = stubIframe(fakeWindow);
++
++    const promise = browserPrintAdapter.print(job);
++    const iframe = getIframe();
++    expect(iframe.srcdoc).toBe(job.html());
++    expect(document.body.contains(iframe)).toBe(true);
++    expect(iframe.style.width).toBe('0px');
++
++    iframe.onload();
++    await promise;
++
++    expect(fakeWindow.print).toHaveBeenCalledTimes(1);
++    listeners.afterprint();
++    expect(document.body.contains(iframe)).toBe(false);
++  });
++
++  it('rejects and cleans up when print() throws', async () => {
++    const fakeWindow = {
++      focus: jest.fn(),
++      print: jest.fn(() => {
++        throw new Error('print blocked');
++      }),
++      addEventListener: jest.fn(),
++    };
++    const getIframe = stubIframe(fakeWindow);
++
++    const promise = browserPrintAdapter.print(job);
++    const iframe = getIframe();
++    iframe.onload();
++
++    await expect(promise).rejects.toThrow('print blocked');
++    expect(document.body.contains(iframe)).toBe(false);
++  });
++
++  it('rejects if the receipt frame never loads', async () => {
++    jest.useFakeTimers();
++    const getIframe = stubIframe({ focus: jest.fn(), print: jest.fn(), addEventListener: jest.fn() });
++
++    const promise = browserPrintAdapter.print(job);
++    const iframe = getIframe();
++    jest.advanceTimersByTime(5000);
++
++    await expect(promise).rejects.toThrow('failed to load');
++    expect(document.body.contains(iframe)).toBe(false);
++  });
++});
+diff --git a/frontend/src/printing/__tests__/escpos.test.js b/frontend/src/printing/__tests__/escpos.test.js
+new file mode 100644
+index 0000000..226a1c4
+--- /dev/null
++++ b/frontend/src/printing/__tests__/escpos.test.js
+@@ -0,0 +1,36 @@
++import { EscPosBuilder } from '../escpos';
++
++const bytes = (b) => Array.from(b.build());
++
++describe('EscPosBuilder', () => {
++  it('emits ESC @ on init', () => {
++    expect(bytes(new EscPosBuilder().init())).toEqual([0x1b, 0x40]);
++  });
++
++  it('encodes text as ASCII bytes and lines end with LF', () => {
++    expect(bytes(new EscPosBuilder().line('Hi'))).toEqual([0x48, 0x69, 0x0a]);
++  });
++
++  it('only emits bold/double commands when the state changes', () => {
++    const b = new EscPosBuilder().init().bold(false).bold(true).bold(true).bold(false);
++    expect(bytes(b)).toEqual([0x1b, 0x40, 0x1b, 0x45, 1, 0x1b, 0x45, 0]);
++
++    const d = new EscPosBuilder().double(true).double(true).double(false);
++    expect(bytes(d)).toEqual([0x1d, 0x21, 0x11, 0x1d, 0x21, 0x00]);
++  });
++
++  it('supports partial, full and no cut', () => {
++    expect(bytes(new EscPosBuilder().cut('partial'))).toEqual([0x1d, 0x56, 0x01]);
++    expect(bytes(new EscPosBuilder().cut('full'))).toEqual([0x1d, 0x56, 0x00]);
++    expect(bytes(new EscPosBuilder().cut('none'))).toEqual([]);
++  });
++
++  it('feeds lines and kicks the cash drawer', () => {
++    expect(bytes(new EscPosBuilder().feed(3))).toEqual([0x1b, 0x64, 3]);
++    expect(bytes(new EscPosBuilder().openDrawer())).toEqual([0x1b, 0x70, 0x00, 0x19, 0xfa]);
++  });
++
++  it('converts non-ASCII text before encoding', () => {
++    expect(bytes(new EscPosBuilder().text('Café'))).toEqual([0x43, 0x61, 0x66, 0x65]);
++  });
++});
+diff --git a/frontend/src/printing/__tests__/printService.test.js b/frontend/src/printing/__tests__/printService.test.js
+new file mode 100644
+index 0000000..48d4a45
+--- /dev/null
++++ b/frontend/src/printing/__tests__/printService.test.js
+@@ -0,0 +1,111 @@
++import { printReceipt, printTestReceipt, createPrintJob } from '../printService';
++import { buildReceipt } from '../receiptModel';
++
++const money = (n) => `KSh ${Number(n).toFixed(2)}`;
++const sale = {
++  serverData: { invoiceNumber: 'INV-1' },
++  items: [{ id: 1, name: 'Item', price: 10, quantity: 1 }],
++  total: 10,
++  paymentMethod: 'cash',
++  paymentAmount: 10,
++  change: 0,
++};
++
++const adapter = (id, { supported = true, error = null } = {}) => ({
++  id,
++  label: id,
++  isSupported: () => supported,
++  print: jest.fn(async () => {
++    if (error) throw error;
++  }),
++});
++
++describe('printReceipt fallback chain', () => {
++  it('uses the profile adapter when it works', async () => {
++    const bt = adapter('bluetooth');
++    const browser = adapter('browser');
++    const res = await printReceipt(sale, {
++      formatMoney: money,
++      profile: { connection: 'bluetooth' },
++      adapters: { bluetooth: bt, browser },
++    });
++    expect(res).toEqual({ ok: true, adapterId: 'bluetooth', fellBack: false });
++    expect(browser.print).not.toHaveBeenCalled();
++  });
++
++  it('falls back to the browser when the profile adapter throws', async () => {
++    const bt = adapter('bluetooth', { error: new Error('Printer not paired') });
++    const browser = adapter('browser');
++    const res = await printReceipt(sale, {
++      formatMoney: money,
++      profile: { connection: 'bluetooth' },
++      adapters: { bluetooth: bt, browser },
++    });
++    expect(res).toMatchObject({ ok: true, adapterId: 'browser', fellBack: true, error: 'Printer not paired' });
++    expect(browser.print).toHaveBeenCalledTimes(1);
++  });
++
++  it('falls back when the adapter is unsupported or not registered', async () => {
++    const browser = adapter('browser');
++    const unsupported = adapter('usb', { supported: false });
++
++    const a = await printReceipt(sale, { profile: { connection: 'usb' }, adapters: { usb: unsupported, browser } });
++    expect(a).toMatchObject({ ok: true, adapterId: 'browser', fellBack: true });
++
++    const b = await printReceipt(sale, { profile: { connection: 'network' }, adapters: { browser } });
++    expect(b).toMatchObject({ ok: true, adapterId: 'browser', fellBack: true });
++  });
++
++  it('does not retry the browser adapter when it is the configured one', async () => {
++    const browser = adapter('browser', { error: new Error('popup blocked') });
++    const res = await printReceipt(sale, { profile: { connection: 'browser' }, adapters: { browser } });
++    expect(res).toMatchObject({ ok: false, error: 'popup blocked' });
++    expect(browser.print).toHaveBeenCalledTimes(1);
++  });
++
++  it('reports failure without throwing when everything fails', async () => {
++    const bt = adapter('bluetooth', { error: new Error('no device') });
++    const browser = adapter('browser', { error: new Error('no print dialog') });
++    const res = await printReceipt(sale, { profile: { connection: 'bluetooth' }, adapters: { bluetooth: bt, browser } });
++    expect(res).toMatchObject({ ok: false, error: 'no print dialog' });
++  });
++
++  it('never throws even if formatting fails', async () => {
++    const browser = adapter('browser');
++    browser.print = jest.fn(async (job) => job.html());
++    const res = await printReceipt(sale, {
++      formatMoney: () => {
++        throw new Error('bad format');
++      },
++      profile: { connection: 'browser' },
++      adapters: { browser },
++    });
++    expect(res.ok).toBe(false);
++    expect(res.error).toBe('bad format');
++  });
++});
++
++describe('createPrintJob', () => {
++  it('renders each format lazily and only once', () => {
++    const fmt = jest.fn(money);
++    const job = createPrintJob(buildReceipt(sale), { paperWidth: 58 }, fmt);
++    expect(fmt).not.toHaveBeenCalled();
++    const first = job.escpos();
++    const calls = fmt.mock.calls.length;
++    expect(calls).toBeGreaterThan(0);
++    expect(job.escpos()).toBe(first);
++    expect(fmt.mock.calls.length).toBe(calls);
++  });
++});
++
++describe('printTestReceipt', () => {
++  it('prints a sample receipt through the same pipeline', async () => {
++    const browser = adapter('browser');
++    browser.print = jest.fn(async (job) => {
++      expect(job.text()).toContain('TEST-0001');
++    });
++    const res = await printTestReceipt({ formatMoney: money, profile: { connection: 'browser' }, adapters: { browser } });
++    expect(res.ok).toBe(true);
++    expect(browser.print).toHaveBeenCalled();
++  });
++});
+diff --git a/frontend/src/printing/__tests__/profile.test.js b/frontend/src/printing/__tests__/profile.test.js
+new file mode 100644
+index 0000000..b3c77f0
+--- /dev/null
++++ b/frontend/src/printing/__tests__/profile.test.js
+@@ -0,0 +1,71 @@
++import {
++  DEFAULT_PROFILE,
++  STORAGE_KEY,
++  getCharsPerLine,
++  loadProfile,
++  normalizeProfile,
++  saveProfile,
++} from '../profile';
++
++const fakeStorage = (initial = {}) => {
++  const data = { ...initial };
++  return {
++    getItem: (k) => (k in data ? data[k] : null),
++    setItem: (k, v) => {
++      data[k] = v;
++    },
++    data,
++  };
++};
++
++describe('normalizeProfile', () => {
++  it('falls back to defaults for junk input', () => {
++    expect(normalizeProfile(null)).toEqual(DEFAULT_PROFILE);
++    expect(normalizeProfile('nope')).toEqual(DEFAULT_PROFILE);
++    expect(
++      normalizeProfile({ connection: 'carrier-pigeon', paperWidth: 99, cut: 'sideways', feedLines: 500 })
++    ).toEqual(DEFAULT_PROFILE);
++  });
++
++  it('keeps valid values', () => {
++    const p = { connection: 'bluetooth', paperWidth: 80, cut: 'full', openDrawer: true, feedLines: 5 };
++    expect(normalizeProfile(p)).toEqual(p);
++  });
++
++  it('defaults to 58mm, the safe width for a mixed fleet', () => {
++    expect(DEFAULT_PROFILE.paperWidth).toBe(58);
++  });
++});
++
++describe('getCharsPerLine', () => {
++  it('maps paper width to columns', () => {
++    expect(getCharsPerLine({ paperWidth: 58 })).toBe(32);
++    expect(getCharsPerLine({ paperWidth: 80 })).toBe(48);
++  });
++});
++
++describe('load/save', () => {
++  it('round-trips through storage', () => {
++    const storage = fakeStorage();
++    saveProfile({ connection: 'usb', paperWidth: 80 }, storage);
++    expect(loadProfile(storage)).toMatchObject({ connection: 'usb', paperWidth: 80 });
++  });
++
++  it('returns defaults for corrupt JSON', () => {
++    expect(loadProfile(fakeStorage({ [STORAGE_KEY]: '{not json' }))).toEqual(DEFAULT_PROFILE);
++  });
++
++  it('returns defaults when storage is unavailable or throws', () => {
++    expect(loadProfile(null)).toEqual(DEFAULT_PROFILE);
++    const broken = {
++      getItem: () => {
++        throw new Error('blocked');
++      },
++      setItem: () => {
++        throw new Error('blocked');
++      },
++    };
++    expect(loadProfile(broken)).toEqual(DEFAULT_PROFILE);
++    expect(() => saveProfile({ paperWidth: 80 }, broken)).not.toThrow();
++  });
++});
+diff --git a/frontend/src/printing/__tests__/receipt.test.js b/frontend/src/printing/__tests__/receipt.test.js
+new file mode 100644
+index 0000000..f8bcaa5
+--- /dev/null
++++ b/frontend/src/printing/__tests__/receipt.test.js
+@@ -0,0 +1,145 @@
++import { buildReceipt } from '../receiptModel';
++import { renderEscPos, renderHtml, renderPlainText } from '../renderers';
++
++const money = (n) => `KSh ${Number(n).toFixed(2)}`;
++
++const sale = (overrides = {}) => ({
++  serverData: { invoiceNumber: 'INV-1001', createdAt: '2026-09-19T11:32:00' },
++  items: [
++    { id: 1, name: 'Sugar 1kg', price: 150, quantity: 2 },
++    { id: 2, name: 'Extra long product name that must wrap onto more lines', price: '75.50', quantity: 1 },
++  ],
++  customer: { name: 'Jane' },
++  total: 350.5,
++  paymentMethod: 'cash',
++  paymentAmount: 400,
++  change: 49.5,
++  notes: '',
++  ...overrides,
++});
++
++const business = { name: 'Mama Njeri Supermarket', address: 'Moi Avenue, Nairobi', phone: '0700 000 000', kraPin: 'P000000000X' };
++
++describe('buildReceipt', () => {
++  it('computes subtotal, discount and cash tender', () => {
++    const r = buildReceipt(sale(), { business });
++    expect(r.totals.subtotal).toBeCloseTo(375.5);
++    expect(r.totals.discount).toBeCloseTo(25);
++    expect(r.totals.total).toBe(350.5);
++    expect(r.totals.tendered).toBe(400);
++    expect(r.totals.change).toBe(49.5);
++    expect(r.meta.paymentLabel).toBe('Cash');
++  });
++
++  it('has no tender or change for non-cash payments', () => {
++    const r = buildReceipt(sale({ paymentMethod: 'mpesa', paymentAmount: 350.5, change: 0 }));
++    expect(r.totals.tendered).toBeNull();
++    expect(r.meta.paymentLabel).toBe('M-Pesa');
++  });
++
++  it('falls back to safe defaults', () => {
++    const r = buildReceipt({ items: [], serverData: null });
++    expect(r.meta.invoiceNumber).toBe('N/A');
++    expect(r.meta.customerName).toBe('Walk-in Customer');
++    expect(r.lines).toEqual([]);
++  });
++});
++
++describe.each([
++  [58, 32],
++  [80, 48],
++])('%imm paper (%i columns)', (paperWidth, cols) => {
++  const profile = { paperWidth };
++
++  it('never lets a line exceed the paper width', () => {
++    const text = renderPlainText(buildReceipt(sale(), { business }), profile, money);
++    text.split('\n').forEach((line) => {
++      expect(line.length).toBeLessThanOrEqual(cols);
++    });
++  });
++
++  it('contains the key receipt facts', () => {
++    const text = renderPlainText(buildReceipt(sale(), { business }), profile, money);
++    expect(text).toContain('INV-1001');
++    expect(text).toContain('2026-09-19 11:32');
++    expect(text).toContain('Jane');
++    expect(text).toContain('KRA PIN: P000000000X');
++    expect(text).toContain('Discount');
++    expect(text).toContain('KSh 350.50');
++    expect(text).toContain('Change Due');
++  });
++});
++
++describe('renderPlainText details', () => {
++  it('omits discount when there is none', () => {
++    const text = renderPlainText(buildReceipt(sale({ total: 375.5 })), { paperWidth: 58 }, money);
++    expect(text).not.toContain('Discount');
++  });
++
++  it('flags offline sales as pending sync', () => {
++    const text = renderPlainText(buildReceipt(sale({ isOffline: true })), { paperWidth: 58 }, money);
++    expect(text).toContain('pending sync');
++  });
++
++  it('survives very large amounts by dropping double-size total instead of truncating', () => {
++    const big = buildReceipt(sale({ total: 12345678.9 }));
++    const lines = renderPlainText(big, { paperWidth: 58 }, money).split('\n');
++    const totalLine = lines.find((l) => l.startsWith('TOTAL'));
++    expect(totalLine).toBeDefined();
++    expect(totalLine).toContain('12345678.90');
++    expect(totalLine.length).toBeLessThanOrEqual(32);
++  });
++});
++
++describe('renderEscPos', () => {
++  const receipt = buildReceipt(sale(), { business });
++
++  it('starts with init and ends with a partial cut by default', () => {
++    const b = Array.from(renderEscPos(receipt, { paperWidth: 58 }, money));
++    expect(b.slice(0, 2)).toEqual([0x1b, 0x40]);
++    expect(b.slice(-3)).toEqual([0x1d, 0x56, 0x01]);
++  });
++
++  it('honours cut = none', () => {
++    const b = Array.from(renderEscPos(receipt, { cut: 'none' }, money));
++    const hasCut = b.some((v, i) => v === 0x1d && b[i + 1] === 0x56);
++    expect(hasCut).toBe(false);
++  });
++
++  it('kicks the cash drawer before cutting when enabled', () => {
++    const b = Array.from(renderEscPos(receipt, { openDrawer: true }, money));
++    const kick = b.findIndex((v, i) => v === 0x1b && b[i + 1] === 0x70);
++    const cut = b.findIndex((v, i) => v === 0x1d && b[i + 1] === 0x56);
++    expect(kick).toBeGreaterThan(-1);
++    expect(kick).toBeLessThan(cut);
++  });
++
++  it('resets bold/double before finishing so the next job starts clean', () => {
++    const b = Array.from(renderEscPos(receipt, { paperWidth: 58 }, money));
++    const lastDouble = b.map((v, i) => (v === 0x1d && b[i + 1] === 0x21 ? b[i + 2] : null)).filter((v) => v !== null).pop();
++    expect(lastDouble).toBe(0x00);
++  });
++
++  it('emits only ASCII text bytes and control codes', () => {
++    const r = buildReceipt(sale({ items: [{ id: 1, name: 'Café ☕ Crème', price: 10, quantity: 1 }] }));
++    Array.from(renderEscPos(r, {}, money)).forEach((v) => expect(v).toBeLessThan(0x80));
++  });
++});
++
++describe('renderHtml', () => {
++  it('sizes the page to the configured paper', () => {
++    const r = buildReceipt(sale());
++    expect(renderHtml(r, { paperWidth: 58 }, money)).toContain('size: 58mm auto');
++    expect(renderHtml(r, { paperWidth: 80 }, money)).toContain('size: 80mm auto');
++  });
++
++  it('escapes HTML in user-controlled fields', () => {
++    const r = buildReceipt(sale({ items: [{ id: 1, name: '<script>alert(1)</script>', price: 1, quantity: 1 }] }), {
++      business: { name: 'A & B <Shop>' },
++    });
++    const html = renderHtml(r, {}, money);
++    expect(html).not.toContain('<script>');
++    expect(html).toContain('&lt;script&gt;');
++    expect(html).toContain('A &amp; B &lt;Shop&gt;');
++  });
++});
+diff --git a/frontend/src/printing/__tests__/text.test.js b/frontend/src/printing/__tests__/text.test.js
+new file mode 100644
+index 0000000..0f4b525
+--- /dev/null
++++ b/frontend/src/printing/__tests__/text.test.js
+@@ -0,0 +1,66 @@
++import { toPrinterText, wrapText, twoCol, center } from '../text';
++
++describe('toPrinterText', () => {
++  it('keeps plain ASCII unchanged', () => {
++    expect(toPrinterText('KSh 1,250.00')).toBe('KSh 1,250.00');
++  });
++
++  it('transliterates currency symbols and punctuation used in supported markets', () => {
++    expect(toPrinterText('GH₵ 10')).toBe('GHC 10');
++    expect(toPrinterText('₦5,000')).toBe('N5,000');
++    expect(toPrinterText('Item — big × 2')).toBe('Item - big x 2');
++  });
++
++  it('strips accents and replaces unprintable characters', () => {
++    expect(toPrinterText('Café')).toBe('Cafe');
++    expect(toPrinterText('Tea ☕')).toBe('Tea ?');
++  });
++
++  it('never emits newlines or nulls', () => {
++    expect(toPrinterText('a\nb\tc')).toBe('a b c');
++    expect(toPrinterText(null)).toBe('');
++    expect(toPrinterText(undefined)).toBe('');
++  });
++});
++
++describe('wrapText', () => {
++  it('wraps on word boundaries', () => {
++    expect(wrapText('the quick brown fox', 10)).toEqual(['the quick', 'brown fox']);
++  });
++
++  it('hard-splits words longer than the line', () => {
++    expect(wrapText('abcdefghij', 4)).toEqual(['abcd', 'efgh', 'ij']);
++  });
++
++  it('returns no lines for empty input', () => {
++    expect(wrapText('', 10)).toEqual([]);
++    expect(wrapText('   ', 10)).toEqual([]);
++  });
++
++  it('never exceeds the width', () => {
++    wrapText('Extra long product name with supercalifragilistic words', 12).forEach((l) => {
++      expect(l.length).toBeLessThanOrEqual(12);
++    });
++  });
++});
++
++describe('twoCol', () => {
++  it('fills exactly the width', () => {
++    const line = twoCol('Total', '100.00', 20);
++    expect(line).toHaveLength(20);
++    expect(line.startsWith('Total')).toBe(true);
++    expect(line.endsWith('100.00')).toBe(true);
++  });
++
++  it('truncates the left side, never the amount', () => {
++    const line = twoCol('A very long product name', '99.00', 16);
++    expect(line).toHaveLength(16);
++    expect(line.endsWith('99.00')).toBe(true);
++  });
++});
++
++describe('center', () => {
++  it('pads on the left only', () => {
++    expect(center('abc', 9)).toBe('   abc');
++  });
++});
+diff --git a/frontend/src/printing/adapters/browserPrintAdapter.js b/frontend/src/printing/adapters/browserPrintAdapter.js
+new file mode 100644
+index 0000000..16ea432
+--- /dev/null
++++ b/frontend/src/printing/adapters/browserPrintAdapter.js
+@@ -0,0 +1,64 @@
++/**
++ * Browser print adapter: universal fallback that works on every device.
++ *
++ * Prints the receipt HTML from a hidden iframe, so the app UI behind it never
++ * ends up on paper and no global print CSS is needed. The output goes through
++ * whatever printer the OS/browser has selected (driver-based thermal printers,
++ * office printers, "Save as PDF").
++ */
++
++const LOAD_TIMEOUT_MS = 5000;
++const CLEANUP_DELAY_MS = 60000;
++
++function printHtmlInIframe(html) {
++  return new Promise((resolve, reject) => {
++    const iframe = document.createElement('iframe');
++    iframe.setAttribute('aria-hidden', 'true');
++    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
++
++    let settled = false;
++    const cleanup = () => iframe.parentNode && iframe.parentNode.removeChild(iframe);
++    const fail = (error) => {
++      if (settled) return;
++      settled = true;
++      cleanup();
++      reject(error);
++    };
++
++    const timeout = setTimeout(() => fail(new Error('Receipt failed to load for printing')), LOAD_TIMEOUT_MS);
++
++    iframe.onload = () => {
++      if (settled) return;
++      clearTimeout(timeout);
++      try {
++        const win = iframe.contentWindow;
++        win.focus();
++        win.print();
++        settled = true;
++        resolve();
++        // print() returns once the dialog opens; keep the frame until it is done.
++        win.addEventListener('afterprint', cleanup, { once: true });
++        setTimeout(cleanup, CLEANUP_DELAY_MS);
++      } catch (error) {
++        fail(error);
++      }
++    };
++
++    iframe.srcdoc = html;
++    document.body.appendChild(iframe);
++  });
++}
++
++export const browserPrintAdapter = {
++  id: 'browser',
++  label: 'Browser / system printer',
++
++  isSupported() {
++    return typeof window !== 'undefined' && typeof document !== 'undefined' && typeof window.print === 'function';
++  },
++
++  /** @param {import('../printService').PrintJob} job */
++  async print(job) {
++    await printHtmlInIframe(job.html());
++  },
++};
+diff --git a/frontend/src/printing/adapters/index.js b/frontend/src/printing/adapters/index.js
+new file mode 100644
+index 0000000..67dadc9
+--- /dev/null
++++ b/frontend/src/printing/adapters/index.js
+@@ -0,0 +1,21 @@
++import { browserPrintAdapter } from './browserPrintAdapter';
++
++/**
++ * Print adapter registry.
++ *
++ * An adapter is `{ id, label, isSupported(): boolean, print(job): Promise<void> }`
++ * where `job` is a PrintJob (see printService.js). Thermal adapters call
++ * `job.escpos()` for raw bytes and write them to their transport; the browser
++ * adapter calls `job.html()`.
++ *
++ * To add a connection type (Bluetooth, WebUSB, Web Serial, a local print agent
++ * for LAN printers), implement that interface and register it here under the id
++ * used in the printer profile's `connection` field. The print service already
++ * falls back to the browser adapter whenever a registered adapter is missing,
++ * unsupported, or throws.
++ */
++export const ADAPTERS = {
++  browser: browserPrintAdapter,
++};
++
++export const FALLBACK_ADAPTER_ID = 'browser';
+diff --git a/frontend/src/printing/escpos.js b/frontend/src/printing/escpos.js
+new file mode 100644
+index 0000000..edef94a
+--- /dev/null
++++ b/frontend/src/printing/escpos.js
+@@ -0,0 +1,78 @@
++import { toPrinterText } from './text';
++
++const ESC = 0x1b;
++const GS = 0x1d;
++
++/**
++ * Minimal ESC/POS command builder. Covers only what receipts need
++ * (init, bold, double size, text, feed, cut, cash-drawer kick), so the app
++ * carries no extra dependency and every byte is unit-testable.
++ */
++export class EscPosBuilder {
++  constructor() {
++    this.bytes = [];
++    this._bold = false;
++    this._double = false;
++  }
++
++  raw(...values) {
++    this.bytes.push(...values);
++    return this;
++  }
++
++  /** Reset the printer to its defaults (ESC @). */
++  init() {
++    this._bold = false;
++    this._double = false;
++    return this.raw(ESC, 0x40);
++  }
++
++  /** Bold on/off (ESC E n). Only emits when the state changes. */
++  bold(on) {
++    if (on === this._bold) return this;
++    this._bold = on;
++    return this.raw(ESC, 0x45, on ? 1 : 0);
++  }
++
++  /** Double width + height on/off (GS ! n). Only emits when the state changes. */
++  double(on) {
++    if (on === this._double) return this;
++    this._double = on;
++    return this.raw(GS, 0x21, on ? 0x11 : 0x00);
++  }
++
++  text(str) {
++    const s = toPrinterText(str);
++    for (let i = 0; i < s.length; i += 1) this.bytes.push(s.charCodeAt(i));
++    return this;
++  }
++
++  newline() {
++    return this.raw(0x0a);
++  }
++
++  line(str = '') {
++    return this.text(str).newline();
++  }
++
++  /** Print buffer and feed n lines (ESC d n). */
++  feed(n) {
++    return this.raw(ESC, 0x64, Math.min(255, Math.max(0, n | 0)));
++  }
++
++  /** Paper cut (GS V m). 'none' emits nothing, for printers without a cutter. */
++  cut(mode = 'partial') {
++    if (mode === 'full') return this.raw(GS, 0x56, 0x00);
++    if (mode === 'partial') return this.raw(GS, 0x56, 0x01);
++    return this;
++  }
++
++  /** Pulse cash-drawer pin 2 (ESC p 0 25 250). */
++  openDrawer() {
++    return this.raw(ESC, 0x70, 0x00, 0x19, 0xfa);
++  }
++
++  build() {
++    return Uint8Array.from(this.bytes);
++  }
++}
+diff --git a/frontend/src/printing/index.js b/frontend/src/printing/index.js
+new file mode 100644
+index 0000000..2f0fdd5
+--- /dev/null
++++ b/frontend/src/printing/index.js
+@@ -0,0 +1,4 @@
++export { buildReceipt } from './receiptModel';
++export { printReceipt, printTestReceipt, createPrintJob } from './printService';
++export { loadProfile, saveProfile, normalizeProfile, DEFAULT_PROFILE, PAPER_PRESETS } from './profile';
++export { renderEscPos, renderHtml, renderPlainText } from './renderers';
+diff --git a/frontend/src/printing/layout.js b/frontend/src/printing/layout.js
+new file mode 100644
+index 0000000..de84f78
+--- /dev/null
++++ b/frontend/src/printing/layout.js
+@@ -0,0 +1,81 @@
++import { toPrinterText, wrapText, twoCol, center, rule } from './text';
++
++const pad2 = (n) => String(n).padStart(2, '0');
++
++export function formatReceiptDate(value) {
++  const d = value instanceof Date ? value : new Date(value);
++  if (Number.isNaN(d.getTime())) return '';
++  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
++}
++
++/**
++ * Lay a receipt out as fixed-width lines: [{ text, bold, double }].
++ *
++ * Alignment is baked into `text` (padding), so ESC/POS, HTML and plain text
++ * all print identically. `double` lines print at 2x width and height, so they
++ * only have half as many columns to work with.
++ */
++export function layoutReceipt(receipt, { charsPerLine, formatMoney }) {
++  const width = charsPerLine;
++  const half = Math.floor(width / 2);
++  const out = [];
++  const add = (text, { bold = false, double = false } = {}) => out.push({ text, bold, double });
++  const blank = () => add('');
++  const money = (n) => toPrinterText(formatMoney(n));
++  const kv = (label, value) => wrapText(`${label}: ${value}`, width).forEach((l) => add(l));
++
++  const { business, meta, lines, totals, notes, footer } = receipt;
++
++  // Header
++  wrapText(business.name, half).forEach((l) => add(center(l, half), { bold: true, double: true }));
++  wrapText(business.address, width).forEach((l) => add(center(l, width)));
++  if (business.phone) wrapText(`Tel: ${business.phone}`, width).forEach((l) => add(center(l, width)));
++  if (business.kraPin) wrapText(`KRA PIN: ${business.kraPin}`, width).forEach((l) => add(center(l, width)));
++  blank();
++  add(center('RECEIPT', width), { bold: true });
++  add(rule(width));
++
++  // Sale details
++  kv('Invoice', `#${meta.invoiceNumber}`);
++  const date = formatReceiptDate(meta.dateTime);
++  if (date) kv('Date', date);
++  kv('Customer', meta.customerName);
++  kv('Payment', meta.paymentLabel);
++  if (meta.isOffline) wrapText('Offline sale - pending sync', width).forEach((l) => add(l, { bold: true }));
++  add(rule(width));
++
++  // Items: name on its own line(s), then "qty x price ..... line total".
++  // Two lines per item stays readable even on 32-column paper.
++  lines.forEach((line) => {
++    wrapText(line.name, width).forEach((l) => add(l));
++    add(twoCol(`  ${line.quantity} x ${money(line.unitPrice)}`, money(line.lineTotal), width));
++  });
++  add(rule(width));
++
++  // Totals
++  add(twoCol('Subtotal', money(totals.subtotal), width));
++  if (totals.discount > 0) add(twoCol('Discount', `-${money(totals.discount)}`, width));
++
++  const totalMoney = money(totals.total);
++  if ('TOTAL'.length + 1 + totalMoney.length <= half) {
++    add(twoCol('TOTAL', totalMoney, half), { bold: true, double: true });
++  } else {
++    // Amount too wide to double: fall back to bold at normal size.
++    add(twoCol('TOTAL', totalMoney, width), { bold: true });
++  }
++
++  if (totals.tendered !== null) {
++    add(twoCol('Amount Received', money(totals.tendered), width));
++    if (totals.change > 0) add(twoCol('Change Due', money(totals.change), width), { bold: true });
++  }
++
++  if (notes) {
++    add(rule(width));
++    wrapText(`Notes: ${notes}`, width).forEach((l) => add(l));
++  }
++
++  blank();
++  wrapText(footer, width).forEach((l) => add(center(l, width)));
++
++  return out;
++}
+diff --git a/frontend/src/printing/printService.js b/frontend/src/printing/printService.js
+new file mode 100644
+index 0000000..0a47968
+--- /dev/null
++++ b/frontend/src/printing/printService.js
+@@ -0,0 +1,101 @@
++import { buildReceipt } from './receiptModel';
++import { renderEscPos, renderHtml, renderPlainText } from './renderers';
++import { loadProfile, normalizeProfile } from './profile';
++import { ADAPTERS, FALLBACK_ADAPTER_ID } from './adapters';
++
++/**
++ * @typedef {object} PrintJob
++ * @property {object} receipt      printer-agnostic receipt model
++ * @property {object} profile      normalized printer profile
++ * @property {() => Uint8Array} escpos  raw ESC/POS bytes (rendered lazily, once)
++ * @property {() => string} html        standalone HTML document
++ * @property {() => string} text        plain text
++ */
++
++/** @returns {PrintJob} */
++export function createPrintJob(receipt, profile, formatMoney) {
++  const p = normalizeProfile(profile);
++  const cache = {};
++  const once = (key, render) => () => {
++    if (!(key in cache)) cache[key] = render(receipt, p, formatMoney);
++    return cache[key];
++  };
++  return {
++    receipt,
++    profile: p,
++    escpos: once('escpos', renderEscPos),
++    html: once('html', renderHtml),
++    text: once('text', renderPlainText),
++  };
++}
++
++const messageOf = (error) => (error && error.message) || String(error || 'Unknown printing error');
++
++/**
++ * Print a receipt using this device's printer profile.
++ *
++ * Fallback chain: the profile's adapter first; if it is missing, unsupported or
++ * throws, the browser adapter. Never throws: a printer problem must not block a
++ * sale, so the caller gets a result to show the cashier instead.
++ *
++ * @returns {Promise<{ok: boolean, adapterId: string|null, fellBack: boolean, error?: string}>}
++ */
++export async function printReceipt(
++  completedSale,
++  { formatMoney, business, profile, adapters = ADAPTERS } = {}
++) {
++  const money = typeof formatMoney === 'function' ? formatMoney : (n) => Number(n || 0).toFixed(2);
++  const activeProfile = normalizeProfile(profile || loadProfile());
++
++  let job;
++  try {
++    job = createPrintJob(buildReceipt(completedSale, { business }), activeProfile, money);
++  } catch (error) {
++    return { ok: false, adapterId: null, fellBack: false, error: messageOf(error) };
++  }
++
++  const preferred = adapters[activeProfile.connection];
++  let preferredError = null;
++
++  if (preferred && preferred.isSupported()) {
++    try {
++      await preferred.print(job);
++      return { ok: true, adapterId: preferred.id, fellBack: false };
++    } catch (error) {
++      preferredError = messageOf(error);
++    }
++  } else {
++    preferredError = `${activeProfile.connection} printing is not available on this device`;
++  }
++
++  const fallback = adapters[FALLBACK_ADAPTER_ID];
++  const alreadyTriedFallback = preferred === fallback;
++  if (!fallback || alreadyTriedFallback || !fallback.isSupported()) {
++    return { ok: false, adapterId: null, fellBack: false, error: preferredError };
++  }
++
++  try {
++    await fallback.print(job);
++    return { ok: true, adapterId: fallback.id, fellBack: true, error: preferredError };
++  } catch (error) {
++    return { ok: false, adapterId: null, fellBack: false, error: messageOf(error) };
++  }
++}
++
++/** Sample receipt for a "Test print" button in printer settings. */
++export function printTestReceipt({ formatMoney, business, profile, adapters } = {}) {
++  const sample = {
++    serverData: { invoiceNumber: 'TEST-0001', createdAt: new Date() },
++    items: [
++      { id: 1, name: 'Sample item', price: 150, quantity: 2 },
++      { id: 2, name: 'Second sample item with a long name', price: 75.5, quantity: 1 },
++    ],
++    customer: { name: 'Test Customer' },
++    total: 375.5,
++    paymentMethod: 'cash',
++    paymentAmount: 400,
++    change: 24.5,
++    notes: 'Printer test - not a real sale',
++  };
++  return printReceipt(sample, { formatMoney, business, profile, adapters });
++}
+diff --git a/frontend/src/printing/profile.js b/frontend/src/printing/profile.js
+new file mode 100644
+index 0000000..c781dce
+--- /dev/null
++++ b/frontend/src/printing/profile.js
+@@ -0,0 +1,74 @@
++/**
++ * Printer profile: how THIS device prints receipts.
++ *
++ * Stored per device (localStorage), not per shop: the same shop may print
++ * over Bluetooth from a phone and over USB from the counter PC.
++ */
++
++export const STORAGE_KEY = 'zana.printerProfile.v1';
++
++export const CONNECTIONS = ['browser', 'bluetooth', 'usb', 'serial', 'network'];
++export const CUT_MODES = ['partial', 'full', 'none'];
++
++/**
++ * Printable width of common thermal paper at 203 dpi, using the printer's
++ * standard 12-dot font: 58mm paper ≈ 32 columns, 80mm paper ≈ 48 columns.
++ */
++export const PAPER_PRESETS = {
++  58: { charsPerLine: 32 },
++  80: { charsPerLine: 48 },
++};
++
++/**
++ * 58mm is the safe default for a mixed fleet: narrow content still prints
++ * correctly on 80mm paper, but 80mm content would be clipped on 58mm paper.
++ */
++export const DEFAULT_PROFILE = Object.freeze({
++  connection: 'browser',
++  paperWidth: 58,
++  cut: 'partial',
++  openDrawer: false,
++  feedLines: 3,
++});
++
++/** Validate an untrusted/partial profile and fill in defaults. */
++export function normalizeProfile(raw) {
++  const p = raw && typeof raw === 'object' ? raw : {};
++  const feed = Number(p.feedLines);
++  return {
++    connection: CONNECTIONS.includes(p.connection) ? p.connection : DEFAULT_PROFILE.connection,
++    paperWidth: PAPER_PRESETS[p.paperWidth] ? Number(p.paperWidth) : DEFAULT_PROFILE.paperWidth,
++    cut: CUT_MODES.includes(p.cut) ? p.cut : DEFAULT_PROFILE.cut,
++    openDrawer: p.openDrawer === true,
++    feedLines: Number.isInteger(feed) && feed >= 0 && feed <= 10 ? feed : DEFAULT_PROFILE.feedLines,
++  };
++}
++
++export const getCharsPerLine = (profile) => PAPER_PRESETS[normalizeProfile(profile).paperWidth].charsPerLine;
++
++const getStorage = () => {
++  try {
++    return typeof window !== 'undefined' ? window.localStorage : null;
++  } catch {
++    return null; // storage blocked (private mode, etc.)
++  }
++};
++
++export function loadProfile(storage = getStorage()) {
++  try {
++    const raw = storage?.getItem(STORAGE_KEY);
++    return normalizeProfile(raw ? JSON.parse(raw) : null);
++  } catch {
++    return normalizeProfile(null);
++  }
++}
++
++export function saveProfile(profile, storage = getStorage()) {
++  const clean = normalizeProfile(profile);
++  try {
++    storage?.setItem(STORAGE_KEY, JSON.stringify(clean));
++  } catch {
++    // Non-fatal: the profile just won't persist.
++  }
++  return clean;
++}
+diff --git a/frontend/src/printing/receiptModel.js b/frontend/src/printing/receiptModel.js
+new file mode 100644
+index 0000000..73b2e74
+--- /dev/null
++++ b/frontend/src/printing/receiptModel.js
+@@ -0,0 +1,87 @@
++/**
++ * Receipt data model: a plain, printer-agnostic description of one sale.
++ *
++ * Everything downstream (ESC/POS, HTML, plain text, and later PDF or
++ * WhatsApp receipts) renders from this one structure, so a receipt can never
++ * differ between output channels.
++ */
++
++const PAYMENT_LABELS = {
++  cash: 'Cash',
++  card: 'Card',
++  mpesa: 'M-Pesa',
++  split: 'Split Tender',
++};
++
++const paymentLabel = (method) => {
++  const key = String(method || 'cash').toLowerCase();
++  if (PAYMENT_LABELS[key]) return PAYMENT_LABELS[key];
++  return key.charAt(0).toUpperCase() + key.slice(1);
++};
++
++const num = (value) => {
++  const n = parseFloat(value);
++  return Number.isFinite(n) ? n : 0;
++};
++
++/**
++ * @param {object} completedSale  { serverData, items, customer, total, paymentMethod,
++ *                                  paymentAmount, change, notes, isOffline }
++ * @param {object} [options]
++ * @param {object} [options.business]  { name, address, phone, kraPin }
++ * @param {Date}   [options.now]
++ */
++export function buildReceipt(completedSale, { business = {}, now = new Date() } = {}) {
++  const {
++    serverData,
++    items = [],
++    customer,
++    total = 0,
++    paymentMethod = 'cash',
++    paymentAmount = 0,
++    change = 0,
++    notes,
++    isOffline = false,
++  } = completedSale || {};
++
++  const lines = items.map((item) => {
++    const unitPrice = num(item.price);
++    const quantity = item.quantity ?? 1;
++    return {
++      name: item.name || 'Item',
++      quantity,
++      unitPrice,
++      lineTotal: unitPrice * num(quantity),
++    };
++  });
++
++  const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
++  const grandTotal = num(total);
++  const isCash = String(paymentMethod).toLowerCase() === 'cash';
++
++  return {
++    business: {
++      name: business?.name || '',
++      address: business?.address || '',
++      phone: business?.phone || '',
++      kraPin: business?.kraPin || '',
++    },
++    meta: {
++      invoiceNumber: String(serverData?.invoiceNumber || serverData?.id || 'N/A'),
++      dateTime: serverData?.createdAt || now,
++      customerName: customer?.name || 'Walk-in Customer',
++      paymentLabel: paymentLabel(paymentMethod),
++      isOffline: Boolean(isOffline),
++    },
++    lines,
++    totals: {
++      subtotal,
++      discount: Math.max(0, subtotal - grandTotal),
++      total: grandTotal,
++      tendered: isCash ? num(paymentAmount) : null,
++      change: isCash ? num(change) : 0,
++    },
++    notes: notes || '',
++    footer: 'Thank you for your business!',
++  };
++}
+diff --git a/frontend/src/printing/renderers.js b/frontend/src/printing/renderers.js
+new file mode 100644
+index 0000000..baa6f02
+--- /dev/null
++++ b/frontend/src/printing/renderers.js
+@@ -0,0 +1,67 @@
++import { EscPosBuilder } from './escpos';
++import { layoutReceipt } from './layout';
++import { normalizeProfile, getCharsPerLine } from './profile';
++
++const layoutFor = (receipt, profile, formatMoney) =>
++  layoutReceipt(receipt, { charsPerLine: getCharsPerLine(profile), formatMoney });
++
++/** Raw ESC/POS bytes for thermal printers (Bluetooth, USB, serial, network). */
++export function renderEscPos(receipt, profile, formatMoney) {
++  const p = normalizeProfile(profile);
++  const b = new EscPosBuilder().init();
++
++  layoutFor(receipt, p, formatMoney).forEach((line) => {
++    b.bold(line.bold).double(line.double).line(line.text);
++  });
++  b.bold(false).double(false);
++
++  b.feed(p.feedLines);
++  if (p.openDrawer) b.openDrawer();
++  b.cut(p.cut);
++  return b.build();
++}
++
++/** Plain text, for previews, logs and tests. */
++export function renderPlainText(receipt, profile, formatMoney) {
++  return `${layoutFor(receipt, profile, formatMoney).map((l) => l.text).join('\n')}\n`;
++}
++
++const escapeHtml = (s) =>
++  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
++
++/**
++ * Standalone HTML document for browser/system-driver printing.
++ *
++ * Same layout as ESC/POS, in a monospace font sized so that 32 (58mm) or
++ * 48 (80mm) columns fit the printable area: 7pt monospace is ~1.5mm per
++ * column, matching a thermal printer's native 12-dot font.
++ */
++export function renderHtml(receipt, profile, formatMoney) {
++  const p = normalizeProfile(profile);
++  const rows = layoutFor(receipt, p, formatMoney)
++    .map((l) => {
++      const cls = ['l', l.bold ? 'b' : '', l.double ? 'd' : ''].filter(Boolean).join(' ');
++      return `<div class="${cls}">${escapeHtml(l.text)}</div>`;
++    })
++    .join('\n');
++
++  return `<!doctype html>
++<html>
++<head>
++<meta charset="utf-8">
++<title>Receipt</title>
++<style>
++  @page { size: ${p.paperWidth}mm auto; margin: 0; }
++  html, body { margin: 0; background: #fff; color: #000; }
++  body { width: ${p.paperWidth}mm; box-sizing: border-box; padding: 2mm 2mm 6mm;
++         font: 7pt/1.3 "Courier New", "Liberation Mono", monospace; }
++  .l { white-space: pre; overflow: hidden; min-height: 1.3em; }
++  .b { font-weight: bold; }
++  .d { font-size: 14pt; line-height: 1.2; min-height: 1.2em; }
++</style>
++</head>
++<body>
++${rows}
++</body>
++</html>`;
++}
+diff --git a/frontend/src/printing/text.js b/frontend/src/printing/text.js
+new file mode 100644
+index 0000000..eae36ab
+--- /dev/null
++++ b/frontend/src/printing/text.js
+@@ -0,0 +1,92 @@
++/**
++ * Text helpers for fixed-width (thermal printer) output.
++ *
++ * Thermal printers use a small single-byte code page. We only emit printable
++ * ASCII so receipts look the same on every printer, whatever its code page.
++ */
++
++const REPLACEMENTS = {
++  '\u20A6': 'N', // ₦
++  '\u20B5': 'C', // ₵
++  '\u20AC': 'EUR',
++  '\u00A3': 'GBP',
++  '\u2013': '-',
++  '\u2014': '-',
++  '\u2018': "'",
++  '\u2019': "'",
++  '\u201C': '"',
++  '\u201D': '"',
++  '\u2026': '...',
++  '\u00D7': 'x',
++};
++
++/** Convert any value to single-line printable ASCII. */
++export function toPrinterText(input) {
++  const str = String(input ?? '');
++  let out = '';
++  for (const ch of str.normalize('NFKD')) {
++    if (Object.prototype.hasOwnProperty.call(REPLACEMENTS, ch)) {
++      out += REPLACEMENTS[ch];
++      continue;
++    }
++    const code = ch.codePointAt(0);
++    if (code >= 0x20 && code <= 0x7e) {
++      out += ch;
++    } else if (code >= 0x300 && code <= 0x36f) {
++      // combining accent left over from NFKD: drop it (é -> e)
++    } else if (ch === '\n' || ch === '\r' || ch === '\t') {
++      out += ' ';
++    } else {
++      out += '?';
++    }
++  }
++  return out;
++}
++
++/** Word-wrap text to `width` columns, hard-splitting words that are too long. */
++export function wrapText(text, width) {
++  const w = Math.max(1, Math.floor(width));
++  const clean = toPrinterText(text).trim();
++  if (!clean) return [];
++
++  const lines = [];
++  let current = '';
++  for (let word of clean.split(/\s+/)) {
++    while (word.length > w) {
++      if (current) {
++        lines.push(current);
++        current = '';
++      }
++      lines.push(word.slice(0, w));
++      word = word.slice(w);
++    }
++    if (!current) {
++      current = word;
++    } else if (current.length + 1 + word.length <= w) {
++      current += ` ${word}`;
++    } else {
++      lines.push(current);
++      current = word;
++    }
++  }
++  if (current) lines.push(current);
++  return lines;
++}
++
++/** `left` flush left, `right` flush right, exactly `width` columns. */
++export function twoCol(left, right, width) {
++  const l = toPrinterText(left);
++  const r = toPrinterText(right);
++  if (r.length >= width) return r.slice(0, width);
++  const room = width - r.length - 1;
++  const leftText = l.slice(0, Math.max(0, room));
++  return leftText + ' '.repeat(width - leftText.length - r.length) + r;
++}
++
++/** Center text within `width` columns (leading pad only, no trailing spaces). */
++export function center(text, width) {
++  const t = toPrinterText(text).slice(0, width);
++  return ' '.repeat(Math.floor((width - t.length) / 2)) + t;
++}
++
++export const rule = (width, ch = '-') => ch.repeat(width);
