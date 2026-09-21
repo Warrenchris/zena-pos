@@ -1,8 +1,0 @@
-{
-  "appId": "com.zana.pos",
-  "appName": "Zana POS",
-  "webDir": "../frontend/dist",
-  "android": {
-    "allowMixedContent": false
-  }
-}

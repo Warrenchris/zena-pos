@@ -5,8 +5,6 @@
  * over Bluetooth from a phone and over USB from the counter PC.
  */
 
-import { getNativeBluetoothPlugin } from './adapters/nativeBluetooth';
-
 export const STORAGE_KEY = 'zana.printerProfile.v1';
 
 export const CONNECTIONS = ['browser', 'bluetooth', 'usb', 'serial', 'network'];
@@ -55,20 +53,7 @@ export const DEFAULT_PROFILE = Object.freeze({
   cut: 'partial',
   openDrawer: false,
   feedLines: 3,
-  printerAddress: '', // Bluetooth MAC address of the chosen printer
-  printerName: '',
 });
-
-const MAC_ADDRESS = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i;
-export const isValidBluetoothAddress = (value) => typeof value === 'string' && MAC_ADDRESS.test(value);
-
-/**
- * The profile a device starts with. Inside the Android app the browser print
- * dialog isn't available, so a fresh device starts on Bluetooth.
- */
-export function getDefaultProfile() {
-  return { ...DEFAULT_PROFILE, connection: getNativeBluetoothPlugin() ? 'bluetooth' : 'browser' };
-}
 
 /** Validate an untrusted/partial profile and fill in defaults. */
 export function normalizeProfile(raw) {
@@ -80,12 +65,6 @@ export function normalizeProfile(raw) {
     cut: CUT_MODES.includes(p.cut) ? p.cut : DEFAULT_PROFILE.cut,
     openDrawer: p.openDrawer === true,
     feedLines: Number.isInteger(feed) && feed >= 0 && feed <= 10 ? feed : DEFAULT_PROFILE.feedLines,
-    ...(isValidBluetoothAddress(p.printerAddress)
-      ? {
-          printerAddress: p.printerAddress.toUpperCase(),
-          printerName: typeof p.printerName === 'string' ? p.printerName.trim().slice(0, 64) : '',
-        }
-      : { printerAddress: '', printerName: '' }),
   };
 }
 
@@ -100,14 +79,12 @@ const getStorage = () => {
 };
 
 export function loadProfile(storage = getStorage()) {
-  let raw = null;
   try {
-    const stored = storage?.getItem(STORAGE_KEY);
-    raw = stored ? JSON.parse(stored) : null;
+    const raw = storage?.getItem(STORAGE_KEY);
+    return normalizeProfile(raw ? JSON.parse(raw) : null);
   } catch {
-    raw = null;
+    return normalizeProfile(null);
   }
-  return raw ? normalizeProfile(raw) : normalizeProfile(getDefaultProfile());
 }
 
 export function saveProfile(profile, storage = getStorage()) {

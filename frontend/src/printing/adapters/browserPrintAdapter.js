@@ -1,13 +1,11 @@
 /**
- * Browser print adapter: the universal fallback for any web browser (not the Android app).
+ * Browser print adapter: universal fallback that works on every device.
  *
  * Prints the receipt HTML from a hidden iframe, so the app UI behind it never
  * ends up on paper and no global print CSS is needed. The output goes through
  * whatever printer the OS/browser has selected (driver-based thermal printers,
  * office printers, "Save as PDF").
  */
-
-import { isNativeAndroid } from './nativeBluetooth';
 
 const LOAD_TIMEOUT_MS = 5000;
 const CLEANUP_DELAY_MS = 60000;
@@ -64,12 +62,7 @@ export const browserPrintAdapter = {
   id: 'browser',
   label: 'Browser / system printer',
 
-  unsupportedReason: 'Not available in the Android app',
-
   isSupported() {
-    // Inside the Android app's WebView, window.print() doesn't open a print dialog, so
-    // reporting it as supported would make prints "succeed" without printing anything.
-    if (isNativeAndroid()) return false;
     return typeof window !== 'undefined' && typeof document !== 'undefined' && typeof window.print === 'function';
   },
 

@@ -1,9 +1,0 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Bluetooth Classic printing to already-paired printers. No scanning, so no location or BLUETOOTH_SCAN. -->
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-
-    <!-- The app still installs on devices without Bluetooth (e.g. some tablets); printing is just unavailable there. -->
-    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
-</manifest>
