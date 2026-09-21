@@ -15,4 +15,3 @@ export {
 export { renderEscPos, renderHtml, renderPlainText } from './renderers';
 export { sampleSale } from './sample';
 export { ADAPTERS } from './adapters';
-export { buildReceiptSettings, resolveLogoUrl } from './receiptSettings';

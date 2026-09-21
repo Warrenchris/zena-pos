@@ -1,4 +1,4 @@
-import { toPrinterText, wrapText, wrapParagraphs, twoCol, center } from '../text';
+import { toPrinterText, wrapText, twoCol, center } from '../text';
 
 describe('toPrinterText', () => {
   it('keeps plain ASCII unchanged', () => {
@@ -62,26 +62,5 @@ describe('twoCol', () => {
 describe('center', () => {
   it('pads on the left only', () => {
     expect(center('abc', 9)).toBe('   abc');
-  });
-});
-
-describe('wrapParagraphs', () => {
-  it('keeps line breaks and wraps each paragraph', () => {
-    expect(wrapParagraphs('Welcome to our shop\nOpen daily 8am to 8pm', 12)).toEqual([
-      'Welcome to',
-      'our shop',
-      'Open daily',
-      '8am to 8pm',
-    ]);
-  });
-
-  it('preserves blank lines and Windows line endings', () => {
-    expect(wrapParagraphs('one\r\n\r\ntwo', 10)).toEqual(['one', '', 'two']);
-  });
-
-  it('returns nothing for empty input', () => {
-    expect(wrapParagraphs('', 10)).toEqual([]);
-    expect(wrapParagraphs('  \n ', 10)).toEqual([]);
-    expect(wrapParagraphs(null, 10)).toEqual([]);
   });
 });

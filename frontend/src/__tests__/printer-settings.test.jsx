@@ -25,13 +25,10 @@ jest.mock('../printing/adapters', () => {
 
 const shop = { name: 'Mama Njeri Supermarket', address: 'Moi Avenue', phone: '0700 000 000', kraPin: 'P000000000X' };
 
-function renderPanel({ withShop = true, settings = {} } = {}) {
+function renderPanel({ withShop = true } = {}) {
   const store = configureStore({
     reducer: combineReducers({ auth: authReducer, shop: shopReducer, settings: settingsReducer }),
-    preloadedState: {
-      ...(withShop ? { shop: { ...shopReducer(undefined, { type: '@@init' }), shop } } : {}),
-      settings: { ...settingsReducer(undefined, { type: '@@init' }), ...settings },
-    },
+    preloadedState: withShop ? { shop: { ...shopReducer(undefined, { type: '@@init' }), shop } } : undefined,
   });
   return render(
     <Provider store={store}>
@@ -172,51 +169,6 @@ describe('PrinterSettingsPanel', () => {
       await screen.findByRole('status');
       fireEvent.click(radio(/^80 mm/));
       expect(screen.queryByRole('status')).toBeNull();
-    });
-  });
-
-  describe('shop-wide receipt header, footer and logo', () => {
-    const receiptSettings = {
-      receiptHeader: 'Welcome to Mama Njeri!\nOpen daily 8am - 8pm',
-      receiptFooter: 'Please come again!',
-      showLogoOnReceipt: true,
-      businessLogo: '/uploads/logos/a.png',
-    };
-
-    it('shows them in the preview', () => {
-      renderPanel({ settings: receiptSettings });
-      const preview = screen.getByTestId('receipt-preview');
-      expect(within(preview).getByText('Welcome to Mama Njeri!')).toBeInTheDocument();
-      expect(within(preview).getByText(/Open daily 8am - 8pm/)).toBeInTheDocument();
-      expect(within(preview).getByText('Please come again!')).toBeInTheDocument();
-      expect(within(preview).queryByText(/Thank you for your business/)).toBeNull();
-      expect(within(preview).getByAltText('Business logo').getAttribute('src')).toMatch(/\/uploads\/logos\/a\.png$/);
-    });
-
-    it('hides the logo when "show logo" is off, and shows the default footer when none is set', () => {
-      renderPanel({ settings: { ...receiptSettings, showLogoOnReceipt: false, receiptFooter: '' } });
-      const preview = screen.getByTestId('receipt-preview');
-      expect(within(preview).queryByAltText('Business logo')).toBeNull();
-      expect(within(preview).getByText(/Thank you for your business/)).toBeInTheDocument();
-    });
-
-    it('prints them on the test receipt', async () => {
-      renderPanel({ settings: receiptSettings });
-      fireEvent.click(radio(/Bluetooth printer/));
-      fireEvent.click(screen.getByRole('button', { name: /print test receipt/i }));
-      await screen.findByRole('status');
-
-      const job = ADAPTERS.bluetooth.print.mock.calls[0][0];
-      expect(job.text()).toContain('Welcome to Mama Njeri!');
-      expect(job.text()).toContain('Please come again!');
-      expect(job.html()).toContain('<img src=');
-    });
-
-    it('explains that logos only print through the browser for now', () => {
-      renderPanel({ settings: receiptSettings });
-      expect(screen.queryByText(/logo prints with browser printing only/i)).toBeNull();
-      fireEvent.click(radio(/Bluetooth printer/));
-      expect(screen.getByText(/logo prints with browser printing only/i)).toBeInTheDocument();
     });
   });
 });

@@ -90,16 +90,3 @@ export function center(text, width) {
 }
 
 export const rule = (width, ch = '-') => ch.repeat(width);
-
-/**
- * Wrap multi-line text (e.g. a receipt header typed into a textarea) to `width`
- * columns. Line breaks are kept, including blank lines; each paragraph is wrapped.
- */
-export function wrapParagraphs(text, width) {
-  const raw = String(text ?? '').replace(/\r\n?/g, '\n').trim();
-  if (!raw) return [];
-  return raw.split('\n').flatMap((paragraph) => {
-    const wrapped = wrapText(paragraph, width);
-    return wrapped.length ? wrapped : [''];
-  });
-}

@@ -24,17 +24,14 @@ const num = (value) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const DEFAULT_FOOTER = 'Thank you for your business!';
-
 /**
  * @param {object} completedSale  { serverData, items, customer, total, paymentMethod,
  *                                  paymentAmount, change, notes, isOffline }
  * @param {object} [options]
  * @param {object} [options.business]  { name, address, phone, kraPin }
- * @param {object} [options.receiptSettings]  { header, footer, showLogo, logoUrl } (see receiptSettings.js)
  * @param {Date}   [options.now]
  */
-export function buildReceipt(completedSale, { business = {}, receiptSettings = {}, now = new Date() } = {}) {
+export function buildReceipt(completedSale, { business = {}, now = new Date() } = {}) {
   const {
     serverData,
     items = [],
@@ -60,12 +57,9 @@ export function buildReceipt(completedSale, { business = {}, receiptSettings = {
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
   const grandTotal = num(total);
-  const customFooter = typeof receiptSettings?.footer === 'string' ? receiptSettings.footer.trim() : '';
   const isCash = String(paymentMethod).toLowerCase() === 'cash';
 
   return {
-    // Logo is only ever an image URL (HTML/browser printing); ESC/POS output has no logo yet.
-    logoUrl: receiptSettings?.showLogo !== false && receiptSettings?.logoUrl ? receiptSettings.logoUrl : null,
     business: {
       name: business?.name || '',
       address: business?.address || '',
@@ -87,8 +81,7 @@ export function buildReceipt(completedSale, { business = {}, receiptSettings = {
       tendered: isCash ? num(paymentAmount) : null,
       change: isCash ? num(change) : 0,
     },
-    header: typeof receiptSettings?.header === 'string' ? receiptSettings.header.trim() : '',
     notes: notes || '',
-    footer: customFooter || DEFAULT_FOOTER,
+    footer: 'Thank you for your business!',
   };
 }

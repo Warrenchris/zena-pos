@@ -8,7 +8,6 @@ import {
 } from '@heroicons/react/24/outline';
 import useCurrency from '../../hooks/useCurrency';
 import usePrinterProfile from '../../hooks/usePrinterProfile';
-import useReceiptSettings from '../../hooks/useReceiptSettings';
 import Button from '../ui/Button';
 import {
   ADAPTERS,
@@ -84,7 +83,7 @@ function ChoiceCard({ name, value, checked, disabled, onChange, title, descripti
   );
 }
 
-function ReceiptPreview({ lines, columns, logoUrl }) {
+function ReceiptPreview({ lines, columns }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border-default bg-surface-2/40 p-4">
       {/* Receipt paper is white with black text in every theme, like the real thing. */}
@@ -102,13 +101,6 @@ function ReceiptPreview({ lines, columns, logoUrl }) {
           boxSizing: 'border-box',
         }}
       >
-        {logoUrl && (
-          <img
-            src={logoUrl}
-            alt="Business logo"
-            style={{ display: 'block', margin: '0 auto 8px', maxWidth: '100%', maxHeight: 80, filter: 'grayscale(1) contrast(1.5)' }}
-          />
-        )}
         {lines.map((line, index) => (
           <div
             key={index}
@@ -138,7 +130,6 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
   const { profile, update, reset } = usePrinterProfile();
   const { format: formatMoney } = useCurrency();
   const shop = useSelector((state) => state.shop?.shop);
-  const receiptSettings = useReceiptSettings();
   const [testState, setTestState] = useState(null);
 
   const columns = getCharsPerLine(profile);
@@ -147,12 +138,8 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
 
   const previewLines = useMemo(() => {
     const business = shop?.name ? shop : { ...shop, name: 'Your Shop Name' };
-    return layoutReceipt(buildReceipt(sampleSale(), { business, receiptSettings }), {
-      charsPerLine: columns,
-      formatMoney,
-    });
-  }, [shop, receiptSettings, columns, formatMoney]);
-  const previewLogoUrl = receiptSettings.showLogo ? receiptSettings.logoUrl : null;
+    return layoutReceipt(buildReceipt(sampleSale(), { business }), { charsPerLine: columns, formatMoney });
+  }, [shop, columns, formatMoney]);
 
   const change = (patch) => {
     setTestState(null);
@@ -166,7 +153,7 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
 
   const handleTestPrint = async () => {
     setTestState({ kind: 'pending', message: 'Sending test receipt…' });
-    const result = await printTestReceipt({ formatMoney, business: shop, receiptSettings, profile });
+    const result = await printTestReceipt({ formatMoney, business: shop, profile });
     if (!result.ok) {
       setTestState({ kind: 'error', message: `Could not print the test receipt: ${result.error}` });
     } else if (result.fellBack) {
@@ -326,16 +313,10 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
 
       <div className="space-y-2">
         <h4 className={legendClass}>Receipt preview</h4>
-        <ReceiptPreview lines={previewLines} columns={columns} logoUrl={previewLogoUrl} />
+        <ReceiptPreview lines={previewLines} columns={columns} />
         <p className="text-caption text-text-muted">
-          Sample receipt at {columns} characters per line, using your shop details, currency, and the receipt header,
-          footer and logo from Settings.
+          Sample receipt at {columns} characters per line. Your shop details and currency are used.
         </p>
-        {previewLogoUrl && !usesBrowser && (
-          <p className="text-caption text-text-muted">
-            The logo prints with browser printing only for now. Direct printing prints the receipt text without it.
-          </p>
-        )}
       </div>
 
       <div className="space-y-3">

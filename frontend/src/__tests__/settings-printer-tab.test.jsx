@@ -6,7 +6,6 @@ import authReducer from '../store/slices/authSlice';
 import shopReducer from '../store/slices/shopSlice';
 import settingsReducer from '../store/slices/settingsSlice';
 import Settings from '../pages/Settings';
-import { settingsAPI } from '../services/api';
 
 jest.mock('../services/api', () => ({
   settingsAPI: {
@@ -59,29 +58,5 @@ describe('Settings > Receipt & Printer tab', () => {
     await waitFor(() =>
       expect(JSON.parse(window.localStorage.getItem('zana.printerProfile.v1')).paperWidth).toBe(80)
     );
-  });
-
-  it('loads the saved receipt header and footer into the form', async () => {
-    settingsAPI.getAll.mockResolvedValueOnce({
-      data: { success: true, data: { receiptHeader: 'Welcome to Mama Njeri!', receiptFooter: 'Please come again!' } },
-    });
-    renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: /Receipt & Printer/ }));
-
-    expect(await screen.findByDisplayValue('Welcome to Mama Njeri!')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Please come again!')).toBeInTheDocument();
-  });
-
-  it('actually saves an edited receipt footer to the server', async () => {
-    settingsAPI.getAll.mockResolvedValueOnce({ data: { success: true, data: { receiptFooter: 'Old footer' } } });
-    settingsAPI.update.mockResolvedValue({ data: { success: true, data: { receiptFooter: 'New footer' } } });
-    renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: /Receipt & Printer/ }));
-
-    fireEvent.change(await screen.findByDisplayValue('Old footer'), { target: { value: 'New footer' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
-
-    await waitFor(() => expect(settingsAPI.update).toHaveBeenCalled());
-    expect(settingsAPI.update.mock.calls[0][0]).toMatchObject({ receiptFooter: 'New footer' });
   });
 });

@@ -43,14 +43,14 @@ const messageOf = (error) => (error && error.message) || String(error || 'Unknow
  */
 export async function printReceipt(
   completedSale,
-  { formatMoney, business, receiptSettings, profile, adapters = ADAPTERS } = {}
+  { formatMoney, business, profile, adapters = ADAPTERS } = {}
 ) {
   const money = typeof formatMoney === 'function' ? formatMoney : (n) => Number(n || 0).toFixed(2);
   const activeProfile = normalizeProfile(profile || loadProfile());
 
   let job;
   try {
-    job = createPrintJob(buildReceipt(completedSale, { business, receiptSettings }), activeProfile, money);
+    job = createPrintJob(buildReceipt(completedSale, { business }), activeProfile, money);
   } catch (error) {
     return { ok: false, adapterId: null, fellBack: false, error: messageOf(error) };
   }
@@ -84,6 +84,6 @@ export async function printReceipt(
 }
 
 /** Sample receipt for a "Test print" button in printer settings. */
-export function printTestReceipt({ formatMoney, business, receiptSettings, profile, adapters } = {}) {
-  return printReceipt(sampleSale(), { formatMoney, business, receiptSettings, profile, adapters });
+export function printTestReceipt({ formatMoney, business, profile, adapters } = {}) {
+  return printReceipt(sampleSale(), { formatMoney, business, profile, adapters });
 }

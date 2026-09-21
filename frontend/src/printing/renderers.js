@@ -34,8 +34,7 @@ const escapeHtml = (s) =>
  *
  * Same layout as ESC/POS, in a monospace font sized so that 32 (58mm) or
  * 48 (80mm) columns fit the printable area: 7pt monospace is ~1.5mm per
- * column, matching a thermal printer's native 12-dot font. The logo (if any) is
- * an <img>, so it only appears in this browser/driver path, not in ESC/POS.
+ * column, matching a thermal printer's native 12-dot font.
  */
 export function renderHtml(receipt, profile, formatMoney) {
   const p = normalizeProfile(profile);
@@ -45,10 +44,6 @@ export function renderHtml(receipt, profile, formatMoney) {
       return `<div class="${cls}">${escapeHtml(l.text)}</div>`;
     })
     .join('\n');
-
-  const logo = receipt.logoUrl
-    ? `<div class="logo"><img src="${escapeHtml(receipt.logoUrl)}" alt=""></div>\n`
-    : '';
 
   return `<!doctype html>
 <html>
@@ -63,12 +58,10 @@ export function renderHtml(receipt, profile, formatMoney) {
   .l { white-space: pre; overflow: hidden; min-height: 1.3em; }
   .b { font-weight: bold; }
   .d { font-size: 14pt; line-height: 1.2; min-height: 1.2em; }
-  .logo { text-align: center; margin-bottom: 2mm; }
-  .logo img { max-width: 100%; max-height: 20mm; filter: grayscale(1) contrast(1.5); }
 </style>
 </head>
 <body>
-${logo}${rows}
+${rows}
 </body>
 </html>`;
 }
