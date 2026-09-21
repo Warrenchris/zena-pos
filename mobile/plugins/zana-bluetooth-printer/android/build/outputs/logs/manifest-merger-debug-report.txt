@@ -1,0 +1,38 @@
+-- Merging decision tree log ---
+manifest
+ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:1:1-9:12
+INJECTED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:1:1-9:12
+	package
+		INJECTED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml
+	xmlns:android
+		ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:1:11-69
+uses-permission#android.permission.BLUETOOTH
+ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:3:5-95
+	android:maxSdkVersion
+		ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:3:66-92
+	android:name
+		ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:3:22-65
+uses-permission#android.permission.BLUETOOTH_ADMIN
+ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:4:5-101
+	android:maxSdkVersion
+		ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:4:72-98
+	android:name
+		ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:4:22-71
+uses-permission#android.permission.BLUETOOTH_CONNECT
+ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:5:5-76
+	android:name
+		ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:5:22-73
+uses-feature#android.hardware.bluetooth
+ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:8:5-88
+	android:required
+		ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:8:61-85
+	android:name
+		ADDED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:8:19-60
+uses-sdk
+INJECTED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml
+INJECTED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml

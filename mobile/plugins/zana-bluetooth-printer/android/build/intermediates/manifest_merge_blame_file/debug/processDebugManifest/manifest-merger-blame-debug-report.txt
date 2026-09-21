@@ -1,0 +1,31 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.zana.bluetoothprinter" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+6    <!-- Bluetooth Classic printing to already-paired printers. No scanning, so no location or BLUETOOTH_SCAN. -->
+7    <uses-permission
+7-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:3:5-95
+8        android:name="android.permission.BLUETOOTH"
+8-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:3:22-65
+9        android:maxSdkVersion="30" />
+9-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:3:66-92
+10    <uses-permission
+10-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:4:5-101
+11        android:name="android.permission.BLUETOOTH_ADMIN"
+11-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:4:22-71
+12        android:maxSdkVersion="30" />
+12-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:4:72-98
+13    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+13-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:5:5-76
+13-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:5:22-73
+14
+15    <!-- The app still installs on devices without Bluetooth (e.g. some tablets); printing is just unavailable there. -->
+16    <uses-feature
+16-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:8:5-88
+17        android:name="android.hardware.bluetooth"
+17-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:8:19-60
+18        android:required="false" />
+18-->C:\Users\WARREN CHRIS\Desktop\empty\mobile\plugins\zana-bluetooth-printer\android\src\main\AndroidManifest.xml:8:61-85
+19
+20</manifest>
