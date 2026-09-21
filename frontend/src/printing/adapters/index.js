@@ -1,4 +1,5 @@
 import { browserPrintAdapter } from './browserPrintAdapter';
+import { createBluetoothAdapter } from './bluetoothAdapter';
 
 /**
  * Print adapter registry.
@@ -16,6 +17,7 @@ import { browserPrintAdapter } from './browserPrintAdapter';
  */
 export const ADAPTERS = {
   browser: browserPrintAdapter,
+  bluetooth: createBluetoothAdapter(),
 };
 
 export const FALLBACK_ADAPTER_ID = 'browser';

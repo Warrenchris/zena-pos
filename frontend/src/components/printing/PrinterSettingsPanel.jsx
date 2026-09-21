@@ -10,6 +10,7 @@ import useCurrency from '../../hooks/useCurrency';
 import usePrinterProfile from '../../hooks/usePrinterProfile';
 import useReceiptSettings from '../../hooks/useReceiptSettings';
 import Button from '../ui/Button';
+import BluetoothPrinterPicker from './BluetoothPrinterPicker';
 import {
   ADAPTERS,
   CONNECTIONS,
@@ -43,9 +44,10 @@ const connectionStatus = (id) => {
   return adapter.isSupported() ? 'available' : 'unsupported';
 };
 
-const STATUS_BADGES = {
-  'coming-soon': 'Coming soon',
-  unsupported: 'Not supported on this device',
+const statusBadge = (id, status) => {
+  if (status === 'coming-soon') return 'Coming soon';
+  if (status === 'unsupported') return ADAPTERS[id]?.unsupportedReason || 'Not supported on this device';
+  return null;
 };
 
 const fieldsetClass = 'space-y-2';
@@ -220,7 +222,7 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
                 onChange={() => change({ connection: id })}
                 title={CONNECTION_INFO[id].label}
                 description={CONNECTION_INFO[id].hint}
-                badge={STATUS_BADGES[status]}
+                badge={statusBadge(id, status)}
               />
             );
           })}
@@ -235,6 +237,14 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
           </p>
         )}
       </fieldset>
+
+      {profile.connection === 'bluetooth' && selectedStatus === 'available' && (
+        <BluetoothPrinterPicker
+          selectedAddress={profile.printerAddress}
+          selectedName={profile.printerName}
+          onSelect={change}
+        />
+      )}
 
       <fieldset className={fieldsetClass}>
         <legend className={legendClass}>Paper width</legend>

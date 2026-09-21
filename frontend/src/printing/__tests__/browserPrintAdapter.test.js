@@ -29,6 +29,16 @@ describe('browserPrintAdapter', () => {
     expect(browserPrintAdapter.isSupported()).toBe(true);
   });
 
+  it('is not supported inside the Android app, where window.print() would silently do nothing', () => {
+    window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
+    try {
+      expect(browserPrintAdapter.isSupported()).toBe(false);
+      expect(browserPrintAdapter.unsupportedReason).toMatch(/Android app/);
+    } finally {
+      delete window.Capacitor;
+    }
+  });
+
   it('prints the receipt HTML from a hidden iframe, then removes it after printing', async () => {
     const listeners = {};
     const fakeWindow = {

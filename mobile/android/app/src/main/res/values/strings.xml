@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Zana POS</string>
+    <string name="title_activity_main">Zana POS</string>
+    <string name="package_name">com.zana.pos</string>
+    <string name="custom_url_scheme">com.zana.pos</string>
+</resources>

@@ -6,6 +6,8 @@ export {
   saveProfile,
   normalizeProfile,
   getCharsPerLine,
+  getDefaultProfile,
+  isValidBluetoothAddress,
   DEFAULT_PROFILE,
   PAPER_PRESETS,
   CONNECTIONS,
@@ -16,3 +18,4 @@ export { renderEscPos, renderHtml, renderPlainText } from './renderers';
 export { sampleSale } from './sample';
 export { ADAPTERS } from './adapters';
 export { buildReceiptSettings, resolveLogoUrl } from './receiptSettings';
+export { getNativeBluetoothPlugin, isNativeAndroid } from './adapters/nativeBluetooth';
