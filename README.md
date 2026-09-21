@@ -68,6 +68,9 @@ zana-pos/
 ├── frontend/                 # React + TypeScript + Vite frontend app
 │   ├── src/                  # Components, pages, hooks, Redux store
 │   └── public/               # Static web assets
+├── mobile/                   # Capacitor 8 Android shell + Classic Bluetooth printer plugin
+│   ├── android/              # Android Studio project
+│   └── plugins/              # zana-bluetooth-printer (SPP / ESC/POS)
 ├── ai_service/               # FastAPI Python AI microservice
 │   ├── src/                  # Forecasting algorithms, API endpoints, ML models
 │   ├── pyproject.toml        # Poetry dependency management
@@ -84,7 +87,8 @@ zana-pos/
 
 ### Prerequisites
 * **Docker & Docker Compose** (Recommended)
-* **Node.js** (v18+) & **npm** (v9+)
+* **Node.js** (v18+ for web services; **v22+** for the Android/Capacitor app) & **npm** (v9+)
+* **JDK 21** and **Android Studio** (SDK Platform 36) if you are building the Android APK
 * **Python** (v3.9+) & **Poetry** (if running AI service natively)
 * **MySQL** (v8.0+) & **Redis** (v7.0+) (if running locally without Docker)
 
@@ -164,6 +168,8 @@ zana-pos/
 ```env
 PORT=3000
 NODE_ENV=development
+ALLOWED_ORIGINS=http://localhost:5173,https://localhost
+FRONTEND_URL=http://localhost:5173
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=zana_pos
@@ -176,11 +182,15 @@ JWT_PUBLIC_KEY_PATH=./keys/public.pem
 AI_SERVICE_URL=http://localhost:8000
 ```
 
+`https://localhost` is required so the Android WebView can call the API. CORS `allowedHeaders` must include `Idempotency-Key` (see `backend/src/app.js`) or checkout from the app fails preflight.
+
 ### Frontend (`frontend/.env`)
 ```env
 VITE_API_URL=http://localhost:3000
 VITE_AI_SERVICE_URL=http://localhost:8000
 ```
+
+For the Android APK, rebuild with an **https** API URL. Android blocks plain `http://localhost`.
 
 ### AI Service (`ai_service/.env`)
 ```env
@@ -209,6 +219,28 @@ From the project root:
 
 ---
 
+## 📱 Android app
+
+The POS website is wrapped in a Capacitor Android shell with Classic Bluetooth (SPP) receipt printing. Full steps: **[mobile/README.md](mobile/README.md)**.
+
+**Debug APK (after a Gradle build):** `mobile/android/app/build/outputs/apk/debug/app-debug.apk`
+
+```powershell
+cd mobile
+npm install
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-21"   # your JDK 21 install
+$env:VITE_API_URL = "https://your-api-host"
+npm run prepare:android
+npm run open   # Android Studio → Run
+# or:
+cd android
+.\gradlew.bat assembleDebug
+```
+
+Pair a Bluetooth Classic printer on the phone, allow **Nearby devices**, then **Settings → Receipt & Printer**. The API must be HTTPS. A debug APK built against `VITE_API_URL=http://localhost:3000` will not reach the backend on a real device.
+
+---
+
 ## 🔒 Security & Architecture
 
 * **Inter-Service Authentication**: Built with **RS256 JWT** signatures. The Backend signs requests using a private key, and the AI microservice verifies requests using the shared public key.
@@ -220,13 +252,14 @@ From the project root:
 ## 📚 Detailed Documentation
 
 For specific implementation details, refer to the following guides in the repository:
-* 📄 [API Documentation](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/API_DOCUMENTATION.md)
-* 🐳 [Docker Setup Guide](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/DOCKER_SETUP.md)
-* 🔑 [Inter-Service Authentication](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/INTER_SERVICE_AUTHENTICATION.md)
-* 🔐 [JWT RS256 Migration Guide](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/JWT_RS256_MIGRATION_GUIDE.md)
-* ⚡ [RBAC Caching Implementation](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/RBAC_CACHING_IMPLEMENTATION.md)
-* ⚙️ [Settings Feature Documentation](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/SETTINGS_FEATURE_README.md)
-* 📊 [Chart Standardization Guide](file:///c:/Users/WARREN%20CHRIS/Desktop/empty/CHART_LIBRARY_STANDARDIZATION.md)
+* 📄 [API Documentation](API_DOCUMENTATION.md)
+* 🐳 [Docker Setup Guide](DOCKER_SETUP.md)
+* 🔑 [Inter-Service Authentication](INTER_SERVICE_AUTHENTICATION.md)
+* 🔐 [JWT RS256 Migration Guide](JWT_RS256_MIGRATION_GUIDE.md)
+* ⚡ [RBAC Caching Implementation](RBAC_CACHING_IMPLEMENTATION.md)
+* ⚙️ [Settings Feature Documentation](SETTINGS_FEATURE_README.md)
+* 📊 [Chart Standardization Guide](CHART_LIBRARY_STANDARDIZATION.md)
+* 📱 [Android app (Capacitor + Bluetooth printing)](mobile/README.md)
 
 ---
 

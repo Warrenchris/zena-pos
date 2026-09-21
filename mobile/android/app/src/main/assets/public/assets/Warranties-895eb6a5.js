@@ -1,0 +1,1 @@
+import{j as r}from"./index-15d3d087.js";import"./react-vendor-037559ad.js";import"./ui-vendor-aece9436.js";import"./chart-vendor-0d7fb67f.js";const i=()=>r.jsxs("div",{className:"py-6",children:[r.jsx("h1",{className:"text-2xl font-semibold",children:"Warranties"}),r.jsx("p",{className:"mt-2 text-gray-600",children:"Configure product warranties."})]});export{i as default};

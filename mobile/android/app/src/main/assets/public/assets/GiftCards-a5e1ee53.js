@@ -1,0 +1,1 @@
+import{j as s}from"./index-15d3d087.js";import"./react-vendor-037559ad.js";import"./ui-vendor-aece9436.js";import"./chart-vendor-0d7fb67f.js";const i=()=>s.jsxs("div",{className:"py-6",children:[s.jsx("h1",{className:"text-2xl font-semibold",children:"Gift Cards"}),s.jsx("p",{className:"mt-2 text-gray-600",children:"Issue and manage gift cards."})]});export{i as default};

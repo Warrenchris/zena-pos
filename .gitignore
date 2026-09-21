@@ -6,13 +6,29 @@ backend/.env
 frontend/node_modules/
 frontend/.env
 
+# Mobile
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/.idea/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/capacitor-cordova-android-plugins/
+mobile/android/local.properties
+
 # Python
 ai_service/__pycache__/
 ai_service/.env
+**/.venv/
+**/.pytest_cache/
+**/__pycache__/
 
 # Docker
 *.log
 docker-compose.override.yml
+
+# Generated dependencies and logs
+frontend/node_modules.bak*/
+backend/logs/
 
 # VS Code
 .vscode/

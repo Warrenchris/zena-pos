@@ -1,0 +1,6 @@
+[
+	{
+		"pkg": "zana-bluetooth-printer",
+		"classpath": "com.zana.bluetoothprinter.ZanaBluetoothPrinterPlugin"
+	}
+]

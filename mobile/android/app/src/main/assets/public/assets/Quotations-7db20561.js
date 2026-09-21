@@ -1,0 +1,1 @@
+import{j as t}from"./index-15d3d087.js";import"./react-vendor-037559ad.js";import"./ui-vendor-aece9436.js";import"./chart-vendor-0d7fb67f.js";const r=()=>t.jsxs("div",{className:"py-6",children:[t.jsx("h1",{className:"text-2xl font-semibold",children:"Quotations"}),t.jsx("p",{className:"mt-2 text-gray-600",children:"Create and manage quotations."})]});export{r as default};

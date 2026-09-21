@@ -1,0 +1,1 @@
+import{a1 as o,a2 as e}from"./index-15d3d087.js";function s(a,r){o(2,arguments);var t=e(a),i=e(r);return t.getTime()>i.getTime()}function n(a,r){o(2,arguments);var t=e(a),i=e(r);return t.getTime()<i.getTime()}export{n as a,s as i};
