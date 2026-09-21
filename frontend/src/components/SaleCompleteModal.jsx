@@ -10,6 +10,7 @@ import useCurrency from '../hooks/useCurrency';
 import Button from './ui/Button';
 import { printReceipt } from '../printing';
 import PrinterSettingsModal from './printing/PrinterSettingsModal';
+import useReceiptSettings from '../hooks/useReceiptSettings';
 
 /**
  * SaleCompleteModal — Post-payment receipt/confirmation screen.
@@ -24,6 +25,7 @@ import PrinterSettingsModal from './printing/PrinterSettingsModal';
 export default function SaleCompleteModal({ completedSale, onNewSale, onClose }) {
   const { format: formatCurrency } = useCurrency();
   const shop = useSelector((state) => state.shop?.shop);
+  const receiptSettings = useReceiptSettings();
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
 
   if (!completedSale) return null;
@@ -46,7 +48,7 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
 
   const handlePrint = async () => {
-    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop });
+    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop, receiptSettings });
     if (!window.showToast) return;
     if (!result.ok) {
       window.showToast({

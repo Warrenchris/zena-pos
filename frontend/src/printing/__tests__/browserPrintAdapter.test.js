@@ -83,4 +83,22 @@ describe('browserPrintAdapter', () => {
     await expect(promise).rejects.toThrow('failed to load');
     expect(document.body.contains(iframe)).toBe(false);
   });
+
+  it('prints without waiting for a slow logo once the receipt text has loaded', async () => {
+    jest.useFakeTimers();
+    const fakeWindow = {
+      focus: jest.fn(),
+      print: jest.fn(),
+      addEventListener: jest.fn(),
+      document: { body: { childElementCount: 12 } }, // receipt text is there, load event still pending
+    };
+    const getIframe = stubIframe(fakeWindow);
+
+    const promise = browserPrintAdapter.print(job);
+    jest.advanceTimersByTime(5000);
+
+    await expect(promise).resolves.toBeUndefined();
+    expect(fakeWindow.print).toHaveBeenCalledTimes(1);
+    expect(getIframe()).not.toBeNull();
+  });
 });

@@ -25,9 +25,7 @@ function printHtmlInIframe(html) {
       reject(error);
     };
 
-    const timeout = setTimeout(() => fail(new Error('Receipt failed to load for printing')), LOAD_TIMEOUT_MS);
-
-    iframe.onload = () => {
+    const attemptPrint = () => {
       if (settled) return;
       clearTimeout(timeout);
       try {
@@ -43,6 +41,17 @@ function printHtmlInIframe(html) {
         fail(error);
       }
     };
+
+    const timeout = setTimeout(() => {
+      // A slow or unreachable subresource (the shop logo) can delay the load event
+      // indefinitely. If the receipt text is already there, print without waiting:
+      // a missing logo must never stop a receipt from printing.
+      const body = iframe.contentWindow && iframe.contentWindow.document && iframe.contentWindow.document.body;
+      if (body && body.childElementCount > 0) attemptPrint();
+      else fail(new Error('Receipt failed to load for printing'));
+    }, LOAD_TIMEOUT_MS);
+
+    iframe.onload = attemptPrint;
 
     iframe.srcdoc = html;
     document.body.appendChild(iframe);
