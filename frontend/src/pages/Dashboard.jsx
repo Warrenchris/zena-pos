@@ -32,6 +32,7 @@ import { formatCurrency, formatDate } from '../utils/formatters';
 import { fetchSalesStatistics, fetchSales } from '../store/slices/salesSlice';
 import { fetchCustomers } from '../store/slices/customersSlice';
 import { fetchProducts } from '../store/slices/productsSlice';
+import { fetchSubscription } from '../store/slices/billingSlice';
 import api, { employeesAPI } from '../services/api';
 import { notifyLowStock } from '../utils/notifications';
 
@@ -46,6 +47,7 @@ export default function Dashboard() {
   const { sales, statistics, loading: salesLoading, error: salesError } = useSelector((state) => state.sales);
   const { loading: customersLoading, error: customersError } = useSelector((state) => state.customers);
   const { products, loading: productsLoading, error: productsError } = useSelector((state) => state.products);
+  const { quotas: billingQuotas } = useSelector((state) => state.billing);
 
   const userId = user?.id;
   const userRole = user?.role;
@@ -116,7 +118,11 @@ export default function Dashboard() {
     if (userRole === 'admin') {
       loadEmployees();
     }
-  }, [userRole]);
+    // Org-wide seat usage (independent of which branch is currently active) is
+    // needed so the "Add Staff Members" onboarding step reflects staff added
+    // on ANY branch, matching the Billing page's seat count.
+    dispatch(fetchSubscription());
+  }, [userRole, dispatch]);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -460,6 +466,7 @@ export default function Dashboard() {
         <GettingStartedChecklist
           products={products}
           employees={employees}
+          orgStaffCount={billingQuotas?.users?.current}
           user={user}
           shop={user?.shop}
           onDismiss={handleDismissChecklist}

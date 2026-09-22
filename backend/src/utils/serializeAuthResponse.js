@@ -50,7 +50,11 @@ function buildAuthPayload({
     email: entity?.email || '',
     role: isEmployee ? 'employee' : (entity?.role || 'admin'),
     orgRole: resolvedOrgRole,
-    shopId: entity?.shopId || serializedShop?.id || null,
+    // NOTE: serializedShop reflects the caller's *active* branch (may differ
+    // from entity.shopId after switchShop, which only changes the JWT claim
+    // and never writes to the DB). Prefer it so user.shopId always agrees
+    // with user.shop.id.
+    shopId: serializedShop?.id || entity?.shopId || null,
     organizationId: resolvedOrgId,
     shop: serializedShop,
     ...(subscriptionStatus ? { subscriptionStatus } : {})

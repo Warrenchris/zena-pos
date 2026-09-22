@@ -30,6 +30,7 @@ import Button from '../ui/Button';
 export default function GettingStartedChecklist({
   products = [],
   employees = [],
+  orgStaffCount = null,
   user = null,
   shop = null,
   onDismiss,
@@ -53,14 +54,19 @@ export default function GettingStartedChecklist({
     (settings?.receiptHeader && settings?.receiptHeader.length > 0)
   );
 
-  // Step 3: Add Staff Members (real-data check: additional employees/cashiers present)
-  const isStaffCompleted = Boolean(
-    Array.isArray(employees) &&
-    (employees.length > 1 ||
-      employees.some(
-        (e) => (e.role && e.role !== 'admin') || String(e.id) !== String(user?.id)
-      ))
-  );
+  // Step 3: Add Staff Members. Prefer the organization-wide seat count (same
+  // figure shown on the Billing page) so staff added on ANY branch counts
+  // here — not just the branch currently active in this session. Fall back
+  // to the current-branch employees list only if that count is unavailable.
+  const isStaffCompleted = Number.isFinite(orgStaffCount)
+    ? orgStaffCount > 1
+    : Boolean(
+        Array.isArray(employees) &&
+        (employees.length > 1 ||
+          employees.some(
+            (e) => (e.role && e.role !== 'admin') || String(e.id) !== String(user?.id)
+          ))
+      );
 
   const steps = [
     {

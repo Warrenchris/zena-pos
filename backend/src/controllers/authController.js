@@ -376,6 +376,22 @@ exports.getProfile = async (req, res) => {
       }
 
       const empOrgId = req.organizationId || req.user.organizationId || employee.Shop?.organizationId;
+
+      // Resolve the ACTIVE shop from the JWT's shopId claim (set by switchShop),
+      // not just the employee's permanently-assigned Shop association. Without
+      // this, a branch switch is reflected in req.shopId but getProfile keeps
+      // reporting the employee's original/default branch after a page reload.
+      let activeShop = employee.Shop;
+      if (req.shopId && req.shopId !== employee.Shop?.id) {
+        const switchedShop = await Shop.findOne({
+          where: { id: req.shopId, organizationId: empOrgId },
+          attributes: ['id', 'name', 'address', 'phone', 'organizationId', 'kraPin']
+        });
+        if (switchedShop) {
+          activeShop = switchedShop;
+        }
+      }
+
       const empMembershipWhere = { employeeId: employee.id, status: 'active' };
       if (empOrgId) {
         empMembershipWhere.organizationId = empOrgId;
@@ -385,7 +401,7 @@ exports.getProfile = async (req, res) => {
 
       const payload = buildAuthPayload({
         employee,
-        shop: employee.Shop,
+        shop: activeShop,
         orgRole: empOrgRole,
         organizationId: empOrgId
       });
@@ -404,6 +420,25 @@ exports.getProfile = async (req, res) => {
     }
 
     const orgId = req.organizationId || req.user.organizationId || user.Shop?.organizationId;
+
+    // Resolve the ACTIVE shop from the JWT's shopId claim (set by switchShop),
+    // not just User.shopId. switchShop mints a new token with a different
+    // shopId claim but is a documented zero-DB-write operation, so User.shopId
+    // in the database still points at the account's original/default branch.
+    // Falling back to user.Shop here caused getProfile (called on every app
+    // bootstrap/reload) to silently revert the active branch back to the
+    // original one right after a user switched branches.
+    let activeShop = user.Shop;
+    if (req.shopId && req.shopId !== user.Shop?.id) {
+      const switchedShop = await Shop.findOne({
+        where: { id: req.shopId, organizationId: orgId },
+        attributes: ['id', 'name', 'address', 'phone', 'organizationId', 'kraPin']
+      });
+      if (switchedShop) {
+        activeShop = switchedShop;
+      }
+    }
+
     const membershipWhere = { userId: user.id, status: 'active' };
     if (orgId) {
       membershipWhere.organizationId = orgId;
@@ -413,7 +448,7 @@ exports.getProfile = async (req, res) => {
 
     const payload = buildAuthPayload({
       user,
-      shop: user.Shop,
+      shop: activeShop,
       orgRole,
       organizationId: orgId
     });
