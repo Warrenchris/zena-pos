@@ -1,0 +1,702 @@
+diff --git a/frontend/src/__tests__/usb-serial-printer.test.jsx b/frontend/src/__tests__/usb-serial-printer.test.jsx
+new file mode 100644
+index 0000000..f4c3dc1
+--- /dev/null
++++ b/frontend/src/__tests__/usb-serial-printer.test.jsx
+@@ -0,0 +1,87 @@
++/* eslint-env jest */
++import React from 'react';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { Provider } from 'react-redux';
++import { configureStore, combineReducers } from '@reduxjs/toolkit';
++import authReducer from '../store/slices/authSlice';
++import shopReducer from '../store/slices/shopSlice';
++import settingsReducer from '../store/slices/settingsSlice';
++import PrinterSettingsPanel from '../components/printing/PrinterSettingsPanel';
++import { STORAGE_KEY } from '../printing/profile';
++
++// Real adapters this time, with navigator.usb / navigator.serial faked underneath.
++
++const shop = { name: 'Mama Njeri Supermarket' };
++const radio = (name) => screen.getByRole('radio', { name });
++const stored = () => JSON.parse(window.localStorage.getItem(STORAGE_KEY));
++
++function renderPanel() {
++  const store = configureStore({
++    reducer: combineReducers({ auth: authReducer, shop: shopReducer, settings: settingsReducer }),
++    preloadedState: { shop: { ...shopReducer(undefined, { type: '@@init' }), shop } },
++  });
++  return render(
++    <Provider store={store}>
++      <PrinterSettingsPanel />
++    </Provider>
++  );
++}
++
++const installSecure = () => Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
++
++beforeEach(() => {
++  window.localStorage.clear();
++  installSecure();
++  delete window.navigator.usb;
++  delete window.navigator.serial;
++});
++
++describe('USB printing, in the settings panel', () => {
++  it('is disabled without navigator.usb, with a clear reason', () => {
++    renderPanel();
++    expect(radio(/USB printer/)).toBeDisabled();
++    expect(screen.getByText(/This browser does not support USB printing/)).toBeInTheDocument();
++  });
++
++  it('lets the user pick a device once navigator.usb exists, and saves the chosen device', async () => {
++    const device = { vendorId: 0x0483, productId: 0x5743, serialNumber: 'SN1' };
++    window.navigator.usb = { requestDevice: jest.fn().mockResolvedValue(device), getDevices: jest.fn().mockResolvedValue([device]) };
++    renderPanel();
++
++    fireEvent.click(radio(/USB printer/));
++    expect(await screen.findByText('No USB printer selected yet.')).toBeInTheDocument();
++
++    fireEvent.click(screen.getByRole('button', { name: 'Select USB printer' }));
++
++    await waitFor(() => expect(stored()).toMatchObject({ usbVendorId: 0x0483, usbProductId: 0x5743, usbSerialNumber: 'SN1' }));
++    expect(await screen.findByText(/A USB printer is selected/)).toBeInTheDocument();
++  });
++
++  it('does not show an error when the user simply closes the device picker', async () => {
++    window.navigator.usb = { requestDevice: jest.fn().mockRejectedValue(Object.assign(new Error('cancelled'), { name: 'NotFoundError' })) };
++    renderPanel();
++    fireEvent.click(radio(/USB printer/));
++    fireEvent.click(await screen.findByRole('button', { name: 'Select USB printer' }));
++    await new Promise((r) => setTimeout(r, 20));
++    expect(screen.queryByRole('alert', { name: '' })).toBeNull();
++  });
++});
++
++describe('Serial printing, in the settings panel', () => {
++  it('is disabled without navigator.serial', () => {
++    renderPanel();
++    expect(radio(/Serial \/ COM port printer/)).toBeDisabled();
++  });
++
++  it('lets the user grant a port and pick a baud rate', async () => {
++    window.navigator.serial = { requestPort: jest.fn().mockResolvedValue({}), getPorts: jest.fn().mockResolvedValue([{}]) };
++    renderPanel();
++
++    fireEvent.click(radio(/Serial \/ COM port printer/));
++    fireEvent.click(await screen.findByRole('button', { name: 'Select serial port' }));
++    await waitFor(() => expect(window.navigator.serial.requestPort).toHaveBeenCalledTimes(1));
++
++    fireEvent.change(screen.getByLabelText('Baud rate'), { target: { value: '19200' } });
++    expect(stored().serialBaudRate).toBe(19200);
++  });
++});
+diff --git a/frontend/src/components/printing/PrinterSettingsPanel.jsx b/frontend/src/components/printing/PrinterSettingsPanel.jsx
+index a15356b..d157661 100644
+--- a/frontend/src/components/printing/PrinterSettingsPanel.jsx
++++ b/frontend/src/components/printing/PrinterSettingsPanel.jsx
+@@ -9,6 +9,7 @@ import {
+ import useCurrency from '../../hooks/useCurrency';
+ import usePrinterProfile from '../../hooks/usePrinterProfile';
+ import Button from '../ui/Button';
++import UsbSerialPrinterPicker from './UsbSerialPrinterPicker';
+ import {
+   ADAPTERS,
+   CONNECTIONS,
+@@ -42,9 +43,10 @@ const connectionStatus = (id) => {
+   return adapter.isSupported() ? 'available' : 'unsupported';
+ };
+ 
+-const STATUS_BADGES = {
+-  'coming-soon': 'Coming soon',
+-  unsupported: 'Not supported on this device',
++const statusBadge = (id, status) => {
++  if (status === 'coming-soon') return 'Coming soon';
++  if (status === 'unsupported') return ADAPTERS[id]?.unsupportedReason || 'Not supported on this device';
++  return null;
+ };
+ 
+ const fieldsetClass = 'space-y-2';
+@@ -207,7 +209,7 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
+                 onChange={() => change({ connection: id })}
+                 title={CONNECTION_INFO[id].label}
+                 description={CONNECTION_INFO[id].hint}
+-                badge={STATUS_BADGES[status]}
++                badge={statusBadge(id, status)}
+               />
+             );
+           })}
+@@ -223,6 +225,10 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
+         )}
+       </fieldset>
+ 
++      {(profile.connection === 'usb' || profile.connection === 'serial') && selectedStatus === 'available' && (
++        <UsbSerialPrinterPicker connection={profile.connection} profile={profile} onSelect={change} />
++      )}
++
+       <fieldset className={fieldsetClass}>
+         <legend className={legendClass}>Paper width</legend>
+         <div className="grid gap-2 sm:grid-cols-2">
+diff --git a/frontend/src/components/printing/UsbSerialPrinterPicker.jsx b/frontend/src/components/printing/UsbSerialPrinterPicker.jsx
+new file mode 100644
+index 0000000..58828d6
+--- /dev/null
++++ b/frontend/src/components/printing/UsbSerialPrinterPicker.jsx
+@@ -0,0 +1,107 @@
++import React, { useState } from 'react';
++import { Cog6ToothIcon } from '@heroicons/react/24/outline';
++import Button from '../ui/Button';
++import { SERIAL_BAUD_RATES } from '../../printing';
++
++const messageOf = (error) => (error && error.message) || 'Something went wrong.';
++
++/**
++ * Pick which USB printer (Chrome's device picker, by vendor/product id) or which serial port
++ * (Chrome's port picker) this device prints to. Both need a one-time user gesture, so a chooser
++ * dialog can't be triggered from anywhere except a click - hence the two buttons below.
++ */
++export default function UsbSerialPrinterPicker({ connection, profile, onSelect }) {
++  const [error, setError] = useState(null);
++  const [busy, setBusy] = useState(false);
++
++  const pickUsbDevice = async () => {
++    setError(null);
++    setBusy(true);
++    try {
++      const device = await navigator.usb.requestDevice({ filters: [{}] });
++      onSelect({ usbVendorId: device.vendorId, usbProductId: device.productId, usbSerialNumber: device.serialNumber || '' });
++    } catch (err) {
++      // The user closing the picker without choosing anything is not an error worth showing.
++      if (err?.name !== 'NotFoundError') setError(messageOf(err));
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const pickSerialPort = async () => {
++    setError(null);
++    setBusy(true);
++    try {
++      await navigator.serial.requestPort();
++      onSelect({}); // nothing to store: the adapter uses whichever port was just granted
++    } catch (err) {
++      if (err?.name !== 'NotFoundError') setError(messageOf(err));
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  if (connection === 'usb') {
++    const hasSelection = profile.usbVendorId !== null && profile.usbProductId !== null;
++    return (
++      <fieldset className="space-y-2">
++        <legend className="block text-small font-semibold text-text-primary mb-1.5">Which USB printer?</legend>
++        <p className="text-caption text-text-muted">
++          {hasSelection
++            ? `A USB printer is selected (device ${profile.usbVendorId.toString(16).padStart(4, '0')}:${profile.usbProductId
++                .toString(16)
++                .padStart(4, '0')}).`
++            : 'No USB printer selected yet.'}
++        </p>
++        {error && (
++          <p role="alert" className="text-caption text-warning-text">
++            {error}
++          </p>
++        )}
++        <Button type="button" variant="secondary" size="sm" leftIcon={Cog6ToothIcon} loading={busy} onClick={pickUsbDevice}>
++          {hasSelection ? 'Choose a different USB printer' : 'Select USB printer'}
++        </Button>
++      </fieldset>
++    );
++  }
++
++  if (connection === 'serial') {
++    return (
++      <fieldset className="space-y-2">
++        <legend className="block text-small font-semibold text-text-primary mb-1.5">Which serial port?</legend>
++        <p className="text-caption text-text-muted">
++          Grant access to one serial or COM port and this device will use it. If more than one port is granted, printing is
++          refused until only one is left.
++        </p>
++        {error && (
++          <p role="alert" className="text-caption text-warning-text">
++            {error}
++          </p>
++        )}
++        <Button type="button" variant="secondary" size="sm" leftIcon={Cog6ToothIcon} loading={busy} onClick={pickSerialPort}>
++          Select serial port
++        </Button>
++        <div>
++          <label htmlFor="serial-baud-rate" className="block text-caption font-semibold text-text-secondary mb-1">
++            Baud rate
++          </label>
++          <select
++            id="serial-baud-rate"
++            value={profile.serialBaudRate}
++            onChange={(e) => onSelect({ serialBaudRate: Number(e.target.value) })}
++            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
++          >
++            {SERIAL_BAUD_RATES.map((rate) => (
++              <option key={rate} value={rate}>
++                {rate}
++              </option>
++            ))}
++          </select>
++          <p className="text-caption text-text-muted mt-1">Check your printer&apos;s manual - 9600 is the most common default.</p>
++        </div>
++      </fieldset>
++    );
++  }
++
++  return null;
++}
+diff --git a/frontend/src/printing/__tests__/profile.test.js b/frontend/src/printing/__tests__/profile.test.js
+index af2ecd6..ffacade 100644
+--- a/frontend/src/printing/__tests__/profile.test.js
++++ b/frontend/src/printing/__tests__/profile.test.js
+@@ -31,7 +31,7 @@ describe('normalizeProfile', () => {
+ 
+   it('keeps valid values', () => {
+     const p = { connection: 'bluetooth', paperWidth: 80, cut: 'full', openDrawer: true, feedLines: 5 };
+-    expect(normalizeProfile(p)).toEqual(p);
++    expect(normalizeProfile(p)).toMatchObject(p);
+   });
+ 
+   it('defaults to 58mm, the safe width for a mixed fleet', () => {
+@@ -80,3 +80,21 @@ describe('CONNECTION_INFO', () => {
+     });
+   });
+ });
++
++describe('USB / serial fields', () => {
++  it('keeps a valid USB device id and serial number', () => {
++    const p = { usbVendorId: 0x0483, usbProductId: 0x5743, usbSerialNumber: 'SN1' };
++    expect(normalizeProfile(p)).toMatchObject(p);
++  });
++
++  it('rejects invalid vendor/product ids and clamps a long serial number', () => {
++    expect(normalizeProfile({ usbVendorId: -1, usbProductId: 'x' })).toMatchObject({ usbVendorId: null, usbProductId: null });
++    expect(normalizeProfile({ usbSerialNumber: 'x'.repeat(300) }).usbSerialNumber).toHaveLength(128);
++  });
++
++  it('accepts a known baud rate and falls back to 9600 for anything else', () => {
++    expect(normalizeProfile({ serialBaudRate: 115200 }).serialBaudRate).toBe(115200);
++    expect(normalizeProfile({ serialBaudRate: 4800 }).serialBaudRate).toBe(9600);
++    expect(normalizeProfile({}).serialBaudRate).toBe(9600);
++  });
++});
+diff --git a/frontend/src/printing/__tests__/webSerialAdapter.test.js b/frontend/src/printing/__tests__/webSerialAdapter.test.js
+new file mode 100644
+index 0000000..6e7825f
+--- /dev/null
++++ b/frontend/src/printing/__tests__/webSerialAdapter.test.js
+@@ -0,0 +1,72 @@
++/* eslint-env jest */
++import { webSerialAdapter, isWebSerialSupported } from '../adapters/webSerialAdapter';
++
++const bytes = Uint8Array.from([0x1b, 0x40, 0x48, 0x69]);
++const job = (baud = 9600) => ({ profile: { serialBaudRate: baud }, escpos: () => bytes });
++
++function fakePort() {
++  const writer = { write: jest.fn().mockResolvedValue(), releaseLock: jest.fn() };
++  return {
++    open: jest.fn().mockResolvedValue(),
++    close: jest.fn().mockResolvedValue(),
++    writable: { getWriter: jest.fn(() => writer) },
++    _writer: writer,
++  };
++}
++
++const installSerial = (ports) => {
++  window.navigator.serial = { getPorts: jest.fn().mockResolvedValue(ports) };
++};
++const installSecure = (value = true) => Object.defineProperty(window, 'isSecureContext', { value, configurable: true });
++
++beforeEach(() => {
++  delete window.navigator.serial;
++  installSecure(true);
++});
++
++describe('isWebSerialSupported', () => {
++  it('requires navigator.serial and a secure context', () => {
++    expect(isWebSerialSupported()).toBe(false);
++    installSerial([]);
++    expect(isWebSerialSupported()).toBe(true);
++    installSecure(false);
++    expect(isWebSerialSupported()).toBe(false);
++  });
++});
++
++describe('webSerialAdapter', () => {
++  it('opens the one granted port at the configured baud rate and writes the bytes', async () => {
++    const port = fakePort();
++    installSerial([port]);
++
++    await webSerialAdapter.print(job(19200));
++
++    expect(port.open).toHaveBeenCalledWith({ baudRate: 19200 });
++    expect(port._writer.write).toHaveBeenCalledWith(bytes);
++    expect(port._writer.releaseLock).toHaveBeenCalled();
++    expect(port.close).toHaveBeenCalled();
++  });
++
++  it('asks for a port to be selected when none is granted', async () => {
++    installSerial([]);
++    await expect(webSerialAdapter.print(job())).rejects.toThrow(/No serial printer selected/);
++  });
++
++  it('refuses to guess when more than one port is granted', async () => {
++    installSerial([fakePort(), fakePort()]);
++    await expect(webSerialAdapter.print(job())).rejects.toThrow(/More than one serial port/);
++  });
++
++  it('always closes the port, even when the write fails', async () => {
++    const port = fakePort();
++    port._writer.write.mockRejectedValue(new Error('port busy'));
++    installSerial([port]);
++    await expect(webSerialAdapter.print(job())).rejects.toThrow('port busy');
++    expect(port.close).toHaveBeenCalled();
++  });
++
++  it('is not supported without navigator.serial', async () => {
++    expect(webSerialAdapter.isSupported()).toBe(false);
++    await expect(webSerialAdapter.print(job())).rejects.toThrow(/not available on this device/);
++  });
++});
+diff --git a/frontend/src/printing/__tests__/webUsbAdapter.test.js b/frontend/src/printing/__tests__/webUsbAdapter.test.js
+new file mode 100644
+index 0000000..63460d0
+--- /dev/null
++++ b/frontend/src/printing/__tests__/webUsbAdapter.test.js
+@@ -0,0 +1,115 @@
++/* eslint-env jest */
++import { webUsbAdapter, isWebUsbSupported } from '../adapters/webUsbAdapter';
++
++const PROFILE = { usbVendorId: 0x0483, usbProductId: 0x5743, usbSerialNumber: '' };
++const bytes = Uint8Array.from([0x1b, 0x40, 0x48, 0x69]);
++const job = (profile = PROFILE) => ({ profile, escpos: () => bytes });
++
++function fakeDevice(overrides = {}) {
++  return {
++    vendorId: 0x0483,
++    productId: 0x5743,
++    serialNumber: 'SN1',
++    configuration: {
++      interfaces: [{ interfaceNumber: 0, alternates: [{ endpoints: [{ direction: 'out', type: 'bulk', endpointNumber: 1 }] }] }],
++    },
++    open: jest.fn().mockResolvedValue(),
++    close: jest.fn().mockResolvedValue(),
++    selectConfiguration: jest.fn().mockResolvedValue(),
++    claimInterface: jest.fn().mockResolvedValue(),
++    releaseInterface: jest.fn().mockResolvedValue(),
++    transferOut: jest.fn().mockResolvedValue({ status: 'ok' }),
++    ...overrides,
++  };
++}
++
++const installUsb = (devices) => {
++  window.navigator.usb = { getDevices: jest.fn().mockResolvedValue(devices) };
++};
++const installSecure = (value = true) => Object.defineProperty(window, 'isSecureContext', { value, configurable: true });
++
++beforeEach(() => {
++  delete window.navigator.usb;
++  installSecure(true);
++});
++
++describe('isWebUsbSupported', () => {
++  it('requires navigator.usb and a secure context', () => {
++    expect(isWebUsbSupported()).toBe(false);
++    installUsb([]);
++    expect(isWebUsbSupported()).toBe(true);
++    installSecure(false);
++    expect(isWebUsbSupported()).toBe(false);
++  });
++});
++
++describe('webUsbAdapter', () => {
++  it('connects to the matching granted device and writes the ESC/POS bytes', async () => {
++    const device = fakeDevice();
++    installUsb([device]);
++
++    await webUsbAdapter.print(job());
++
++    expect(device.open).toHaveBeenCalledTimes(1);
++    expect(device.claimInterface).toHaveBeenCalledWith(0);
++    expect(device.transferOut).toHaveBeenCalledWith(1, bytes);
++    expect(device.releaseInterface).toHaveBeenCalledWith(0);
++    expect(device.close).toHaveBeenCalledTimes(1);
++  });
++
++  it('matches by vendor+product+serial when a serial number is stored', async () => {
++    const wrong = fakeDevice({ serialNumber: 'OTHER' });
++    const right = fakeDevice({ serialNumber: 'SN1' });
++    installUsb([wrong, right]);
++
++    await webUsbAdapter.print(job({ ...PROFILE, usbSerialNumber: 'SN1' }));
++
++    expect(wrong.open).not.toHaveBeenCalled();
++    expect(right.open).toHaveBeenCalled();
++  });
++
++  it('asks for a printer to be selected when none is stored', async () => {
++    installUsb([fakeDevice()]);
++    await expect(webUsbAdapter.print(job({ usbVendorId: null, usbProductId: null }))).rejects.toThrow(/No USB printer selected/);
++  });
++
++  it('explains when the selected device is not currently connected', async () => {
++    installUsb([]);
++    await expect(webUsbAdapter.print(job())).rejects.toThrow(/was not found/);
++  });
++
++  it('selects a configuration first if the device has none active', async () => {
++    const device = fakeDevice({ configuration: null, configurations: [{ interfaces: [{ interfaceNumber: 0, alternates: [{ endpoints: [{ direction: 'out', type: 'bulk', endpointNumber: 2 }] }] }] }] });
++    installUsb([device]);
++    await webUsbAdapter.print(job());
++    expect(device.selectConfiguration).toHaveBeenCalledWith(1);
++  });
++
++  it('fails clearly when the device has no bulk OUT endpoint', async () => {
++    const device = fakeDevice({ configuration: { interfaces: [] } });
++    installUsb([device]);
++    await expect(webUsbAdapter.print(job())).rejects.toThrow(/no printer data endpoint/);
++    expect(device.close).toHaveBeenCalled();
++  });
++
++  it('always closes the device, even when the write fails', async () => {
++    const device = fakeDevice({ transferOut: jest.fn().mockRejectedValue(new Error('cable unplugged')) });
++    installUsb([device]);
++    await expect(webUsbAdapter.print(job())).rejects.toThrow('cable unplugged');
++    expect(device.releaseInterface).toHaveBeenCalled();
++    expect(device.close).toHaveBeenCalled();
++  });
++
++  it('sends large payloads in chunks', async () => {
++    const device = fakeDevice();
++    installUsb([device]);
++    const big = new Uint8Array(9000).fill(1);
++    await webUsbAdapter.print({ profile: PROFILE, escpos: () => big });
++    expect(device.transferOut).toHaveBeenCalledTimes(3); // 4096 + 4096 + 808
++  });
++
++  it('is not supported without navigator.usb', async () => {
++    expect(webUsbAdapter.isSupported()).toBe(false);
++    await expect(webUsbAdapter.print(job())).rejects.toThrow(/not available on this device/);
++  });
++});
+diff --git a/frontend/src/printing/adapters/index.js b/frontend/src/printing/adapters/index.js
+index 67dadc9..a81db19 100644
+--- a/frontend/src/printing/adapters/index.js
++++ b/frontend/src/printing/adapters/index.js
+@@ -1,4 +1,6 @@
+ import { browserPrintAdapter } from './browserPrintAdapter';
++import { webUsbAdapter } from './webUsbAdapter';
++import { webSerialAdapter } from './webSerialAdapter';
+ 
+ /**
+  * Print adapter registry.
+@@ -16,6 +18,8 @@ import { browserPrintAdapter } from './browserPrintAdapter';
+  */
+ export const ADAPTERS = {
+   browser: browserPrintAdapter,
++  usb: webUsbAdapter,
++  serial: webSerialAdapter,
+ };
+ 
+ export const FALLBACK_ADAPTER_ID = 'browser';
+diff --git a/frontend/src/printing/adapters/webSerialAdapter.js b/frontend/src/printing/adapters/webSerialAdapter.js
+new file mode 100644
+index 0000000..a1258ee
+--- /dev/null
++++ b/frontend/src/printing/adapters/webSerialAdapter.js
+@@ -0,0 +1,49 @@
++const describe = (error) => (error && error.message) || String(error || 'Unknown error');
++
++export const isWebSerialSupported = () =>
++  typeof navigator !== 'undefined' && Boolean(navigator.serial) && typeof window !== 'undefined' && window.isSecureContext === true;
++
++/**
++ * Web Serial print adapter, for a receipt printer on a serial or USB-to-serial (virtual COM) port.
++ *
++ * Unlike WebUSB, the Web Serial API gives no stable id for a granted port, so this adapter uses
++ * whichever single port the browser has already granted access to (the user grants it once, in
++ * Printer settings). With more than one port granted there is no reliable way to tell them apart,
++ * so printing is refused with a message explaining that, rather than guessing which port to use.
++ * Chrome and Edge only (desktop); not Firefox or Safari.
++ */
++export const webSerialAdapter = {
++  id: 'serial',
++  label: 'Serial / COM port printer',
++  unsupportedReason: 'This browser does not support serial printing (Chrome or Edge on a computer)',
++
++  isSupported: isWebSerialSupported,
++
++  /** @param {import('../printService').PrintJob} job */
++  async print(job) {
++    if (!isWebSerialSupported()) throw new Error('Serial printing is not available on this device');
++
++    const ports = await navigator.serial.getPorts();
++    if (ports.length === 0) {
++      throw new Error('No serial printer selected. Choose one in Printer settings.');
++    }
++    if (ports.length > 1) {
++      throw new Error('More than one serial port is available to this app. Remove access to the ones you are not using and try again.');
++    }
++    const port = ports[0];
++
++    try {
++      await port.open({ baudRate: job.profile.serialBaudRate });
++      const writer = port.writable.getWriter();
++      try {
++        await writer.write(job.escpos());
++      } finally {
++        writer.releaseLock();
++      }
++    } catch (error) {
++      throw new Error(describe(error));
++    } finally {
++      await port.close().catch(() => {});
++    }
++  },
++};
+diff --git a/frontend/src/printing/adapters/webUsbAdapter.js b/frontend/src/printing/adapters/webUsbAdapter.js
+new file mode 100644
+index 0000000..f02c377
+--- /dev/null
++++ b/frontend/src/printing/adapters/webUsbAdapter.js
+@@ -0,0 +1,86 @@
++// One write at a time per printer, so two receipts can never interleave on the wire.
++const CHUNK_SIZE = 4096;
++
++const describe = (error) => (error && error.message) || String(error || 'Unknown error');
++
++export const isWebUsbSupported = () =>
++  typeof navigator !== 'undefined' && Boolean(navigator.usb) && typeof window !== 'undefined' && window.isSecureContext === true;
++
++const matches = (device, profile) =>
++  device.vendorId === profile.usbVendorId &&
++  device.productId === profile.usbProductId &&
++  (!profile.usbSerialNumber || device.serialNumber === profile.usbSerialNumber);
++
++/** Find the already-granted device this profile points at (requires no user gesture: permission was granted earlier). */
++async function findGrantedDevice(profile) {
++  const devices = await navigator.usb.getDevices();
++  return devices.find((device) => matches(device, profile)) || null;
++}
++
++/** The first interface with a bulk OUT endpoint - where receipt printer data goes on virtually every USB printer. */
++function findBulkOutEndpoint(device) {
++  for (const config of device.configuration ? [device.configuration] : device.configurations) {
++    for (const iface of config.interfaces) {
++      const alt = iface.alternates[0];
++      const endpoint = alt.endpoints.find((e) => e.direction === 'out' && e.type === 'bulk');
++      if (endpoint) return { interfaceNumber: iface.interfaceNumber, endpointNumber: endpoint.endpointNumber };
++    }
++  }
++  return null;
++}
++
++async function sendBytes(device, endpoint, bytes) {
++  for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
++    const chunk = bytes.subarray(offset, offset + CHUNK_SIZE);
++    const result = await device.transferOut(endpoint.endpointNumber, chunk);
++    if (result.status !== 'ok') throw new Error(`USB transfer failed (${result.status})`);
++  }
++}
++
++/**
++ * WebUSB print adapter, for a receipt printer plugged directly into this computer.
++ *
++ * The user grants access to one specific device once, in Printer settings (WebUSB requires a
++ * user gesture for that first pairing); afterwards the browser remembers it by vendor/product id,
++ * so no further prompt is needed. Chrome and Edge only (desktop); not Firefox or Safari.
++ */
++export const webUsbAdapter = {
++  id: 'usb',
++  label: 'USB printer',
++  unsupportedReason: 'This browser does not support USB printing (Chrome or Edge on a computer)',
++
++  isSupported: isWebUsbSupported,
++
++  /** @param {import('../printService').PrintJob} job */
++  async print(job) {
++    if (!isWebUsbSupported()) throw new Error('USB printing is not available on this device');
++    const { profile } = job;
++    if (profile.usbVendorId === null || profile.usbProductId === null) {
++      throw new Error('No USB printer selected. Choose one in Printer settings.');
++    }
++
++    const device = await findGrantedDevice(profile);
++    if (!device) {
++      throw new Error('The selected USB printer was not found. Check it is plugged in, or select it again in Printer settings.');
++    }
++
++    try {
++      await device.open();
++      if (device.configuration === null) await device.selectConfiguration(1);
++
++      const endpoint = findBulkOutEndpoint(device);
++      if (!endpoint) throw new Error('This USB device has no printer data endpoint.');
++
++      await device.claimInterface(endpoint.interfaceNumber);
++      try {
++        await sendBytes(device, endpoint, job.escpos());
++      } finally {
++        await device.releaseInterface(endpoint.interfaceNumber).catch(() => {});
++      }
++    } catch (error) {
++      throw new Error(describe(error));
++    } finally {
++      await device.close().catch(() => {});
++    }
++  },
++};
+diff --git a/frontend/src/printing/index.js b/frontend/src/printing/index.js
+index f9d4df4..17430b5 100644
+--- a/frontend/src/printing/index.js
++++ b/frontend/src/printing/index.js
+@@ -11,7 +11,10 @@ export {
+   CONNECTIONS,
+   CONNECTION_INFO,
+   CUT_MODES,
++  SERIAL_BAUD_RATES,
+ } from './profile';
+ export { renderEscPos, renderHtml, renderPlainText } from './renderers';
+ export { sampleSale } from './sample';
+ export { ADAPTERS } from './adapters';
++export { isWebUsbSupported } from './adapters/webUsbAdapter';
++export { isWebSerialSupported } from './adapters/webSerialAdapter';
+diff --git a/frontend/src/printing/profile.js b/frontend/src/printing/profile.js
+index 6243505..971595a 100644
+--- a/frontend/src/printing/profile.js
++++ b/frontend/src/printing/profile.js
+@@ -53,8 +53,18 @@ export const DEFAULT_PROFILE = Object.freeze({
+   cut: 'partial',
+   openDrawer: false,
+   feedLines: 3,
++  // USB: matched by vendor/product id (and serial number, when the device exposes one) - stable
++  // across browser sessions once the user has granted access to the device once.
++  usbVendorId: null,
++  usbProductId: null,
++  usbSerialNumber: '',
++  // Serial: the Web Serial API gives no stable device id, so the adapter uses whichever single
++  // port the browser has already granted access to. baudRate is the only thing worth storing.
++  serialBaudRate: 9600,
+ });
+ 
++export const SERIAL_BAUD_RATES = [9600, 19200, 38400, 57600, 115200];
++
+ /** Validate an untrusted/partial profile and fill in defaults. */
+ export function normalizeProfile(raw) {
+   const p = raw && typeof raw === 'object' ? raw : {};
+@@ -65,6 +75,10 @@ export function normalizeProfile(raw) {
+     cut: CUT_MODES.includes(p.cut) ? p.cut : DEFAULT_PROFILE.cut,
+     openDrawer: p.openDrawer === true,
+     feedLines: Number.isInteger(feed) && feed >= 0 && feed <= 10 ? feed : DEFAULT_PROFILE.feedLines,
++    usbVendorId: Number.isInteger(p.usbVendorId) && p.usbVendorId >= 0 ? p.usbVendorId : null,
++    usbProductId: Number.isInteger(p.usbProductId) && p.usbProductId >= 0 ? p.usbProductId : null,
++    usbSerialNumber: typeof p.usbSerialNumber === 'string' ? p.usbSerialNumber.slice(0, 128) : '',
++    serialBaudRate: SERIAL_BAUD_RATES.includes(Number(p.serialBaudRate)) ? Number(p.serialBaudRate) : DEFAULT_PROFILE.serialBaudRate,
+   };
+ }
+ 

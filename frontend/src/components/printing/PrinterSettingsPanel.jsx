@@ -9,6 +9,7 @@ import {
 import useCurrency from '../../hooks/useCurrency';
 import usePrinterProfile from '../../hooks/usePrinterProfile';
 import Button from '../ui/Button';
+import UsbSerialPrinterPicker from './UsbSerialPrinterPicker';
 import {
   ADAPTERS,
   CONNECTIONS,
@@ -42,9 +43,10 @@ const connectionStatus = (id) => {
   return adapter.isSupported() ? 'available' : 'unsupported';
 };
 
-const STATUS_BADGES = {
-  'coming-soon': 'Coming soon',
-  unsupported: 'Not supported on this device',
+const statusBadge = (id, status) => {
+  if (status === 'coming-soon') return 'Coming soon';
+  if (status === 'unsupported') return ADAPTERS[id]?.unsupportedReason || 'Not supported on this device';
+  return null;
 };
 
 const fieldsetClass = 'space-y-2';
@@ -207,7 +209,7 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
                 onChange={() => change({ connection: id })}
                 title={CONNECTION_INFO[id].label}
                 description={CONNECTION_INFO[id].hint}
-                badge={STATUS_BADGES[status]}
+                badge={statusBadge(id, status)}
               />
             );
           })}
@@ -222,6 +224,10 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
           </p>
         )}
       </fieldset>
+
+      {(profile.connection === 'usb' || profile.connection === 'serial') && selectedStatus === 'available' && (
+        <UsbSerialPrinterPicker connection={profile.connection} profile={profile} onSelect={change} />
+      )}
 
       <fieldset className={fieldsetClass}>
         <legend className={legendClass}>Paper width</legend>
