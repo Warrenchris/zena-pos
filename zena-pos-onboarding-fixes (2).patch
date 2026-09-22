@@ -1,0 +1,230 @@
+diff --git a/backend/src/controllers/authController.js b/backend/src/controllers/authController.js
+index 6094180..8f4e7c4 100644
+--- a/backend/src/controllers/authController.js
++++ b/backend/src/controllers/authController.js
+@@ -376,6 +376,22 @@ exports.getProfile = async (req, res) => {
+       }
+ 
+       const empOrgId = req.organizationId || req.user.organizationId || employee.Shop?.organizationId;
++
++      // Resolve the ACTIVE shop from the JWT's shopId claim (set by switchShop),
++      // not just the employee's permanently-assigned Shop association. Without
++      // this, a branch switch is reflected in req.shopId but getProfile keeps
++      // reporting the employee's original/default branch after a page reload.
++      let activeShop = employee.Shop;
++      if (req.shopId && req.shopId !== employee.Shop?.id) {
++        const switchedShop = await Shop.findOne({
++          where: { id: req.shopId, organizationId: empOrgId },
++          attributes: ['id', 'name', 'address', 'phone', 'organizationId', 'kraPin']
++        });
++        if (switchedShop) {
++          activeShop = switchedShop;
++        }
++      }
++
+       const empMembershipWhere = { employeeId: employee.id, status: 'active' };
+       if (empOrgId) {
+         empMembershipWhere.organizationId = empOrgId;
+@@ -385,7 +401,7 @@ exports.getProfile = async (req, res) => {
+ 
+       const payload = buildAuthPayload({
+         employee,
+-        shop: employee.Shop,
++        shop: activeShop,
+         orgRole: empOrgRole,
+         organizationId: empOrgId
+       });
+@@ -404,6 +420,25 @@ exports.getProfile = async (req, res) => {
+     }
+ 
+     const orgId = req.organizationId || req.user.organizationId || user.Shop?.organizationId;
++
++    // Resolve the ACTIVE shop from the JWT's shopId claim (set by switchShop),
++    // not just User.shopId. switchShop mints a new token with a different
++    // shopId claim but is a documented zero-DB-write operation, so User.shopId
++    // in the database still points at the account's original/default branch.
++    // Falling back to user.Shop here caused getProfile (called on every app
++    // bootstrap/reload) to silently revert the active branch back to the
++    // original one right after a user switched branches.
++    let activeShop = user.Shop;
++    if (req.shopId && req.shopId !== user.Shop?.id) {
++      const switchedShop = await Shop.findOne({
++        where: { id: req.shopId, organizationId: orgId },
++        attributes: ['id', 'name', 'address', 'phone', 'organizationId', 'kraPin']
++      });
++      if (switchedShop) {
++        activeShop = switchedShop;
++      }
++    }
++
+     const membershipWhere = { userId: user.id, status: 'active' };
+     if (orgId) {
+       membershipWhere.organizationId = orgId;
+@@ -413,7 +448,7 @@ exports.getProfile = async (req, res) => {
+ 
+     const payload = buildAuthPayload({
+       user,
+-      shop: user.Shop,
++      shop: activeShop,
+       orgRole,
+       organizationId: orgId
+     });
+diff --git a/backend/src/utils/serializeAuthResponse.js b/backend/src/utils/serializeAuthResponse.js
+index bfafb60..0ae7882 100644
+--- a/backend/src/utils/serializeAuthResponse.js
++++ b/backend/src/utils/serializeAuthResponse.js
+@@ -50,7 +50,11 @@ function buildAuthPayload({
+     email: entity?.email || '',
+     role: isEmployee ? 'employee' : (entity?.role || 'admin'),
+     orgRole: resolvedOrgRole,
+-    shopId: entity?.shopId || serializedShop?.id || null,
++    // NOTE: serializedShop reflects the caller's *active* branch (may differ
++    // from entity.shopId after switchShop, which only changes the JWT claim
++    // and never writes to the DB). Prefer it so user.shopId always agrees
++    // with user.shop.id.
++    shopId: serializedShop?.id || entity?.shopId || null,
+     organizationId: resolvedOrgId,
+     shop: serializedShop,
+     ...(subscriptionStatus ? { subscriptionStatus } : {})
+diff --git a/frontend/src/components/dashboard/GettingStartedChecklist.jsx b/frontend/src/components/dashboard/GettingStartedChecklist.jsx
+index 8c39178..05ff563 100644
+--- a/frontend/src/components/dashboard/GettingStartedChecklist.jsx
++++ b/frontend/src/components/dashboard/GettingStartedChecklist.jsx
+@@ -11,6 +11,7 @@ import {
+   SparklesIcon,
+   ChartBarSquareIcon,
+   ArrowTopRightOnSquareIcon,
++  ExclamationTriangleIcon,
+ } from '@heroicons/react/24/outline';
+ import Card from '../ui/Card';
+ import Button from '../ui/Button';
+@@ -30,6 +31,8 @@ import Button from '../ui/Button';
+ export default function GettingStartedChecklist({
+   products = [],
+   employees = [],
++  orgStaffCount = null,
++  shopQuota = null,
+   user = null,
+   shop = null,
+   onDismiss,
+@@ -53,14 +56,19 @@ export default function GettingStartedChecklist({
+     (settings?.receiptHeader && settings?.receiptHeader.length > 0)
+   );
+ 
+-  // Step 3: Add Staff Members (real-data check: additional employees/cashiers present)
+-  const isStaffCompleted = Boolean(
+-    Array.isArray(employees) &&
+-    (employees.length > 1 ||
+-      employees.some(
+-        (e) => (e.role && e.role !== 'admin') || String(e.id) !== String(user?.id)
+-      ))
+-  );
++  // Step 3: Add Staff Members. Prefer the organization-wide seat count (same
++  // figure shown on the Billing page) so staff added on ANY branch counts
++  // here — not just the branch currently active in this session. Fall back
++  // to the current-branch employees list only if that count is unavailable.
++  const isStaffCompleted = Number.isFinite(orgStaffCount)
++    ? orgStaffCount > 1
++    : Boolean(
++        Array.isArray(employees) &&
++        (employees.length > 1 ||
++          employees.some(
++            (e) => (e.role && e.role !== 'admin') || String(e.id) !== String(user?.id)
++          ))
++      );
+ 
+   const steps = [
+     {
+@@ -98,6 +106,14 @@ export default function GettingStartedChecklist({
+   const completedCount = steps.filter((step) => step.isCompleted).length;
+   const progressPercent = Math.round((completedCount / steps.length) * 100);
+ 
++  const isShopLimitReached = Boolean(
++    shopQuota &&
++    !shopQuota.isUnlimited &&
++    Number.isFinite(shopQuota.limit) &&
++    shopQuota.limit > 0 &&
++    shopQuota.current >= shopQuota.limit
++  );
++
+   const handleDismiss = () => {
+     if (onDismiss) {
+       onDismiss();
+@@ -170,6 +186,23 @@ export default function GettingStartedChecklist({
+                 🎉 Great job! You have completed all initial onboarding steps.
+               </p>
+             )}
++            {isShopLimitReached && (
++              <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
++                <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
++                <p className="text-caption text-amber-700 dark:text-amber-400">
++                  <span className="font-semibold">Branch limit reached</span> ({shopQuota.current}/{shopQuota.limit}).
++                  Your organization can't add another branch on the current plan.{' '}
++                  <button
++                    type="button"
++                    onClick={() => navigate('/billing')}
++                    className="underline decoration-dotted font-semibold hover:text-amber-800 dark:hover:text-amber-300"
++                  >
++                    Upgrade your plan
++                  </button>
++                  {' '}to add more.
++                </p>
++              </div>
++            )}
+           </div>
+         </div>
+ 
+diff --git a/frontend/src/pages/Dashboard.jsx b/frontend/src/pages/Dashboard.jsx
+index eb3d684..cb23133 100644
+--- a/frontend/src/pages/Dashboard.jsx
++++ b/frontend/src/pages/Dashboard.jsx
+@@ -32,6 +32,7 @@ import { formatCurrency, formatDate } from '../utils/formatters';
+ import { fetchSalesStatistics, fetchSales } from '../store/slices/salesSlice';
+ import { fetchCustomers } from '../store/slices/customersSlice';
+ import { fetchProducts } from '../store/slices/productsSlice';
++import { fetchSubscription } from '../store/slices/billingSlice';
+ import api, { employeesAPI } from '../services/api';
+ import { notifyLowStock } from '../utils/notifications';
+ 
+@@ -46,9 +47,11 @@ export default function Dashboard() {
+   const { sales, statistics, loading: salesLoading, error: salesError } = useSelector((state) => state.sales);
+   const { loading: customersLoading, error: customersError } = useSelector((state) => state.customers);
+   const { products, loading: productsLoading, error: productsError } = useSelector((state) => state.products);
++  const { quotas: billingQuotas } = useSelector((state) => state.billing);
+ 
+   const userId = user?.id;
+   const userRole = user?.role;
++  const userOrgRole = user?.orgRole;
+   const userShopId = user?.shopId || user?.shop?.id;
+ 
+   // First-run onboarding checklist state
+@@ -113,10 +116,18 @@ export default function Dashboard() {
+         console.error('Failed to load employees for dashboard filter:', err);
+       }
+     };
+-    if (userRole === 'admin') {
++    // Gate on BOTH shop-level role and org-level role: an org owner/admin
++    // whose shop-level `role` field isn't literally 'admin' (e.g. added to
++    // the org a different way than self-registration) would otherwise
++    // silently get an empty employees list here with no error surfaced.
++    if (userRole === 'admin' || userOrgRole === 'owner' || userOrgRole === 'admin') {
+       loadEmployees();
+     }
+-  }, [userRole]);
++    // Org-wide seat usage (independent of which branch is currently active) is
++    // needed so the "Add Staff Members" onboarding step reflects staff added
++    // on ANY branch, matching the Billing page's seat count.
++    dispatch(fetchSubscription());
++  }, [userRole, userOrgRole, dispatch]);
+ 
+   const [refreshKey, setRefreshKey] = useState(0);
+   const [isRefreshing, setIsRefreshing] = useState(false);
+@@ -460,6 +471,8 @@ export default function Dashboard() {
+         <GettingStartedChecklist
+           products={products}
+           employees={employees}
++          orgStaffCount={billingQuotas?.users?.current}
++          shopQuota={billingQuotas?.shops}
+           user={user}
+           shop={user?.shop}
+           onDismiss={handleDismissChecklist}

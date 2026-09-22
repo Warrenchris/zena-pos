@@ -11,6 +11,7 @@ import {
   SparklesIcon,
   ChartBarSquareIcon,
   ArrowTopRightOnSquareIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
@@ -31,6 +32,7 @@ export default function GettingStartedChecklist({
   products = [],
   employees = [],
   orgStaffCount = null,
+  shopQuota = null,
   user = null,
   shop = null,
   onDismiss,
@@ -104,6 +106,14 @@ export default function GettingStartedChecklist({
   const completedCount = steps.filter((step) => step.isCompleted).length;
   const progressPercent = Math.round((completedCount / steps.length) * 100);
 
+  const isShopLimitReached = Boolean(
+    shopQuota &&
+    !shopQuota.isUnlimited &&
+    Number.isFinite(shopQuota.limit) &&
+    shopQuota.limit > 0 &&
+    shopQuota.current >= shopQuota.limit
+  );
+
   const handleDismiss = () => {
     if (onDismiss) {
       onDismiss();
@@ -175,6 +185,23 @@ export default function GettingStartedChecklist({
               <p className="text-caption text-emerald-600 dark:text-emerald-400 font-medium">
                 🎉 Great job! You have completed all initial onboarding steps.
               </p>
+            )}
+            {isShopLimitReached && (
+              <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-caption text-amber-700 dark:text-amber-400">
+                  <span className="font-semibold">Branch limit reached</span> ({shopQuota.current}/{shopQuota.limit}).
+                  Your organization can't add another branch on the current plan.{' '}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/billing')}
+                    className="underline decoration-dotted font-semibold hover:text-amber-800 dark:hover:text-amber-300"
+                  >
+                    Upgrade your plan
+                  </button>
+                  {' '}to add more.
+                </p>
+              </div>
             )}
           </div>
         </div>
