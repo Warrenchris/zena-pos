@@ -18,12 +18,14 @@ import {
   ArrowPathIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  ArchiveBoxXMarkIcon
+  ArchiveBoxXMarkIcon,
+  DocumentArrowUpIcon
 } from '@heroicons/react/24/outline';
 import { fetchProducts, deleteProduct } from '../store/slices/productsSlice';
 import { fetchCategories } from '../store/slices/categoriesSlice';
 import ProductModal from '../components/ProductModal';
 import StockModal from '../components/StockModal';
+import ImportProductsModal from '../components/ImportProductsModal';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 function ProductsContent() {
@@ -40,6 +42,7 @@ function ProductsContent() {
   const [pageSize, setPageSize] = useState(24); // Default to 24 items per page so all 13+ load on initial view
   const [showProductModal, setShowProductModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [viewMode, setViewMode] = useState('list'); // 'grid' | 'list'
@@ -328,6 +331,16 @@ function ProductsContent() {
               >
                 <PlusIcon className="h-4.5 w-4.5 stroke-[2.5]" />
                 <span>Add Product</span>
+              </button>
+
+              {/* Import Products Button */}
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="bg-surface-2 text-text-primary px-4 py-2.5 rounded-xl hover:bg-surface-3 active:bg-surface-4 border border-border-default shadow-sm flex items-center gap-2 text-small font-semibold transition-all duration-150 active:scale-[0.98]"
+                disabled={loading || localLoading.delete}
+              >
+                <DocumentArrowUpIcon className="h-4.5 w-4.5 stroke-[2.5]" />
+                <span>Import</span>
               </button>
             </div>
           </div>
@@ -750,6 +763,25 @@ function ProductsContent() {
             onClose={() => {
               setShowStockModal(false);
               setSelectedProduct(null);
+            }}
+          />
+        )}
+
+        {/* Import Products Modal */}
+        {showImportModal && (
+          <ImportProductsModal
+            onClose={() => setShowImportModal(false)}
+            onImportComplete={() => {
+              // Refresh products after import
+              dispatch(fetchProducts({ 
+                page: currentPage, 
+                pageSize: pageSize,
+                search: searchTerm || undefined,
+                categoryId: filters.categoryId || undefined,
+                availability: filters.availability !== 'all' ? filters.availability : undefined,
+                minPrice: filters.minPrice || undefined,
+                maxPrice: filters.maxPrice || undefined,
+              }));
             }}
           />
         )}

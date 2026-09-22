@@ -3,6 +3,63 @@ const { body } = require('express-validator');
 const router = express.Router();
 const productController = require('../controllers/productController');
 const { auth, checkRole } = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configure multer for file uploads
+const uploadsDir = path.join(__dirname, '../../uploads/imports');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const uniqueName = `products_import_${req.shopId || 'shop'}_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, uniqueName);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'text/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ];
+  const allowedExtensions = ['.csv', '.xlsx', '.xls'];
+  
+  const ext = path.extname(file.originalname).toLowerCase();
+  
+  if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only CSV and Excel files are allowed.'), false);
+  }
+};
+
+const uploadImport = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter
+});
+
+const handleImportMiddleware = (req, res, next) => {
+  uploadImport.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size limit exceeded. Maximum allowed size is 5MB.' });
+      }
+      return res.status(400).json({ error: err.message });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+};
 
 // Validation middleware
 const validateProduct = [
@@ -86,6 +143,13 @@ const { requireActiveSubscription } = require('../middleware/subscriptionEnforce
 router.get('/batch', auth, productController.getProductsBatch);
 router.get('/', auth, productController.getAllProducts);
 router.get('/:id', auth, productController.getProductById);
+router.post('/import', 
+  auth, 
+  requireActiveSubscription(),
+  checkRole(['admin', 'manager']), 
+  handleImportMiddleware,
+  productController.importProducts
+);
 router.post('/', 
   auth, 
   requireActiveSubscription(),

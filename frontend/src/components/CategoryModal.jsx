@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { XMarkIcon, TagIcon, FolderIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
 import { createCategory, updateCategory } from '../store/slices/categoriesSlice'
 
-export default function CategoryModal({ category, onClose, defaultParentId = null }) {
+export default function CategoryModal({ category, onClose, defaultParentId = null, onCategoryCreated }) {
   const dispatch = useDispatch()
   const { categories } = useSelector(state => state.categories)
   const [formData, setFormData] = useState({
@@ -107,7 +107,11 @@ export default function CategoryModal({ category, onClose, defaultParentId = nul
           categoryData: submissionData 
         })).unwrap()
       } else {
-        await dispatch(createCategory(submissionData)).unwrap()
+        const result = await dispatch(createCategory(submissionData)).unwrap()
+        // Call the callback with the new category ID if provided
+        if (onCategoryCreated && result?.id) {
+          onCategoryCreated(result.id)
+        }
       }
       if (typeof window !== 'undefined' && window.showToast) {
         window.showToast({

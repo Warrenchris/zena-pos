@@ -36,7 +36,8 @@
     "node-cache": "^5.1.2",
     "nodemailer": "^6.10.0",
     "pdfkit": "^0.14.0",
-    "sequelize": "^6.37.7"
+    "sequelize": "^6.37.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "eslint": "^9.35.0",

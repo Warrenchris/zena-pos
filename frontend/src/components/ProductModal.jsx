@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useDispatch } from 'react-redux';
-import { XMarkIcon, CubeIcon, TagIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
+import { useDispatch, useSelector } from 'react-redux';
+import { XMarkIcon, CubeIcon, TagIcon, ExclamationCircleIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { createProduct, updateProduct } from '../store/slices/productsSlice';
+import { fetchCategories } from '../store/slices/categoriesSlice';
+import CategoryModal from './CategoryModal';
 
 export default function ProductModal({ product, categories = [], onClose }) {
   const dispatch = useDispatch();
@@ -18,6 +20,7 @@ export default function ProductModal({ product, categories = [], onClose }) {
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   useEffect(() => {
     if (product) {
@@ -48,6 +51,31 @@ export default function ProductModal({ product, categories = [], onClose }) {
         [name]: ''
       }));
     }
+  };
+
+  const handleCategoryChange = (e) => {
+    const value = e.target.value;
+    if (value === 'new') {
+      setShowCategoryModal(true);
+      // Don't update form state with 'new' value
+      return;
+    }
+    handleChange(e);
+  };
+
+  const handleCategoryCreated = (newCategoryId) => {
+    // Refresh categories to get the latest list
+    dispatch(fetchCategories());
+    // Set the newly created category as selected
+    setFormData(prev => ({
+      ...prev,
+      CategoryId: String(newCategoryId)
+    }));
+    // Clear any category error
+    setErrors(prev => ({
+      ...prev,
+      CategoryId: ''
+    }));
   };
 
   const validateForm = () => {
@@ -218,12 +246,15 @@ export default function ProductModal({ product, categories = [], onClose }) {
               <select
                 name="CategoryId"
                 value={formData.CategoryId || formData.categoryId}
-                onChange={handleChange}
+                onChange={handleCategoryChange}
                 className={`w-full px-3.5 py-2.5 rounded-xl bg-surface-2/70 text-text-primary border ${
                   errors.CategoryId ? 'border-danger focus:ring-danger/30' : 'border-border-default focus:border-primary focus:ring-primary/40'
                 } focus:outline-none focus:ring-2 focus:bg-surface text-small transition-colors`}
               >
                 <option value="">Select Category</option>
+                <option value="new" className="text-primary font-medium">
+                  + Add New Category
+                </option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -378,6 +409,14 @@ export default function ProductModal({ product, categories = [], onClose }) {
 
         </form>
       </div>
+
+      {/* Category Modal for adding new categories */}
+      {showCategoryModal && (
+        <CategoryModal
+          onClose={() => setShowCategoryModal(false)}
+          onCategoryCreated={handleCategoryCreated}
+        />
+      )}
     </div>
   );
 }
