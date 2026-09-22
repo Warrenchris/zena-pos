@@ -10,6 +10,8 @@
  * production keys.
  */
 
+process.env.NODE_ENV = 'test';
+
 const crypto = require('crypto');
 
 // Only generate if a real key isn't already present in the environment.
