@@ -3,6 +3,9 @@ const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const { Product, Category, SystemSettings, Inventory, Shop, StockMovement, User } = require('../models');
 const sequelize = require('../config/database');
+const XLSX = require('xlsx');
+const fs = require('fs');
+const path = require('path');
 
 // Helper to format product with branch-scoped inventory
 function formatProductWithInventory(product) {
@@ -894,5 +897,229 @@ exports.getProductsBatch = async (req, res) => {
   } catch (error) {
     logger.error('Error in getProductsBatch:', error);
     res.status(500).json({ error: 'Failed to batch fetch products' });
+  }
+};
+
+// Import products from CSV/Excel file
+exports.importProducts = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
+
+    const filePath = req.file.path;
+    const fileExt = path.extname(req.file.originalname).toLowerCase();
+
+    let products = [];
+    
+    // Parse the file based on extension
+    if (fileExt === '.csv') {
+      const workbook = XLSX.readFile(filePath);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      products = XLSX.utils.sheet_to_json(worksheet);
+    } else if (fileExt === '.xlsx' || fileExt === '.xls') {
+      const workbook = XLSX.readFile(filePath);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      products = XLSX.utils.sheet_to_json(worksheet);
+    } else {
+      // Delete the uploaded file
+      fs.unlinkSync(filePath);
+      return res.status(400).json({ error: 'Unsupported file format' });
+    }
+
+    // Clean up the uploaded file
+    fs.unlinkSync(filePath);
+
+    if (!products || products.length === 0) {
+      return res.status(400).json({ error: 'No products found in file' });
+    }
+
+    // Validate and process products
+    const errors = [];
+    const successfulProducts = [];
+    const skippedProducts = [];
+
+    // Get settings for defaults
+    const settings = await SystemSettings.findOne({ where: { shopId } });
+    const skuPrefix = settings?.skuPrefix || 'SKU';
+    const barcodeFormat = settings?.barcodeFormat || 'EAN13';
+    const defaultLowStock = settings?.lowStockThreshold !== undefined ? settings.lowStockThreshold : 10;
+
+    // Get existing SKUs and barcodes to prevent duplicates
+    const existingProducts = await Product.findAll({
+      where: { organizationId },
+      attributes: ['sku', 'barcode']
+    });
+    const existingSkus = new Set(existingProducts.map(p => p.sku));
+    const existingBarcodes = new Set(existingProducts.map(p => p.barcode).filter(b => b));
+
+    // Get all categories for validation
+    const categories = await Category.findAll({
+      where: { 
+        organizationId: organizationId || null,
+        shopId: organizationId ? null : shopId,
+        active: true
+      },
+      attributes: ['id', 'name']
+    });
+    const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]));
+
+    for (let i = 0; i < products.length; i++) {
+      const row = products[i];
+      const rowNumber = i + 2; // Excel row numbers start from 1, header is row 1
+
+      try {
+        // Map column names (handle different naming conventions)
+        const name = row['name'] || row['Name'] || row['Product Name'] || row['product_name'];
+        const sku = row['sku'] || row['SKU'] || row['Sku'];
+        const barcode = row['barcode'] || row['Barcode'] || row['Bar Code'] || row['bar_code'];
+        const description = row['description'] || row['Description'] || row['desc'];
+        const price = row['price'] || row['Price'] || row['Selling Price'] || row['selling_price'];
+        const cost = row['cost'] || row['Cost'] || row['Cost Price'] || row['cost_price'];
+        const stockQuantity = row['stockQuantity'] || row['Stock Quantity'] || row['stock_quantity'] || row['quantity'];
+        const reorderPoint = row['reorderPoint'] || row['Reorder Point'] || row['reorder_point'];
+        const categoryName = row['category'] || row['Category'] || row['category_name'];
+        const weightGrams = row['weightGrams'] || row['Weight'] || row['weight_grams'];
+        const expirationDate = row['expirationDate'] || row['Expiration Date'] || row['expiration_date'];
+
+        // Validate required fields
+        if (!name) {
+          errors.push({ row: rowNumber, field: 'name', message: 'Product name is required' });
+          skippedProducts.push(row);
+          continue;
+        }
+
+        if (!price || isNaN(parseFloat(price))) {
+          errors.push({ row: rowNumber, field: 'price', message: 'Valid price is required' });
+          skippedProducts.push(row);
+          continue;
+        }
+
+        if (!cost || isNaN(parseFloat(cost))) {
+          errors.push({ row: rowNumber, field: 'cost', message: 'Valid cost is required' });
+          skippedProducts.push(row);
+          continue;
+        }
+
+        // Handle SKU
+        let finalSku = sku ? String(sku).trim() : '';
+        if (!finalSku) {
+          const count = await Product.count({ where: { organizationId } });
+          finalSku = `${skuPrefix}${String(count + 1).padStart(4, '0')}`;
+        }
+
+        if (existingSkus.has(finalSku)) {
+          errors.push({ row: rowNumber, field: 'sku', message: `SKU ${finalSku} already exists` });
+          skippedProducts.push(row);
+          continue;
+        }
+
+        // Handle barcode
+        let finalBarcode = barcode ? String(barcode).trim() : '';
+        if (finalBarcode && existingBarcodes.has(finalBarcode)) {
+          errors.push({ row: rowNumber, field: 'barcode', message: `Barcode ${finalBarcode} already exists` });
+          skippedProducts.push(row);
+          continue;
+        }
+
+        // Handle category
+        let categoryId = null;
+        if (categoryName) {
+          const catId = categoryMap.get(String(categoryName).toLowerCase().trim());
+          if (catId) {
+            categoryId = catId;
+          } else {
+            errors.push({ row: rowNumber, field: 'category', message: `Category "${categoryName}" not found` });
+            skippedProducts.push(row);
+            continue;
+          }
+        }
+
+        // Create product
+        const productData = {
+          name: String(name).trim(),
+          sku: finalSku,
+          barcode: finalBarcode || null,
+          description: description ? String(description).trim() : null,
+          price: parseFloat(price),
+          cost: parseFloat(cost),
+          categoryId: categoryId,
+          CategoryId: categoryId,
+          organizationId,
+          shopId: organizationId ? null : shopId,
+          weightGrams: weightGrams ? parseInt(weightGrams, 10) : null,
+          expirationDate: expirationDate ? new Date(expirationDate) : null
+        };
+
+        const product = await Product.create(productData);
+
+        // Create inventory entry if shopId exists
+        if (shopId) {
+          const initialStock = stockQuantity ? parseFloat(stockQuantity) : 0;
+          const initialReorder = reorderPoint ? parseInt(reorderPoint, 10) : defaultLowStock;
+
+          await Inventory.create({
+            productId: product.id,
+            shopId,
+            stockQuantity: initialStock,
+            reorderPoint: initialReorder
+          });
+        }
+
+        successfulProducts.push({
+          row: rowNumber,
+          name: product.name,
+          sku: product.sku,
+          id: product.id
+        });
+
+        existingSkus.add(finalSku);
+        if (finalBarcode) existingBarcodes.add(finalBarcode);
+
+      } catch (error) {
+        logger.error(`Error processing row ${rowNumber}:`, error);
+        errors.push({ row: rowNumber, message: error.message });
+        skippedProducts.push(row);
+      }
+    }
+
+    // Invalidate cache
+    if (organizationId) {
+      await invalidateOrgProductCaches(organizationId);
+    } else if (shopId) {
+      await invalidateShopProductCache(shopId);
+    }
+
+    res.json({
+      success: true,
+      message: `Import completed. ${successfulProducts.length} products imported successfully.`,
+      summary: {
+        total: products.length,
+        successful: successfulProducts.length,
+        skipped: skippedProducts.length,
+        errors: errors.length
+      },
+      successfulProducts,
+      errors
+    });
+
+  } catch (error) {
+    logger.error('Error importing products:', error);
+    
+    // Clean up file if it exists
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    res.status(500).json({ error: 'Failed to import products', details: error.message });
   }
 };
