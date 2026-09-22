@@ -11,7 +11,7 @@ const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, 
 const crypto = require('crypto');
 const Shop = require('../models/Shop');
 const { sequelize, Organization, OrganizationMembership, ShopAccess, Subscription, Plan } = require('../models');
-const { buildAuthPayload } = require('../utils/serializeAuthResponse');
+const { buildAuthPayload, resolveAuthRole } = require('../utils/serializeAuthResponse');
 const logger = require('../utils/logger');
 const tokenRevocationService = require('../services/tokenRevocationService');
 
@@ -163,7 +163,8 @@ exports.login = async (req, res) => {
             id: employee.id,
             name: `${employee.firstName} ${employee.lastName}`,
             email: employee.email,
-            role: 'employee',
+            role: resolveAuthRole(employee.position),
+            position: employee.position,
             shopId: employee.shopId,
             Shop: employee.Shop,
             isEmployee: true
