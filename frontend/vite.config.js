@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // Optional: PurgeCSS plugin for additional CSS optimization
 // NOTE: Tailwind CSS v3+ already has built-in JIT purging, so this is optional
@@ -8,7 +9,70 @@ import react from '@vitejs/plugin-react'
 // import purgecss from 'vite-plugin-purgecss'
 
 export default defineConfig(({ mode }) => {
-  const plugins = [react()]
+  const plugins = [
+    react(),
+    // Installable app + offline app shell. See src/pwa/registerServiceWorker.js for the update flow.
+    VitePWA({
+      registerType: 'prompt', // never reload a cashier mid-sale: ask first
+      injectRegister: false, // registration is done in src/main.jsx (skipped inside the Android app)
+      includeAssets: ['logo.svg', 'apple-touch-icon.png'],
+      manifest: {
+        id: '/',
+        name: 'Zana POS',
+        short_name: 'Zana POS',
+        description: 'Point of sale and business management. Keeps selling when the internet is down.',
+        // Signed-in users land on their dashboard; everyone else is sent to the login page.
+        start_url: '/dashboard',
+        scope: '/',
+        display: 'standalone',
+        orientation: 'any',
+        background_color: '#ffffff',
+        theme_color: '#784421',
+        categories: ['business', 'finance', 'productivity'],
+        icons: [
+          { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        // Store the app itself. API responses are deliberately NOT cached by the service worker: they are
+        // private to the signed-in user and must be fresh (offline product search uses its own per-shop copy).
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
+        // Report/export libraries are big and only needed on a few screens. Leave them out of the install
+        // download; the rule below stores them the first time they are used.
+        globIgnores: ['**/xlsx-*.js', '**/jspdf*.js', '**/html2canvas*.js', '**/index.es-*.js'],
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
+        cleanupOutdatedCaches: true,
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            // Built files have content hashes in their names, so a stored copy is never stale.
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/assets/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'app-assets', expiration: { maxEntries: 80 }, cacheableResponse: { statuses: [200] } },
+          },
+          {
+            // The Inter font stylesheet (imported by index.css) and font files, so text looks the same offline.
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'google-fonts-styles' },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-files',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+      devOptions: { enabled: false },
+    }),
+  ]
   
   // Optional: Add PurgeCSS for additional CSS purging when installed.
   // Install `vite-plugin-purgecss` and uncomment its usage if needed.

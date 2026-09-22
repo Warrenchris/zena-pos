@@ -1,5 +1,10 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { authAPI } from '../../services/api'
+import { cacheProfile, clearCachedProfile, readCachedProfile } from '../../offline/authCache'
+
+// Shown when the server can't be reached. Deliberately different from the "session expired" message,
+// so a dropped connection never signs anyone out.
+export const CONNECTIVITY_ERROR = 'Cannot reach the server. Check your internet connection and try again.'
 
 const initialState = {
   user: null,
@@ -22,20 +27,27 @@ export const login = createAsyncThunk(
       // Get full profile after login
       try {
         const profileResponse = await authAPI.getProfile()
-        return {
+        const result = {
           token,
           user: profileResponse.data.user,
           shop: profileResponse.data.shop || profileResponse.data.user?.shop || null
         }
+        cacheProfile(token, { user: result.user, shop: result.shop })
+        return result
       } catch (profileError) {
         // If profile fetch fails, return basic user info with shop
-        return {
+        const result = {
           token,
           user,
           shop: shop || user?.shop || null
         }
+        cacheProfile(token, { user: result.user, shop: result.shop })
+        return result
       }
     } catch (error) {
+      if (error?.isAxiosError && !error.response) {
+        return rejectWithValue(CONNECTIVITY_ERROR);
+      }
       const data = error?.response?.data;
       let errorMsg = 'Invalid email or password';
       if (Array.isArray(data?.errors) && data.errors.length > 0) {
@@ -58,8 +70,15 @@ export const getCurrentUser = createAsyncThunk(
     
     try {
       const response = await authAPI.getProfile()
+      cacheProfile(token, response.data)
       return response.data
     } catch (error) {
+      // No answer from the server (offline, timeout) or the server is down: that is not an expired
+      // session. Stay signed in, using the profile remembered on this device if there is one.
+      if (error?.isAxiosError && (!error.response || error.response.status >= 500)) {
+        const cached = readCachedProfile(token)
+        return cached ? cached : rejectWithValue(CONNECTIVITY_ERROR)
+      }
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
       }
@@ -106,6 +125,7 @@ const authSlice = createSlice({
       state.token = null
       state.error = null
       localStorage.removeItem('token')
+      clearCachedProfile()
     },
     clearError: (state) => {
       state.error = null
@@ -154,6 +174,7 @@ const authSlice = createSlice({
             action.payload === 'No authentication token found') {
           state.token = null
           localStorage.removeItem('token')
+          clearCachedProfile()
         }
         state.error = action.payload || null
       })

@@ -1,142 +1,149 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import api from '../services/api';
 import { generateUUID } from '../utils/uuid';
+import { createEntry, listQueue, migrateLegacyQueue, removeEntry, saveEntry, subscribeQueue } from '../offline/salesQueue';
+import { flushSales, registerQueueOwner, requeueEntry } from '../offline/salesSync';
+
+const RETRY_INTERVAL_MS = 60 * 1000;
 
 /**
  * usePendingSales
  * Offline resilience queue for CASH sales.
- * Persists pending sales to localStorage with an idempotency key and auto-flushes on reconnect.
+ *
+ * Sales are stored durably on the device (IndexedDB) with an idempotency key, and sent when the
+ * connection is back: when the browser reports it is online, on load, and once a minute while
+ * anything is waiting (so a server that was briefly down doesn't strand a sale until the next reload).
+ * A sale the server refuses is kept as "failed" for a person to review; it is never dropped silently.
+ * Sales queued by older versions of the app (localStorage) are moved over automatically.
  */
 export function usePendingSales(cashierId, { onSaleSynced, showToast } = {}) {
-  const [pendingQueue, setPendingQueue] = useState([]);
+  const [entries, setEntries] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
-  const isSyncingRef = useRef(false);
-  const storageKey = `zena_pending_sales_${cashierId || 'anonymous'}`;
 
-  // 1. Load pending sales from storage on mount
+  // Callers pass fresh inline callbacks on every render; keep them out of effect dependencies.
+  const callbacks = useRef({ onSaleSynced, showToast });
   useEffect(() => {
+    callbacks.current = { onSaleSynced, showToast };
+  });
+
+  const mounted = useRef(true);
+  const refresh = useCallback(async () => {
     try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setPendingQueue(parsed);
-        }
-      }
+      const list = await listQueue(cashierId);
+      if (mounted.current) setEntries(list);
     } catch (err) {
-      console.warn('Failed to load pending offline sales:', err);
+      console.warn('Failed to read the offline sales queue:', err);
     }
-  }, [storageKey]);
+  }, [cashierId]);
 
-  // 2. Queue a sale locally
-  const queueSale = useCallback((salePayload) => {
-    const idempotencyKey = salePayload.idempotencyKey || generateUUID();
-    const queuedEntry = {
-      id: idempotencyKey,
-      idempotencyKey,
-      saleData: {
-        ...salePayload,
-        idempotencyKey
-      },
-      queuedAt: Date.now()
-    };
+  // Tell the global background sync that this hook is handling the queue right now.
+  useEffect(() => registerQueueOwner(), []);
 
-    setPendingQueue((prevQueue) => {
-      const newQueue = [...prevQueue, queuedEntry];
+  // Load (and migrate old data) on mount / cashier change; stay in sync with other writers.
+  useEffect(() => {
+    mounted.current = true;
+    (async () => {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(newQueue));
+        await migrateLegacyQueue(cashierId);
       } catch (err) {
-        console.error('Failed to persist offline sale to localStorage:', err);
+        console.warn('Failed to migrate old offline sales:', err);
       }
-      return newQueue;
-    });
-
-    return queuedEntry;
-  }, [storageKey]);
-
-  // 3. Flush the offline queue
-  const flushPendingSales = useCallback(async () => {
-    if (isSyncingRef.current) return;
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-
-    let queueToProcess = [];
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        queueToProcess = JSON.parse(stored) || [];
-      }
-    } catch {
-      queueToProcess = [];
-    }
-
-    if (queueToProcess.length === 0) return;
-
-    isSyncingRef.current = true;
-    setIsSyncing(true);
-
-    let syncedCount = 0;
-    const remainingQueue = [];
-
-    for (const entry of queueToProcess) {
-      try {
-        const response = await api.post('/api/sales', entry.saleData);
-        syncedCount += 1;
-        onSaleSynced?.(response.data);
-      } catch (error) {
-        // If it's a conflict / already submitted, treat as success and drop from queue
-        if (error.response?.status === 409) {
-          syncedCount += 1;
-        } else if (error.response?.status >= 400 && error.response?.status < 500) {
-          // Unrecoverable validation error: log and drop or mark failed
-          console.error('Dropping malformed offline sale:', error.response?.data);
-        } else {
-          // Network / 500 error: retain for next retry
-          remainingQueue.push(entry);
-        }
-      }
-    }
-
-    try {
-      if (remainingQueue.length > 0) {
-        localStorage.setItem(storageKey, JSON.stringify(remainingQueue));
-      } else {
-        localStorage.removeItem(storageKey);
-      }
-      setPendingQueue(remainingQueue);
-    } catch (err) {
-      console.warn('Failed to update offline sales queue storage:', err);
-    }
-
-    if (syncedCount > 0) {
-      showToast?.(`Synced ${syncedCount} offline sale(s) with the server`, 'success');
-    }
-
-    isSyncingRef.current = false;
-    setIsSyncing(false);
-  }, [storageKey, onSaleSynced, showToast]);
-
-  // 4. Auto-flush on window 'online' event and on mount if online
-  useEffect(() => {
-    const handleOnline = () => {
-      flushPendingSales();
+      await refresh();
+    })();
+    const unsubscribe = subscribeQueue(refresh);
+    return () => {
+      mounted.current = false;
+      unsubscribe();
     };
+  }, [cashierId, refresh]);
 
-    window.addEventListener('online', handleOnline);
+  // Queue a sale locally. The sale shows up immediately and is written to the device in the background.
+  const queueSale = useCallback(
+    (salePayload) => {
+      const entry = createEntry(salePayload, cashierId);
+      setEntries((prev) => [...prev, entry]);
+      saveEntry(entry).catch((err) => {
+        console.error('Failed to store the offline sale on this device:', err);
+        callbacks.current.showToast?.(
+          'Could not save this offline sale on the device. Do not close the app until it syncs.',
+          'error'
+        );
+      });
+      return entry;
+    },
+    [cashierId]
+  );
 
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      flushPendingSales();
+  const flushPendingSales = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    setIsSyncing(true);
+    try {
+      const summary = await flushSales({ cashierId, api });
+      if (!summary.joined) {
+        const { onSaleSynced: synced, showToast: toast } = callbacks.current;
+        summary.syncedResponses.forEach((data) => synced?.(data));
+        if (summary.synced > 0) toast?.(`Synced ${summary.synced} offline sale(s) with the server`, 'success');
+        if (summary.failed > 0) {
+          toast?.(`${summary.failed} offline sale(s) were refused by the server and need your attention.`, 'error');
+        }
+        if (summary.blocked === 'auth') toast?.('Sign in again to sync your offline sales.', 'warning');
+      }
+    } catch (err) {
+      console.warn('Offline sales sync failed:', err);
+    } finally {
+      if (mounted.current) setIsSyncing(false);
+      await refresh();
     }
+  }, [cashierId, refresh]);
 
-    return () => window.removeEventListener('online', handleOnline);
-  }, [flushPendingSales]);
+  const pendingQueue = useMemo(() => entries.filter((e) => e.status === 'pending'), [entries]);
+  const failedQueue = useMemo(() => entries.filter((e) => e.status === 'failed'), [entries]);
+  const pendingCount = pendingQueue.length;
+
+  // Auto-flush: on the 'online' event, on mount, and periodically while something is waiting.
+  useEffect(() => {
+    const handleOnline = () => flushPendingSales();
+    window.addEventListener('online', handleOnline);
+    if (typeof navigator === 'undefined' || navigator.onLine) flushPendingSales();
+
+    let timer = null;
+    if (pendingCount > 0) timer = setInterval(handleOnline, RETRY_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      if (timer) clearInterval(timer);
+    };
+  }, [flushPendingSales, pendingCount > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const retryFailedSale = useCallback(
+    async (id) => {
+      const entry = entries.find((e) => e.id === id);
+      if (!entry) return;
+      await requeueEntry(entry);
+      await flushPendingSales();
+    },
+    [entries, flushPendingSales]
+  );
+
+  const discardFailedSale = useCallback(
+    async (id) => {
+      const entry = entries.find((e) => e.id === id);
+      if (entry) await removeEntry(entry);
+    },
+    [entries]
+  );
 
   return {
     pendingQueue,
-    pendingCount: pendingQueue.length,
+    failedQueue,
+    pendingCount,
+    failedCount: failedQueue.length,
     isSyncing,
     queueSale,
     flushPendingSales,
-    generateUUID
+    retryFailedSale,
+    discardFailedSale,
+    generateUUID,
   };
 }
 

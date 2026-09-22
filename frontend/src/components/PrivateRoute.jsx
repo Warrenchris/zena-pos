@@ -1,11 +1,13 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { useEffect, useRef } from 'react';
-import { getCurrentUser } from '../store/slices/authSlice';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getCurrentUser, logout, CONNECTIVITY_ERROR } from '../store/slices/authSlice';
+import ConnectionProblem from './ConnectionProblem';
 
 export default function PrivateRoute({ children }) {
   const dispatch = useDispatch();
-  const { token, user, loading } = useSelector((state) => state.auth);
+  const { token, user, loading, error } = useSelector((state) => state.auth);
+  const [attempt, setAttempt] = useState(0);
   const location = useLocation();
   const authCheckRef = useRef(false);
 
@@ -32,7 +34,22 @@ export default function PrivateRoute({ children }) {
     return () => {
       mounted = false;
     };
-  }, [token, user, loading, dispatch]);
+  }, [token, user, loading, dispatch, attempt]);
+
+  // The server can't be reached but the sign-in is still valid: wait here instead of bouncing to /login
+  // (which would bounce straight back and loop).
+  const connectivityProblem = Boolean(token) && !user && error === CONNECTIVITY_ERROR;
+
+  const retryCheck = useCallback(() => {
+    authCheckRef.current = false;
+    setAttempt((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!connectivityProblem) return undefined;
+    window.addEventListener('online', retryCheck);
+    return () => window.removeEventListener('online', retryCheck);
+  }, [connectivityProblem, retryCheck]);
 
   // Show loading state while we're fetching user data
   if (loading) {
@@ -46,6 +63,10 @@ export default function PrivateRoute({ children }) {
     );
   }
     
+  if (connectivityProblem) {
+    return <ConnectionProblem onRetry={retryCheck} onSignOut={() => dispatch(logout())} />;
+  }
+
   // Redirect to login if there's no token or no user data
   if (!token || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;

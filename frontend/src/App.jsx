@@ -8,6 +8,7 @@ import { SnackbarProvider } from './components/Snackbar';
 import { CurrencyProvider } from './components/CurrencyProvider';
 
 import { ThemeProvider } from './providers/ThemeProvider';
+import OfflineSupport from './components/OfflineSupport'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <CurrencyProvider>
             <ToastProvider>
               <SnackbarProvider>
+                <OfflineSupport />
                 <RouterProvider router={router} future={{ v7_startTransition: true }} />
               </SnackbarProvider>
             </ToastProvider>
