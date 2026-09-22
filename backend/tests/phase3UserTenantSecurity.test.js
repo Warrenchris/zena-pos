@@ -653,7 +653,7 @@ describe('Phase 3: User Creation, Tenant Membership & Quota Integrity', () => {
         .expect(200);
 
       expect(loginRes.body.token).toBeDefined();
-      expect(loginRes.body.user.role).toBe('employee');
+      expect(loginRes.body.user.role).toBe('cashier');
       expect(loginRes.body.user.orgRole).toBe('member');
 
       // 3. Retrieve profile using the employee token
@@ -662,7 +662,7 @@ describe('Phase 3: User Creation, Tenant Membership & Quota Integrity', () => {
         .set('Authorization', `Bearer ${loginRes.body.token}`)
         .expect(200);
 
-      expect(profileRes.body.user.role).toBe('employee');
+      expect(profileRes.body.user.role).toBe('cashier');
       expect(profileRes.body.user.orgRole).toBe('member');
       expect(profileRes.body.shop).toBeDefined();
       expect(profileRes.body.shop.id).toBe(shopA1.id);
