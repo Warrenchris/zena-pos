@@ -53,7 +53,17 @@ export const DEFAULT_PROFILE = Object.freeze({
   cut: 'partial',
   openDrawer: false,
   feedLines: 3,
+  // USB: matched by vendor/product id (and serial number, when the device exposes one) - stable
+  // across browser sessions once the user has granted access to the device once.
+  usbVendorId: null,
+  usbProductId: null,
+  usbSerialNumber: '',
+  // Serial: the Web Serial API gives no stable device id, so the adapter uses whichever single
+  // port the browser has already granted access to. baudRate is the only thing worth storing.
+  serialBaudRate: 9600,
 });
+
+export const SERIAL_BAUD_RATES = [9600, 19200, 38400, 57600, 115200];
 
 /** Validate an untrusted/partial profile and fill in defaults. */
 export function normalizeProfile(raw) {
@@ -65,6 +75,10 @@ export function normalizeProfile(raw) {
     cut: CUT_MODES.includes(p.cut) ? p.cut : DEFAULT_PROFILE.cut,
     openDrawer: p.openDrawer === true,
     feedLines: Number.isInteger(feed) && feed >= 0 && feed <= 10 ? feed : DEFAULT_PROFILE.feedLines,
+    usbVendorId: Number.isInteger(p.usbVendorId) && p.usbVendorId >= 0 ? p.usbVendorId : null,
+    usbProductId: Number.isInteger(p.usbProductId) && p.usbProductId >= 0 ? p.usbProductId : null,
+    usbSerialNumber: typeof p.usbSerialNumber === 'string' ? p.usbSerialNumber.slice(0, 128) : '',
+    serialBaudRate: SERIAL_BAUD_RATES.includes(Number(p.serialBaudRate)) ? Number(p.serialBaudRate) : DEFAULT_PROFILE.serialBaudRate,
   };
 }
 

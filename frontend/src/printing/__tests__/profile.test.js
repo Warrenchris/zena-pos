@@ -31,7 +31,7 @@ describe('normalizeProfile', () => {
 
   it('keeps valid values', () => {
     const p = { connection: 'bluetooth', paperWidth: 80, cut: 'full', openDrawer: true, feedLines: 5 };
-    expect(normalizeProfile(p)).toEqual(p);
+    expect(normalizeProfile(p)).toMatchObject(p);
   });
 
   it('defaults to 58mm, the safe width for a mixed fleet', () => {
@@ -78,5 +78,23 @@ describe('CONNECTION_INFO', () => {
       expect(CONNECTION_INFO[id].label).toBeTruthy();
       expect(CONNECTION_INFO[id].hint).toBeTruthy();
     });
+  });
+});
+
+describe('USB / serial fields', () => {
+  it('keeps a valid USB device id and serial number', () => {
+    const p = { usbVendorId: 0x0483, usbProductId: 0x5743, usbSerialNumber: 'SN1' };
+    expect(normalizeProfile(p)).toMatchObject(p);
+  });
+
+  it('rejects invalid vendor/product ids and clamps a long serial number', () => {
+    expect(normalizeProfile({ usbVendorId: -1, usbProductId: 'x' })).toMatchObject({ usbVendorId: null, usbProductId: null });
+    expect(normalizeProfile({ usbSerialNumber: 'x'.repeat(300) }).usbSerialNumber).toHaveLength(128);
+  });
+
+  it('accepts a known baud rate and falls back to 9600 for anything else', () => {
+    expect(normalizeProfile({ serialBaudRate: 115200 }).serialBaudRate).toBe(115200);
+    expect(normalizeProfile({ serialBaudRate: 4800 }).serialBaudRate).toBe(9600);
+    expect(normalizeProfile({}).serialBaudRate).toBe(9600);
   });
 });

@@ -1,4 +1,6 @@
 import { browserPrintAdapter } from './browserPrintAdapter';
+import { webUsbAdapter } from './webUsbAdapter';
+import { webSerialAdapter } from './webSerialAdapter';
 
 /**
  * Print adapter registry.
@@ -16,6 +18,8 @@ import { browserPrintAdapter } from './browserPrintAdapter';
  */
 export const ADAPTERS = {
   browser: browserPrintAdapter,
+  usb: webUsbAdapter,
+  serial: webSerialAdapter,
 };
 
 export const FALLBACK_ADAPTER_ID = 'browser';
