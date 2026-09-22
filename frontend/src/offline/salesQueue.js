@@ -86,11 +86,32 @@ function writeLocal(cashierId, entries) {
   }
 }
 
+function dropLocal(cashierId, id) {
+  writeLocal(cashierId, readLocal(cashierId).filter((e) => e.id !== id));
+}
+
+function mergeQueues(idbEntries, localEntries) {
+  const ids = new Set(idbEntries.map((e) => e.id));
+  return [...idbEntries, ...localEntries.filter((e) => !ids.has(e.id))];
+}
+
 // ---- public API ----
 export async function listQueue(cashierId) {
+  // Every reader migrates; background sync and banners must not wait for the dashboard.
+  try {
+    await migrateLegacyQueue(cashierId);
+  } catch (error) {
+    console.warn('Could not move old offline sales into IndexedDB:', error);
+  }
+  const local = readLocal(cashierId);
   const entries = (await canUseIdb())
-    ? (await idbGetAllByIndex(STORES.pendingSales, 'cashierId', cashierKey(cashierId))).map((e) => normalizeEntry(e, cashierId))
-    : readLocal(cashierId);
+    ? mergeQueues(
+        (await idbGetAllByIndex(STORES.pendingSales, 'cashierId', cashierKey(cashierId))).map((e) =>
+          normalizeEntry(e, cashierId)
+        ),
+        local
+      )
+    : local;
   return entries.sort((a, b) => a.queuedAt - b.queuedAt);
 }
 
@@ -100,6 +121,7 @@ export async function saveEntry(entry) {
   if (await canUseIdb()) {
     try {
       await idbPut(STORES.pendingSales, clean);
+      dropLocal(clean.cashierId, clean.id);
       notify();
       return clean;
     } catch (error) {
@@ -114,10 +136,13 @@ export async function saveEntry(entry) {
 
 export async function removeEntry(entry) {
   if (await canUseIdb()) {
-    await idbDelete(STORES.pendingSales, entry.id);
-  } else {
-    writeLocal(entry.cashierId, readLocal(entry.cashierId).filter((e) => e.id !== entry.id));
+    try {
+      await idbDelete(STORES.pendingSales, entry.id);
+    } catch (error) {
+      console.warn('IndexedDB delete failed, removing from localStorage:', error);
+    }
   }
+  dropLocal(entry.cashierId, entry.id);
   notify();
 }
 

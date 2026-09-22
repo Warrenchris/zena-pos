@@ -1,6 +1,14 @@
 /* eslint-env jest */
+jest.mock('../idb', () => {
+  const actual = jest.requireActual('../idb');
+  return {
+    ...actual,
+    idbPut: jest.fn((...args) => actual.idbPut(...args)),
+  };
+});
+
 import { freshDatabase } from '../testing/testDb';
-import { closeDb } from '../idb';
+import { closeDb, idbPut } from '../idb';
 import {
   createEntry,
   legacyStorageKey,
@@ -15,7 +23,11 @@ import {
 
 const sale = (n = 1, extra = {}) => ({ items: [{ productId: n, quantity: 1, price: 100 }], total: 100, paymentMethod: 'cash', ...extra });
 
-beforeEach(freshDatabase);
+beforeEach(async () => {
+  await freshDatabase();
+  idbPut.mockReset();
+  idbPut.mockImplementation((...args) => jest.requireActual('../idb').idbPut(...args));
+});
 
 describe('sales queue (IndexedDB)', () => {
   it('stores a sale with its idempotency key and reads it back', async () => {
@@ -113,6 +125,13 @@ describe('moving sales queued by the old localStorage version', () => {
     expect(await migrateLegacyQueue(7)).toBe(0);
     expect(await listQueue(7)).toEqual([]);
   });
+
+  it('listQueue migrates leftover localStorage sales without a separate call', async () => {
+    window.localStorage.setItem(legacyStorageKey(7), JSON.stringify([legacy('k1', 1000)]));
+
+    expect((await listQueue(7)).map((e) => e.id)).toEqual(['k1']);
+    expect(window.localStorage.getItem(legacyStorageKey(7))).toBeNull();
+  });
 });
 
 describe('when IndexedDB is not available', () => {
@@ -136,6 +155,21 @@ describe('when IndexedDB is not available', () => {
     window.localStorage.setItem(legacyStorageKey(7), JSON.stringify([{ id: 'k1', saleData: {} }]));
     expect(await migrateLegacyQueue(7)).toBe(0);
     expect(window.localStorage.getItem(legacyStorageKey(7))).not.toBeNull();
+  });
+});
+
+describe('when IndexedDB writes fail but the database still looks available', () => {
+  it('lists and removes the localStorage fallback copy', async () => {
+    idbPut.mockRejectedValue(new Error('quota'));
+    const entry = createEntry(sale(), 7);
+    await saveEntry(entry);
+
+    expect((await listQueue(7)).map((e) => e.id)).toEqual([entry.id]);
+    expect(JSON.parse(window.localStorage.getItem(legacyStorageKey(7)))).toHaveLength(1);
+
+    await removeEntry(entry);
+    expect(await listQueue(7)).toEqual([]);
+    expect(window.localStorage.getItem(legacyStorageKey(7))).toBeNull();
   });
 });
 

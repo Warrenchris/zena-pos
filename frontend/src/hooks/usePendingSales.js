@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import api from '../services/api';
 import { generateUUID } from '../utils/uuid';
-import { createEntry, listQueue, migrateLegacyQueue, removeEntry, saveEntry, subscribeQueue } from '../offline/salesQueue';
+import { createEntry, listQueue, removeEntry, saveEntry, subscribeQueue } from '../offline/salesQueue';
 import { flushSales, registerQueueOwner, requeueEntry } from '../offline/salesSync';
 
 const RETRY_INTERVAL_MS = 60 * 1000;
@@ -39,17 +39,10 @@ export function usePendingSales(cashierId, { onSaleSynced, showToast } = {}) {
   // Tell the global background sync that this hook is handling the queue right now.
   useEffect(() => registerQueueOwner(), []);
 
-  // Load (and migrate old data) on mount / cashier change; stay in sync with other writers.
+  // Load on mount / cashier change; stay in sync with other writers.
   useEffect(() => {
     mounted.current = true;
-    (async () => {
-      try {
-        await migrateLegacyQueue(cashierId);
-      } catch (err) {
-        console.warn('Failed to migrate old offline sales:', err);
-      }
-      await refresh();
-    })();
+    refresh();
     const unsubscribe = subscribeQueue(refresh);
     return () => {
       mounted.current = false;

@@ -6,7 +6,7 @@ import { configureStore, combineReducers } from '@reduxjs/toolkit';
 import authReducer, { logout } from '../../store/slices/authSlice';
 import settingsReducer from '../../store/slices/settingsSlice';
 import { freshDatabase } from '../../offline/testing/testDb';
-import { createEntry, saveEntry } from '../../offline/salesQueue';
+import { createEntry, legacyStorageKey, saveEntry } from '../../offline/salesQueue';
 import { registerQueueOwner } from '../../offline/salesSync';
 import { loadCatalog, saveCatalog, syncCatalog } from '../../offline/catalog';
 import api from '../../services/api';
@@ -107,6 +107,18 @@ describe('OfflineSupport', () => {
   });
 
   describe('offline sales in the background', () => {
+    it('sends sales left in localStorage by an older app version', async () => {
+      api.post.mockResolvedValue({ data: { id: 's1' } });
+      window.localStorage.setItem(
+        legacyStorageKey(7),
+        JSON.stringify([{ id: 'old-1', idempotencyKey: 'old-1', saleData: { ...sale, idempotencyKey: 'old-1' }, queuedAt: 1000 }])
+      );
+
+      renderSupport();
+
+      await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    });
+
     it('sends waiting sales when the cashier dashboard is not open, and says so', async () => {
       api.post.mockResolvedValue({ data: { id: 's1' } });
       await saveEntry(createEntry(sale, 7));
