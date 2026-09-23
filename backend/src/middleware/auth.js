@@ -102,10 +102,7 @@ const auth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token.' });
-    }
-    res.status(401).json({ error: 'Please authenticate.' });
+    next(error);
   }
 };
 
