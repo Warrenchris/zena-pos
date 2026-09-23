@@ -20,6 +20,7 @@ const {
   User,
   Shop,
   Organization,
+  OrganizationMembership,
   Category,
   Product,
   Inventory
@@ -86,6 +87,12 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
       status: 'active'
     });
 
+    await OrganizationMembership.create({
+      organizationId: orgA.id,
+      userId: adminA.id,
+      orgRole: 'owner'
+    });
+
     tokenAdminA = tokenFor({
       id: adminA.id,
       email: adminA.email,
@@ -117,6 +124,12 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
       shopId: shopB.id,
       organizationId: orgB.id,
       status: 'active'
+    });
+
+    await OrganizationMembership.create({
+      organizationId: orgB.id,
+      userId: adminB.id,
+      orgRole: 'owner'
     });
 
     tokenAdminB = tokenFor({
