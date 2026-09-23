@@ -15,7 +15,6 @@ python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 prophet = "^1.1.4"
 python-dotenv = "^1.0.0"
 pydantic = "^2.1.1"
-sqlalchemy = "^2.0.19"
 plotly = "^5.15.0"
 
 [tool.poetry.dev-dependencies]

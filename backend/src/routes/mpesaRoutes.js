@@ -6,6 +6,7 @@ const sequelize = require('../config/database');
 const mpesaService = require('../services/mpesaService');
 const { PendingPayment, Sale } = require('../models');
 const saleController = require('../controllers/saleController');
+const logger = require('../utils/logger');
 
 // POST /api/mpesa/initiate (authenticated)
 router.post('/initiate', auth, async (req, res) => {
@@ -87,7 +88,10 @@ router.post('/callback', async (req, res) => {
       // Authenticate callback: verification token must match single-use token in pending payment
       const expectedToken = pendingPayment.saleData?.callbackToken;
       if (!expectedToken || token !== expectedToken) {
-        console.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for POS payment ${checkoutRequestId}. Provided: ${token}`);
+        logger.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for POS payment ${checkoutRequestId}`, {
+          requestId: req.requestId || req.id,
+          checkoutRequestId
+        });
         const err = new Error('Unauthorized callback: invalid verification token.');
         err.statusCode = 401;
         throw err;

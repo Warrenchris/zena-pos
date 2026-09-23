@@ -19,7 +19,8 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueName = `products_import_${req.shopId || 'shop'}_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
+    const safeShop = String(req.shopId || 'shop').replace(/[^a-zA-Z0-9_-]/g, '');
+    const uniqueName = `products_import_${safeShop}_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
     cb(null, uniqueName);
   }
 });
@@ -27,17 +28,17 @@ const storage = multer.diskStorage({
 const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     'text/csv',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel', // legacy mime sometimes sent by browsers for csv/tsv
   ];
-  const allowedExtensions = ['.csv', '.xlsx', '.xls'];
+  const allowedExtensions = ['.csv', '.xlsx'];
   
   const ext = path.extname(file.originalname).toLowerCase();
   
-  if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+  if (allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only CSV and Excel files are allowed.'), false);
+    cb(new Error('Invalid file type. Only CSV and XLSX files are allowed.'), false);
   }
 };
 

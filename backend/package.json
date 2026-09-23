@@ -24,6 +24,7 @@
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.5.2",
     "express-validator": "^7.2.1",
@@ -36,8 +37,7 @@
     "node-cache": "^5.1.2",
     "nodemailer": "^6.10.0",
     "pdfkit": "^0.14.0",
-    "sequelize": "^6.37.7",
-    "xlsx": "^0.18.5"
+    "sequelize": "^6.37.7"
   },
   "devDependencies": {
     "eslint": "^9.35.0",
@@ -49,7 +49,9 @@
   "jest": {
     "globalSetup": "./tests/setup.js",
     "globalTeardown": "./tests/teardown.js",
-    "setupFiles": ["./tests/jestSetupEnv.js"],
+    "setupFiles": [
+      "./tests/jestSetupEnv.js"
+    ],
     "testEnvironment": "node",
     "testTimeout": 30000
   }

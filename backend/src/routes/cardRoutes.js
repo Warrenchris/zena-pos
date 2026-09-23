@@ -277,9 +277,12 @@ router.post('/verify', auth, async (req, res) => {
 
     res.json({ verified: true, sale: completeSale });
   } catch (error) {
-    logger.error('Card verification error:', error);
+    logger.error('Card verification error:', error, { requestId: req.requestId || req.id });
     const statusCode = error.statusCode || 500;
-    res.status(statusCode).json({ error: error.message || 'Failed to verify card payment.' });
+    res.status(statusCode).json({
+      error: error.message || 'Failed to verify card payment.',
+      requestId: req.requestId || req.id
+    });
   }
 });
 
