@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM node:18-alpine AS base
 
-# Install necessary build tools for native addons if needed
-RUN apk add --no-cache python3 make g++ wget curl
+# Install necessary build tools and client utilities
+RUN apk add --no-cache python3 make g++ wget curl mysql-client
 
 WORKDIR /app
 

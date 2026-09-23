@@ -109,10 +109,39 @@ services:
     networks:
       - zana-internal-net
 
+  # Automated Database Backup Scheduler (OPS-P2-01)
+  backup-scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: zana-backup-scheduler-prod
+    command: ["node", "scripts/backup-scheduler.js"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-zana_pos}
+      DB_USER: ${DB_USER:-zana_app}
+      DB_PASS: ${DB_PASSWORD}
+      BACKUP_DIR: /app/backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+    volumes:
+      - mysql_prod_backups:/app/backups
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - zana-internal-net
+
 volumes:
   mysql_prod_data:
     driver: local
   redis_prod_data:
+    driver: local
+  mysql_prod_backups:
     driver: local
 
 networks:
