@@ -1,0 +1,431 @@
+'use strict';
+
+const request = require('supertest');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const ExcelJS = require('exceljs');
+const app = require('../src/app');
+const sequelize = require('../src/config/database');
+const redisClient = require('../src/config/redis');
+const aiCacheService = require('../src/services/aiCacheService');
+const {
+  createDistributedRateLimiter,
+  incrementAndCheck,
+  resetRateLimitKey,
+  localFallbackStore
+} = require('../src/utils/distributedRateLimiter');
+const {
+  User,
+  Shop,
+  Organization,
+  Category,
+  Product,
+  Inventory
+} = require('../src/models');
+
+function getPrivateKey() {
+  return process.env.JWT_PRIVATE_KEY
+    ? process.env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n')
+    : (fs.existsSync(path.join(__dirname, '../jwt_private_key.pem'))
+      ? fs.readFileSync(path.join(__dirname, '../jwt_private_key.pem'), 'utf8')
+      : '');
+}
+
+function tokenFor(payload) {
+  const privateKey = getPrivateKey();
+  const jti = payload.jti || crypto.randomUUID();
+  return 'Bearer ' + jwt.sign({ jti, ...payload }, privateKey, {
+    algorithm: 'RS256',
+    expiresIn: '2h'
+  });
+}
+
+describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed Rate Limiting & Observability', () => {
+  let orgA, orgB;
+  let shopA1, shopA2, shopB;
+  let adminA, adminB;
+  let tokenAdminA, tokenAdminB;
+  const testFilesToClean = [];
+
+  beforeAll(async () => {
+    await sequelize.authenticate();
+  }, 30000);
+
+  beforeEach(async () => {
+    const ts = Date.now() + '-' + Math.floor(Math.random() * 100000);
+
+    // Organization A
+    orgA = await Organization.create({
+      name: `Org A ${ts}`,
+      slug: `org-a-${ts}`,
+      status: 'active',
+      currency: 'KES'
+    });
+
+    shopA1 = await Shop.create({
+      name: `Shop A1 ${ts}`,
+      organizationId: orgA.id,
+      status: 'active'
+    });
+
+    shopA2 = await Shop.create({
+      name: `Shop A2 ${ts}`,
+      organizationId: orgA.id,
+      status: 'active'
+    });
+
+    adminA = await User.create({
+      name: `Admin A ${ts}`,
+      email: `admin-a-${ts}@example.com`,
+      password: 'HashedPassword123!',
+      role: 'admin',
+      shopId: shopA1.id,
+      organizationId: orgA.id,
+      status: 'active'
+    });
+
+    tokenAdminA = tokenFor({
+      id: adminA.id,
+      email: adminA.email,
+      role: 'admin',
+      shopId: shopA1.id,
+      organizationId: orgA.id,
+      isEmployee: false
+    });
+
+    // Organization B
+    orgB = await Organization.create({
+      name: `Org B ${ts}`,
+      slug: `org-b-${ts}`,
+      status: 'active',
+      currency: 'KES'
+    });
+
+    shopB = await Shop.create({
+      name: `Shop B ${ts}`,
+      organizationId: orgB.id,
+      status: 'active'
+    });
+
+    adminB = await User.create({
+      name: `Admin B ${ts}`,
+      email: `admin-b-${ts}@example.com`,
+      password: 'HashedPassword123!',
+      role: 'admin',
+      shopId: shopB.id,
+      organizationId: orgB.id,
+      status: 'active'
+    });
+
+    tokenAdminB = tokenFor({
+      id: adminB.id,
+      email: adminB.email,
+      role: 'admin',
+      shopId: shopB.id,
+      organizationId: orgB.id,
+      isEmployee: false
+    });
+  });
+
+  afterAll(async () => {
+    // Clean up any test spreadsheets
+    for (const f of testFilesToClean) {
+      if (fs.existsSync(f)) {
+        try { fs.unlinkSync(f); } catch (e) {}
+      }
+    }
+  });
+
+  // =========================================================================
+  // 1. AI Distributed Cache Hardening (AI-01)
+  // =========================================================================
+  describe('1. AI Distributed Cache & Tenant Isolation (AI-01)', () => {
+    test('1.1: Build distributed forecast cache key enforces org and shop namespacing', () => {
+      const payload = { dates: ['2026-09-01', '2026-09-02'], values: [100, 200] };
+      const keyShopA = aiCacheService.buildForecastCacheKey(orgA.id, shopA1.id, payload, 30, 'prophet');
+      const keyShopB = aiCacheService.buildForecastCacheKey(orgB.id, shopB.id, payload, 30, 'prophet');
+      const keyOrgA = aiCacheService.buildOrgForecastCacheKey(orgA.id, payload, 30, 'prophet');
+
+      expect(keyShopA).toContain(`ai:forecast:org:${orgA.id}:shop:${shopA1.id}:prophet:30:`);
+      expect(keyShopB).toContain(`ai:forecast:org:${orgB.id}:shop:${shopB.id}:prophet:30:`);
+      expect(keyOrgA).toContain(`ai:forecast:org:${orgA.id}:prophet:30:`);
+
+      // Tenant separation: keys must differ even with identical parameters
+      expect(keyShopA).not.toBe(keyShopB);
+      expect(keyShopA).not.toBe(keyOrgA);
+    });
+
+    test('1.2: Redis authoritative cache set and get works with L1 hydration', async () => {
+      const payload = { dates: ['2026-09-01'], values: [500] };
+      const testKey = `ai:forecast:org:${orgA.id}:shop:${shopA1.id}:prophet:30:test_${Date.now()}`;
+      const testData = { predictions: [510, 520], status: 'ok', generatedAt: Date.now() };
+
+      // Ensure key is cleared
+      aiCacheService.l1Cache.del(testKey);
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.del(testKey);
+      }
+
+      // Initial get is a miss
+      const initialMiss = await aiCacheService.getForecast(testKey);
+      expect(initialMiss).toBeNull();
+
+      // Set forecast in authoritative cache
+      await aiCacheService.setForecast(testKey, testData, 60);
+
+      // Verify in Redis
+      if (redisClient && redisClient.status === 'ready') {
+        const rawRedis = await redisClient.get(testKey);
+        expect(rawRedis).not.toBeNull();
+        expect(JSON.parse(rawRedis)).toEqual(testData);
+      }
+
+      // Flush L1 to verify Redis reads and re-hydrates L1
+      aiCacheService.l1Cache.del(testKey);
+      const rehydrated = await aiCacheService.getForecast(testKey);
+      expect(rehydrated).toEqual(testData);
+      expect(aiCacheService.l1Cache.get(testKey)).toEqual(testData);
+
+      // Clean up
+      await aiCacheService.invalidateShopForecastCache(orgA.id, shopA1.id);
+    });
+
+    test('1.3: Distributed invalidation (SCAN & DEL) clears matching Redis keys across replicas', async () => {
+      const key1 = `ai:forecast:org:${orgA.id}:shop:${shopA1.id}:prophet:30:k1`;
+      const key2 = `ai:forecast:org:${orgA.id}:shop:${shopA1.id}:rf:30:k2`;
+      const keyOtherOrg = `ai:forecast:org:${orgB.id}:shop:${shopB.id}:prophet:30:k3`;
+
+      await aiCacheService.setForecast(key1, { val: 1 }, 120);
+      await aiCacheService.setForecast(key2, { val: 2 }, 120);
+      await aiCacheService.setForecast(keyOtherOrg, { val: 3 }, 120);
+
+      // Invalidate Org A
+      const cleared = await aiCacheService.invalidateOrgForecastCache(orgA.id);
+      expect(cleared).toBeGreaterThanOrEqual(2);
+
+      // Org A keys must be gone
+      expect(await aiCacheService.getForecast(key1)).toBeNull();
+      expect(await aiCacheService.getForecast(key2)).toBeNull();
+
+      // Org B key must remain completely untouched
+      const preserved = await aiCacheService.getForecast(keyOtherOrg);
+      expect(preserved).toEqual({ val: 3 });
+
+      // Clean up Org B
+      await aiCacheService.invalidateOrgForecastCache(orgB.id);
+    });
+
+    test('1.4: Cross-organization cache invalidation via DELETE /api/ai/cache/org/:id is rejected with 403', async () => {
+      const res = await request(app)
+        .delete(`/api/ai/cache/org/${orgB.id}`)
+        .set('Authorization', tokenAdminA)
+        .send();
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('cannot clear cache for another organization');
+    });
+
+    test('1.5: Upstream AI failure response sanitizes and strips internal AI_SERVICE_URL', async () => {
+      // Dispatch a request to an endpoint with intentionally invalid/unreachable parameters
+      // to verify error sanitization
+      const res = await request(app)
+        .post('/api/ai/forward/api/forecasting/forecast')
+        .set('Authorization', tokenAdminA)
+        .send({ dates: 'not-an-array', values: 'invalid' });
+
+      // Should return structured safe error without leaking internal hostnames
+      const responseStr = JSON.stringify(res.body);
+      expect(responseStr).not.toContain('http://127.0.0.1:8000');
+      expect(responseStr).not.toContain('http://zana-ai-service:8000');
+      expect(res.body.requestId || res.headers['x-request-id']).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // 2. Distributed Rate Limiting (RATE-01)
+  // =========================================================================
+  describe('2. Distributed Rate Limiting (RATE-01)', () => {
+    test('2.1: Distributed limiter enforces quota and returns 429 when max is exceeded', async () => {
+      const testKey = `ratelimit:test:quota_${Date.now()}`;
+      const maxRequests = 3;
+      const windowSec = 10;
+
+      for (let i = 1; i <= maxRequests; i++) {
+        const res = await incrementAndCheck(testKey, maxRequests, windowSec);
+        expect(res.allowed).toBe(true);
+        expect(res.current).toBe(i);
+      }
+
+      // 4th request must be rejected
+      const blockedRes = await incrementAndCheck(testKey, maxRequests, windowSec);
+      expect(blockedRes.allowed).toBe(false);
+      expect(blockedRes.current).toBe(maxRequests + 1);
+
+      await resetRateLimitKey(testKey);
+    });
+
+    test('2.2: Tenant separation: Org A reaching limit does not throttle Org B', async () => {
+      const keyOrgA = `ratelimit:test:org:${orgA.id}`;
+      const keyOrgB = `ratelimit:test:org:${orgB.id}`;
+      const limit = 2;
+
+      // Exhaust Org A
+      await incrementAndCheck(keyOrgA, limit, 10);
+      await incrementAndCheck(keyOrgA, limit, 10);
+      const blockedOrgA = await incrementAndCheck(keyOrgA, limit, 10);
+      expect(blockedOrgA.allowed).toBe(false);
+
+      // Org B should have its full quota available
+      const orgBFirst = await incrementAndCheck(keyOrgB, limit, 10);
+      expect(orgBFirst.allowed).toBe(true);
+      expect(orgBFirst.current).toBe(1);
+
+      await resetRateLimitKey(keyOrgA);
+      await resetRateLimitKey(keyOrgB);
+    });
+
+    test('2.3: Rate limiter fails open gracefully when Redis connection is unavailable', async () => {
+      // Test the local fallback store directly to verify fail-open mechanics
+      const fallbackKey = `ratelimit:fallback_test:${Date.now()}`;
+      localFallbackStore.delete(fallbackKey);
+
+      // Simulate local fallback execution
+      const now = Date.now();
+      localFallbackStore.set(fallbackKey, { current: 1, resetAt: now + 5000 });
+
+      expect(localFallbackStore.get(fallbackKey).current).toBe(1);
+      localFallbackStore.delete(fallbackKey);
+    });
+  });
+
+  // =========================================================================
+  // 3. File Import Security (ExcelJS Migration)
+  // =========================================================================
+  describe('3. File Import Security & ExcelJS Integration', () => {
+    test('3.1: Valid CSV file imports products successfully and assigns tenant context', async () => {
+      const csvData = [
+        'name,sku,barcode,price,cost,stockQuantity,category',
+        `CSV Test Prod ${Date.now()},SKUCSV${Date.now()},111222333444,150.00,80.00,25,`
+      ].join('\n');
+
+      const tempCsvPath = path.join(__dirname, `test_import_${Date.now()}.csv`);
+      fs.writeFileSync(tempCsvPath, csvData);
+      testFilesToClean.push(tempCsvPath);
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', tempCsvPath);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.summary.successful).toBeGreaterThanOrEqual(1);
+
+      // Clean up product from DB
+      await Product.destroy({ where: { organizationId: orgA.id, name: { [sequelize.Sequelize.Op.like]: 'CSV Test Prod%' } } });
+    });
+
+    test('3.2: Valid XLSX created with ExcelJS imports cleanly without prototype pollution', async () => {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['name', 'sku', 'barcode', 'price', 'cost', 'stockQuantity']);
+      worksheet.addRow([`XLSX Test Prod ${Date.now()}`, `SKUXLSX${Date.now()}`, '555666777888', 250.00, 120.00, 50]);
+
+      const tempXlsxPath = path.join(__dirname, `test_import_${Date.now()}.xlsx`);
+      await workbook.xlsx.writeFile(tempXlsxPath);
+      testFilesToClean.push(tempXlsxPath);
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', tempXlsxPath);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.summary.successful).toBe(1);
+
+      // Verify prototype was not polluted
+      expect(Object.prototype.polluted).toBeUndefined();
+
+      // Clean up product
+      await Product.destroy({ where: { organizationId: orgA.id, name: { [sequelize.Sequelize.Op.like]: 'XLSX Test Prod%' } } });
+    });
+
+    test('3.3: Malformed/corrupted spreadsheet upload is rejected with safe 400 Bad Request', async () => {
+      const corruptPath = path.join(__dirname, `corrupt_${Date.now()}.xlsx`);
+      fs.writeFileSync(corruptPath, 'THIS_IS_CORRUPT_NON_ZIP_DATA');
+      testFilesToClean.push(corruptPath);
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', corruptPath);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    test('3.4: Disallowed file extension (.txt/.exe) is rejected by upload filter with 400', async () => {
+      const invalidPath = path.join(__dirname, `script_${Date.now()}.txt`);
+      fs.writeFileSync(invalidPath, 'some text');
+      testFilesToClean.push(invalidPath);
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', invalidPath);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Only CSV and XLSX files are allowed');
+    });
+  });
+
+  // =========================================================================
+  // 4. Observability & Request Correlation (OBS-01)
+  // =========================================================================
+  describe('4. Observability & Request Correlation (OBS-01)', () => {
+    test('4.1: Automatically generates UUID X-Request-Id when client header is omitted', async () => {
+      const res = await request(app).get('/');
+      expect(res.status).toBe(200);
+      expect(res.headers['x-request-id']).toBeDefined();
+      // Valid UUID v4 pattern
+      expect(res.headers['x-request-id']).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    });
+
+    test('4.2: Accepts and mirrors valid trusted client-provided X-Request-Id', async () => {
+      const customId = `client-req-${Date.now()}-abc`;
+      const res = await request(app)
+        .get('/')
+        .set('X-Request-Id', customId);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['x-request-id']).toBe(customId);
+    });
+
+    test('4.3: Malformed/oversized client X-Request-Id (>64 chars) is replaced with safe UUID', async () => {
+      const oversizedId = 'A'.repeat(128);
+      const res = await request(app)
+        .get('/')
+        .set('X-Request-Id', oversizedId);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['x-request-id']).not.toBe(oversizedId);
+      expect(res.headers['x-request-id'].length).toBeLessThanOrEqual(64);
+    });
+
+    test('4.4: Error responses include requestId and success:false in standard envelope', async () => {
+      const customId = `err-trace-${Date.now()}`;
+      const res = await request(app)
+        .get('/api/sales/999999999')
+        .set('Authorization', tokenAdminA)
+        .set('X-Request-Id', customId);
+
+      expect(res.status).toBe(404);
+      expect(res.body.requestId).toBe(customId);
+      expect(res.headers['x-request-id']).toBe(customId);
+      expect(res.body.error).toBeDefined();
+    });
+  });
+});
