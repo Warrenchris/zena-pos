@@ -22,10 +22,13 @@ const completedSale = {
   change: 200,
 };
 
-function renderModal({ onClose = jest.fn() } = {}) {
+function renderModal({ onClose = jest.fn(), settings = {} } = {}) {
   const store = configureStore({
     reducer: combineReducers({ auth: authReducer, shop: shopReducer, settings: settingsReducer }),
-    preloadedState: { shop: { ...shopReducer(undefined, { type: '@@init' }), shop } },
+    preloadedState: {
+      shop: { ...shopReducer(undefined, { type: '@@init' }), shop },
+      settings: { ...settingsReducer(undefined, { type: '@@init' }), ...settings },
+    },
   });
   return render(
     <Provider store={store}>
@@ -66,6 +69,37 @@ describe('SaleCompleteModal printing', () => {
     expect(options.business).toEqual(shop);
     expect(options.formatMoney(150)).toContain('150');
     expect(window.showToast).not.toHaveBeenCalled();
+  });
+
+  it('prints with the shop-wide receipt header, footer and logo from Settings', async () => {
+    printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: false });
+    renderModal({
+      settings: {
+        receiptHeader: 'Welcome to Mama Njeri!',
+        receiptFooter: 'Please come again!',
+        showLogoOnReceipt: true,
+        businessLogo: '/uploads/logos/a.png',
+      },
+    });
+
+    fireEvent.click(screen.getByText('Print Receipt'));
+
+    await waitFor(() => expect(printReceipt).toHaveBeenCalledTimes(1));
+    const { receiptSettings } = printReceipt.mock.calls[0][1];
+    expect(receiptSettings).toMatchObject({
+      header: 'Welcome to Mama Njeri!',
+      footer: 'Please come again!',
+      showLogo: true,
+    });
+    expect(receiptSettings.logoUrl).toMatch(/\/uploads\/logos\/a\.png$/);
+  });
+
+  it('respects the "show logo" switch being off', async () => {
+    printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: false });
+    renderModal({ settings: { showLogoOnReceipt: false, businessLogo: '/uploads/logos/a.png' } });
+    fireEvent.click(screen.getByText('Print Receipt'));
+    await waitFor(() => expect(printReceipt).toHaveBeenCalledTimes(1));
+    expect(printReceipt.mock.calls[0][1].receiptSettings.showLogo).toBe(false);
   });
 
   it('warns the cashier when it had to fall back to browser printing', async () => {

@@ -1,4 +1,5 @@
 import { browserPrintAdapter } from './browserPrintAdapter';
+import { createBluetoothAdapter } from './bluetoothAdapter';
 import { webUsbAdapter } from './webUsbAdapter';
 import { webSerialAdapter } from './webSerialAdapter';
 
@@ -18,6 +19,7 @@ import { webSerialAdapter } from './webSerialAdapter';
  */
 export const ADAPTERS = {
   browser: browserPrintAdapter,
+  bluetooth: createBluetoothAdapter(),
   usb: webUsbAdapter,
   serial: webSerialAdapter,
 };

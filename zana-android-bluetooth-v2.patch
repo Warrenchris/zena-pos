@@ -1,0 +1,1046 @@
+diff --git a/frontend/src/__tests__/bluetooth-picker.test.jsx b/frontend/src/__tests__/bluetooth-picker.test.jsx
+new file mode 100644
+index 0000000..07dd49d
+--- /dev/null
++++ b/frontend/src/__tests__/bluetooth-picker.test.jsx
+@@ -0,0 +1,194 @@
++import React from 'react';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { Provider } from 'react-redux';
++import { configureStore, combineReducers } from '@reduxjs/toolkit';
++import authReducer from '../store/slices/authSlice';
++import shopReducer from '../store/slices/shopSlice';
++import settingsReducer from '../store/slices/settingsSlice';
++import PrinterSettingsPanel from '../components/printing/PrinterSettingsPanel';
++import { STORAGE_KEY } from '../printing/profile';
++
++// These tests use the REAL adapters and a fake native plugin behind window.Capacitor.
++
++const PRINTER = { name: 'MHT-P58', address: '66:32:AB:CD:EF:01', isPrinter: true };
++const PHONE = { name: 'Janes Phone', address: 'AA:BB:CC:DD:EE:02', isPrinter: false };
++const decode = (b64) => Array.from(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
++
++function makePlugin(overrides = {}) {
++  return {
++    requestBluetoothPermission: jest.fn().mockResolvedValue({ granted: true }),
++    isBluetoothEnabled: jest.fn().mockResolvedValue({ available: true, enabled: true }),
++    getPairedDevices: jest.fn().mockResolvedValue({ devices: [PHONE, PRINTER] }),
++    isConnected: jest.fn().mockResolvedValue({ connected: false }),
++    connect: jest.fn().mockResolvedValue({ connected: true }),
++    write: jest.fn().mockResolvedValue({ written: 1 }),
++    disconnect: jest.fn().mockResolvedValue(),
++    openBluetoothSettings: jest.fn().mockResolvedValue(),
++    ...overrides,
++  };
++}
++
++function installAndroid(plugin) {
++  window.Capacitor = {
++    isNativePlatform: () => true,
++    getPlatform: () => 'android',
++    isPluginAvailable: () => true,
++    registerPlugin: () => plugin,
++  };
++}
++
++function renderPanel() {
++  const store = configureStore({
++    reducer: combineReducers({ auth: authReducer, shop: shopReducer, settings: settingsReducer }),
++    preloadedState: { shop: { ...shopReducer(undefined, { type: '@@init' }), shop: { name: 'Mama Njeri Supermarket' } } },
++  });
++  return render(
++    <Provider store={store}>
++      <PrinterSettingsPanel />
++    </Provider>
++  );
++}
++
++const stored = () => JSON.parse(window.localStorage.getItem(STORAGE_KEY));
++const radio = (name) => screen.getByRole('radio', { name });
++
++beforeEach(() => window.localStorage.clear());
++afterEach(() => {
++  delete window.Capacitor;
++});
++
++describe('in a normal browser', () => {
++  it('offers browser printing and explains that Bluetooth needs the Android app', () => {
++    renderPanel();
++    expect(radio(/Browser \/ system printer/)).toBeEnabled();
++    expect(radio(/Bluetooth printer/)).toBeDisabled();
++    expect(screen.getByText('Available in the Android app')).toBeInTheDocument();
++    expect(screen.queryByText('Which Bluetooth printer?')).toBeNull();
++  });
++});
++
++describe('in the Android app', () => {
++  it('starts on Bluetooth and disables browser printing, which does not work in the app', async () => {
++    installAndroid(makePlugin());
++    renderPanel();
++    expect(radio(/Bluetooth printer/)).toBeChecked();
++    expect(radio(/Browser \/ system printer/)).toBeDisabled();
++    expect(screen.getByText('Not available in the Android app')).toBeInTheDocument();
++    expect(await screen.findByText('MHT-P58')).toBeInTheDocument();
++  });
++
++  it('lists paired devices with likely printers first and saves the chosen one', async () => {
++    installAndroid(makePlugin());
++    renderPanel();
++
++    await screen.findByText('MHT-P58');
++    const names = screen.getAllByRole('radio', { name: /MHT-P58|Janes Phone/ }).map((r) => r.value);
++    expect(names).toEqual([PRINTER.address, PHONE.address]);
++
++    fireEvent.click(radio(/MHT-P58/));
++    expect(stored()).toMatchObject({ connection: 'bluetooth', printerAddress: PRINTER.address, printerName: 'MHT-P58' });
++    expect(radio(/MHT-P58/)).toBeChecked();
++  });
++
++  it('shows the printer saved on this device as selected', async () => {
++    installAndroid(makePlugin());
++    window.localStorage.setItem(
++      STORAGE_KEY,
++      JSON.stringify({ connection: 'bluetooth', printerAddress: PRINTER.address, printerName: 'MHT-P58' })
++    );
++    renderPanel();
++    await screen.findByText('MHT-P58');
++    expect(radio(/MHT-P58/)).toBeChecked();
++    expect(screen.queryByRole('alert')).toBeNull();
++  });
++
++  it('warns when the saved printer is no longer paired', async () => {
++    installAndroid(makePlugin({ getPairedDevices: jest.fn().mockResolvedValue({ devices: [PHONE] }) }));
++    window.localStorage.setItem(
++      STORAGE_KEY,
++      JSON.stringify({ connection: 'bluetooth', printerAddress: PRINTER.address, printerName: 'MHT-P58' })
++    );
++    renderPanel();
++    expect(await screen.findByRole('alert')).toHaveTextContent(/MHT-P58 isn't paired with this device any more/);
++  });
++
++  it('explains how to pair when nothing is paired, and Refresh picks up a newly paired printer', async () => {
++    const plugin = makePlugin({
++      getPairedDevices: jest.fn().mockResolvedValueOnce({ devices: [] }).mockResolvedValue({ devices: [PRINTER] }),
++    });
++    installAndroid(plugin);
++    renderPanel();
++
++    expect(await screen.findByText(/No paired devices found/)).toBeInTheDocument();
++    fireEvent.click(screen.getByRole('button', { name: /Refresh/ }));
++    expect(await screen.findByText('MHT-P58')).toBeInTheDocument();
++    expect(screen.queryByText(/No paired devices found/)).toBeNull();
++  });
++
++  it('explains a denied permission and a switched-off Bluetooth', async () => {
++    installAndroid(makePlugin({ requestBluetoothPermission: jest.fn().mockResolvedValue({ granted: false }) }));
++    const { unmount } = renderPanel();
++    expect(await screen.findByRole('alert')).toHaveTextContent(/permission was denied/i);
++    unmount();
++
++    installAndroid(makePlugin({ isBluetoothEnabled: jest.fn().mockResolvedValue({ available: true, enabled: false }) }));
++    renderPanel();
++    expect(await screen.findByRole('alert')).toHaveTextContent(/Bluetooth is turned off/);
++  });
++
++  it('shows plugin errors instead of failing silently', async () => {
++    installAndroid(makePlugin({ getPairedDevices: jest.fn().mockRejectedValue(new Error('Bluetooth is disabled')) }));
++    renderPanel();
++    expect(await screen.findByRole('alert')).toHaveTextContent('Bluetooth is disabled');
++  });
++
++  it('opens Android Bluetooth settings so a new printer can be paired', async () => {
++    const plugin = makePlugin();
++    installAndroid(plugin);
++    renderPanel();
++    await screen.findByText('MHT-P58');
++    fireEvent.click(screen.getByRole('button', { name: /Open Bluetooth settings/ }));
++    expect(plugin.openBluetoothSettings).toHaveBeenCalledTimes(1);
++  });
++
++  describe('Print test receipt', () => {
++    const chooseAndPrint = async () => {
++      await screen.findByText('MHT-P58');
++      fireEvent.click(radio(/MHT-P58/));
++      fireEvent.click(screen.getByRole('button', { name: /print test receipt/i }));
++    };
++
++    it('sends the receipt to the chosen printer as ESC/POS bytes', async () => {
++      const plugin = makePlugin();
++      installAndroid(plugin);
++      renderPanel();
++      await chooseAndPrint();
++
++      expect(await screen.findByRole('status')).toHaveTextContent('Test receipt sent using Bluetooth printer.');
++      expect(plugin.connect).toHaveBeenCalledWith({ address: PRINTER.address });
++      const { data, address } = plugin.write.mock.calls[0][0];
++      expect(address).toBe(PRINTER.address);
++      const bytes = decode(data);
++      expect(bytes.slice(0, 2)).toEqual([0x1b, 0x40]); // ESC @ (initialize)
++      expect(String.fromCharCode(...bytes.filter((b) => b >= 0x20 && b < 0x7f))).toContain('TEST-0001');
++      expect(bytes.slice(-3)).toEqual([0x1d, 0x56, 0x01]); // partial cut
++    });
++
++    it('reports the reason when the printer cannot be reached; there is no browser fallback in the app', async () => {
++      installAndroid(makePlugin({ connect: jest.fn().mockRejectedValue(new Error('Could not connect to the printer.')) }));
++      renderPanel();
++      await chooseAndPrint();
++      expect(await screen.findByRole('status')).toHaveTextContent(
++        'Could not print the test receipt: MHT-P58: Could not connect to the printer.'
++      );
++    });
++
++    it('asks for a printer to be chosen when none is selected yet', async () => {
++      installAndroid(makePlugin());
++      renderPanel();
++      await screen.findByText('MHT-P58');
++      fireEvent.click(screen.getByRole('button', { name: /print test receipt/i }));
++      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/No Bluetooth printer selected/));
++    });
++  });
++});
+diff --git a/frontend/src/components/printing/BluetoothPrinterPicker.jsx b/frontend/src/components/printing/BluetoothPrinterPicker.jsx
+new file mode 100644
+index 0000000..46fa8fa
+--- /dev/null
++++ b/frontend/src/components/printing/BluetoothPrinterPicker.jsx
+@@ -0,0 +1,144 @@
++import React, { useCallback, useEffect, useRef, useState } from 'react';
++import { ArrowPathIcon, Cog6ToothIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
++import Button from '../ui/Button';
++import { getNativeBluetoothPlugin } from '../../printing';
++
++const byPrinterThenName = (a, b) =>
++  Number(b.isPrinter) - Number(a.isPrinter) || String(a.name).localeCompare(String(b.name));
++
++const messageOf = (error) => (error && error.message) || 'Something went wrong talking to Bluetooth.';
++
++/**
++ * Pick which paired Bluetooth printer this device prints to (Android app only).
++ *
++ * Lists the devices already paired in Android's Bluetooth settings. Pairing itself
++ * happens in Android (there's a shortcut button), so no Bluetooth scanning, and no
++ * location permission, is needed here.
++ */
++export default function BluetoothPrinterPicker({ selectedAddress, selectedName, onSelect }) {
++  const [state, setState] = useState({ status: 'loading', devices: [], error: null });
++  const mounted = useRef(true);
++
++  const load = useCallback(async () => {
++    const plugin = getNativeBluetoothPlugin();
++    if (!plugin) {
++      setState({ status: 'error', devices: [], error: 'Bluetooth printing is only available in the Android app.' });
++      return;
++    }
++    setState((prev) => ({ ...prev, status: 'loading', error: null }));
++    try {
++      const { granted } = await plugin.requestBluetoothPermission();
++      if (!granted) {
++        throw new Error('Bluetooth permission was denied. Allow "Nearby devices" for this app in Android settings.');
++      }
++      const { enabled } = await plugin.isBluetoothEnabled();
++      if (!enabled) throw new Error('Bluetooth is turned off. Turn it on, then tap Refresh.');
++      const { devices } = await plugin.getPairedDevices();
++      if (mounted.current) setState({ status: 'ready', devices: [...devices].sort(byPrinterThenName), error: null });
++    } catch (error) {
++      if (mounted.current) setState({ status: 'error', devices: [], error: messageOf(error) });
++    }
++  }, []);
++
++  useEffect(() => {
++    mounted.current = true;
++    load();
++    return () => {
++      mounted.current = false;
++    };
++  }, [load]);
++
++  const openSettings = async () => {
++    try {
++      await getNativeBluetoothPlugin()?.openBluetoothSettings();
++    } catch {
++      // Nothing useful to show: the user can open Android settings manually.
++    }
++  };
++
++  const { status, devices, error } = state;
++  const selectedIsListed = devices.some((d) => d.address === selectedAddress);
++
++  return (
++    <fieldset className="space-y-2">
++      <legend className="block text-small font-semibold text-text-primary mb-1.5">Which Bluetooth printer?</legend>
++
++      {status === 'loading' && <p className="text-caption text-text-muted">Looking for paired printers…</p>}
++
++      {error && (
++        <p role="alert" className="flex items-start gap-2 text-caption text-warning-text">
++          <ExclamationTriangleIcon className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
++          <span>{error}</span>
++        </p>
++      )}
++
++      {status === 'ready' && devices.length === 0 && (
++        <p className="text-caption text-text-muted">
++          No paired devices found. Pair your printer in Android&apos;s Bluetooth settings first (the PIN is usually 0000
++          or 1234), then tap Refresh.
++        </p>
++      )}
++
++      {devices.length > 0 && (
++        <div className="grid gap-2">
++          {devices.map((device) => {
++            const checked = device.address === selectedAddress;
++            return (
++              <label
++                key={device.address}
++                className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
++                  checked ? 'border-primary bg-primary/5' : 'border-border-default bg-surface hover:border-border-hover'
++                }`}
++              >
++                <input
++                  type="radio"
++                  name="bluetooth-printer"
++                  value={device.address}
++                  checked={checked}
++                  onChange={() => onSelect({ printerAddress: device.address, printerName: device.name || '' })}
++                  className="h-4 w-4 text-primary focus:ring-primary/30"
++                />
++                <span className="min-w-0 flex-1">
++                  <span className="flex flex-wrap items-center gap-2">
++                    <span className="text-small font-semibold text-text-primary">{device.name || 'Unnamed device'}</span>
++                    {device.isPrinter && (
++                      <span className="text-caption font-medium text-text-muted bg-surface-2 border border-border-default rounded-full px-2 py-0.5">
++                        Printer
++                      </span>
++                    )}
++                  </span>
++                  <span className="block text-caption text-text-muted">{device.address}</span>
++                </span>
++              </label>
++            );
++          })}
++        </div>
++      )}
++
++      {status === 'ready' && selectedAddress && !selectedIsListed && (
++        <p role="alert" className="flex items-start gap-2 text-caption text-warning-text">
++          <ExclamationTriangleIcon className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
++          <span>
++            {selectedName || selectedAddress} isn&apos;t paired with this device any more. Pair it again in Android&apos;s
++            Bluetooth settings, or pick another printer.
++          </span>
++        </p>
++      )}
++
++      {status === 'ready' && !selectedAddress && devices.length > 0 && (
++        <p className="text-caption text-text-muted">
++          Choose your printer. Until you do, receipts can&apos;t be sent to it.
++        </p>
++      )}
++
++      <div className="flex flex-wrap gap-2 pt-1">
++        <Button type="button" variant="secondary" size="sm" leftIcon={ArrowPathIcon} onClick={load}>
++          Refresh
++        </Button>
++        <Button type="button" variant="ghost" size="sm" leftIcon={Cog6ToothIcon} onClick={openSettings}>
++          Open Bluetooth settings
++        </Button>
++      </div>
++    </fieldset>
++  );
++}
+diff --git a/frontend/src/components/printing/PrinterSettingsPanel.jsx b/frontend/src/components/printing/PrinterSettingsPanel.jsx
+index 5abbccc..ab6b678 100644
+--- a/frontend/src/components/printing/PrinterSettingsPanel.jsx
++++ b/frontend/src/components/printing/PrinterSettingsPanel.jsx
+@@ -10,6 +10,7 @@ import useCurrency from '../../hooks/useCurrency';
+ import usePrinterProfile from '../../hooks/usePrinterProfile';
+ import useReceiptSettings from '../../hooks/useReceiptSettings';
+ import Button from '../ui/Button';
++import BluetoothPrinterPicker from './BluetoothPrinterPicker';
+ import UsbSerialPrinterPicker from './UsbSerialPrinterPicker';
+ import {
+   ADAPTERS,
+@@ -238,6 +239,14 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
+         )}
+       </fieldset>
+ 
++      {profile.connection === 'bluetooth' && selectedStatus === 'available' && (
++        <BluetoothPrinterPicker
++          selectedAddress={profile.printerAddress}
++          selectedName={profile.printerName}
++          onSelect={change}
++        />
++      )}
++
+       {(profile.connection === 'usb' || profile.connection === 'serial') && selectedStatus === 'available' && (
+         <UsbSerialPrinterPicker connection={profile.connection} profile={profile} onSelect={change} />
+       )}
+diff --git a/frontend/src/hooks/usePrinterProfile.js b/frontend/src/hooks/usePrinterProfile.js
+index 783f594..5fec776 100644
+--- a/frontend/src/hooks/usePrinterProfile.js
++++ b/frontend/src/hooks/usePrinterProfile.js
+@@ -1,5 +1,5 @@
+ import { useCallback, useRef, useState } from 'react';
+-import { DEFAULT_PROFILE, loadProfile, saveProfile } from '../printing/profile';
++import { getDefaultProfile, loadProfile, saveProfile } from '../printing/profile';
+ 
+ /**
+  * Read and edit this device's printer profile.
+@@ -21,7 +21,7 @@ export default function usePrinterProfile() {
+   }, []);
+ 
+   const update = useCallback((patch) => commit({ ...latest.current, ...patch }), [commit]);
+-  const reset = useCallback(() => commit({ ...DEFAULT_PROFILE }), [commit]);
++  const reset = useCallback(() => commit(getDefaultProfile()), [commit]);
+ 
+   return { profile, update, reset };
+ }
+diff --git a/frontend/src/printing/__tests__/base64.test.js b/frontend/src/printing/__tests__/base64.test.js
+new file mode 100644
+index 0000000..f7e7eb7
+--- /dev/null
++++ b/frontend/src/printing/__tests__/base64.test.js
+@@ -0,0 +1,21 @@
++import { bytesToBase64 } from '../base64';
++
++const decode = (b64) => Array.from(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
++
++describe('bytesToBase64', () => {
++  it('round-trips every possible byte value (binary-safe)', () => {
++    const all = Uint8Array.from({ length: 256 }, (_, i) => i);
++    expect(decode(bytesToBase64(all))).toEqual(Array.from(all));
++  });
++
++  it('encodes the ESC/POS drawer kick, which contains a byte above 0x7F', () => {
++    expect(decode(bytesToBase64(Uint8Array.from([0x1b, 0x70, 0x00, 0x19, 0xfa])))).toEqual([0x1b, 0x70, 0x00, 0x19, 0xfa]);
++  });
++
++  it('handles data larger than one internal chunk and plain arrays', () => {
++    const big = Uint8Array.from({ length: 100000 }, (_, i) => i % 251);
++    expect(decode(bytesToBase64(big))).toEqual(Array.from(big));
++    expect(decode(bytesToBase64([1, 2, 3]))).toEqual([1, 2, 3]);
++    expect(bytesToBase64(new Uint8Array(0))).toBe('');
++  });
++});
+diff --git a/frontend/src/printing/__tests__/bluetoothAdapter.test.js b/frontend/src/printing/__tests__/bluetoothAdapter.test.js
+new file mode 100644
+index 0000000..b0198c7
+--- /dev/null
++++ b/frontend/src/printing/__tests__/bluetoothAdapter.test.js
+@@ -0,0 +1,148 @@
++import { createBluetoothAdapter } from '../adapters/bluetoothAdapter';
++
++const ADDRESS = '66:32:AB:CD:EF:01';
++const bytes = Uint8Array.from([0x1b, 0x40, 0x48, 0x69, 0x0a, 0x1b, 0x70, 0x00, 0x19, 0xfa]);
++const decode = (b64) => Array.from(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
++
++const makeJob = (profile = {}) => ({
++  profile: { printerAddress: ADDRESS, printerName: 'MHT-P58', ...profile },
++  escpos: () => bytes,
++});
++
++function makePlugin(overrides = {}) {
++  return {
++    requestBluetoothPermission: jest.fn().mockResolvedValue({ granted: true }),
++    isBluetoothEnabled: jest.fn().mockResolvedValue({ available: true, enabled: true }),
++    isConnected: jest.fn().mockResolvedValue({ connected: false }),
++    connect: jest.fn().mockResolvedValue({ connected: true }),
++    write: jest.fn().mockResolvedValue({ written: bytes.length }),
++    disconnect: jest.fn().mockResolvedValue(),
++    ...overrides,
++  };
++}
++
++const adapterFor = (plugin) => createBluetoothAdapter({ getPlugin: () => plugin });
++
++describe('bluetooth adapter', () => {
++  it('is supported only when the native plugin exists', () => {
++    expect(adapterFor(makePlugin()).isSupported()).toBe(true);
++    expect(adapterFor(null).isSupported()).toBe(false);
++    expect(adapterFor(null).unsupportedReason).toMatch(/Android app/);
++  });
++
++  it('connects, then sends the exact ESC/POS bytes as base64', async () => {
++    const plugin = makePlugin();
++    await adapterFor(plugin).print(makeJob());
++
++    expect(plugin.connect).toHaveBeenCalledWith({ address: ADDRESS });
++    expect(plugin.write).toHaveBeenCalledTimes(1);
++    const arg = plugin.write.mock.calls[0][0];
++    expect(arg.address).toBe(ADDRESS);
++    expect(decode(arg.data)).toEqual(Array.from(bytes)); // including the 0xFA byte
++    expect(arg.chunkSize).toBeGreaterThan(0);
++  });
++
++  it('reuses an open connection instead of reconnecting', async () => {
++    const plugin = makePlugin({ isConnected: jest.fn().mockResolvedValue({ connected: true }) });
++    await adapterFor(plugin).print(makeJob());
++    expect(plugin.connect).not.toHaveBeenCalled();
++    expect(plugin.write).toHaveBeenCalledTimes(1);
++  });
++
++  it('reconnects once and retries when a reused connection has gone stale', async () => {
++    const plugin = makePlugin({
++      isConnected: jest.fn().mockResolvedValue({ connected: true }),
++      write: jest.fn().mockRejectedValueOnce(new Error('Broken pipe')).mockResolvedValue({ written: 1 }),
++    });
++    await adapterFor(plugin).print(makeJob());
++
++    expect(plugin.disconnect).toHaveBeenCalledWith({ address: ADDRESS });
++    expect(plugin.connect).toHaveBeenCalledTimes(1);
++    expect(plugin.write).toHaveBeenCalledTimes(2);
++  });
++
++  it('does not retry a failed fresh connection, so a switched-off printer fails fast', async () => {
++    const plugin = makePlugin({ connect: jest.fn().mockRejectedValue(new Error('Could not connect to the printer.')) });
++    await expect(adapterFor(plugin).print(makeJob())).rejects.toThrow('MHT-P58: Could not connect to the printer.');
++    expect(plugin.connect).toHaveBeenCalledTimes(1);
++    expect(plugin.write).not.toHaveBeenCalled();
++  });
++
++  it('fails when the write fails after a fresh connection', async () => {
++    const plugin = makePlugin({ write: jest.fn().mockRejectedValue(new Error('Write failed')) });
++    await expect(adapterFor(plugin).print(makeJob())).rejects.toThrow('MHT-P58: Write failed');
++    expect(plugin.write).toHaveBeenCalledTimes(1);
++  });
++
++  it('fails when the retry after a stale connection also fails', async () => {
++    const plugin = makePlugin({
++      isConnected: jest.fn().mockResolvedValue({ connected: true }),
++      write: jest.fn().mockRejectedValue(new Error('Broken pipe')),
++    });
++    await expect(adapterFor(plugin).print(makeJob())).rejects.toThrow('MHT-P58: Broken pipe');
++    expect(plugin.write).toHaveBeenCalledTimes(2);
++  });
++
++  it('asks the cashier to choose a printer when none is selected', async () => {
++    const plugin = makePlugin();
++    await expect(adapterFor(plugin).print(makeJob({ printerAddress: '' }))).rejects.toThrow(/No Bluetooth printer selected/);
++    expect(plugin.connect).not.toHaveBeenCalled();
++  });
++
++  it('explains a denied permission and a switched-off Bluetooth', async () => {
++    const denied = makePlugin({ requestBluetoothPermission: jest.fn().mockResolvedValue({ granted: false }) });
++    await expect(adapterFor(denied).print(makeJob())).rejects.toThrow(/permission was denied/i);
++
++    const off = makePlugin({ isBluetoothEnabled: jest.fn().mockResolvedValue({ available: true, enabled: false }) });
++    await expect(adapterFor(off).print(makeJob())).rejects.toThrow(/Bluetooth is turned off/);
++    expect(off.connect).not.toHaveBeenCalled();
++  });
++
++  it('falls back to the address when the printer has no name', async () => {
++    const plugin = makePlugin({ connect: jest.fn().mockRejectedValue(new Error('nope')) });
++    await expect(adapterFor(plugin).print(makeJob({ printerName: '' }))).rejects.toThrow(`${ADDRESS}: nope`);
++  });
++
++  it('prints receipts one at a time so they never interleave', async () => {
++    const events = [];
++    let releaseFirstWrite;
++    const plugin = makePlugin({
++      write: jest.fn((arg) => {
++        events.push(`write:${arg.tag}`);
++        if (arg.tag === 'first') return new Promise((resolve) => (releaseFirstWrite = resolve));
++        return Promise.resolve();
++      }),
++    });
++    // tag each job's payload through escpos()
++    const tagged = (tag) => ({ profile: makeJob().profile, escpos: () => Uint8Array.from([tag === 'first' ? 1 : 2]) });
++    plugin.write.mockImplementation((arg) => {
++      const tag = decode(arg.data)[0] === 1 ? 'first' : 'second';
++      events.push(`start:${tag}`);
++      if (tag === 'first') return new Promise((resolve) => (releaseFirstWrite = () => { events.push('end:first'); resolve(); }));
++      events.push('end:second');
++      return Promise.resolve();
++    });
++
++    const adapter = adapterFor(plugin);
++    const p1 = adapter.print(tagged('first'));
++    const p2 = adapter.print(tagged('second'));
++
++    await new Promise((r) => setTimeout(r, 20));
++    expect(events).toEqual(['start:first']); // second must wait
++    releaseFirstWrite();
++    await Promise.all([p1, p2]);
++    expect(events).toEqual(['start:first', 'end:first', 'start:second', 'end:second']);
++  });
++
++  it('keeps printing after an earlier print failed', async () => {
++    const plugin = makePlugin();
++    const adapter = adapterFor(plugin);
++    await expect(adapter.print(makeJob({ printerAddress: '' }))).rejects.toThrow();
++    await expect(adapter.print(makeJob())).resolves.toBeUndefined();
++    expect(plugin.write).toHaveBeenCalledTimes(1);
++  });
++
++  it('rejects clearly if the plugin disappears', async () => {
++    await expect(createBluetoothAdapter({ getPlugin: () => null }).print(makeJob())).rejects.toThrow(/only available in the Android app/);
++  });
++});
+diff --git a/frontend/src/printing/__tests__/browserPrintAdapter.test.js b/frontend/src/printing/__tests__/browserPrintAdapter.test.js
+index 5fea7bb..286af54 100644
+--- a/frontend/src/printing/__tests__/browserPrintAdapter.test.js
++++ b/frontend/src/printing/__tests__/browserPrintAdapter.test.js
+@@ -29,6 +29,16 @@ describe('browserPrintAdapter', () => {
+     expect(browserPrintAdapter.isSupported()).toBe(true);
+   });
+ 
++  it('is not supported inside the Android app, where window.print() would silently do nothing', () => {
++    window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
++    try {
++      expect(browserPrintAdapter.isSupported()).toBe(false);
++      expect(browserPrintAdapter.unsupportedReason).toMatch(/Android app/);
++    } finally {
++      delete window.Capacitor;
++    }
++  });
++
+   it('prints the receipt HTML from a hidden iframe, then removes it after printing', async () => {
+     const listeners = {};
+     const fakeWindow = {
+diff --git a/frontend/src/printing/__tests__/nativeBluetooth.test.js b/frontend/src/printing/__tests__/nativeBluetooth.test.js
+new file mode 100644
+index 0000000..d6e5880
+--- /dev/null
++++ b/frontend/src/printing/__tests__/nativeBluetooth.test.js
+@@ -0,0 +1,57 @@
++import { getNativeBluetoothPlugin, isNativeAndroid, PLUGIN_NAME } from '../adapters/nativeBluetooth';
++
++const install = (overrides = {}) => {
++  const plugin = { id: 'plugin' };
++  const cap = {
++    isNativePlatform: () => true,
++    getPlatform: () => 'android',
++    isPluginAvailable: () => true,
++    registerPlugin: jest.fn(() => plugin),
++    ...overrides,
++  };
++  window.Capacitor = cap;
++  return { cap, plugin };
++};
++
++afterEach(() => {
++  delete window.Capacitor;
++});
++
++describe('getNativeBluetoothPlugin', () => {
++  it('is null in a normal browser', () => {
++    expect(getNativeBluetoothPlugin()).toBeNull();
++    expect(isNativeAndroid()).toBe(false);
++  });
++
++  it('is null on the web build of Capacitor and on iOS', () => {
++    install({ isNativePlatform: () => false, getPlatform: () => 'web' });
++    expect(getNativeBluetoothPlugin()).toBeNull();
++    install({ getPlatform: () => 'ios' });
++    expect(getNativeBluetoothPlugin()).toBeNull();
++    expect(isNativeAndroid()).toBe(false);
++  });
++
++  it('is null when the app was built without the plugin', () => {
++    const { cap } = install({ isPluginAvailable: () => false });
++    expect(getNativeBluetoothPlugin()).toBeNull();
++    expect(cap.registerPlugin).not.toHaveBeenCalled();
++    expect(isNativeAndroid()).toBe(true); // still the Android shell
++  });
++
++  it('returns the registered plugin, registering it only once', () => {
++    const { cap, plugin } = install();
++    expect(getNativeBluetoothPlugin()).toBe(plugin);
++    expect(getNativeBluetoothPlugin()).toBe(plugin);
++    expect(cap.registerPlugin).toHaveBeenCalledTimes(1);
++    expect(cap.registerPlugin).toHaveBeenCalledWith(PLUGIN_NAME);
++  });
++
++  it('survives registerPlugin throwing', () => {
++    install({
++      registerPlugin: () => {
++        throw new Error('boom');
++      },
++    });
++    expect(getNativeBluetoothPlugin()).toBeNull();
++  });
++});
+diff --git a/frontend/src/printing/__tests__/profile.test.js b/frontend/src/printing/__tests__/profile.test.js
+index ffacade..adebbdb 100644
+--- a/frontend/src/printing/__tests__/profile.test.js
++++ b/frontend/src/printing/__tests__/profile.test.js
+@@ -4,6 +4,8 @@ import {
+   DEFAULT_PROFILE,
+   STORAGE_KEY,
+   getCharsPerLine,
++  getDefaultProfile,
++  isValidBluetoothAddress,
+   loadProfile,
+   normalizeProfile,
+   saveProfile,
+@@ -98,3 +100,54 @@ describe('USB / serial fields', () => {
+     expect(normalizeProfile({}).serialBaudRate).toBe(9600);
+   });
+ });
++
++describe('Bluetooth printer choice', () => {
++  it('validates and normalizes the printer address', () => {
++    expect(isValidBluetoothAddress('66:32:ab:cd:ef:01')).toBe(true);
++    ['', '66:32:AB:CD:EF', '66-32-AB-CD-EF-01', 'zz:32:AB:CD:EF:01', null, 7].forEach((bad) =>
++      expect(isValidBluetoothAddress(bad)).toBe(false)
++    );
++    expect(normalizeProfile({ printerAddress: '66:32:ab:cd:ef:01', printerName: '  MHT-P58  ' })).toMatchObject({
++      printerAddress: '66:32:AB:CD:EF:01',
++      printerName: 'MHT-P58',
++    });
++  });
++
++  it('drops a name that has no valid address, and caps very long names', () => {
++    expect(normalizeProfile({ printerAddress: 'nope', printerName: 'Orphan' })).toMatchObject({ printerAddress: '', printerName: '' });
++    expect(normalizeProfile({ printerAddress: '66:32:AB:CD:EF:01', printerName: 'x'.repeat(200) }).printerName).toHaveLength(64);
++  });
++});
++
++describe('environment-aware default', () => {
++  afterEach(() => {
++    delete window.Capacitor;
++  });
++
++  const android = () => {
++    window.Capacitor = {
++      isNativePlatform: () => true,
++      getPlatform: () => 'android',
++      isPluginAvailable: () => true,
++      registerPlugin: () => ({}),
++    };
++  };
++
++  it('starts on browser printing in a normal browser', () => {
++    expect(getDefaultProfile().connection).toBe('browser');
++    expect(loadProfile(fakeStorage()).connection).toBe('browser');
++  });
++
++  it('starts on Bluetooth inside the Android app, where the browser print dialog is unavailable', () => {
++    android();
++    expect(getDefaultProfile().connection).toBe('bluetooth');
++    expect(loadProfile(fakeStorage()).connection).toBe('bluetooth');
++  });
++
++  it('never overrides a profile the user saved', () => {
++    android();
++    const storage = fakeStorage();
++    saveProfile({ connection: 'browser', paperWidth: 80 }, storage);
++    expect(loadProfile(storage)).toMatchObject({ connection: 'browser', paperWidth: 80 });
++  });
++});
+diff --git a/frontend/src/printing/adapters/bluetoothAdapter.js b/frontend/src/printing/adapters/bluetoothAdapter.js
+new file mode 100644
+index 0000000..04b92e6
+--- /dev/null
++++ b/frontend/src/printing/adapters/bluetoothAdapter.js
+@@ -0,0 +1,99 @@
++import { bytesToBase64 } from '../base64';
++import { getNativeBluetoothPlugin } from './nativeBluetooth';
++
++// Small pieces with a short pause between them keep cheap printers with tiny
++// buffers from dropping data. A typical receipt is 1-2 KB, so this adds ~30ms.
++const CHUNK_SIZE = 512;
++const CHUNK_DELAY_MS = 10;
++
++const noop = () => {};
++
++const describe = (error) => (error && error.message) || String(error || 'Unknown error');
++
++/**
++ * Bluetooth (Classic / SPP) print adapter for the Android app.
++ *
++ * Sends the ESC/POS bytes to the printer chosen in this device's printer profile
++ * through the native plugin. Prints are queued so two receipts never interleave,
++ * the connection is kept open between prints, and a stale connection (printer
++ * slept or moved out of range) is transparently re-opened once.
++ *
++ * @param {object} [options]
++ * @param {() => object|null} [options.getPlugin]  plugin lookup, injectable for tests
++ */
++export function createBluetoothAdapter({ getPlugin = getNativeBluetoothPlugin } = {}) {
++  let queue = Promise.resolve();
++
++  async function connect(plugin, address, label) {
++    try {
++      await plugin.connect({ address });
++    } catch (error) {
++      throw new Error(`${label}: ${describe(error)}`);
++    }
++  }
++
++  async function write(plugin, address, data) {
++    await plugin.write({ address, data, chunkSize: CHUNK_SIZE, chunkDelayMs: CHUNK_DELAY_MS });
++  }
++
++  async function printJob(job) {
++    const plugin = getPlugin();
++    if (!plugin) throw new Error('Bluetooth printing is only available in the Android app');
++
++    const { printerAddress: address, printerName } = job.profile;
++    if (!address) throw new Error('No Bluetooth printer selected. Choose one in Printer settings.');
++    const label = printerName || address;
++
++    const { granted } = await plugin.requestBluetoothPermission();
++    if (!granted) {
++      throw new Error('Bluetooth permission was denied. Allow "Nearby devices" for this app in Android settings.');
++    }
++    const { enabled } = await plugin.isBluetoothEnabled();
++    if (!enabled) throw new Error('Bluetooth is turned off. Turn it on and try again.');
++
++    const data = bytesToBase64(job.escpos());
++    const { connected } = await plugin.isConnected({ address });
++
++    if (!connected) {
++      await connect(plugin, address, label);
++      try {
++        await write(plugin, address, data);
++      } catch (error) {
++        throw new Error(`${label}: ${describe(error)}`);
++      }
++      return;
++    }
++
++    try {
++      await write(plugin, address, data);
++    } catch {
++      // The socket looked open but the printer is gone (slept, out of range, switched off).
++      // Reconnect and try once more.
++      await Promise.resolve(plugin.disconnect({ address })).catch(noop);
++      await connect(plugin, address, label);
++      try {
++        await write(plugin, address, data);
++      } catch (error) {
++        throw new Error(`${label}: ${describe(error)}`);
++      }
++    }
++  }
++
++  return {
++    id: 'bluetooth',
++    label: 'Bluetooth printer',
++    unsupportedReason: 'Available in the Android app',
++
++    isSupported() {
++      return getPlugin() !== null;
++    },
++
++    /** @param {import('../printService').PrintJob} job */
++    print(job) {
++      const run = () => printJob(job);
++      const result = queue.then(run, run);
++      queue = result.catch(noop); // a failed print must not block the next one
++      return result;
++    },
++  };
++}
+diff --git a/frontend/src/printing/adapters/browserPrintAdapter.js b/frontend/src/printing/adapters/browserPrintAdapter.js
+index be78a36..6f04232 100644
+--- a/frontend/src/printing/adapters/browserPrintAdapter.js
++++ b/frontend/src/printing/adapters/browserPrintAdapter.js
+@@ -1,5 +1,5 @@
+ /**
+- * Browser print adapter: universal fallback that works on every device.
++ * Browser print adapter: the universal fallback for any web browser (not the Android app).
+  *
+  * Prints the receipt HTML from a hidden iframe, so the app UI behind it never
+  * ends up on paper and no global print CSS is needed. The output goes through
+@@ -7,6 +7,8 @@
+  * office printers, "Save as PDF").
+  */
+ 
++import { isNativeAndroid } from './nativeBluetooth';
++
+ const LOAD_TIMEOUT_MS = 5000;
+ const CLEANUP_DELAY_MS = 60000;
+ 
+@@ -62,7 +64,12 @@ export const browserPrintAdapter = {
+   id: 'browser',
+   label: 'Browser / system printer',
+ 
++  unsupportedReason: 'Not available in the Android app',
++
+   isSupported() {
++    // Inside the Android app's WebView, window.print() doesn't open a print dialog, so
++    // reporting it as supported would make prints "succeed" without printing anything.
++    if (isNativeAndroid()) return false;
+     return typeof window !== 'undefined' && typeof document !== 'undefined' && typeof window.print === 'function';
+   },
+ 
+diff --git a/frontend/src/printing/adapters/index.js b/frontend/src/printing/adapters/index.js
+index a81db19..f584ee4 100644
+--- a/frontend/src/printing/adapters/index.js
++++ b/frontend/src/printing/adapters/index.js
+@@ -1,4 +1,5 @@
+ import { browserPrintAdapter } from './browserPrintAdapter';
++import { createBluetoothAdapter } from './bluetoothAdapter';
+ import { webUsbAdapter } from './webUsbAdapter';
+ import { webSerialAdapter } from './webSerialAdapter';
+ 
+@@ -18,6 +19,7 @@ import { webSerialAdapter } from './webSerialAdapter';
+  */
+ export const ADAPTERS = {
+   browser: browserPrintAdapter,
++  bluetooth: createBluetoothAdapter(),
+   usb: webUsbAdapter,
+   serial: webSerialAdapter,
+ };
+diff --git a/frontend/src/printing/adapters/nativeBluetooth.js b/frontend/src/printing/adapters/nativeBluetooth.js
+new file mode 100644
+index 0000000..f54f72a
+--- /dev/null
++++ b/frontend/src/printing/adapters/nativeBluetooth.js
+@@ -0,0 +1,49 @@
++import { isNativeAndroid } from '../../utils/capacitorEnv';
++
++/**
++ * Access to the native ZanaBluetoothPrinter Capacitor plugin (Android app only).
++ *
++ * The plugin is looked up through the `window.Capacitor` global that the native
++ * shell injects, instead of importing @capacitor/core, so the normal web build
++ * carries no Capacitor dependency at all. Everywhere except inside the Android app
++ * this returns null.
++ *
++ * Plugin API (see mobile/plugins/zana-bluetooth-printer):
++ *   requestBluetoothPermission() -> { granted }
++ *   isBluetoothEnabled()         -> { available, enabled }
++ *   getPairedDevices()           -> { devices: [{ name, address, isPrinter }] }
++ *   connect({ address })         -> { connected }
++ *   isConnected({ address })     -> { connected }
++ *   write({ address, data, chunkSize?, chunkDelayMs? })  (data = base64 bytes) -> { written }
++ *   disconnect({ address? })
++ *   openBluetoothSettings()
++ */
++
++export const PLUGIN_NAME = 'ZanaBluetoothPrinter';
++
++let cachedFor = null;
++let cachedPlugin = null;
++
++/** @returns {object|null} the native plugin, or null when not running in the Android app */
++export function getNativeBluetoothPlugin() {
++  const cap = typeof window !== 'undefined' ? window.Capacitor : undefined;
++  if (!cap || typeof cap.isNativePlatform !== 'function' || !cap.isNativePlatform()) return null;
++  if (typeof cap.getPlatform === 'function' && cap.getPlatform() !== 'android') return null;
++  if (typeof cap.isPluginAvailable === 'function' && !cap.isPluginAvailable(PLUGIN_NAME)) return null;
++
++  // registerPlugin() warns if called twice for the same name, so keep the proxy.
++  if (cachedFor === cap) return cachedPlugin;
++  let plugin = null;
++  try {
++    plugin = typeof cap.registerPlugin === 'function' ? cap.registerPlugin(PLUGIN_NAME) : cap.Plugins?.[PLUGIN_NAME] || null;
++  } catch {
++    plugin = null;
++  }
++  cachedFor = cap;
++  cachedPlugin = plugin;
++  return plugin;
++}
++
++// Re-exported for existing importers - the platform check itself lives in utils/capacitorEnv.js,
++// shared with the PWA's service-worker registration.
++export { isNativeAndroid };
+diff --git a/frontend/src/printing/base64.js b/frontend/src/printing/base64.js
+new file mode 100644
+index 0000000..f1bfe77
+--- /dev/null
++++ b/frontend/src/printing/base64.js
+@@ -0,0 +1,10 @@
++/** Encode raw bytes as base64 (binary-safe, unlike sending them as a string). */
++export function bytesToBase64(bytes) {
++  const view = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
++  const CHUNK = 0x8000; // keep String.fromCharCode.apply() well under the argument limit
++  let binary = '';
++  for (let i = 0; i < view.length; i += CHUNK) {
++    binary += String.fromCharCode.apply(null, view.subarray(i, i + CHUNK));
++  }
++  return btoa(binary);
++}
+diff --git a/frontend/src/printing/index.js b/frontend/src/printing/index.js
+index 292ada9..bf87568 100644
+--- a/frontend/src/printing/index.js
++++ b/frontend/src/printing/index.js
+@@ -6,6 +6,8 @@ export {
+   saveProfile,
+   normalizeProfile,
+   getCharsPerLine,
++  getDefaultProfile,
++  isValidBluetoothAddress,
+   DEFAULT_PROFILE,
+   PAPER_PRESETS,
+   CONNECTIONS,
+@@ -19,3 +21,4 @@ export { ADAPTERS } from './adapters';
+ export { isWebUsbSupported } from './adapters/webUsbAdapter';
+ export { isWebSerialSupported } from './adapters/webSerialAdapter';
+ export { buildReceiptSettings, resolveLogoUrl } from './receiptSettings';
++export { getNativeBluetoothPlugin, isNativeAndroid } from './adapters/nativeBluetooth';
+diff --git a/frontend/src/printing/profile.js b/frontend/src/printing/profile.js
+index 971595a..dfe2934 100644
+--- a/frontend/src/printing/profile.js
++++ b/frontend/src/printing/profile.js
+@@ -5,6 +5,8 @@
+  * over Bluetooth from a phone and over USB from the counter PC.
+  */
+ 
++import { getNativeBluetoothPlugin } from './adapters/nativeBluetooth';
++
+ export const STORAGE_KEY = 'zana.printerProfile.v1';
+ 
+ export const CONNECTIONS = ['browser', 'bluetooth', 'usb', 'serial', 'network'];
+@@ -53,6 +55,8 @@ export const DEFAULT_PROFILE = Object.freeze({
+   cut: 'partial',
+   openDrawer: false,
+   feedLines: 3,
++  printerAddress: '', // Bluetooth MAC address of the chosen printer
++  printerName: '',
+   // USB: matched by vendor/product id (and serial number, when the device exposes one) - stable
+   // across browser sessions once the user has granted access to the device once.
+   usbVendorId: null,
+@@ -65,6 +69,17 @@ export const DEFAULT_PROFILE = Object.freeze({
+ 
+ export const SERIAL_BAUD_RATES = [9600, 19200, 38400, 57600, 115200];
+ 
++const MAC_ADDRESS = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i;
++export const isValidBluetoothAddress = (value) => typeof value === 'string' && MAC_ADDRESS.test(value);
++
++/**
++ * The profile a device starts with. Inside the Android app the browser print
++ * dialog isn't available, so a fresh device starts on Bluetooth.
++ */
++export function getDefaultProfile() {
++  return { ...DEFAULT_PROFILE, connection: getNativeBluetoothPlugin() ? 'bluetooth' : 'browser' };
++}
++
+ /** Validate an untrusted/partial profile and fill in defaults. */
+ export function normalizeProfile(raw) {
+   const p = raw && typeof raw === 'object' ? raw : {};
+@@ -75,6 +90,12 @@ export function normalizeProfile(raw) {
+     cut: CUT_MODES.includes(p.cut) ? p.cut : DEFAULT_PROFILE.cut,
+     openDrawer: p.openDrawer === true,
+     feedLines: Number.isInteger(feed) && feed >= 0 && feed <= 10 ? feed : DEFAULT_PROFILE.feedLines,
++    ...(isValidBluetoothAddress(p.printerAddress)
++      ? {
++          printerAddress: p.printerAddress.toUpperCase(),
++          printerName: typeof p.printerName === 'string' ? p.printerName.trim().slice(0, 64) : '',
++        }
++      : { printerAddress: '', printerName: '' }),
+     usbVendorId: Number.isInteger(p.usbVendorId) && p.usbVendorId >= 0 ? p.usbVendorId : null,
+     usbProductId: Number.isInteger(p.usbProductId) && p.usbProductId >= 0 ? p.usbProductId : null,
+     usbSerialNumber: typeof p.usbSerialNumber === 'string' ? p.usbSerialNumber.slice(0, 128) : '',
+@@ -93,12 +114,14 @@ const getStorage = () => {
+ };
+ 
+ export function loadProfile(storage = getStorage()) {
++  let raw = null;
+   try {
+-    const raw = storage?.getItem(STORAGE_KEY);
+-    return normalizeProfile(raw ? JSON.parse(raw) : null);
++    const stored = storage?.getItem(STORAGE_KEY);
++    raw = stored ? JSON.parse(stored) : null;
+   } catch {
+-    return normalizeProfile(null);
++    raw = null;
+   }
++  return raw ? normalizeProfile(raw) : normalizeProfile(getDefaultProfile());
+ }
+ 
+ export function saveProfile(profile, storage = getStorage()) {

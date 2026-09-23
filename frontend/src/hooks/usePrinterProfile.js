@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { DEFAULT_PROFILE, loadProfile, saveProfile } from '../printing/profile';
+import { getDefaultProfile, loadProfile, saveProfile } from '../printing/profile';
 
 /**
  * Read and edit this device's printer profile.
@@ -21,7 +21,7 @@ export default function usePrinterProfile() {
   }, []);
 
   const update = useCallback((patch) => commit({ ...latest.current, ...patch }), [commit]);
-  const reset = useCallback(() => commit({ ...DEFAULT_PROFILE }), [commit]);
+  const reset = useCallback(() => commit(getDefaultProfile()), [commit]);
 
   return { profile, update, reset };
 }

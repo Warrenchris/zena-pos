@@ -5,6 +5,8 @@
  * over Bluetooth from a phone and over USB from the counter PC.
  */
 
+import { getNativeBluetoothPlugin } from './adapters/nativeBluetooth';
+
 export const STORAGE_KEY = 'zana.printerProfile.v1';
 
 export const CONNECTIONS = ['browser', 'bluetooth', 'usb', 'serial', 'network'];
@@ -53,6 +55,8 @@ export const DEFAULT_PROFILE = Object.freeze({
   cut: 'partial',
   openDrawer: false,
   feedLines: 3,
+  printerAddress: '', // Bluetooth MAC address of the chosen printer
+  printerName: '',
   // USB: matched by vendor/product id (and serial number, when the device exposes one) - stable
   // across browser sessions once the user has granted access to the device once.
   usbVendorId: null,
@@ -65,6 +69,17 @@ export const DEFAULT_PROFILE = Object.freeze({
 
 export const SERIAL_BAUD_RATES = [9600, 19200, 38400, 57600, 115200];
 
+const MAC_ADDRESS = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i;
+export const isValidBluetoothAddress = (value) => typeof value === 'string' && MAC_ADDRESS.test(value);
+
+/**
+ * The profile a device starts with. Inside the Android app the browser print
+ * dialog isn't available, so a fresh device starts on Bluetooth.
+ */
+export function getDefaultProfile() {
+  return { ...DEFAULT_PROFILE, connection: getNativeBluetoothPlugin() ? 'bluetooth' : 'browser' };
+}
+
 /** Validate an untrusted/partial profile and fill in defaults. */
 export function normalizeProfile(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
@@ -75,6 +90,12 @@ export function normalizeProfile(raw) {
     cut: CUT_MODES.includes(p.cut) ? p.cut : DEFAULT_PROFILE.cut,
     openDrawer: p.openDrawer === true,
     feedLines: Number.isInteger(feed) && feed >= 0 && feed <= 10 ? feed : DEFAULT_PROFILE.feedLines,
+    ...(isValidBluetoothAddress(p.printerAddress)
+      ? {
+          printerAddress: p.printerAddress.toUpperCase(),
+          printerName: typeof p.printerName === 'string' ? p.printerName.trim().slice(0, 64) : '',
+        }
+      : { printerAddress: '', printerName: '' }),
     usbVendorId: Number.isInteger(p.usbVendorId) && p.usbVendorId >= 0 ? p.usbVendorId : null,
     usbProductId: Number.isInteger(p.usbProductId) && p.usbProductId >= 0 ? p.usbProductId : null,
     usbSerialNumber: typeof p.usbSerialNumber === 'string' ? p.usbSerialNumber.slice(0, 128) : '',
@@ -93,12 +114,14 @@ const getStorage = () => {
 };
 
 export function loadProfile(storage = getStorage()) {
+  let raw = null;
   try {
-    const raw = storage?.getItem(STORAGE_KEY);
-    return normalizeProfile(raw ? JSON.parse(raw) : null);
+    const stored = storage?.getItem(STORAGE_KEY);
+    raw = stored ? JSON.parse(stored) : null;
   } catch {
-    return normalizeProfile(null);
+    raw = null;
   }
+  return raw ? normalizeProfile(raw) : normalizeProfile(getDefaultProfile());
 }
 
 export function saveProfile(profile, storage = getStorage()) {
