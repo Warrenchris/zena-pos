@@ -67,6 +67,14 @@ async function runSubscriptionTransitionJob(asOfDate = new Date()) {
       error: error.message
     });
     throw error;
+  } finally {
+    if (acquiredLock && redisClient && redisClient.status === 'ready') {
+      try {
+        await redisClient.del(lockKey);
+      } catch (err) {
+        logger.warn(`[BillingScheduler] (jobRunId=${jobRunId}) Failed to release distributed lock: ${err.message}`, { jobRunId });
+      }
+    }
   }
 }
 

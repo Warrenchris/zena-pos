@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
 const { Shop, Category, Product, Inventory, Sale, SaleItem, ActivityLog, Employee, User, SalePayment } = require('../src/models');
+const tokenRevocationService = require('../src/services/tokenRevocationService');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');

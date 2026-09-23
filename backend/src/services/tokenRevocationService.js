@@ -136,6 +136,21 @@ const tokenRevocationService = {
   },
 
   /**
+   * Clear user/employee status from Redis cache (primarily for testing cleanup).
+   */
+  async clearUserStatus(id, isEmployee) {
+    if (!id) return;
+    const key = `auth_status:${isEmployee ? 'employee' : 'user'}:${id}`;
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.del(key);
+      }
+    } catch (err) {
+      // ignore
+    }
+  },
+
+  /**
    * Mark user/employee status in Redis immediately (e.g., on deactivation, termination, or reactivation).
    */
   async setUserStatus(id, isEmployee, status) {
