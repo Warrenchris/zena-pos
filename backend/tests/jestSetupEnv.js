@@ -29,3 +29,17 @@ if (!hasRealKey) {
   process.env.JWT_PUBLIC_KEY  = publicKey;
 }
 
+beforeAll(async () => {
+  try {
+    const redisClient = require('../src/config/redis');
+    if (redisClient && redisClient.status === 'ready') {
+      const keys = await redisClient.keys('ratelimit:*');
+      if (keys && keys.length > 0) {
+        await redisClient.del(keys);
+      }
+    }
+  } catch (e) {
+    // Ignore Redis errors in setup
+  }
+});
+
