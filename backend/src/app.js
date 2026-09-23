@@ -105,6 +105,7 @@ const generalLimiter = createDistributedRateLimiter({
   namespace: 'general',
   windowMs: 15 * 60 * 1000,
   max: 500,
+  skip: () => process.env.NODE_ENV === 'test',
   keyGenerator: (req) => (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.ip) || 'unknown'
 });
 app.use(generalLimiter);
