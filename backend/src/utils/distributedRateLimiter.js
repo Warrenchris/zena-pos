@@ -53,6 +53,28 @@ function warnRedisDown(err) {
   }
 }
 
+async function waitForRedisReady(client, timeoutMs = 500) {
+  if (!client) return false;
+  if (client.status === 'ready') return true;
+  if (client.status !== 'connecting' && client.status !== 'connect') return false;
+
+  return new Promise((resolve) => {
+    let timer;
+    const cleanup = () => {
+      clearTimeout(timer);
+      client.removeListener('ready', onReady);
+      client.removeListener('error', onError);
+      client.removeListener('close', onError);
+    };
+    const onReady = () => { cleanup(); resolve(true); };
+    const onError = () => { cleanup(); resolve(false); };
+    timer = setTimeout(() => { cleanup(); resolve(client.status === 'ready'); }, timeoutMs);
+    client.once('ready', onReady);
+    client.once('error', onError);
+    client.once('close', onError);
+  });
+}
+
 /**
  * Increment and check rate limit for a key.
  * @param {string} fullKey - Fully namespaced Redis key
@@ -61,20 +83,25 @@ function warnRedisDown(err) {
  * @returns {Promise<{ allowed: boolean, current: number, limit: number, ttl: number, source: 'redis'|'fallback' }>}
  */
 async function incrementAndCheck(fullKey, max, windowSeconds) {
-  if (redisClient && redisClient.status === 'ready') {
-    try {
-      const result = await redisClient.eval(RATE_LIMIT_LUA_SCRIPT, 1, fullKey, max, windowSeconds);
-      const current = Number(result[0]);
-      const ttl = Number(result[1]);
-      return {
-        allowed: current <= max,
-        current,
-        limit: max,
-        ttl: ttl > 0 ? ttl : windowSeconds,
-        source: 'redis'
-      };
-    } catch (err) {
-      warnRedisDown(err);
+  if (redisClient) {
+    if (redisClient.status !== 'ready') {
+      await waitForRedisReady(redisClient, 500);
+    }
+    if (redisClient.status === 'ready') {
+      try {
+        const result = await redisClient.eval(RATE_LIMIT_LUA_SCRIPT, 1, fullKey, max, windowSeconds);
+        const current = Number(result[0]);
+        const ttl = Number(result[1]);
+        return {
+          allowed: current <= max,
+          current,
+          limit: max,
+          ttl: ttl > 0 ? ttl : windowSeconds,
+          source: 'redis'
+        };
+      } catch (err) {
+        warnRedisDown(err);
+      }
     }
   }
 
