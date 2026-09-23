@@ -3,7 +3,7 @@ const { validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const { Product, Category, SystemSettings, Inventory, Shop, StockMovement, User } = require('../models');
 const sequelize = require('../config/database');
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 
@@ -919,25 +919,60 @@ exports.importProducts = async (req, res) => {
 
     let products = [];
     
-    // Parse the file based on extension
-    if (fileExt === '.csv') {
-      const workbook = XLSX.readFile(filePath);
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      products = XLSX.utils.sheet_to_json(worksheet);
-    } else if (fileExt === '.xlsx' || fileExt === '.xls') {
-      const workbook = XLSX.readFile(filePath);
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      products = XLSX.utils.sheet_to_json(worksheet);
-    } else {
-      // Delete the uploaded file
-      fs.unlinkSync(filePath);
-      return res.status(400).json({ error: 'Unsupported file format' });
+    // Parse the file based on extension using ExcelJS
+    try {
+      const workbook = new ExcelJS.Workbook();
+      if (fileExt === '.csv') {
+        await workbook.csv.readFile(filePath);
+      } else if (fileExt === '.xlsx') {
+        await workbook.xlsx.readFile(filePath);
+      } else {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        return res.status(400).json({ error: 'Unsupported file format. Only CSV and XLSX are supported.' });
+      }
+
+      const worksheet = workbook.worksheets[0];
+      if (worksheet) {
+        const headers = [];
+        const headerRow = worksheet.getRow(1);
+        headerRow.eachCell((cell, colNumber) => {
+          headers[colNumber] = String(cell.value || '').trim();
+        });
+
+        worksheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return; // skip header row
+          const rowData = {};
+          let hasData = false;
+          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            const header = headers[colNumber];
+            if (header) {
+              let val = cell.value;
+              if (val && typeof val === 'object') {
+                if (val.result !== undefined) val = val.result;
+                else if (val.text !== undefined) val = val.text;
+                else if (val instanceof Date) val = val.toISOString().split('T')[0];
+              }
+              if (val !== undefined && val !== null && String(val).trim() !== '') {
+                hasData = true;
+                rowData[header] = typeof val === 'string' ? val.trim() : val;
+              }
+            }
+          });
+          if (hasData) {
+            products.push(rowData);
+          }
+        });
+      }
+    } catch (parseError) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      logger.warn(`[productController:import] Failed to parse spreadsheet: ${parseError.message}`);
+      return res.status(400).json({ error: 'Failed to parse file. The file may be corrupt or improperly formatted.' });
     }
 
     // Clean up the uploaded file
-    fs.unlinkSync(filePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
 
     if (!products || products.length === 0) {
       return res.status(400).json({ error: 'No products found in file' });

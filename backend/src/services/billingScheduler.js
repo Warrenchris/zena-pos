@@ -4,6 +4,7 @@ const { checkAndTransitionExpiredSubscriptions } = require('./billingService');
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
 
+const crypto = require('crypto');
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 let schedulerTimer = null;
@@ -21,6 +22,7 @@ let lastRunResult = null;
  * @returns {Promise<{ transitionedToPastDue: number, transitionedToSuspended: number, skipped?: boolean }>}
  */
 async function runSubscriptionTransitionJob(asOfDate = new Date()) {
+  const jobRunId = crypto.randomUUID();
   const lockKey = 'lock:billing_scheduler_job';
   const lockTtl = 300; // 5 minutes lock
   let acquiredLock = false;
@@ -29,17 +31,20 @@ async function runSubscriptionTransitionJob(asOfDate = new Date()) {
     try {
       const acquired = await redisClient.set(lockKey, '1', 'NX', 'EX', lockTtl);
       if (!acquired) {
-        logger.info('[BillingScheduler] Another replica is currently running or recently completed the transition job. Skipping execution.');
+        logger.info(`[BillingScheduler] (jobRunId=${jobRunId}) Another replica is currently running or recently completed the transition job. Skipping execution.`, { jobRunId });
         return { transitionedToPastDue: 0, transitionedToSuspended: 0, skipped: true };
       }
       acquiredLock = true;
     } catch (lockErr) {
-      logger.warn('[BillingScheduler] Failed to acquire distributed lock in Redis, proceeding with cautious local execution:', lockErr.message);
+      logger.warn(`[BillingScheduler] (jobRunId=${jobRunId}) Failed to acquire distributed lock in Redis, proceeding with cautious local execution: ${lockErr.message}`, { jobRunId });
     }
   }
 
   const startTime = new Date();
-  logger.info(`[BillingScheduler] Starting subscription transition check at ${startTime.toISOString()} (asOf: ${asOfDate.toISOString()})...`);
+  logger.info(`[BillingScheduler] (jobRunId=${jobRunId}) Starting subscription transition check at ${startTime.toISOString()} (asOf: ${asOfDate.toISOString()})...`, {
+    jobRunId,
+    asOfDate: asOfDate.toISOString()
+  });
 
   try {
     const result = await checkAndTransitionExpiredSubscriptions(asOfDate);
@@ -48,7 +53,8 @@ async function runSubscriptionTransitionJob(asOfDate = new Date()) {
     lastRunAt = startTime;
     lastRunResult = result;
 
-    logger.info(`[BillingScheduler] Completed subscription transition check in ${durationMs}ms:`, {
+    logger.info(`[BillingScheduler] (jobRunId=${jobRunId}) Completed subscription transition check in ${durationMs}ms:`, {
+      jobRunId,
       transitionedToPastDue: result.transitionedToPastDue,
       transitionedToSuspended: result.transitionedToSuspended,
       completedAt: new Date().toISOString()
@@ -56,7 +62,10 @@ async function runSubscriptionTransitionJob(asOfDate = new Date()) {
 
     return result;
   } catch (error) {
-    logger.error('[BillingScheduler] Error during subscription transition check:', error);
+    logger.error(`[BillingScheduler] (jobRunId=${jobRunId}) Error during subscription transition check: ${error.message}`, {
+      jobRunId,
+      error: error.message
+    });
     throw error;
   }
 }
