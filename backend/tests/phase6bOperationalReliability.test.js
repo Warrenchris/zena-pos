@@ -431,14 +431,24 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
     test('4.4: Error responses include requestId and success:false in standard envelope', async () => {
       const customId = `err-trace-${Date.now()}`;
       const res = await request(app)
+        .get('/api/auth/profile')
+        .set('Authorization', 'Bearer invalid.token.payload')
+        .set('X-Request-Id', customId);
+
+      expect(res.status).toBe(401);
+      expect(res.body.requestId).toBe(customId);
+      expect(res.headers['x-request-id']).toBe(customId);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('token');
+
+      // Test 404 response header correlation
+      const res404 = await request(app)
         .get('/api/sales/999999999')
         .set('Authorization', tokenAdminA)
         .set('X-Request-Id', customId);
-
-      expect(res.status).toBe(404);
-      expect(res.body.requestId).toBe(customId);
-      expect(res.headers['x-request-id']).toBe(customId);
-      expect(res.body.error).toBeDefined();
+      expect(res404.status).toBe(404);
+      expect(res404.headers['x-request-id']).toBe(customId);
+      expect(res404.body.error).toBe('Sale not found');
     });
   });
 });
