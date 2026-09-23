@@ -1,10 +1,8 @@
 const express = require('express');
-const axios = require('axios');
 const aiClient = require('../utils/aiClient');
-const crypto = require('crypto');
-const rateLimit = require('express-rate-limit');
-const { ipKeyGenerator } = rateLimit;
-const NodeCache = require('node-cache');
+const aiCacheService = require('../services/aiCacheService');
+const { createDistributedRateLimiter } = require('../utils/distributedRateLimiter');
+const logger = require('../utils/logger');
 const router = express.Router();
 const { auth, checkRole } = require('../middleware/auth');
 const requireOrgAdmin = require('../middleware/requireOrgAdmin');
@@ -15,52 +13,29 @@ require('dotenv').config();
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
-const forecastCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
-
-function buildForecastCacheKey(orgId, shopId, requestBody, periods, model = 'prophet') {
-  const dataHash = crypto
-    .createHash('sha256')
-    .update(JSON.stringify({
-      dates: requestBody.dates,
-      values: requestBody.values,
-      periods: periods ?? requestBody.periods,
-      model
-    }))
-    .digest('hex')
-    .substring(0, 16);
-  return `forecast:org:${orgId || 'no-org'}:shop:${shopId}:${model}:${periods}:${dataHash}`;
-}
-
-function buildOrgForecastCacheKey(organizationId, requestBody, periods, model = 'prophet') {
-  const dataHash = crypto
-    .createHash('sha256')
-    .update(JSON.stringify({
-      dates: requestBody.dates,
-      values: requestBody.values,
-      periods: periods ?? requestBody.periods,
-      model
-    }))
-    .digest('hex')
-    .substring(0, 16);
-  return `forecast:org:${organizationId}:${model}:${periods}:${dataHash}`;
-}
-
-const aiRateLimiter = rateLimit({
+// Distributed Rate Limiter: 20 requests per 15 minutes, tenant-scoped, fail-open
+const aiRateLimiter = createDistributedRateLimiter({
+  namespace: 'ai',
   windowMs: 15 * 60 * 1000,
   max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: {
+    success: false,
     error: 'Too many AI requests. Please wait before requesting new forecasts.',
-    retryAfter: '15 minutes'
+    code: 'RATE_LIMIT_EXCEEDED'
   },
   keyGenerator: (req) => {
     const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
-    if (isOrg && (req.organizationId || req.user?.organizationId)) {
-      return `org:${req.organizationId || req.user?.organizationId}`;
+    const orgId = req.organizationId || req.user?.organizationId;
+    if (isOrg && orgId) {
+      return `org:${orgId}`;
     }
-    return req.shopId ? String(req.shopId) : ipKeyGenerator(req);
-  },
+    const shopId = req.shopId || req.user?.shopId;
+    if (shopId) {
+      return `shop:${shopId}`;
+    }
+    const clientIp = (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.ip) || 'unknown';
+    return `ip:${clientIp}`;
+  }
 });
 
 const HEALTH_TTL = 30000; // 30 seconds – re-probe inline if cached result is stale
@@ -99,21 +74,29 @@ function stopProbe() {
   }
 }
 
-// Don't start the background probe in test environments — the timer fires
-// after Jest tears down the module registry, causing "import after teardown".
+// Don't start the background probe in test environments
 if (process.env.NODE_ENV !== 'test') {
   scheduleNextProbe();
 }
-
 
 router.get('/status', async (req, res) => {
   try {
     if (!lastHealth || (Date.now() - lastHealth.timestamp) > HEALTH_TTL) {
       await probeHealth();
     }
-    return res.json(lastHealth);
+    return res.json({
+      ok: lastHealth.ok,
+      status: lastHealth.ok ? 'operational' : 'degraded',
+      timestamp: lastHealth.timestamp
+    });
   } catch (err) {
-    return res.status(502).json({ ok: false, error: 'AI health probe failed', details: err.message });
+    return res.status(502).json({
+      success: false,
+      ok: false,
+      error: 'AI health probe failed',
+      code: 'AI_HEALTH_PROBE_FAILED',
+      requestId: req.requestId || req.id
+    });
   }
 });
 
@@ -124,26 +107,50 @@ router.use('/forward/api/forecasting', aiRateLimiter);
 router.use('/forward/api/insights', aiRateLimiter);
 router.use('/forward/api/finance', aiRateLimiter);
 
-router.delete('/cache/org/:organizationId', requireOrgAdmin, (req, res) => {
+router.delete('/cache/org/:organizationId', requireOrgAdmin, async (req, res) => {
   const { organizationId } = req.params;
   const targetOrgId = parseInt(organizationId, 10);
   if (targetOrgId !== req.organizationId) {
-    return res.status(403).json({ error: 'Access denied: cannot clear cache for another organization' });
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied: cannot clear cache for another organization',
+      code: 'FORBIDDEN_ORGANIZATION_ACCESS',
+      requestId: req.requestId || req.id
+    });
   }
-  const keys = forecastCache.keys().filter((key) => key.startsWith(`forecast:org:${targetOrgId}:`));
-  keys.forEach((key) => forecastCache.del(key));
-  return res.json({ message: 'Organization forecast cache cleared', keysCleared: keys.length });
+  const keysCleared = await aiCacheService.invalidateOrgForecastCache(targetOrgId);
+  return res.json({
+    success: true,
+    message: 'Organization forecast cache cleared',
+    keysCleared,
+    requestId: req.requestId || req.id
+  });
 });
 
-router.delete('/cache/:shopId', checkRole(['admin']), (req, res) => {
+router.delete('/cache/:shopId', checkRole(['admin', 'manager']), async (req, res) => {
   const { shopId } = req.params;
+  const targetShopId = parseInt(shopId, 10);
   const userShopId = req.shopId || req.user?.shopId;
-  if (parseInt(shopId, 10) !== userShopId) {
-    return res.status(403).json({ error: 'Access denied: cannot clear cache for another shop' });
+  const userOrgId = req.organizationId || req.user?.organizationId;
+
+  if (targetShopId !== userShopId) {
+    if (!req.accessibleShopIds || !req.accessibleShopIds.includes(targetShopId)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: cannot clear cache for another shop',
+        code: 'FORBIDDEN_SHOP_ACCESS',
+        requestId: req.requestId || req.id
+      });
+    }
   }
-  const keys = forecastCache.keys().filter((key) => key.includes(`:shop:${shopId}:`));
-  keys.forEach((key) => forecastCache.del(key));
-  return res.json({ message: 'Forecast cache cleared', keysCleared: keys.length });
+
+  const keysCleared = await aiCacheService.invalidateShopForecastCache(userOrgId, targetShopId);
+  return res.json({
+    success: true,
+    message: 'Forecast cache cleared',
+    keysCleared,
+    requestId: req.requestId || req.id
+  });
 });
 
 router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
@@ -168,9 +175,10 @@ router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
 
     const periods = req.query.periods || req.body.periods || 30;
     const cacheKey = (isOrg && orgId)
-      ? buildOrgForecastCacheKey(orgId, req.body, periods, 'prophet')
-      : buildForecastCacheKey(orgId, shopId, req.body, periods, 'prophet');
-    const cached = forecastCache.get(cacheKey);
+      ? aiCacheService.buildOrgForecastCacheKey(orgId, req.body, periods, 'prophet')
+      : aiCacheService.buildForecastCacheKey(orgId, shopId, req.body, periods, 'prophet');
+
+    const cached = await aiCacheService.getForecast(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });
     }
@@ -178,6 +186,9 @@ router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders['host'];
     delete forwardHeaders['content-length'];
+    if (req.requestId) {
+      forwardHeaders['x-request-id'] = req.requestId;
+    }
 
     const resp = await aiClient.request({
       method: 'POST',
@@ -194,19 +205,30 @@ router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
       const responseData = typeof resp.data === 'object' && resp.data !== null
         ? { ...resp.data, cached: false }
         : { data: resp.data, cached: false };
-      forecastCache.set(cacheKey, responseData);
+      await aiCacheService.setForecast(cacheKey, responseData);
       return res.status(resp.status).json(responseData);
     }
 
+    // Upstream returned non-2xx
+    logger.warn(`[aiProxy:forecast] Upstream returned status ${resp.status}`, {
+      requestId: req.requestId || req.id,
+      shopId,
+      orgId
+    });
     return res.status(resp.status).json(resp.data);
   } catch (err) {
     const status = err.response?.status || 503;
-    const data = err.response?.data || {
-      error: 'Upstream AI service unreachable',
-      details: err.message,
-      upstream: AI_SERVICE_URL,
-    };
-    return res.status(status).json(data);
+    logger.error(`[aiProxy:forecast] Upstream AI failure (status=${status}): ${err.message}`, {
+      requestId: req.requestId || req.id,
+      url: req.originalUrl,
+      error: err.message
+    });
+    return res.status(status).json({
+      success: false,
+      error: 'AI service temporarily unavailable',
+      code: 'AI_SERVICE_UNAVAILABLE',
+      requestId: req.requestId || req.id
+    });
   }
 });
 
@@ -234,9 +256,10 @@ router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
     }
 
     const cacheKey = (isOrg && orgId)
-      ? buildOrgForecastCacheKey(orgId, req.body, periods, 'rf')
-      : buildForecastCacheKey(orgId, shopId, req.body, periods, 'rf');
-    const cached = forecastCache.get(cacheKey);
+      ? aiCacheService.buildOrgForecastCacheKey(orgId, req.body, periods, 'rf')
+      : aiCacheService.buildForecastCacheKey(orgId, shopId, req.body, periods, 'rf');
+
+    const cached = await aiCacheService.getForecast(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });
     }
@@ -244,6 +267,9 @@ router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders['host'];
     delete forwardHeaders['content-length'];
+    if (req.requestId) {
+      forwardHeaders['x-request-id'] = req.requestId;
+    }
 
     const resp = await aiClient.request({
       method: 'POST',
@@ -262,26 +288,32 @@ router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
       const responseData = typeof resp.data === 'object' && resp.data !== null
         ? { ...resp.data, cached: false }
         : { data: resp.data, cached: false };
-      forecastCache.set(cacheKey, responseData);
+      await aiCacheService.setForecast(cacheKey, responseData);
       return res.status(resp.status).json(responseData);
     }
 
     // Safe diagnostic log on upstream error (no secrets or sensitive data)
     const errField = resp.data?.field || 'unknown';
     const errMsg = resp.data?.message || resp.data?.detail || JSON.stringify(resp.data);
-    console.warn(`[aiProxy:rf-forecast] Upstream error status=${resp.status} (${duration}ms, dates=${datesCount}): field=${errField}, message=${errMsg}`);
+    logger.warn(`[aiProxy:rf-forecast] Upstream error status=${resp.status} (${duration}ms, dates=${datesCount}): field=${errField}, message=${errMsg}`, {
+      requestId: req.requestId || req.id
+    });
 
     return res.status(resp.status).json(resp.data);
   } catch (err) {
     const duration = Date.now() - startTime;
-    console.error(`[aiProxy:rf-forecast] Proxy failure (${duration}ms): ${err.message}`);
     const status = err.response?.status || 503;
-    const data = err.response?.data || {
-      error: 'Upstream AI service unreachable',
-      details: err.message,
-      upstream: AI_SERVICE_URL,
-    };
-    return res.status(status).json(data);
+    logger.error(`[aiProxy:rf-forecast] Proxy failure (${duration}ms): ${err.message}`, {
+      requestId: req.requestId || req.id,
+      url: req.originalUrl,
+      error: err.message
+    });
+    return res.status(status).json({
+      success: false,
+      error: 'AI service temporarily unavailable',
+      code: 'AI_SERVICE_UNAVAILABLE',
+      requestId: req.requestId || req.id
+    });
   }
 });
 
@@ -294,6 +326,9 @@ router.use(async (req, res, next) => {
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders['host'];
     delete forwardHeaders['content-length'];
+    if (req.requestId) {
+      forwardHeaders['x-request-id'] = req.requestId;
+    }
 
     const axiosConfig = {
       headers: forwardHeaders,
@@ -321,18 +356,22 @@ router.use(async (req, res, next) => {
     res.status(resp.status).set(responseHeaders).send(responseData);
   } catch (err) {
     const status = err.response?.status || 503;
-    const data = err.response?.data || {
-      error: 'Upstream AI service unreachable',
-      details: err.message,
-      upstream: AI_SERVICE_URL,
-    };
-    return res.status(status).json(data);
+    logger.error(`[aiProxy:forward] Upstream AI failure (status=${status}): ${err.message}`, {
+      requestId: req.requestId || req.id,
+      url: req.originalUrl,
+      error: err.message
+    });
+    return res.status(status).json({
+      success: false,
+      error: 'AI service temporarily unavailable',
+      code: 'AI_SERVICE_UNAVAILABLE',
+      requestId: req.requestId || req.id
+    });
   }
 });
 
 module.exports = router;
-module.exports.forecastCache = forecastCache;
-module.exports.buildForecastCacheKey = buildForecastCacheKey;
-module.exports.buildOrgForecastCacheKey = buildOrgForecastCacheKey;
+module.exports.forecastCache = aiCacheService.l1Cache;
+module.exports.buildForecastCacheKey = aiCacheService.buildForecastCacheKey;
+module.exports.buildOrgForecastCacheKey = aiCacheService.buildOrgForecastCacheKey;
 module.exports.stopProbe = stopProbe;
-
