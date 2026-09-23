@@ -60,6 +60,22 @@ module.exports = async () => {
       );
     }
     await sequelize.close();
+
+    // Clean Redis test database to prevent cross-run state pollution
+    try {
+      const Redis = require('ioredis');
+      const redis = new Redis({
+        host: process.env.REDIS_HOST || '127.0.0.1',
+        port: process.env.REDIS_PORT ? Number(process.env.REDIS_PORT) : 6379,
+        password: process.env.REDIS_PASSWORD || undefined,
+        enableOfflineQueue: false,
+        connectTimeout: 2000
+      });
+      await redis.flushdb();
+      await redis.quit();
+    } catch (e) {
+      // Redis optional during setup
+    }
   } catch (e) {
     console.error('[Test Setup] Migration execution failed:', e.message);
     throw e;
