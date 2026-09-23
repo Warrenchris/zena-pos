@@ -1,34 +1,31 @@
 const express = require('express');
-const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { body } = require('express-validator');
 const authController = require('../controllers/authController');
 const { auth } = require('../middleware/auth');
+const { createDistributedRateLimiter } = require('../utils/distributedRateLimiter');
 const router = express.Router();
 
-// Stricter limiter for credential/reset endpoints to slow down brute-force and
-// credential-stuffing attempts. Keyed by IP + email so a single IP can't lock out
-// unrelated accounts. Uses ipKeyGenerator to correctly normalize IPv6 addresses
-// (otherwise an attacker could vary the IPv6 suffix to bypass the limit entirely).
-// Deliberately NOT applied to /profile or /change-password, which are hit by
-// already-authenticated users during normal use.
-const authLimiter = rateLimit({
+const getClientIp = (req) => {
+  return (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.ip) || 'unknown';
+};
+
+// Distributed limiter for credential/reset endpoints (10 attempts / 15 mins)
+// Keyed by IP + email so a single IP can't lock out unrelated accounts
+const authLimiter = createDistributedRateLimiter({
+  namespace: 'auth',
   windowMs: 15 * 60 * 1000,
   max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many attempts. Please try again in a few minutes.' },
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${(req.body && req.body.email) || ''}`,
+  keyGenerator: (req) => `${getClientIp(req)}:${(req.body && req.body.email) || ''}`,
 });
 
-// Dedicated limiter for registration keyed strictly by IP (partial SEC-02 mitigation)
-// Conservative cap of 5 registrations per hour per IP.
-const registerLimiter = rateLimit({
+// Distributed limiter for registration (5 registrations / hour per IP)
+const registerLimiter = createDistributedRateLimiter({
+  namespace: 'register',
   windowMs: 60 * 60 * 1000,
   max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many registration attempts from this IP address. Please try again later.' },
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  keyGenerator: (req) => getClientIp(req),
 });
 
 router.post(
@@ -91,4 +88,5 @@ router.post(
 );
 
 module.exports = router;
-
+module.exports.authLimiter = authLimiter;
+module.exports.registerLimiter = registerLimiter;

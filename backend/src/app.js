@@ -69,6 +69,11 @@ const organizationRoutes = require('./routes/organizationRoutes');
 const app = express();
 app.set('trust proxy', 1);
 
+// Middleware
+const requestContext = require('./middleware/requestContext');
+const { createDistributedRateLimiter } = require('./utils/distributedRateLimiter');
+app.use(requestContext);
+
 // Force HTTPS in production. Render (and most PaaS) terminate TLS at the edge and
 // forward over HTTP internally, so we rely on X-Forwarded-Proto rather than req.secure.
 // No-op in development so local HTTP workflows are unaffected.
@@ -84,7 +89,6 @@ if (process.env.NODE_ENV === 'production') {
 // Import request logger middleware
 const requestLogger = require('./middleware/requestLogger');
 
-// Middleware
 app.use(helmet());
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -94,19 +98,21 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'Idempotency-Key'],
+  exposedHeaders: ['X-Request-Id', 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset'],
 }));
 
-const generalLimiter = rateLimit({
+const generalLimiter = createDistributedRateLimiter({
+  namespace: 'general',
   windowMs: 15 * 60 * 1000,
   max: 500,
-  standardHeaders: true,
-  legacyHeaders: false,
+  keyGenerator: (req) => (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.ip) || 'unknown'
 });
 app.use(generalLimiter);
 
-// HTTP request logs
-app.use(morgan(':method :url :status :res[content-length] - :response-time ms', {
+// HTTP request logs with correlation ID
+morgan.token('req-id', (req) => req.requestId || req.id || '-');
+app.use(morgan('[:req-id] :method :url :status :res[content-length] - :response-time ms', {
   stream: {
     write: (message) => logger.info(message.trim()),
   },
