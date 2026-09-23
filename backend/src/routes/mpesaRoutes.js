@@ -87,7 +87,14 @@ router.post('/callback', async (req, res) => {
 
       // Authenticate callback: verification token must match single-use token in pending payment
       const expectedToken = pendingPayment.saleData?.callbackToken;
-      if (!expectedToken || token !== expectedToken) {
+      const providedBuffer = Buffer.from(String(token), 'utf8');
+      const expectedBuffer = Buffer.from(String(expectedToken || ''), 'utf8');
+      const tokensMatch =
+        Boolean(expectedToken) &&
+        providedBuffer.length === expectedBuffer.length &&
+        crypto.timingSafeEqual(providedBuffer, expectedBuffer);
+
+      if (!tokensMatch) {
         logger.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for POS payment ${checkoutRequestId}`, {
           requestId: req.requestId || req.id,
           checkoutRequestId
