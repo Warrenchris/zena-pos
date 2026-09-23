@@ -1,4 +1,4 @@
-import { toPrinterText, wrapText, twoCol, center, rule } from './text';
+import { toPrinterText, wrapText, wrapParagraphs, twoCol, center, rule } from './text';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -24,13 +24,18 @@ export function layoutReceipt(receipt, { charsPerLine, formatMoney }) {
   const money = (n) => toPrinterText(formatMoney(n));
   const kv = (label, value) => wrapText(`${label}: ${value}`, width).forEach((l) => add(l));
 
-  const { business, meta, lines, totals, notes, footer } = receipt;
+  const { business, meta, lines, totals, notes, footer, header = '' } = receipt;
 
   // Header
   wrapText(business.name, half).forEach((l) => add(center(l, half), { bold: true, double: true }));
   wrapText(business.address, width).forEach((l) => add(center(l, width)));
   if (business.phone) wrapText(`Tel: ${business.phone}`, width).forEach((l) => add(center(l, width)));
   if (business.kraPin) wrapText(`KRA PIN: ${business.kraPin}`, width).forEach((l) => add(center(l, width)));
+  const headerLines = wrapParagraphs(header, width);
+  if (headerLines.length) {
+    blank();
+    headerLines.forEach((l) => add(center(l, width)));
+  }
   blank();
   add(center('RECEIPT', width), { bold: true });
   add(rule(width));
@@ -75,7 +80,7 @@ export function layoutReceipt(receipt, { charsPerLine, formatMoney }) {
   }
 
   blank();
-  wrapText(footer, width).forEach((l) => add(center(l, width)));
+  wrapParagraphs(footer, width).forEach((l) => add(center(l, width)));
 
   return out;
 }

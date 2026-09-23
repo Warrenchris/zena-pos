@@ -90,6 +90,9 @@ const cleanSettingsData = (data) => {
     'businessLogo',
     'contactEmail',
     'contactPhone',
+    'receiptHeader',
+    'receiptFooter',
+    'showLogoOnReceipt',
     'timezone',
     'language',
     'theme',
@@ -218,6 +221,11 @@ export const refreshCurrencySettings = createAsyncThunk(
   }
 );
 
+// The settings API wraps its payload as { success, data: {...settings} } but the store
+// keeps settings flat, so unwrap before merging into state.
+const unwrapSettings = (payload) =>
+  payload && typeof payload.data === 'object' && payload.data !== null ? payload.data : payload;
+
 export const settingsSlice = createSlice({
   name: 'settings',
   initialState,
@@ -250,7 +258,7 @@ export const settingsSlice = createSlice({
       })
       .addCase(fetchSettings.fulfilled, (state, action) => {
         state.loading = false;
-        Object.assign(state, action.payload);
+        Object.assign(state, unwrapSettings(action.payload));
         state.lastUpdated = new Date().toISOString();
       })
       .addCase(fetchSettings.rejected, (state, action) => {
@@ -266,7 +274,7 @@ export const settingsSlice = createSlice({
       .addCase(updateSettings.fulfilled, (state, action) => {
         state.loading = false;
         // Update all settings including currency settings
-        Object.assign(state, action.payload);
+        Object.assign(state, unwrapSettings(action.payload));
         state.lastUpdated = new Date().toISOString();
       })
       .addCase(updateSettings.rejected, (state, action) => {
@@ -281,7 +289,7 @@ export const settingsSlice = createSlice({
       })
       .addCase(resetSettings.fulfilled, (state, action) => {
         state.loading = false;
-        Object.assign(state, action.payload);
+        Object.assign(state, unwrapSettings(action.payload));
         state.lastUpdated = new Date().toISOString();
       })
       .addCase(resetSettings.rejected, (state, action) => {

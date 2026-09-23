@@ -29,6 +29,16 @@ describe('browserPrintAdapter', () => {
     expect(browserPrintAdapter.isSupported()).toBe(true);
   });
 
+  it('is not supported inside the Android app, where window.print() would silently do nothing', () => {
+    window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
+    try {
+      expect(browserPrintAdapter.isSupported()).toBe(false);
+      expect(browserPrintAdapter.unsupportedReason).toMatch(/Android app/);
+    } finally {
+      delete window.Capacitor;
+    }
+  });
+
   it('prints the receipt HTML from a hidden iframe, then removes it after printing', async () => {
     const listeners = {};
     const fakeWindow = {
@@ -82,5 +92,23 @@ describe('browserPrintAdapter', () => {
 
     await expect(promise).rejects.toThrow('failed to load');
     expect(document.body.contains(iframe)).toBe(false);
+  });
+
+  it('prints without waiting for a slow logo once the receipt text has loaded', async () => {
+    jest.useFakeTimers();
+    const fakeWindow = {
+      focus: jest.fn(),
+      print: jest.fn(),
+      addEventListener: jest.fn(),
+      document: { body: { childElementCount: 12 } }, // receipt text is there, load event still pending
+    };
+    const getIframe = stubIframe(fakeWindow);
+
+    const promise = browserPrintAdapter.print(job);
+    jest.advanceTimersByTime(5000);
+
+    await expect(promise).resolves.toBeUndefined();
+    expect(fakeWindow.print).toHaveBeenCalledTimes(1);
+    expect(getIframe()).not.toBeNull();
   });
 });

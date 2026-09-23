@@ -1,0 +1,893 @@
+diff --git a/frontend/src/__tests__/printer-settings.test.jsx b/frontend/src/__tests__/printer-settings.test.jsx
+index 15f889e..e1f845f 100644
+--- a/frontend/src/__tests__/printer-settings.test.jsx
++++ b/frontend/src/__tests__/printer-settings.test.jsx
+@@ -25,10 +25,13 @@ jest.mock('../printing/adapters', () => {
+ 
+ const shop = { name: 'Mama Njeri Supermarket', address: 'Moi Avenue', phone: '0700 000 000', kraPin: 'P000000000X' };
+ 
+-function renderPanel({ withShop = true } = {}) {
++function renderPanel({ withShop = true, settings = {} } = {}) {
+   const store = configureStore({
+     reducer: combineReducers({ auth: authReducer, shop: shopReducer, settings: settingsReducer }),
+-    preloadedState: withShop ? { shop: { ...shopReducer(undefined, { type: '@@init' }), shop } } : undefined,
++    preloadedState: {
++      ...(withShop ? { shop: { ...shopReducer(undefined, { type: '@@init' }), shop } } : {}),
++      settings: { ...settingsReducer(undefined, { type: '@@init' }), ...settings },
++    },
+   });
+   return render(
+     <Provider store={store}>
+@@ -171,4 +174,49 @@ describe('PrinterSettingsPanel', () => {
+       expect(screen.queryByRole('status')).toBeNull();
+     });
+   });
++
++  describe('shop-wide receipt header, footer and logo', () => {
++    const receiptSettings = {
++      receiptHeader: 'Welcome to Mama Njeri!\nOpen daily 8am - 8pm',
++      receiptFooter: 'Please come again!',
++      showLogoOnReceipt: true,
++      businessLogo: '/uploads/logos/a.png',
++    };
++
++    it('shows them in the preview', () => {
++      renderPanel({ settings: receiptSettings });
++      const preview = screen.getByTestId('receipt-preview');
++      expect(within(preview).getByText('Welcome to Mama Njeri!')).toBeInTheDocument();
++      expect(within(preview).getByText(/Open daily 8am - 8pm/)).toBeInTheDocument();
++      expect(within(preview).getByText('Please come again!')).toBeInTheDocument();
++      expect(within(preview).queryByText(/Thank you for your business/)).toBeNull();
++      expect(within(preview).getByAltText('Business logo').getAttribute('src')).toMatch(/\/uploads\/logos\/a\.png$/);
++    });
++
++    it('hides the logo when "show logo" is off, and shows the default footer when none is set', () => {
++      renderPanel({ settings: { ...receiptSettings, showLogoOnReceipt: false, receiptFooter: '' } });
++      const preview = screen.getByTestId('receipt-preview');
++      expect(within(preview).queryByAltText('Business logo')).toBeNull();
++      expect(within(preview).getByText(/Thank you for your business/)).toBeInTheDocument();
++    });
++
++    it('prints them on the test receipt', async () => {
++      renderPanel({ settings: receiptSettings });
++      fireEvent.click(radio(/Bluetooth printer/));
++      fireEvent.click(screen.getByRole('button', { name: /print test receipt/i }));
++      await screen.findByRole('status');
++
++      const job = ADAPTERS.bluetooth.print.mock.calls[0][0];
++      expect(job.text()).toContain('Welcome to Mama Njeri!');
++      expect(job.text()).toContain('Please come again!');
++      expect(job.html()).toContain('<img src=');
++    });
++
++    it('explains that logos only print through the browser for now', () => {
++      renderPanel({ settings: receiptSettings });
++      expect(screen.queryByText(/logo prints with browser printing only/i)).toBeNull();
++      fireEvent.click(radio(/Bluetooth printer/));
++      expect(screen.getByText(/logo prints with browser printing only/i)).toBeInTheDocument();
++    });
++  });
+ });
+diff --git a/frontend/src/__tests__/sale-complete-print.test.jsx b/frontend/src/__tests__/sale-complete-print.test.jsx
+index 4fbb44c..d785724 100644
+--- a/frontend/src/__tests__/sale-complete-print.test.jsx
++++ b/frontend/src/__tests__/sale-complete-print.test.jsx
+@@ -22,10 +22,13 @@ const completedSale = {
+   change: 200,
+ };
+ 
+-function renderModal({ onClose = jest.fn() } = {}) {
++function renderModal({ onClose = jest.fn(), settings = {} } = {}) {
+   const store = configureStore({
+     reducer: combineReducers({ auth: authReducer, shop: shopReducer, settings: settingsReducer }),
+-    preloadedState: { shop: { ...shopReducer(undefined, { type: '@@init' }), shop } },
++    preloadedState: {
++      shop: { ...shopReducer(undefined, { type: '@@init' }), shop },
++      settings: { ...settingsReducer(undefined, { type: '@@init' }), ...settings },
++    },
+   });
+   return render(
+     <Provider store={store}>
+@@ -68,6 +71,37 @@ describe('SaleCompleteModal printing', () => {
+     expect(window.showToast).not.toHaveBeenCalled();
+   });
+ 
++  it('prints with the shop-wide receipt header, footer and logo from Settings', async () => {
++    printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: false });
++    renderModal({
++      settings: {
++        receiptHeader: 'Welcome to Mama Njeri!',
++        receiptFooter: 'Please come again!',
++        showLogoOnReceipt: true,
++        businessLogo: '/uploads/logos/a.png',
++      },
++    });
++
++    fireEvent.click(screen.getByText('Print Receipt'));
++
++    await waitFor(() => expect(printReceipt).toHaveBeenCalledTimes(1));
++    const { receiptSettings } = printReceipt.mock.calls[0][1];
++    expect(receiptSettings).toMatchObject({
++      header: 'Welcome to Mama Njeri!',
++      footer: 'Please come again!',
++      showLogo: true,
++    });
++    expect(receiptSettings.logoUrl).toMatch(/\/uploads\/logos\/a\.png$/);
++  });
++
++  it('respects the "show logo" switch being off', async () => {
++    printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: false });
++    renderModal({ settings: { showLogoOnReceipt: false, businessLogo: '/uploads/logos/a.png' } });
++    fireEvent.click(screen.getByText('Print Receipt'));
++    await waitFor(() => expect(printReceipt).toHaveBeenCalledTimes(1));
++    expect(printReceipt.mock.calls[0][1].receiptSettings.showLogo).toBe(false);
++  });
++
+   it('warns the cashier when it had to fall back to browser printing', async () => {
+     printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: true, error: 'not paired' });
+     renderModal();
+diff --git a/frontend/src/__tests__/settings-printer-tab.test.jsx b/frontend/src/__tests__/settings-printer-tab.test.jsx
+index 8758bf6..bff7070 100644
+--- a/frontend/src/__tests__/settings-printer-tab.test.jsx
++++ b/frontend/src/__tests__/settings-printer-tab.test.jsx
+@@ -6,6 +6,7 @@ import authReducer from '../store/slices/authSlice';
+ import shopReducer from '../store/slices/shopSlice';
+ import settingsReducer from '../store/slices/settingsSlice';
+ import Settings from '../pages/Settings';
++import { settingsAPI } from '../services/api';
+ 
+ jest.mock('../services/api', () => ({
+   settingsAPI: {
+@@ -59,4 +60,28 @@ describe('Settings > Receipt & Printer tab', () => {
+       expect(JSON.parse(window.localStorage.getItem('zana.printerProfile.v1')).paperWidth).toBe(80)
+     );
+   });
++
++  it('loads the saved receipt header and footer into the form', async () => {
++    settingsAPI.getAll.mockResolvedValueOnce({
++      data: { success: true, data: { receiptHeader: 'Welcome to Mama Njeri!', receiptFooter: 'Please come again!' } },
++    });
++    renderSettings();
++    fireEvent.click(screen.getByRole('button', { name: /Receipt & Printer/ }));
++
++    expect(await screen.findByDisplayValue('Welcome to Mama Njeri!')).toBeInTheDocument();
++    expect(screen.getByDisplayValue('Please come again!')).toBeInTheDocument();
++  });
++
++  it('actually saves an edited receipt footer to the server', async () => {
++    settingsAPI.getAll.mockResolvedValueOnce({ data: { success: true, data: { receiptFooter: 'Old footer' } } });
++    settingsAPI.update.mockResolvedValue({ data: { success: true, data: { receiptFooter: 'New footer' } } });
++    renderSettings();
++    fireEvent.click(screen.getByRole('button', { name: /Receipt & Printer/ }));
++
++    fireEvent.change(await screen.findByDisplayValue('Old footer'), { target: { value: 'New footer' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
++
++    await waitFor(() => expect(settingsAPI.update).toHaveBeenCalled());
++    expect(settingsAPI.update.mock.calls[0][0]).toMatchObject({ receiptFooter: 'New footer' });
++  });
+ });
+diff --git a/frontend/src/__tests__/settings-slice.test.js b/frontend/src/__tests__/settings-slice.test.js
+new file mode 100644
+index 0000000..a7af6f5
+--- /dev/null
++++ b/frontend/src/__tests__/settings-slice.test.js
+@@ -0,0 +1,65 @@
++import { configureStore } from '@reduxjs/toolkit';
++import settingsReducer, { fetchSettings, updateSettings, resetSettings } from '../store/slices/settingsSlice';
++import { settingsAPI } from '../services/api';
++
++jest.mock('../services/api', () => ({
++  settingsAPI: { getAll: jest.fn(), update: jest.fn(), reset: jest.fn() },
++}));
++
++const makeStore = () => configureStore({ reducer: { settings: settingsReducer } });
++
++// What the backend really sends: settings wrapped as { success, data }.
++const envelope = (data) => ({ data: { success: true, data } });
++
++describe('settings slice with the API envelope', () => {
++  it('flattens fetched settings into state so components can read them', async () => {
++    settingsAPI.getAll.mockResolvedValue(
++      envelope({ receiptHeader: 'Welcome!', receiptFooter: 'Bye', showLogoOnReceipt: false, businessLogo: '/uploads/logos/a.png' })
++    );
++    const store = makeStore();
++    await store.dispatch(fetchSettings());
++
++    expect(store.getState().settings).toMatchObject({
++      receiptHeader: 'Welcome!',
++      receiptFooter: 'Bye',
++      showLogoOnReceipt: false,
++      businessLogo: '/uploads/logos/a.png',
++    });
++  });
++
++  it('flattens the response to a save, too', async () => {
++    settingsAPI.update.mockResolvedValue(envelope({ receiptFooter: 'Saved footer' }));
++    const store = makeStore();
++    await store.dispatch(updateSettings({ receiptFooter: 'Saved footer' }));
++    expect(store.getState().settings.receiptFooter).toBe('Saved footer');
++  });
++
++  it('flattens the response to a reset', async () => {
++    settingsAPI.reset.mockResolvedValue(envelope({ receiptHeader: null, showLogoOnReceipt: true }));
++    const store = makeStore();
++    await store.dispatch(resetSettings());
++    expect(store.getState().settings.showLogoOnReceipt).toBe(true);
++    expect(store.getState().settings.receiptHeader).toBeNull();
++  });
++
++  it('still accepts an already-flat payload', async () => {
++    settingsAPI.getAll.mockResolvedValue({ data: { receiptFooter: 'Flat' } });
++    const store = makeStore();
++    await store.dispatch(fetchSettings());
++    expect(store.getState().settings.receiptFooter).toBe('Flat');
++  });
++
++  it('sends the receipt header, footer and logo switch when saving', async () => {
++    settingsAPI.update.mockResolvedValue(envelope({}));
++    const store = makeStore();
++    await store.dispatch(
++      updateSettings({ receiptHeader: 'H', receiptFooter: 'F', showLogoOnReceipt: false, systemName: 'Mama', notASetting: 1 })
++    );
++    expect(settingsAPI.update).toHaveBeenLastCalledWith({
++      receiptHeader: 'H',
++      receiptFooter: 'F',
++      showLogoOnReceipt: false,
++      systemName: 'Mama',
++    });
++  });
++});
+diff --git a/frontend/src/components/SaleCompleteModal.jsx b/frontend/src/components/SaleCompleteModal.jsx
+index 18ffeb8..b89d7f1 100644
+--- a/frontend/src/components/SaleCompleteModal.jsx
++++ b/frontend/src/components/SaleCompleteModal.jsx
+@@ -10,6 +10,7 @@ import useCurrency from '../hooks/useCurrency';
+ import Button from './ui/Button';
+ import { printReceipt } from '../printing';
+ import PrinterSettingsModal from './printing/PrinterSettingsModal';
++import useReceiptSettings from '../hooks/useReceiptSettings';
+ 
+ /**
+  * SaleCompleteModal — Post-payment receipt/confirmation screen.
+@@ -24,6 +25,7 @@ import PrinterSettingsModal from './printing/PrinterSettingsModal';
+ export default function SaleCompleteModal({ completedSale, onNewSale, onClose }) {
+   const { format: formatCurrency } = useCurrency();
+   const shop = useSelector((state) => state.shop?.shop);
++  const receiptSettings = useReceiptSettings();
+   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
+ 
+   if (!completedSale) return null;
+@@ -46,7 +48,7 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
+   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
+ 
+   const handlePrint = async () => {
+-    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop });
++    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop, receiptSettings });
+     if (!window.showToast) return;
+     if (!result.ok) {
+       window.showToast({
+diff --git a/frontend/src/components/printing/PrinterSettingsPanel.jsx b/frontend/src/components/printing/PrinterSettingsPanel.jsx
+index d157661..5abbccc 100644
+--- a/frontend/src/components/printing/PrinterSettingsPanel.jsx
++++ b/frontend/src/components/printing/PrinterSettingsPanel.jsx
+@@ -8,6 +8,7 @@ import {
+ } from '@heroicons/react/24/outline';
+ import useCurrency from '../../hooks/useCurrency';
+ import usePrinterProfile from '../../hooks/usePrinterProfile';
++import useReceiptSettings from '../../hooks/useReceiptSettings';
+ import Button from '../ui/Button';
+ import UsbSerialPrinterPicker from './UsbSerialPrinterPicker';
+ import {
+@@ -85,7 +86,7 @@ function ChoiceCard({ name, value, checked, disabled, onChange, title, descripti
+   );
+ }
+ 
+-function ReceiptPreview({ lines, columns }) {
++function ReceiptPreview({ lines, columns, logoUrl }) {
+   return (
+     <div className="overflow-x-auto rounded-xl border border-border-default bg-surface-2/40 p-4">
+       {/* Receipt paper is white with black text in every theme, like the real thing. */}
+@@ -103,6 +104,13 @@ function ReceiptPreview({ lines, columns }) {
+           boxSizing: 'border-box',
+         }}
+       >
++        {logoUrl && (
++          <img
++            src={logoUrl}
++            alt="Business logo"
++            style={{ display: 'block', margin: '0 auto 8px', maxWidth: '100%', maxHeight: 80, filter: 'grayscale(1) contrast(1.5)' }}
++          />
++        )}
+         {lines.map((line, index) => (
+           <div
+             key={index}
+@@ -132,6 +140,7 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
+   const { profile, update, reset } = usePrinterProfile();
+   const { format: formatMoney } = useCurrency();
+   const shop = useSelector((state) => state.shop?.shop);
++  const receiptSettings = useReceiptSettings();
+   const [testState, setTestState] = useState(null);
+ 
+   const columns = getCharsPerLine(profile);
+@@ -140,8 +149,12 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
+ 
+   const previewLines = useMemo(() => {
+     const business = shop?.name ? shop : { ...shop, name: 'Your Shop Name' };
+-    return layoutReceipt(buildReceipt(sampleSale(), { business }), { charsPerLine: columns, formatMoney });
+-  }, [shop, columns, formatMoney]);
++    return layoutReceipt(buildReceipt(sampleSale(), { business, receiptSettings }), {
++      charsPerLine: columns,
++      formatMoney,
++    });
++  }, [shop, receiptSettings, columns, formatMoney]);
++  const previewLogoUrl = receiptSettings.showLogo ? receiptSettings.logoUrl : null;
+ 
+   const change = (patch) => {
+     setTestState(null);
+@@ -155,7 +168,7 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
+ 
+   const handleTestPrint = async () => {
+     setTestState({ kind: 'pending', message: 'Sending test receipt…' });
+-    const result = await printTestReceipt({ formatMoney, business: shop, profile });
++    const result = await printTestReceipt({ formatMoney, business: shop, receiptSettings, profile });
+     if (!result.ok) {
+       setTestState({ kind: 'error', message: `Could not print the test receipt: ${result.error}` });
+     } else if (result.fellBack) {
+@@ -319,10 +332,16 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
+ 
+       <div className="space-y-2">
+         <h4 className={legendClass}>Receipt preview</h4>
+-        <ReceiptPreview lines={previewLines} columns={columns} />
++        <ReceiptPreview lines={previewLines} columns={columns} logoUrl={previewLogoUrl} />
+         <p className="text-caption text-text-muted">
+-          Sample receipt at {columns} characters per line. Your shop details and currency are used.
++          Sample receipt at {columns} characters per line, using your shop details, currency, and the receipt header,
++          footer and logo from Settings.
+         </p>
++        {previewLogoUrl && !usesBrowser && (
++          <p className="text-caption text-text-muted">
++            The logo prints with browser printing only for now. Direct printing prints the receipt text without it.
++          </p>
++        )}
+       </div>
+ 
+       <div className="space-y-3">
+diff --git a/frontend/src/hooks/useReceiptSettings.js b/frontend/src/hooks/useReceiptSettings.js
+new file mode 100644
+index 0000000..5a4abc3
+--- /dev/null
++++ b/frontend/src/hooks/useReceiptSettings.js
+@@ -0,0 +1,19 @@
++import { useMemo } from 'react';
++import { useSelector } from 'react-redux';
++import api from '../services/api';
++import { selectSettings } from '../store/slices/settingsSlice';
++import { buildReceiptSettings } from '../printing/receiptSettings';
++
++/**
++ * Shop-wide receipt customisation (header text, footer text, logo) from the
++ * app settings, ready to hand to the printing service.
++ */
++export default function useReceiptSettings() {
++  const { receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo } = useSelector(selectSettings);
++  const apiBaseUrl = api?.defaults?.baseURL;
++
++  return useMemo(
++    () => buildReceiptSettings({ receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo }, apiBaseUrl),
++    [receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo, apiBaseUrl]
++  );
++}
+diff --git a/frontend/src/printing/__tests__/browserPrintAdapter.test.js b/frontend/src/printing/__tests__/browserPrintAdapter.test.js
+index 181e6f3..5fea7bb 100644
+--- a/frontend/src/printing/__tests__/browserPrintAdapter.test.js
++++ b/frontend/src/printing/__tests__/browserPrintAdapter.test.js
+@@ -83,4 +83,22 @@ describe('browserPrintAdapter', () => {
+     await expect(promise).rejects.toThrow('failed to load');
+     expect(document.body.contains(iframe)).toBe(false);
+   });
++
++  it('prints without waiting for a slow logo once the receipt text has loaded', async () => {
++    jest.useFakeTimers();
++    const fakeWindow = {
++      focus: jest.fn(),
++      print: jest.fn(),
++      addEventListener: jest.fn(),
++      document: { body: { childElementCount: 12 } }, // receipt text is there, load event still pending
++    };
++    const getIframe = stubIframe(fakeWindow);
++
++    const promise = browserPrintAdapter.print(job);
++    jest.advanceTimersByTime(5000);
++
++    await expect(promise).resolves.toBeUndefined();
++    expect(fakeWindow.print).toHaveBeenCalledTimes(1);
++    expect(getIframe()).not.toBeNull();
++  });
+ });
+diff --git a/frontend/src/printing/__tests__/receipt.test.js b/frontend/src/printing/__tests__/receipt.test.js
+index f8bcaa5..32f8121 100644
+--- a/frontend/src/printing/__tests__/receipt.test.js
++++ b/frontend/src/printing/__tests__/receipt.test.js
+@@ -143,3 +143,84 @@ describe('renderHtml', () => {
+     expect(html).toContain('A &amp; B &lt;Shop&gt;');
+   });
+ });
++
++describe('receipt header, footer and logo', () => {
++  const settings = {
++    header: 'Welcome to Mama Njeri!\nOpen daily 8am - 8pm',
++    footer: 'Goods once sold are not refundable.\nPlease come again!',
++    showLogo: true,
++    logoUrl: 'http://localhost:3000/uploads/logos/a.png',
++  };
++  const build = (receiptSettings, overrides) => buildReceipt(sale(overrides), { business, receiptSettings });
++
++  it('prints the header under the shop details and before the RECEIPT title', () => {
++    const lines = renderPlainText(build(settings), { paperWidth: 80 }, money).split('\n');
++    const kra = lines.findIndex((l) => l.includes('KRA PIN'));
++    const welcome = lines.findIndex((l) => l.includes('Welcome to Mama Njeri!'));
++    const hours = lines.findIndex((l) => l.includes('Open daily 8am - 8pm'));
++    const title = lines.findIndex((l) => l.includes('RECEIPT'));
++    expect(kra).toBeLessThan(welcome);
++    expect(welcome + 1).toBe(hours); // the line break in the textarea is kept
++    expect(hours).toBeLessThan(title);
++    expect(lines[welcome].startsWith(' ')).toBe(true); // centered
++  });
++
++  it('replaces the default thank-you with the custom footer', () => {
++    const text = renderPlainText(build(settings), { paperWidth: 58 }, money);
++    expect(text).toContain('Please come again!');
++    expect(text).not.toContain('Thank you for your business!');
++  });
++
++  it('falls back to the default footer and no header when none is set', () => {
++    [{}, { footer: '   ', header: '' }, undefined].forEach((rs) => {
++      const text = renderPlainText(build(rs), { paperWidth: 58 }, money);
++      expect(text).toContain('Thank you for your business!');
++      expect(text).not.toContain('Welcome');
++    });
++  });
++
++  it.each([58, 80])('never exceeds %imm even with long header/footer lines', (paperWidth) => {
++    const long = build({
++      header: 'A very long welcome message that has to wrap over several lines on narrow paper',
++      footer: 'Extra_long_unbroken_word_that_cannot_be_wrapped_on_spaces_at_all_1234567890 and more',
++    });
++    const cols = paperWidth === 58 ? 32 : 48;
++    renderPlainText(long, { paperWidth }, money)
++      .split('\n')
++      .forEach((l) => expect(l.length).toBeLessThanOrEqual(cols));
++  });
++
++  it('includes header and footer in ESC/POS output but no image data', () => {
++    const b = Array.from(renderEscPos(build(settings), { paperWidth: 58 }, money));
++    const ascii = String.fromCharCode(...b.filter((v) => v >= 0x20 && v < 0x7f));
++    expect(ascii).toContain('Welcome to Mama Njeri!');
++    expect(ascii).toContain('Please come again!');
++    const hasRasterCommand = b.some((v, i) => v === 0x1d && b[i + 1] === 0x76 && b[i + 2] === 0x30);
++    expect(hasRasterCommand).toBe(false);
++  });
++
++  describe('logo', () => {
++    it('is only in the model when enabled and a usable URL exists', () => {
++      expect(build(settings).logoUrl).toBe(settings.logoUrl);
++      expect(build({ ...settings, showLogo: false }).logoUrl).toBeNull();
++      expect(build({ ...settings, logoUrl: null }).logoUrl).toBeNull();
++      expect(build(undefined).logoUrl).toBeNull();
++    });
++
++    it('is printed as an image at the top of the HTML receipt', () => {
++      const html = renderHtml(build(settings), { paperWidth: 58 }, money);
++      expect(html).toContain(`<img src="${settings.logoUrl}"`);
++      expect(html.indexOf('<img')).toBeLessThan(html.indexOf('Mama Njeri'));
++    });
++
++    it('escapes the logo URL so it cannot break out of the attribute', () => {
++      const html = renderHtml(build({ ...settings, logoUrl: 'https://x.test/a.png" onerror="alert(1)' }), {}, money);
++      expect(html).not.toContain('" onerror="');
++      expect(html).toContain('&quot; onerror=&quot;');
++    });
++
++    it('adds no image when there is no logo', () => {
++      expect(renderHtml(build({ ...settings, showLogo: false }), {}, money)).not.toContain('<img');
++    });
++  });
++});
+diff --git a/frontend/src/printing/__tests__/receiptSettings.test.js b/frontend/src/printing/__tests__/receiptSettings.test.js
+new file mode 100644
+index 0000000..3d8eb52
+--- /dev/null
++++ b/frontend/src/printing/__tests__/receiptSettings.test.js
+@@ -0,0 +1,43 @@
++import { buildReceiptSettings, resolveLogoUrl } from '../receiptSettings';
++
++describe('resolveLogoUrl', () => {
++  it('resolves uploaded logo paths against the API base URL', () => {
++    expect(resolveLogoUrl('/uploads/logos/a.png', 'http://localhost:3000')).toBe('http://localhost:3000/uploads/logos/a.png');
++    expect(resolveLogoUrl('/uploads/logos/a.png', 'https://api.example.com/')).toBe(
++      'https://api.example.com/uploads/logos/a.png'
++    );
++  });
++
++  it('keeps a server path as-is when there is no API base URL', () => {
++    expect(resolveLogoUrl('/uploads/logos/a.png')).toBe('/uploads/logos/a.png');
++  });
++
++  it('accepts absolute http(s) URLs and image data URLs', () => {
++    expect(resolveLogoUrl('https://cdn.example.com/logo.png')).toBe('https://cdn.example.com/logo.png');
++    expect(resolveLogoUrl('data:image/png;base64,AAAA')).toBe('data:image/png;base64,AAAA');
++  });
++
++  it('rejects anything that is not a plain image location', () => {
++    ['javascript:alert(1)', 'data:text/html;base64,AAAA', '//evil.example.com/x.png', 'logo.png', '', '   ', null, undefined, 42].forEach(
++      (bad) => expect(resolveLogoUrl(bad, 'http://localhost:3000')).toBeNull()
++    );
++  });
++});
++
++describe('buildReceiptSettings', () => {
++  it('shows the logo unless it is explicitly turned off', () => {
++    expect(buildReceiptSettings({}).showLogo).toBe(true);
++    expect(buildReceiptSettings({ showLogoOnReceipt: true }).showLogo).toBe(true);
++    expect(buildReceiptSettings({ showLogoOnReceipt: false }).showLogo).toBe(false);
++  });
++
++  it('copies header and footer text and tolerates missing settings', () => {
++    expect(buildReceiptSettings({ receiptHeader: 'Hello', receiptFooter: 'Bye' })).toMatchObject({
++      header: 'Hello',
++      footer: 'Bye',
++      logoUrl: null,
++    });
++    expect(buildReceiptSettings(null)).toEqual({ header: '', footer: '', showLogo: true, logoUrl: null });
++    expect(buildReceiptSettings({ receiptHeader: null, receiptFooter: null }).header).toBe('');
++  });
++});
+diff --git a/frontend/src/printing/__tests__/text.test.js b/frontend/src/printing/__tests__/text.test.js
+index 0f4b525..a6c912e 100644
+--- a/frontend/src/printing/__tests__/text.test.js
++++ b/frontend/src/printing/__tests__/text.test.js
+@@ -1,4 +1,4 @@
+-import { toPrinterText, wrapText, twoCol, center } from '../text';
++import { toPrinterText, wrapText, wrapParagraphs, twoCol, center } from '../text';
+ 
+ describe('toPrinterText', () => {
+   it('keeps plain ASCII unchanged', () => {
+@@ -64,3 +64,24 @@ describe('center', () => {
+     expect(center('abc', 9)).toBe('   abc');
+   });
+ });
++
++describe('wrapParagraphs', () => {
++  it('keeps line breaks and wraps each paragraph', () => {
++    expect(wrapParagraphs('Welcome to our shop\nOpen daily 8am to 8pm', 12)).toEqual([
++      'Welcome to',
++      'our shop',
++      'Open daily',
++      '8am to 8pm',
++    ]);
++  });
++
++  it('preserves blank lines and Windows line endings', () => {
++    expect(wrapParagraphs('one\r\n\r\ntwo', 10)).toEqual(['one', '', 'two']);
++  });
++
++  it('returns nothing for empty input', () => {
++    expect(wrapParagraphs('', 10)).toEqual([]);
++    expect(wrapParagraphs('  \n ', 10)).toEqual([]);
++    expect(wrapParagraphs(null, 10)).toEqual([]);
++  });
++});
+diff --git a/frontend/src/printing/adapters/browserPrintAdapter.js b/frontend/src/printing/adapters/browserPrintAdapter.js
+index 16ea432..be78a36 100644
+--- a/frontend/src/printing/adapters/browserPrintAdapter.js
++++ b/frontend/src/printing/adapters/browserPrintAdapter.js
+@@ -25,9 +25,7 @@ function printHtmlInIframe(html) {
+       reject(error);
+     };
+ 
+-    const timeout = setTimeout(() => fail(new Error('Receipt failed to load for printing')), LOAD_TIMEOUT_MS);
+-
+-    iframe.onload = () => {
++    const attemptPrint = () => {
+       if (settled) return;
+       clearTimeout(timeout);
+       try {
+@@ -44,6 +42,17 @@ function printHtmlInIframe(html) {
+       }
+     };
+ 
++    const timeout = setTimeout(() => {
++      // A slow or unreachable subresource (the shop logo) can delay the load event
++      // indefinitely. If the receipt text is already there, print without waiting:
++      // a missing logo must never stop a receipt from printing.
++      const body = iframe.contentWindow && iframe.contentWindow.document && iframe.contentWindow.document.body;
++      if (body && body.childElementCount > 0) attemptPrint();
++      else fail(new Error('Receipt failed to load for printing'));
++    }, LOAD_TIMEOUT_MS);
++
++    iframe.onload = attemptPrint;
++
+     iframe.srcdoc = html;
+     document.body.appendChild(iframe);
+   });
+diff --git a/frontend/src/printing/index.js b/frontend/src/printing/index.js
+index 17430b5..292ada9 100644
+--- a/frontend/src/printing/index.js
++++ b/frontend/src/printing/index.js
+@@ -18,3 +18,4 @@ export { sampleSale } from './sample';
+ export { ADAPTERS } from './adapters';
+ export { isWebUsbSupported } from './adapters/webUsbAdapter';
+ export { isWebSerialSupported } from './adapters/webSerialAdapter';
++export { buildReceiptSettings, resolveLogoUrl } from './receiptSettings';
+diff --git a/frontend/src/printing/layout.js b/frontend/src/printing/layout.js
+index de84f78..87f1566 100644
+--- a/frontend/src/printing/layout.js
++++ b/frontend/src/printing/layout.js
+@@ -1,4 +1,4 @@
+-import { toPrinterText, wrapText, twoCol, center, rule } from './text';
++import { toPrinterText, wrapText, wrapParagraphs, twoCol, center, rule } from './text';
+ 
+ const pad2 = (n) => String(n).padStart(2, '0');
+ 
+@@ -24,13 +24,18 @@ export function layoutReceipt(receipt, { charsPerLine, formatMoney }) {
+   const money = (n) => toPrinterText(formatMoney(n));
+   const kv = (label, value) => wrapText(`${label}: ${value}`, width).forEach((l) => add(l));
+ 
+-  const { business, meta, lines, totals, notes, footer } = receipt;
++  const { business, meta, lines, totals, notes, footer, header = '' } = receipt;
+ 
+   // Header
+   wrapText(business.name, half).forEach((l) => add(center(l, half), { bold: true, double: true }));
+   wrapText(business.address, width).forEach((l) => add(center(l, width)));
+   if (business.phone) wrapText(`Tel: ${business.phone}`, width).forEach((l) => add(center(l, width)));
+   if (business.kraPin) wrapText(`KRA PIN: ${business.kraPin}`, width).forEach((l) => add(center(l, width)));
++  const headerLines = wrapParagraphs(header, width);
++  if (headerLines.length) {
++    blank();
++    headerLines.forEach((l) => add(center(l, width)));
++  }
+   blank();
+   add(center('RECEIPT', width), { bold: true });
+   add(rule(width));
+@@ -75,7 +80,7 @@ export function layoutReceipt(receipt, { charsPerLine, formatMoney }) {
+   }
+ 
+   blank();
+-  wrapText(footer, width).forEach((l) => add(center(l, width)));
++  wrapParagraphs(footer, width).forEach((l) => add(center(l, width)));
+ 
+   return out;
+ }
+diff --git a/frontend/src/printing/printService.js b/frontend/src/printing/printService.js
+index 1e5ad9f..f2efaf3 100644
+--- a/frontend/src/printing/printService.js
++++ b/frontend/src/printing/printService.js
+@@ -43,14 +43,14 @@ const messageOf = (error) => (error && error.message) || String(error || 'Unknow
+  */
+ export async function printReceipt(
+   completedSale,
+-  { formatMoney, business, profile, adapters = ADAPTERS } = {}
++  { formatMoney, business, receiptSettings, profile, adapters = ADAPTERS } = {}
+ ) {
+   const money = typeof formatMoney === 'function' ? formatMoney : (n) => Number(n || 0).toFixed(2);
+   const activeProfile = normalizeProfile(profile || loadProfile());
+ 
+   let job;
+   try {
+-    job = createPrintJob(buildReceipt(completedSale, { business }), activeProfile, money);
++    job = createPrintJob(buildReceipt(completedSale, { business, receiptSettings }), activeProfile, money);
+   } catch (error) {
+     return { ok: false, adapterId: null, fellBack: false, error: messageOf(error) };
+   }
+@@ -84,6 +84,6 @@ export async function printReceipt(
+ }
+ 
+ /** Sample receipt for a "Test print" button in printer settings. */
+-export function printTestReceipt({ formatMoney, business, profile, adapters } = {}) {
+-  return printReceipt(sampleSale(), { formatMoney, business, profile, adapters });
++export function printTestReceipt({ formatMoney, business, receiptSettings, profile, adapters } = {}) {
++  return printReceipt(sampleSale(), { formatMoney, business, receiptSettings, profile, adapters });
+ }
+diff --git a/frontend/src/printing/receiptModel.js b/frontend/src/printing/receiptModel.js
+index 73b2e74..6d20660 100644
+--- a/frontend/src/printing/receiptModel.js
++++ b/frontend/src/printing/receiptModel.js
+@@ -24,14 +24,17 @@ const num = (value) => {
+   return Number.isFinite(n) ? n : 0;
+ };
+ 
++const DEFAULT_FOOTER = 'Thank you for your business!';
++
+ /**
+  * @param {object} completedSale  { serverData, items, customer, total, paymentMethod,
+  *                                  paymentAmount, change, notes, isOffline }
+  * @param {object} [options]
+  * @param {object} [options.business]  { name, address, phone, kraPin }
++ * @param {object} [options.receiptSettings]  { header, footer, showLogo, logoUrl } (see receiptSettings.js)
+  * @param {Date}   [options.now]
+  */
+-export function buildReceipt(completedSale, { business = {}, now = new Date() } = {}) {
++export function buildReceipt(completedSale, { business = {}, receiptSettings = {}, now = new Date() } = {}) {
+   const {
+     serverData,
+     items = [],
+@@ -57,9 +60,12 @@ export function buildReceipt(completedSale, { business = {}, now = new Date() }
+ 
+   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
+   const grandTotal = num(total);
++  const customFooter = typeof receiptSettings?.footer === 'string' ? receiptSettings.footer.trim() : '';
+   const isCash = String(paymentMethod).toLowerCase() === 'cash';
+ 
+   return {
++    // Logo is only ever an image URL (HTML/browser printing); ESC/POS output has no logo yet.
++    logoUrl: receiptSettings?.showLogo !== false && receiptSettings?.logoUrl ? receiptSettings.logoUrl : null,
+     business: {
+       name: business?.name || '',
+       address: business?.address || '',
+@@ -81,7 +87,8 @@ export function buildReceipt(completedSale, { business = {}, now = new Date() }
+       tendered: isCash ? num(paymentAmount) : null,
+       change: isCash ? num(change) : 0,
+     },
++    header: typeof receiptSettings?.header === 'string' ? receiptSettings.header.trim() : '',
+     notes: notes || '',
+-    footer: 'Thank you for your business!',
++    footer: customFooter || DEFAULT_FOOTER,
+   };
+ }
+diff --git a/frontend/src/printing/receiptSettings.js b/frontend/src/printing/receiptSettings.js
+new file mode 100644
+index 0000000..fd1e24e
+--- /dev/null
++++ b/frontend/src/printing/receiptSettings.js
+@@ -0,0 +1,37 @@
++/**
++ * Shop-wide receipt customisation (Settings > Receipt & Printer): header text,
++ * footer text and the business logo. Same for every device in the shop, unlike
++ * the printer profile, which is per device.
++ */
++
++const DATA_IMAGE = /^data:image\/(png|jpe?g|gif|webp);/i;
++const ABSOLUTE_HTTP = /^https?:\/\//i;
++
++/**
++ * Turn the stored logo value into a URL the browser can load, or null.
++ * Uploaded logos are stored as `/uploads/...` paths on the API server, so they are
++ * resolved against the API base URL. Anything that isn't an http(s) URL, an image
++ * data URL or a server path is rejected.
++ */
++export function resolveLogoUrl(logo, apiBaseUrl = '') {
++  if (typeof logo !== 'string') return null;
++  const value = logo.trim();
++  if (!value) return null;
++  if (DATA_IMAGE.test(value) || ABSOLUTE_HTTP.test(value)) return value;
++  if (value.startsWith('/') && !value.startsWith('//')) {
++    const base = String(apiBaseUrl || '').replace(/\/+$/, '');
++    return base ? `${base}${value}` : value;
++  }
++  return null;
++}
++
++/** Pick the receipt customisation fields out of the app's settings state. */
++export function buildReceiptSettings(settings, apiBaseUrl = '') {
++  const s = settings || {};
++  return {
++    header: typeof s.receiptHeader === 'string' ? s.receiptHeader : '',
++    footer: typeof s.receiptFooter === 'string' ? s.receiptFooter : '',
++    showLogo: s.showLogoOnReceipt !== false,
++    logoUrl: resolveLogoUrl(s.businessLogo, apiBaseUrl),
++  };
++}
+diff --git a/frontend/src/printing/renderers.js b/frontend/src/printing/renderers.js
+index baa6f02..17bed42 100644
+--- a/frontend/src/printing/renderers.js
++++ b/frontend/src/printing/renderers.js
+@@ -34,7 +34,8 @@ const escapeHtml = (s) =>
+  *
+  * Same layout as ESC/POS, in a monospace font sized so that 32 (58mm) or
+  * 48 (80mm) columns fit the printable area: 7pt monospace is ~1.5mm per
+- * column, matching a thermal printer's native 12-dot font.
++ * column, matching a thermal printer's native 12-dot font. The logo (if any) is
++ * an <img>, so it only appears in this browser/driver path, not in ESC/POS.
+  */
+ export function renderHtml(receipt, profile, formatMoney) {
+   const p = normalizeProfile(profile);
+@@ -45,6 +46,10 @@ export function renderHtml(receipt, profile, formatMoney) {
+     })
+     .join('\n');
+ 
++  const logo = receipt.logoUrl
++    ? `<div class="logo"><img src="${escapeHtml(receipt.logoUrl)}" alt=""></div>\n`
++    : '';
++
+   return `<!doctype html>
+ <html>
+ <head>
+@@ -58,10 +63,12 @@ export function renderHtml(receipt, profile, formatMoney) {
+   .l { white-space: pre; overflow: hidden; min-height: 1.3em; }
+   .b { font-weight: bold; }
+   .d { font-size: 14pt; line-height: 1.2; min-height: 1.2em; }
++  .logo { text-align: center; margin-bottom: 2mm; }
++  .logo img { max-width: 100%; max-height: 20mm; filter: grayscale(1) contrast(1.5); }
+ </style>
+ </head>
+ <body>
+-${rows}
++${logo}${rows}
+ </body>
+ </html>`;
+ }
+diff --git a/frontend/src/printing/text.js b/frontend/src/printing/text.js
+index eae36ab..cd731fc 100644
+--- a/frontend/src/printing/text.js
++++ b/frontend/src/printing/text.js
+@@ -90,3 +90,16 @@ export function center(text, width) {
+ }
+ 
+ export const rule = (width, ch = '-') => ch.repeat(width);
++
++/**
++ * Wrap multi-line text (e.g. a receipt header typed into a textarea) to `width`
++ * columns. Line breaks are kept, including blank lines; each paragraph is wrapped.
++ */
++export function wrapParagraphs(text, width) {
++  const raw = String(text ?? '').replace(/\r\n?/g, '\n').trim();
++  if (!raw) return [];
++  return raw.split('\n').flatMap((paragraph) => {
++    const wrapped = wrapText(paragraph, width);
++    return wrapped.length ? wrapped : [''];
++  });
++}
+diff --git a/frontend/src/store/slices/settingsSlice.js b/frontend/src/store/slices/settingsSlice.js
+index e01bc56..de7e987 100644
+--- a/frontend/src/store/slices/settingsSlice.js
++++ b/frontend/src/store/slices/settingsSlice.js
+@@ -90,6 +90,9 @@ const cleanSettingsData = (data) => {
+     'businessLogo',
+     'contactEmail',
+     'contactPhone',
++    'receiptHeader',
++    'receiptFooter',
++    'showLogoOnReceipt',
+     'timezone',
+     'language',
+     'theme',
+@@ -218,6 +221,11 @@ export const refreshCurrencySettings = createAsyncThunk(
+   }
+ );
+ 
++// The settings API wraps its payload as { success, data: {...settings} } but the store
++// keeps settings flat, so unwrap before merging into state.
++const unwrapSettings = (payload) =>
++  payload && typeof payload.data === 'object' && payload.data !== null ? payload.data : payload;
++
+ export const settingsSlice = createSlice({
+   name: 'settings',
+   initialState,
+@@ -250,7 +258,7 @@ export const settingsSlice = createSlice({
+       })
+       .addCase(fetchSettings.fulfilled, (state, action) => {
+         state.loading = false;
+-        Object.assign(state, action.payload);
++        Object.assign(state, unwrapSettings(action.payload));
+         state.lastUpdated = new Date().toISOString();
+       })
+       .addCase(fetchSettings.rejected, (state, action) => {
+@@ -266,7 +274,7 @@ export const settingsSlice = createSlice({
+       .addCase(updateSettings.fulfilled, (state, action) => {
+         state.loading = false;
+         // Update all settings including currency settings
+-        Object.assign(state, action.payload);
++        Object.assign(state, unwrapSettings(action.payload));
+         state.lastUpdated = new Date().toISOString();
+       })
+       .addCase(updateSettings.rejected, (state, action) => {
+@@ -281,7 +289,7 @@ export const settingsSlice = createSlice({
+       })
+       .addCase(resetSettings.fulfilled, (state, action) => {
+         state.loading = false;
+-        Object.assign(state, action.payload);
++        Object.assign(state, unwrapSettings(action.payload));
+         state.lastUpdated = new Date().toISOString();
+       })
+       .addCase(resetSettings.rejected, (state, action) => {
