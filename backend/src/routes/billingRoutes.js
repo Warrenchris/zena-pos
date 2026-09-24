@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { Op } = require('sequelize');
 const { auth } = require('../middleware/auth');
@@ -396,9 +397,16 @@ router.post('/mpesa/callback', async (req, res) => {
       return res.status(404).json({ error: 'Subscription invoice not found for this CheckoutRequestID.' });
     }
 
-    // Authenticate callback: verification token must match single-use token stored in invoice metadata
+    // Authenticate callback: verification token must match single-use token stored in invoice metadata (SEC-P1-02 constant-time)
     const expectedToken = invoice.metadata?.callbackToken;
-    if (!expectedToken || token !== expectedToken) {
+    const providedBuffer = Buffer.from(String(token), 'utf8');
+    const expectedBuffer = Buffer.from(String(expectedToken || ''), 'utf8');
+    const tokensMatch =
+      Boolean(expectedToken) &&
+      providedBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(providedBuffer, expectedBuffer);
+
+    if (!tokensMatch) {
       await t.rollback();
       console.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for invoice ${invoice.invoiceNumber}. Provided: ${token}`);
       return res.status(401).json({ error: 'Unauthorized callback: invalid verification token.' });

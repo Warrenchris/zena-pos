@@ -216,6 +216,87 @@ describe('Sub-Phase 6b: Subscription Renewal & Webhook Processing', () => {
       expect(res.body.error).toMatch(/invalid verification token/i);
     });
 
+    it('should reject callback with invalid same-length token with 401 constant-time guard', async () => {
+      const invoice = await SubscriptionInvoice.findOne({
+        where: { paymentReference: MOCK_CHECKOUT_ID }
+      });
+      const validToken = invoice.metadata?.callbackToken;
+      const invalidSameLength = validToken.slice(0, -1) + (validToken.slice(-1) === '0' ? '1' : '0');
+
+      const payload = {
+        Body: {
+          stkCallback: {
+            CheckoutRequestID: MOCK_CHECKOUT_ID,
+            ResultCode: 0,
+            CallbackMetadata: { Item: [] }
+          }
+        }
+      };
+
+      const res = await request(app)
+        .post(`/api/billing/mpesa/callback?token=${invalidSameLength}`)
+        .send(payload);
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toMatch(/invalid verification token/i);
+    });
+
+    it('should reject callback with differing length token safely without throwing RangeError', async () => {
+      const invoice = await SubscriptionInvoice.findOne({
+        where: { paymentReference: MOCK_CHECKOUT_ID }
+      });
+      const validToken = invoice.metadata?.callbackToken;
+      const shortToken = validToken.slice(0, 8);
+      const longToken = validToken + '_overflow_padding';
+
+      const payload = {
+        Body: {
+          stkCallback: {
+            CheckoutRequestID: MOCK_CHECKOUT_ID,
+            ResultCode: 0,
+            CallbackMetadata: { Item: [] }
+          }
+        }
+      };
+
+      const resShort = await request(app)
+        .post(`/api/billing/mpesa/callback?token=${shortToken}`)
+        .send(payload);
+      expect(resShort.status).toBe(401);
+      expect(resShort.body.error).toMatch(/invalid verification token/i);
+
+      const resLong = await request(app)
+        .post(`/api/billing/mpesa/callback?token=${longToken}`)
+        .send(payload);
+      expect(resLong.status).toBe(401);
+      expect(resLong.body.error).toMatch(/invalid verification token/i);
+    });
+
+    it('should reject callback with tampered token with 401', async () => {
+      const invoice = await SubscriptionInvoice.findOne({
+        where: { paymentReference: MOCK_CHECKOUT_ID }
+      });
+      const validToken = invoice.metadata?.callbackToken;
+      const tamperedToken = validToken.slice(0, 10) + 'X' + validToken.slice(11);
+
+      const payload = {
+        Body: {
+          stkCallback: {
+            CheckoutRequestID: MOCK_CHECKOUT_ID,
+            ResultCode: 0,
+            CallbackMetadata: { Item: [] }
+          }
+        }
+      };
+
+      const res = await request(app)
+        .post(`/api/billing/mpesa/callback?token=${tamperedToken}`)
+        .send(payload);
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toMatch(/invalid verification token/i);
+    });
+
     it('should confirm invoice, extend subscription period, create ActivityLog, and invalidate Redis cache with valid token', async () => {
       // Warm up entitlement cache
       await entitlementService.canUseFeature(org.id, 'org_insights');
