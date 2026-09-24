@@ -152,5 +152,33 @@ describe('ImportProductsModal handleUpload endpoint & error handling', () => {
       expect(screen.getByText('Row 3: cost is missing; defaulted to 0')).toBeInTheDocument();
     });
   });
+
+  it('renders created categories line when createdCategories are returned in response', async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'Import completed. 2 products imported successfully.',
+        summary: { successful: 2, skipped: 0, errors: 0 },
+        successfulProducts: [
+          { name: 'Prod 1', sku: 'SKU001' },
+          { name: 'Prod 2', sku: 'SKU002' },
+        ],
+        errors: [],
+        warnings: [],
+        createdCategories: ['Electronics', 'Home Appliances'],
+      },
+    });
+
+    render(<ImportProductsModal onClose={jest.fn()} />);
+    const file = new File(['name,price,category\nProd 1,100,Electronics\nProd 2,200,Home Appliances'], 'products.csv', { type: 'text/csv' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole('button', { name: /import products/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('2 categories created: Electronics, Home Appliances')).toBeInTheDocument();
+    });
+  });
 });
 

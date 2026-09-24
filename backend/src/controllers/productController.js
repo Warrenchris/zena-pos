@@ -990,6 +990,7 @@ exports.importProducts = async (req, res) => {
     const warnings = [];
     const successfulProducts = [];
     const skippedProducts = [];
+    const createdCategories = [];
 
     // Get settings for defaults
     const settings = await SystemSettings.findOne({ where: { shopId } });
@@ -1016,7 +1017,7 @@ exports.importProducts = async (req, res) => {
       where: categoryWhere,
       attributes: ['id', 'name']
     });
-    const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]));
+    const categoryMap = new Map(categories.map(c => [c.name.toLowerCase().trim(), c.id]));
 
     for (let i = 0; i < products.length; i++) {
       const row = products[i];
@@ -1111,16 +1112,62 @@ exports.importProducts = async (req, res) => {
           continue;
         }
 
-        // Handle category
+        // Handle category (auto-create missing categories up to 50 cap)
         let categoryId = null;
         if (categoryName) {
-          const catId = categoryMap.get(String(categoryName).toLowerCase().trim());
-          if (catId) {
-            categoryId = catId;
+          const trimmedCatName = String(categoryName).trim();
+          const catKey = trimmedCatName.toLowerCase();
+          const existingCatId = categoryMap.get(catKey);
+
+          if (existingCatId) {
+            categoryId = existingCatId;
           } else {
-            errors.push({ row: rowNumber, field: 'category', message: `Category "${categoryName}" not found` });
-            skippedProducts.push(row);
-            continue;
+            if (createdCategories.length >= 50) {
+              errors.push({ row: rowNumber, field: 'category', message: 'too many new categories; create them first' });
+              skippedProducts.push(row);
+              continue;
+            }
+
+            try {
+              let catShopId = shopId;
+              if (!catShopId && organizationId) {
+                const defaultShop = await Shop.findOne({ where: { organizationId, active: true }, attributes: ['id'] });
+                catShopId = defaultShop?.id;
+              }
+
+              const [newCategory, wasCreated] = await Category.findOrCreate({
+                where: {
+                  name: trimmedCatName,
+                  ...(organizationId ? { organizationId } : { shopId: catShopId })
+                },
+                defaults: {
+                  name: trimmedCatName,
+                  shopId: catShopId,
+                  organizationId
+                }
+              });
+
+              categoryId = newCategory.id;
+              categoryMap.set(catKey, newCategory.id);
+              if (wasCreated && !createdCategories.includes(newCategory.name)) {
+                createdCategories.push(newCategory.name);
+              }
+            } catch (catErr) {
+              const existing = await Category.findOne({
+                where: {
+                  name: trimmedCatName,
+                  ...(organizationId ? { organizationId } : { shopId: catShopId })
+                }
+              });
+              if (existing) {
+                categoryId = existing.id;
+                categoryMap.set(catKey, existing.id);
+              } else {
+                errors.push({ row: rowNumber, field: 'category', message: `Failed to create category "${trimmedCatName}": ${catErr.message}` });
+                skippedProducts.push(row);
+                continue;
+              }
+            }
           }
         }
 
@@ -1179,9 +1226,14 @@ exports.importProducts = async (req, res) => {
       await invalidateShopProductCache(shopId);
     }
 
+    const isSuccess = successfulProducts.length > 0;
+    const message = isSuccess
+      ? `Import completed. ${successfulProducts.length} products imported successfully.`
+      : `0 products imported, ${skippedProducts.length} rows skipped. See errors below.`;
+
     res.json({
-      success: true,
-      message: `Import completed. ${successfulProducts.length} products imported successfully.`,
+      success: isSuccess,
+      message,
       summary: {
         total: products.length,
         successful: successfulProducts.length,
@@ -1191,7 +1243,8 @@ exports.importProducts = async (req, res) => {
       },
       successfulProducts,
       errors,
-      warnings
+      warnings,
+      createdCategories
     });
 
   } catch (error) {
