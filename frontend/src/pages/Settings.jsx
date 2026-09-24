@@ -920,6 +920,49 @@ const Settings = () => {
           This tax rate will be automatically applied to net order subtotals in the POS checkout modal.
         </p>
       </div>
+
+      <div>
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
+          Max Refund Without Manager Approval ({formData.currencySymbol || 'KSh'})
+        </label>
+        <input
+          type="number"
+          step="1"
+          min="0"
+          value={formData.maxUnapprovedRefundAmount !== undefined && formData.maxUnapprovedRefundAmount !== null ? formData.maxUnapprovedRefundAmount : 5000}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            handleInputChange('maxUnapprovedRefundAmount', Number.isNaN(v) ? 0 : v);
+          }}
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+          placeholder="e.g. 5000"
+        />
+        <p className="text-caption text-text-muted mt-1">
+          Refunds above this amount require a manager to approve the transaction.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-small font-semibold text-text-primary mb-1.5">
+          Return Window (days)
+        </label>
+        <input
+          type="number"
+          step="1"
+          min="0"
+          max="3650"
+          value={formData.returnWindowDays !== undefined && formData.returnWindowDays !== null ? formData.returnWindowDays : 30}
+          onChange={(e) => {
+            const v = parseInt(e.target.value, 10);
+            handleInputChange('returnWindowDays', Number.isNaN(v) ? 0 : v);
+          }}
+          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+          placeholder="e.g. 30"
+        />
+        <p className="text-caption text-text-muted mt-1">
+          Customers may return goods within this many days of purchase.
+        </p>
+      </div>
     </div>
   );
 

@@ -42,6 +42,20 @@ const initialState = {
   allowUserRegistration: false,
   requireEmailVerification: true,
 
+  // POS / payment / inventory / refund settings (match getDefaultSettings())
+  taxRate: 0,
+  printerType: 'browser',
+  printerIP: null,
+  paybillNumber: null,
+  tillNumber: null,
+  enabledPaymentMethods: { cash: true, mobile: true, bank: false },
+  lowStockThreshold: 10,
+  skuPrefix: 'SKU',
+  barcodeFormat: 'EAN13',
+  aiDigestFrequency: 'weekly',
+  maxUnapprovedRefundAmount: 5000,
+  returnWindowDays: 30,
+
   // Additional Settings
   additionalSettings: {},
 
@@ -116,7 +130,7 @@ export const SETTINGS_ALLOWED_FIELDS = [
   'allowUserRegistration',
   'requireEmailVerification',
   'additionalSettings',
-  // POS / payment / inventory fields added after original whitelist was written
+  // POS / payment / inventory / refund fields added after original whitelist was written
   'taxRate',
   'printerType',
   'printerIP',
@@ -130,6 +144,7 @@ export const SETTINGS_ALLOWED_FIELDS = [
   'skuPrefix',
   'barcodeFormat',
   'aiDigestFrequency',
+  'maxUnapprovedRefundAmount',
 ];
 
 // Helper to clean settings data before sending to API
