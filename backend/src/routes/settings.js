@@ -154,7 +154,9 @@ const settingsValidation = [
   body('lowStockThreshold').optional().isInt({ min: 0, max: 10000 }).withMessage('Low stock threshold must be a non-negative integer'),
   body('skuPrefix').optional().isString().isLength({ min: 1, max: 20 }),
   body('barcodeFormat').optional().isIn(['EAN13', 'UPC', 'CODE128']),
-  body('aiDigestFrequency').optional().isIn(['none', 'daily', 'weekly'])
+  body('aiDigestFrequency').optional().isIn(['none', 'daily', 'weekly']),
+  body('maxUnapprovedRefundAmount').optional().isFloat({ min: 0 }),
+  body('returnWindowDays').optional().isInt({ min: 0, max: 3650 })
 ];
 
 // All routes require authentication

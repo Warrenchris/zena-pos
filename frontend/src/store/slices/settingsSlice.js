@@ -115,7 +115,21 @@ const cleanSettingsData = (data) => {
     'backupRetentionDays',
     'allowUserRegistration',
     'requireEmailVerification',
-    'additionalSettings'
+    'additionalSettings',
+    // POS / payment / inventory fields added after original whitelist was written
+    'taxRate',
+    'printerType',
+    'printerIP',
+    'paybillNumber',
+    'tillNumber',
+    'consumerKey',
+    'consumerSecret',
+    'passkey',
+    'enabledPaymentMethods',
+    'lowStockThreshold',
+    'skuPrefix',
+    'barcodeFormat',
+    'aiDigestFrequency'
   ];
 
   // Only include allowed fields

@@ -77,10 +77,18 @@ exports.updateSettings = async (req, res) => {
     console.log('Settings update request for shop', shopId, ':', redactedForLog);
 
     // Process and clean update data
+    // Build the allowlist dynamically from the model so it never drifts out of sync.
+    // Protected columns (id, shopId, timestamps) are always excluded regardless of what
+    // the client sends, so a manage_settings user cannot reassign rows to another shop.
+    const PROTECTED_KEYS = new Set(['id', 'shopId', 'createdAt', 'updatedAt']);
+    const modelFields = Object.keys(SystemSettings.rawAttributes).filter(
+      (k) => !PROTECTED_KEYS.has(k)
+    );
+
     const cleanData = {};
     Object.entries(updateData).forEach(([key, value]) => {
-      // Only include defined values, allowing explicit null
-      if (value !== undefined) {
+      // Only include model fields and defined values, allowing explicit null
+      if (modelFields.includes(key) && value !== undefined) {
         cleanData[key] = value;
       }
     });
