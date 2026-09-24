@@ -145,6 +145,7 @@ export const SETTINGS_ALLOWED_FIELDS = [
   'barcodeFormat',
   'aiDigestFrequency',
   'maxUnapprovedRefundAmount',
+  'returnWindowDays',
 ];
 
 // Helper to clean settings data before sending to API
