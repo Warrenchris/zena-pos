@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { XMarkIcon, DocumentArrowUpIcon, CheckCircleIcon, ExclamationCircleIcon, DocumentIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
 
-export default function ImportProductsModal({ onClose, onImportComplete }) {
+export default function ImportProductsModal({ onClose, onImportComplete, onImportError }) {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
@@ -49,14 +49,16 @@ export default function ImportProductsModal({ onClose, onImportComplete }) {
 
       setResult(response.data);
       if (onImportComplete) {
-        onImportComplete();
+        onImportComplete(response.data);
       }
     } catch (err) {
       console.error('Import error:', err);
       const fallback = err.response?.status
         ? `Failed to import products (HTTP ${err.response.status}). Please try again.`
         : 'Failed to import products. Please try again.';
-      setError(err.response?.data?.error || err.response?.data?.message || fallback);
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || fallback;
+      setError(errorMessage);
+      onImportError?.(errorMessage);
     } finally {
       setUploading(false);
     }

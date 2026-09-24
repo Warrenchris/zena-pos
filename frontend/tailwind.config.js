@@ -1,3 +1,12 @@
+function withOpacity(variableName) {
+  return ({ opacityValue }) => {
+    if (opacityValue !== undefined) {
+      return `color-mix(in srgb, var(${variableName}) calc(${opacityValue} * 100%), transparent)`;
+    }
+    return `var(${variableName})`;
+  };
+}
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
@@ -20,81 +29,81 @@ module.exports = {
          Floating Shell Architecture & Dual Theme System
          ────────────────────────────────────────────── */
       colors: {
-        app: 'var(--bg-app)',
+        app: withOpacity('--bg-app'),
 
         surface: {
-          DEFAULT: 'var(--bg-surface)',
-          0: 'var(--bg-app)',
-          1: 'var(--bg-surface)',
-          2: 'var(--bg-surface-2)',
-          3: 'var(--bg-surface-3)',
+          DEFAULT: withOpacity('--bg-surface'),
+          0: withOpacity('--bg-app'),
+          1: withOpacity('--bg-surface'),
+          2: withOpacity('--bg-surface-2'),
+          3: withOpacity('--bg-surface-3'),
         },
 
         // Warm Mocha / Amber Primary System
         primary: {
-          DEFAULT: 'var(--color-primary)',
-          hover:   'var(--color-primary-hover)',
-          active:  'var(--color-primary-active)',
-          light:   'var(--color-primary-light)',
-          tint:    'var(--color-primary-tint)',
+          DEFAULT: withOpacity('--color-primary'),
+          hover:   withOpacity('--color-primary-hover'),
+          active:  withOpacity('--color-primary-active'),
+          light:   withOpacity('--color-primary-light'),
+          tint:    withOpacity('--color-primary-tint'),
         },
 
         success: {
           DEFAULT: '#10B981',
-          muted:   'var(--color-success-muted)',
-          border:  'var(--color-success-border)',
-          text:    'var(--color-success-text)',
+          muted:   withOpacity('--color-success-muted'),
+          border:  withOpacity('--color-success-border'),
+          text:    withOpacity('--color-success-text'),
         },
         warning: {
           DEFAULT: '#F59E0B',
-          muted:   'var(--color-warning-muted)',
-          border:  'var(--color-warning-border)',
-          text:    'var(--color-warning-text)',
+          muted:   withOpacity('--color-warning-muted'),
+          border:  withOpacity('--color-warning-border'),
+          text:    withOpacity('--color-warning-text'),
         },
         danger: {
           DEFAULT: '#EF4444',
-          muted:   'var(--color-danger-muted)',
-          border:  'var(--color-danger-border)',
-          text:    'var(--color-danger-text)',
+          muted:   withOpacity('--color-danger-muted'),
+          border:  withOpacity('--color-danger-border'),
+          text:    withOpacity('--color-danger-text'),
         },
         info: {
           DEFAULT: '#0EA5E9',
-          muted:   'var(--color-info-muted)',
-          border:  'var(--color-info-border)',
-          text:    'var(--color-info-text)',
+          muted:   withOpacity('--color-info-muted'),
+          border:  withOpacity('--color-info-border'),
+          text:    withOpacity('--color-info-text'),
         },
 
         // Typography Hierarchy Tokens
-        'text-primary':   'var(--text-primary)',
-        'text-secondary': 'var(--text-secondary)',
-        'text-muted':     'var(--text-muted)',
-        'text-disabled':  'var(--text-disabled)',
+        'text-primary':   withOpacity('--text-primary'),
+        'text-secondary': withOpacity('--text-secondary'),
+        'text-muted':     withOpacity('--text-muted'),
+        'text-disabled':  withOpacity('--text-disabled'),
 
         // Borders
-        'border-default': 'var(--border-default)',
-        'border-hover':   'var(--border-hover)',
-        'border-focus':   'var(--color-primary)',
+        'border-default': withOpacity('--border-default'),
+        'border-hover':   withOpacity('--border-hover'),
+        'border-focus':   withOpacity('--color-primary'),
 
         /* Legacy Brand Aliases mapped to semantic variables for zero breakage */
         brand: {
-          black:      'var(--bg-surface)',
-          darkGray:   'var(--bg-surface-2)',
-          gray:       'var(--bg-surface-2)',
-          text:       'var(--text-primary)',
-          yellow:     'var(--color-primary)',
-          yellowDark: 'var(--color-primary-hover)',
-          accent:     'var(--color-primary-light)',
-          blue:       'var(--color-primary)',
+          black:      withOpacity('--bg-surface'),
+          darkGray:   withOpacity('--bg-surface-2'),
+          gray:       withOpacity('--bg-surface-2'),
+          text:       withOpacity('--text-primary'),
+          yellow:     withOpacity('--color-primary'),
+          yellowDark: withOpacity('--color-primary-hover'),
+          accent:     withOpacity('--color-primary-light'),
+          blue:       withOpacity('--color-primary'),
           green:      '#10B981',
           amber:      '#F59E0B',
           cyan:       '#0EA5E9',
           red:        '#EF4444',
         },
         zana: {
-          yellow:     'var(--color-primary)',
-          yellowDark: 'var(--color-primary-hover)',
-          borderTint: 'var(--border-default)',
-          blue:       'var(--color-primary)',
+          yellow:     withOpacity('--color-primary'),
+          yellowDark: withOpacity('--color-primary-hover'),
+          borderTint: withOpacity('--border-default'),
+          blue:       withOpacity('--color-primary'),
           green:      '#10B981',
           amber:      '#F59E0B',
           cyan:       '#0EA5E9',

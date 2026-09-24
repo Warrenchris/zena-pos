@@ -67,7 +67,7 @@ const TopNavBar = ({ onMenuClick, className = '', isSidebarOpen }) => {
               id="global-search"
               type="search"
               placeholder="Search products, sales, customers (Press ⌘K)..."
-              className="block w-full rounded-xl border border-border-default bg-surface-2/50 py-2 pl-10 pr-12 text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-surface transition-all duration-150"
+              className="block w-full rounded-xl border border-border-default bg-surface-2 py-2 pl-10 pr-12 text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
               <kbd className="inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono text-text-muted bg-surface border border-border-default rounded-md shadow-2xs">

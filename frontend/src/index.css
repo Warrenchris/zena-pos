@@ -62,9 +62,11 @@
   --container-max-width-wide: min(1440px, 94vw);
   --layout-padding-inline: clamp(1rem, 2vw, 2.5rem);
   --layout-padding-inline-wide: clamp(1.5rem, 3.5vw, 3.5rem);
+  color-scheme: light;
 }
 
 .dark {
+  color-scheme: dark;
   /* Canvas & Surface (Dark Warm Charcoal / Obsidian) */
   --bg-app: #12100E;               /* Warm Obsidian Canvas */
   --bg-surface: #1C1917;           /* Warm Stone 900 Card Surface */
@@ -136,6 +138,19 @@
     color: var(--text-primary);
     font-weight: 600;
     letter-spacing: -0.015em;
+  }
+
+  input, select, textarea {
+    color: var(--text-primary);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  option {
+    background-color: var(--bg-surface-2);
+    color: var(--text-primary);
   }
 }
 
