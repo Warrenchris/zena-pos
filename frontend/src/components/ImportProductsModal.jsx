@@ -225,14 +225,33 @@ export default function ImportProductsModal({ onClose, onImportComplete }) {
                   </div>
                 </div>
 
-                {/* Success Message */}
-                <div className="flex items-start gap-3 p-4 bg-success/10 border border-success/30 rounded-xl">
-                  <CheckCircleIcon className="h-5 w-5 text-success flex-shrink-0 mt-0.5" />
+                {/* Result Message */}
+                <div className={`flex items-start gap-3 p-4 rounded-xl ${
+                  result.success 
+                    ? 'bg-success/10 border border-success/30' 
+                    : 'bg-danger/10 border border-danger/30'
+                }`}>
+                  {result.success ? (
+                    <CheckCircleIcon className="h-5 w-5 text-success flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <ExclamationCircleIcon className="h-5 w-5 text-danger flex-shrink-0 mt-0.5" />
+                  )}
                   <div>
-                    <p className="text-small font-medium text-success">Import Completed</p>
-                    <p className="text-caption text-success/80 mt-1">{result.message}</p>
+                    <p className={`text-small font-medium ${result.success ? 'text-success' : 'text-danger'}`}>
+                      {result.success ? 'Import Completed' : 'Import Failed'}
+                    </p>
+                    <p className={`text-caption mt-1 ${result.success ? 'text-success/80' : 'text-danger/80'}`}>{result.message}</p>
                   </div>
                 </div>
+
+                {/* Created Categories (if any) */}
+                {result.createdCategories && result.createdCategories.length > 0 && (
+                  <div className="p-4 bg-warning/10 border border-warning/30 rounded-xl">
+                    <p className="text-small font-medium text-warning">
+                      {result.createdCategories.length} categories created: {result.createdCategories.join(', ')}
+                    </p>
+                  </div>
+                )}
 
                 {/* Warnings (if any) */}
                 {result.warnings && result.warnings.length > 0 && (

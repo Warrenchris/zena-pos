@@ -511,6 +511,148 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
       expect(responseStatus).toBe(400);
       expect(responseBody).toEqual({ error: 'Tenant context required' });
     });
+
+    test('3.8: Auto-creates missing category and assigns it to the imported product', async () => {
+      const ts = Date.now();
+      const newCatName = `AutoCreatedCat ${ts}`;
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['Product Name', 'Price (KES)', 'Category']);
+      worksheet.addRow([`AutoCat Prod ${ts}`, 450.00, newCatName]);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', Buffer.from(buffer), 'autocat.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.summary.successful).toBe(1);
+      expect(res.body.createdCategories).toContain(newCatName);
+
+      const dbCategory = await Category.findOne({
+        where: { name: newCatName, organizationId: orgA.id }
+      });
+      expect(dbCategory).not.toBeNull();
+
+      const dbProduct = await Product.findOne({
+        where: { name: `AutoCat Prod ${ts}`, organizationId: orgA.id }
+      });
+      expect(dbProduct).not.toBeNull();
+      expect(dbProduct.categoryId).toBe(dbCategory.id);
+
+      // Clean up
+      await Product.destroy({ where: { id: dbProduct.id } });
+      await Category.destroy({ where: { id: dbCategory.id } });
+    });
+
+    test('3.9: Reuses auto-created category across subsequent rows without duplicate creation', async () => {
+      const ts = Date.now();
+      const sharedCatName = `SharedAutoCat ${ts}`;
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['Product Name', 'Price (KES)', 'Category']);
+      worksheet.addRow([`Shared Prod 1 ${ts}`, 120.00, sharedCatName]);
+      worksheet.addRow([`Shared Prod 2 ${ts}`, 240.00, sharedCatName]);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', Buffer.from(buffer), 'shared_cat.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.summary.successful).toBe(2);
+      expect(res.body.createdCategories).toEqual([sharedCatName]);
+
+      const catCount = await Category.count({
+        where: { name: sharedCatName, organizationId: orgA.id }
+      });
+      expect(catCount).toBe(1);
+
+      const dbCategory = await Category.findOne({
+        where: { name: sharedCatName, organizationId: orgA.id }
+      });
+
+      const prods = await Product.findAll({
+        where: { organizationId: orgA.id, name: [`Shared Prod 1 ${ts}`, `Shared Prod 2 ${ts}`] }
+      });
+      expect(prods.length).toBe(2);
+      expect(prods[0].categoryId).toBe(dbCategory.id);
+      expect(prods[1].categoryId).toBe(dbCategory.id);
+
+      // Clean up
+      await Product.destroy({ where: { organizationId: orgA.id, name: [`Shared Prod 1 ${ts}`, `Shared Prod 2 ${ts}`] } });
+      await Category.destroy({ where: { id: dbCategory.id } });
+    });
+
+    test('3.10: Enforces 50 new category auto-creation cap and skips excess with clear error', async () => {
+      const ts = Date.now();
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['Product Name', 'Price (KES)', 'Category']);
+
+      for (let i = 1; i <= 52; i++) {
+        const catName = `CapCat_${ts}_${i}`;
+        worksheet.addRow([`CapProd_${ts}_${i}`, 50 + i, catName]);
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', Buffer.from(buffer), 'cap_test.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.summary.successful).toBe(50);
+      expect(res.body.summary.skipped).toBe(2);
+      expect(res.body.createdCategories.length).toBe(50);
+
+      const excessErrors = res.body.errors.filter(e => e.message === 'too many new categories; create them first');
+      expect(excessErrors.length).toBe(2);
+
+      // Clean up created products and categories
+      await Product.destroy({
+        where: {
+          organizationId: orgA.id,
+          name: { [sequelize.Sequelize.Op.like]: `CapProd_${ts}_%` }
+        }
+      });
+      await Category.destroy({
+        where: {
+          organizationId: orgA.id,
+          name: { [sequelize.Sequelize.Op.like]: `CapCat_${ts}_%` }
+        }
+      });
+    }, 60000);
+
+    test('3.11: Returns success:false and specific summary message when 0 products are imported', async () => {
+      const ts = Date.now();
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['Product Name', 'Price (KES)']);
+      worksheet.addRow(['', 100]); // missing name
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', Buffer.from(buffer), 'zero_success.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toBe('0 products imported, 1 rows skipped. See errors below.');
+      expect(res.body.summary.successful).toBe(0);
+      expect(res.body.summary.skipped).toBe(1);
+    });
   });
 
   // =========================================================================
