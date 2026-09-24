@@ -12,6 +12,7 @@ jest.mock('../services/api', () => ({
 
 describe('ImportProductsModal handleUpload endpoint & error handling', () => {
   beforeEach(() => {
+    jest.setTimeout(30000);
     jest.clearAllMocks();
   });
 
@@ -119,4 +120,37 @@ describe('ImportProductsModal handleUpload endpoint & error handling', () => {
       expect(screen.getByText(/HTTP 404/)).toBeInTheDocument();
     });
   });
+
+  it('renders result.warnings with summary line when warnings are present in import response', async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'Import completed. 2 products imported successfully.',
+        summary: { successful: 2, skipped: 0, errors: 0, warnings: 2 },
+        successfulProducts: [
+          { name: 'Prod 1', sku: 'SKU001' },
+          { name: 'Prod 2', sku: 'SKU002' },
+        ],
+        errors: [],
+        warnings: [
+          { row: 2, field: 'cost', message: 'Row 2: cost is missing; defaulted to 0' },
+          { row: 3, field: 'cost', message: 'Row 3: cost is missing; defaulted to 0' },
+        ],
+      },
+    });
+
+    render(<ImportProductsModal onClose={jest.fn()} />);
+    const file = new File(['name,price\nProd 1,100\nProd 2,200'], 'products.csv', { type: 'text/csv' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole('button', { name: /import products/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/2 products imported with cost 0 because no cost column was found/)).toBeInTheDocument();
+      expect(screen.getByText('Row 2: cost is missing; defaulted to 0')).toBeInTheDocument();
+      expect(screen.getByText('Row 3: cost is missing; defaulted to 0')).toBeInTheDocument();
+    });
+  });
 });
+

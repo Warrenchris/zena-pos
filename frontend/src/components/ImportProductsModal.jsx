@@ -234,6 +234,23 @@ export default function ImportProductsModal({ onClose, onImportComplete }) {
                   </div>
                 </div>
 
+                {/* Warnings (if any) */}
+                {result.warnings && result.warnings.length > 0 && (
+                  <div className="p-4 bg-warning/10 border border-warning/30 rounded-xl max-h-48 overflow-y-auto">
+                    <p className="text-small font-medium text-warning mb-2">
+                      {result.warnings.length} {result.warnings.length === 1 ? 'product' : 'products'} imported with cost 0 because no cost column was found
+                    </p>
+                    <div className="space-y-1">
+                      {result.warnings.map((warn, index) => (
+                        <div key={index} className="flex items-start gap-2 text-caption">
+                          <span className="text-warning font-medium">Row {warn.row}:</span>
+                          <span className="text-text-muted">{warn.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Errors (if any) */}
                 {result.errors && result.errors.length > 0 && (
                   <div className="p-4 bg-surface-2 rounded-xl max-h-48 overflow-y-auto">

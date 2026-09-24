@@ -914,6 +914,13 @@ exports.importProducts = async (req, res) => {
       organizationId = shop?.organizationId;
     }
 
+    if (!organizationId && !shopId) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(400).json({ error: 'Tenant context required' });
+    }
+
     const filePath = req.file.path;
     const fileExt = path.extname(req.file.originalname).toLowerCase();
 

@@ -43,3 +43,9 @@ backend/backups/
 backups/
 *.dump
 
+# Test debris
+backend/tests/corrupt_*.xlsx
+backend/tests/script_*.txt
+backend/tests/test_import_*.csv
+backend/tests/test_import_*.xlsx
+
