@@ -325,6 +325,8 @@ SystemSettings.getDefaultSettings = function() {
     skuPrefix: 'SKU',
     barcodeFormat: 'EAN13',
     aiDigestFrequency: 'weekly',
+    maxUnapprovedRefundAmount: 5000.00,
+    returnWindowDays: 30,
     additionalSettings: {}
   };
 };
