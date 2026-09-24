@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 /**
  * Settings controller allowlist and persistence tests.
@@ -170,4 +170,41 @@ describe('Settings allowlist & persistence', () => {
     // taxRate is a legitimate field — it must NOT be in ignoredFields
     expect(res.body.ignoredFields).not.toContain('taxRate');
   });
+
+  // -------------------------------------------------------------------
+  it('redacts consumerKey in ActivityLog metadata but still records it in updatedFields', async () => {
+    const plainSecret = 'test-consumer-key-plain-12345';
+    const res = await request(app)
+      .put('/api/settings')
+      .set('Authorization', adminToken)
+      .send({ consumerKey: plainSecret, taxRate: 9 });
+
+    expect(res.status).toBe(200);
+
+    // Fetch the most recent ActivityLog row for this shop
+    const log = await ActivityLog.findOne({
+      where: { shopId: SHOP_ID, action: 'settings_updated' },
+      order: [['createdAt', 'DESC']],
+    });
+    expect(log).not.toBeNull();
+
+    const { updatedFields, newValues, previousValues } = log.metadata;
+
+    // updatedFields must still include 'consumerKey' (WHICH fields changed)
+    expect(updatedFields).toContain('consumerKey');
+
+    // But the VALUE in newValues must be '[REDACTED]', not plaintext or encrypted
+    const row = await SystemSettings.findOne({ where: { shopId: SHOP_ID } });
+    const encryptedValue = row.consumerKey; // what was actually stored in DB
+    expect(newValues.consumerKey).toBe('[REDACTED]');
+    expect(newValues.consumerKey).not.toBe(plainSecret);
+    expect(newValues.consumerKey).not.toBe(encryptedValue);
+
+    // previousValues must also be redacted if it contained a secret
+    if (previousValues && previousValues.consumerKey != null) {
+      expect(previousValues.consumerKey).toBe('[REDACTED]');
+      expect(previousValues.consumerKey).not.toBe(encryptedValue);
+    }
+  });
 });
+

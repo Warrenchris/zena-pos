@@ -156,17 +156,28 @@ exports.updateSettings = async (req, res) => {
       await settings.update(cleanData);
     }
 
-    // 7. Log the activity
+    // 7. Log the activity — redact encrypted secret fields in copies so they
+    //    never reach the audit log. cleanData itself is NOT mutated here.
+    const SECRET_FIELDS = ['consumerKey', 'consumerSecret', 'passkey'];
+    const redactSecrets = (obj) => {
+      if (!obj) return obj;
+      const copy = { ...obj };
+      SECRET_FIELDS.forEach((k) => {
+        if (copy[k] != null) copy[k] = '[REDACTED]';
+      });
+      return copy;
+    };
+
     const { ActivityLog } = require('../models');
     await ActivityLog.create({
       shopId,
       userId: req.user.id,
       action: 'settings_updated',
       description: `Settings updated by ${req.user.name}`,
-      metadata: { 
+      metadata: {
         updatedFields: Object.keys(cleanData),
-        previousValues,
-        newValues: cleanData
+        previousValues: redactSecrets(previousValues),
+        newValues: redactSecrets(cleanData),
       }
     });
 

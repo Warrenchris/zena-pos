@@ -84,6 +84,8 @@ describe('settings slice with the API envelope', () => {
         skuPrefix: 'ZAN',
         barcodeFormat: 'CODE128',
         aiDigestFrequency: 'daily',
+        maxUnapprovedRefundAmount: 2500,
+        returnWindowDays: 14,
         __junkKey: 'should-be-dropped',
       })
     );
@@ -98,6 +100,8 @@ describe('settings slice with the API envelope', () => {
       skuPrefix: 'ZAN',
       barcodeFormat: 'CODE128',
       aiDigestFrequency: 'daily',
+      maxUnapprovedRefundAmount: 2500,
+      returnWindowDays: 14,
     });
     expect(sent).not.toHaveProperty('__junkKey');
   });
@@ -119,9 +123,9 @@ describe('cleanSettingsData drift guard', () => {
     'shopId',
     'createdAt',
     'updatedAt',
-    // Refund policy: read by saleController but no Settings page controls exist yet
-    'maxUnapprovedRefundAmount',
-    'returnWindowDays',
+    // No fields intentionally excluded as of this version — all editable fields
+    // have UI controls. Add entries here (with a comment) when a new model field
+    // should NOT be editable from the Settings page.
   ]);
 
   /**
