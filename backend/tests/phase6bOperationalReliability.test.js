@@ -399,6 +399,7 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
       const cat = await Category.create({
         name: `Import Cat ${ts}`,
         organizationId: orgA.id,
+        shopId: shopA1.id,
         active: true
       });
 
