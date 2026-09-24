@@ -980,6 +980,7 @@ exports.importProducts = async (req, res) => {
 
     // Validate and process products
     const errors = [];
+    const warnings = [];
     const successfulProducts = [];
     const skippedProducts = [];
 
@@ -1013,18 +1014,47 @@ exports.importProducts = async (req, res) => {
       const rowNumber = i + 2; // Excel row numbers start from 1, header is row 1
 
       try {
-        // Map column names (handle different naming conventions)
-        const name = row['name'] || row['Name'] || row['Product Name'] || row['product_name'];
-        const sku = row['sku'] || row['SKU'] || row['Sku'];
-        const barcode = row['barcode'] || row['Barcode'] || row['Bar Code'] || row['bar_code'];
-        const description = row['description'] || row['Description'] || row['desc'];
-        const price = row['price'] || row['Price'] || row['Selling Price'] || row['selling_price'];
-        const cost = row['cost'] || row['Cost'] || row['Cost Price'] || row['cost_price'];
-        const stockQuantity = row['stockQuantity'] || row['Stock Quantity'] || row['stock_quantity'] || row['quantity'];
-        const reorderPoint = row['reorderPoint'] || row['Reorder Point'] || row['reorder_point'];
-        const categoryName = row['category'] || row['Category'] || row['category_name'];
-        const weightGrams = row['weightGrams'] || row['Weight'] || row['weight_grams'];
-        const expirationDate = row['expirationDate'] || row['Expiration Date'] || row['expiration_date'];
+        const normaliseKey = (k) => String(k || '')
+          .toLowerCase()
+          .replace(/\(.*?\)/g, '')
+          .replace(/[^a-z0-9]/g, '');
+
+        const normaliseKeyRaw = (k) => String(k || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '');
+
+        const rowNorm = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (v === undefined || v === null || String(v).trim() === '') continue;
+          rowNorm[normaliseKey(k)] = v;
+          rowNorm[normaliseKeyRaw(k)] = v;
+        }
+
+        const getVal = (...aliases) => {
+          for (const alias of aliases) {
+            if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== '') {
+              return row[alias];
+            }
+            const norm = normaliseKey(alias);
+            if (rowNorm[norm] !== undefined) return rowNorm[norm];
+            const raw = normaliseKeyRaw(alias);
+            if (rowNorm[raw] !== undefined) return rowNorm[raw];
+          }
+          return undefined;
+        };
+
+        // Map column names (handle different naming conventions and normalized headers)
+        const name = getVal('name', 'Name', 'Product Name', 'product_name');
+        const sku = getVal('sku', 'SKU', 'Sku');
+        const barcode = getVal('barcode', 'Barcode', 'Bar Code', 'bar_code');
+        const description = getVal('description', 'Description', 'desc');
+        const price = getVal('price', 'Price', 'Selling Price', 'selling_price', 'unit price', 'selling price', 'Price (KES)');
+        const cost = getVal('cost', 'Cost', 'Cost Price', 'cost_price', 'buying price', 'unit cost');
+        const stockQuantity = getVal('stockQuantity', 'Stock Quantity', 'stock_quantity', 'quantity', 'qty', 'stock');
+        const reorderPoint = getVal('reorderPoint', 'Reorder Point', 'reorder_point');
+        const categoryName = getVal('category', 'Category', 'category_name');
+        const weightGrams = getVal('weightGrams', 'Weight', 'weight_grams');
+        const expirationDate = getVal('expirationDate', 'Expiration Date', 'expiration_date');
 
         // Validate required fields
         if (!name) {
@@ -1039,10 +1069,16 @@ exports.importProducts = async (req, res) => {
           continue;
         }
 
-        if (!cost || isNaN(parseFloat(cost))) {
+        let parsedCost = 0;
+        if (cost === undefined || cost === null || String(cost).trim() === '') {
+          parsedCost = 0;
+          warnings.push({ row: rowNumber, field: 'cost', message: `Row ${rowNumber}: cost is missing; defaulted to 0` });
+        } else if (isNaN(parseFloat(cost))) {
           errors.push({ row: rowNumber, field: 'cost', message: 'Valid cost is required' });
           skippedProducts.push(row);
           continue;
+        } else {
+          parsedCost = parseFloat(cost);
         }
 
         // Handle SKU
@@ -1086,7 +1122,7 @@ exports.importProducts = async (req, res) => {
           barcode: finalBarcode || null,
           description: description ? String(description).trim() : null,
           price: parseFloat(price),
-          cost: parseFloat(cost),
+          cost: parsedCost,
           categoryId: categoryId,
           CategoryId: categoryId,
           organizationId,
@@ -1141,10 +1177,12 @@ exports.importProducts = async (req, res) => {
         total: products.length,
         successful: successfulProducts.length,
         skipped: skippedProducts.length,
-        errors: errors.length
+        errors: errors.length,
+        warnings: warnings.length
       },
       successfulProducts,
-      errors
+      errors,
+      warnings
     });
 
   } catch (error) {
