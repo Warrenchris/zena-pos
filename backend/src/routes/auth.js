@@ -24,6 +24,7 @@ const registerLimiter = createDistributedRateLimiter({
   namespace: 'register',
   windowMs: 60 * 60 * 1000,
   max: 5,
+  skip: (req) => process.env.NODE_ENV === 'test' && !req.headers['x-forwarded-for'],
   message: { error: 'Too many registration attempts from this IP address. Please try again later.' },
   keyGenerator: (req) => getClientIp(req),
 });

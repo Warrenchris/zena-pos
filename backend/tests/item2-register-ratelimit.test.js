@@ -3,7 +3,7 @@ const app = require('../src/app');
 const { User, Shop, Organization, OrganizationMembership } = require('../src/models');
 
 describe('ITEM 2: Registration Rate-Limiter Keying (partial SEC-02 mitigation)', () => {
-  const simulatedIp = '198.51.100.42';
+  const simulatedIp = `198.51.100.${Math.floor(Math.random() * 200) + 10}`;
   const createdUserEmails = [];
 
   afterAll(async () => {

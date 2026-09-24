@@ -6,6 +6,7 @@ const {
   Shop, Category, Product, Inventory, Sale, SaleItem, SaleRefund, SalePayment,
   User, SystemSettings
 } = require('../src/models');
+const tokenRevocationService = require('../src/services/tokenRevocationService');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
@@ -88,6 +89,34 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
     adminToken = tokenFor({ id: adminUser.id, role: 'admin', shopId: 1 });
     managerToken = tokenFor({ id: managerUser.id, role: 'manager', shopId: 1 });
     cashierToken = tokenFor({ id: 999, role: 'manager', shopId: 1 }); // Role manager to allow process_refunds check
+
+    await User.findOrCreate({
+      where: { id: 888 },
+      defaults: {
+        name: 'Refund Cashier 888',
+        email: 'cashier888_test_refund@example.com',
+        role: 'cashier',
+        shopId: 1,
+        password: 'password123'
+      }
+    });
+
+    await User.findOrCreate({
+      where: { id: 999 },
+      defaults: {
+        name: 'Refund Manager 999',
+        email: 'manager999_test_refund@example.com',
+        role: 'manager',
+        shopId: 1,
+        password: 'password123'
+      }
+    });
+
+    for (const uid of [adminUser.id, managerUser.id, 888, 999]) {
+      await tokenRevocationService.clearUserStatus(uid, false);
+      await tokenRevocationService.setUserStatus(uid, false, 'active');
+      await tokenRevocationService.clearUserTokenCutoff(uid, false);
+    }
   });
 
   // TEST R.1: Discounted Unit Refund

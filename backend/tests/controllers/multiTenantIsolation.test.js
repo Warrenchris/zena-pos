@@ -2,7 +2,8 @@ const request = require('supertest');
 const { Op } = require('sequelize');
 const app = require('../../src/app');
 const sequelize = require('../../src/config/database');
-const { Shop, Sale, SaleItem, SalePayment, SaleRefund, Expense } = require('../../src/models');
+const { Shop, Sale, SaleItem, SalePayment, SaleRefund, Expense, User } = require('../../src/models');
+const tokenRevocationService = require('../../src/services/tokenRevocationService');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -54,6 +55,34 @@ describe('Multi-tenant isolation', () => {
         active: true
       }
     });
+
+    await User.findOrCreate({
+      where: { id: 101 },
+      defaults: {
+        name: 'Admin Alpha',
+        email: 'admin_alpha@example.com',
+        role: 'admin',
+        shopId: 1,
+        password: 'Password123!'
+      }
+    });
+
+    await User.findOrCreate({
+      where: { id: 202 },
+      defaults: {
+        name: 'Admin Beta',
+        email: 'admin_beta@example.com',
+        role: 'admin',
+        shopId: 2,
+        password: 'Password123!'
+      }
+    });
+
+    for (const uid of [101, 202]) {
+      await tokenRevocationService.clearUserStatus(uid, false);
+      await tokenRevocationService.setUserStatus(uid, false, 'active');
+      await tokenRevocationService.clearUserTokenCutoff(uid, false);
+    }
   }, 30000);
 
   afterEach(async () => {
