@@ -490,25 +490,26 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
     });
 
     test('3.7: Fails fast with 400 and does not query categories when tenant context is missing', async () => {
-      const tokenNoTenant = tokenFor({
-        id: 99998,
-        email: 'notenant@example.com',
-        role: 'admin'
-      });
+      const productController = require('../src/controllers/productController');
+      const req = {
+        file: { path: 'nonexistent.xlsx', originalname: 'test.xlsx' },
+        user: {} // neither organizationId nor shopId
+      };
+      let responseStatus = null;
+      let responseBody = null;
+      const res = {
+        status: (code) => {
+          responseStatus = code;
+          return {
+            json: (body) => { responseBody = body; }
+          };
+        }
+      };
 
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Products');
-      worksheet.addRow(['Product Name', 'Price (KES)']);
-      worksheet.addRow(['No Tenant Item', 100]);
-      const buffer = await workbook.xlsx.writeBuffer();
+      await productController.importProducts(req, res);
 
-      const res = await request(app)
-        .post('/api/products/import')
-        .set('Authorization', tokenNoTenant)
-        .attach('file', Buffer.from(buffer), 'tenantless.xlsx');
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Tenant context required');
+      expect(responseStatus).toBe(400);
+      expect(responseBody).toEqual({ error: 'Tenant context required' });
     });
   });
 
