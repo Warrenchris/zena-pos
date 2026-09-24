@@ -1,0 +1,128 @@
+diff --git a/backend/src/app.js b/backend/src/app.js
+index 9026190..0125bf2 100644
+--- a/backend/src/app.js
++++ b/backend/src/app.js
+@@ -91,7 +91,10 @@ const requestLogger = require('./middleware/requestLogger');
+ app.use(helmet());
+ const allowedOrigins = process.env.ALLOWED_ORIGINS
+   ? process.env.ALLOWED_ORIGINS.split(',')
+-  : [process.env.FRONTEND_URL || 'http://localhost:5173'];
++  // https://localhost is the Android app's origin (Capacitor). Included in the dev-mode fallback
++  // so the app works out of the box; a deployment that sets ALLOWED_ORIGINS explicitly must add
++  // it itself (documented in mobile/README.md).
++  : [process.env.FRONTEND_URL || 'http://localhost:5173', 'https://localhost'];
+ 
+ app.use(cors({
+   origin: allowedOrigins,
+@@ -126,6 +129,15 @@ const uploadsDir = path.join(__dirname, '../uploads');
+ if (!fs.existsSync(uploadsDir)) {
+   fs.mkdirSync(uploadsDir, { recursive: true });
+ }
++app.use('/uploads', express.static(uploadsDir, {
++  setHeaders: (res) => {
++    // Uploads (e.g. the receipt logo) are loaded via <img> tags from other origins - the web
++    // app's own domain when hosted separately from the API, and the Android app running from
++    // https://localhost - so this route needs helmet's default same-origin resource policy
++    // relaxed. Everything else on the site keeps helmet's defaults untouched.
++    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
++  },
++}));
+ // Root healthcheck route for load balancers / Render
+ app.get('/', (req, res) => {
+   res.status(200).json({ status: 'OK', message: 'Zana Backend API is running' });
+diff --git a/backend/tests/corsAndUploads.test.js b/backend/tests/corsAndUploads.test.js
+new file mode 100644
+index 0000000..0a1416a
+--- /dev/null
++++ b/backend/tests/corsAndUploads.test.js
+@@ -0,0 +1,90 @@
++'use strict';
++
++/**
++ * These check pure middleware behaviour (CORS preflight, static file serving) and need no
++ * database, unlike most of this suite.
++ */
++
++const request = require('supertest');
++const fs = require('fs');
++const path = require('path');
++
++describe('CORS', () => {
++  const app = require('../src/app');
++
++  it('allows the Idempotency-Key header the frontend sends on sales/payments', async () => {
++    const res = await request(app)
++      .options('/api/sales')
++      .set('Origin', 'http://localhost:5173')
++      .set('Access-Control-Request-Method', 'POST')
++      .set('Access-Control-Request-Headers', 'content-type,authorization,idempotency-key');
++
++    expect(res.status).toBe(204);
++    expect(res.headers['access-control-allow-headers']).toContain('Idempotency-Key');
++  });
++
++  it('allows the Android app origin (https://localhost) by default', async () => {
++    const res = await request(app)
++      .options('/api/sales')
++      .set('Origin', 'https://localhost')
++      .set('Access-Control-Request-Method', 'POST')
++      .set('Access-Control-Request-Headers', 'content-type');
++
++    expect(res.status).toBe(204);
++    expect(res.headers['access-control-allow-origin']).toBe('https://localhost');
++  });
++
++  it('does not allow an arbitrary origin', async () => {
++    const res = await request(app)
++      .options('/api/sales')
++      .set('Origin', 'https://evil.example.com')
++      .set('Access-Control-Request-Method', 'POST');
++
++    expect(res.headers['access-control-allow-origin']).toBeUndefined();
++  });
++});
++
++describe('static uploads', () => {
++  const uploadsDir = path.join(__dirname, '../uploads/logos');
++  const filename = `test-logo-${Date.now()}.png`;
++  const filePath = path.join(uploadsDir, filename);
++  // A 1x1 transparent PNG, so this test writes and reads a real (tiny) image file.
++  const onePixelPng = Buffer.from(
++    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
++    'base64'
++  );
++
++  let app;
++
++  beforeAll(() => {
++    fs.mkdirSync(uploadsDir, { recursive: true });
++    fs.writeFileSync(filePath, onePixelPng);
++    app = require('../src/app');
++  });
++
++  afterAll(() => {
++    fs.rmSync(filePath, { force: true });
++  });
++
++  it('serves a file placed under uploads/, at the path the logo upload endpoint returns', async () => {
++    const res = await request(app).get(`/uploads/logos/${filename}`);
++    expect(res.status).toBe(200);
++    expect(res.headers['content-type']).toMatch(/^image\/png/);
++    expect(Buffer.compare(res.body, onePixelPng)).toBe(0);
++  });
++
++  it('sets Cross-Origin-Resource-Policy so an <img> on another origin (or the Android app) can load it', async () => {
++    const res = await request(app).get(`/uploads/logos/${filename}`);
++    expect(res.headers['cross-origin-resource-policy']).toBe('cross-origin');
++  });
++
++  it('answers 404 for a file that does not exist, without leaking a stack trace', async () => {
++    const res = await request(app).get('/uploads/logos/does-not-exist.png');
++    expect(res.status).toBe(404);
++  });
++
++  it('does not serve files outside the uploads directory via path traversal', async () => {
++    const res = await request(app).get('/uploads/logos/..%2f..%2fpackage.json');
++    expect(res.status).not.toBe(200);
++  });
++});

@@ -91,7 +91,10 @@ const requestLogger = require('./middleware/requestLogger');
 app.use(helmet());
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : [process.env.FRONTEND_URL || 'http://localhost:5173'];
+  // https://localhost is the Android app's origin (Capacitor). Included in the dev-mode fallback
+  // so the app works out of the box; a deployment that sets ALLOWED_ORIGINS explicitly must add
+  // it itself (documented in mobile/README.md).
+  : [process.env.FRONTEND_URL || 'http://localhost:5173', 'https://localhost'];
 
 app.use(cors({
   origin: allowedOrigins,
@@ -126,6 +129,15 @@ const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+app.use('/uploads', express.static(uploadsDir, {
+  setHeaders: (res) => {
+    // Uploads (e.g. the receipt logo) are loaded via <img> tags from other origins - the web
+    // app's own domain when hosted separately from the API, and the Android app running from
+    // https://localhost - so this route needs helmet's default same-origin resource policy
+    // relaxed. Everything else on the site keeps helmet's defaults untouched.
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  },
+}));
 // Root healthcheck route for load balancers / Render
 app.get('/', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Zana Backend API is running' });
