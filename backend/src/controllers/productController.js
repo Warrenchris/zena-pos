@@ -1112,7 +1112,31 @@ exports.importProducts = async (req, res) => {
           continue;
         }
 
-        // Handle category (auto-create missing categories up to 50 cap)
+        // Parse and validate weightGrams
+        let parsedWeightGrams = null;
+        if (weightGrams !== undefined && weightGrams !== null && String(weightGrams).trim() !== '') {
+          const parsed = parseInt(weightGrams, 10);
+          if (isNaN(parsed) || parsed < 0) {
+            errors.push({ row: rowNumber, field: 'weightGrams', message: 'Valid weight in grams is required' });
+            skippedProducts.push(row);
+            continue;
+          }
+          parsedWeightGrams = parsed;
+        }
+
+        // Parse and validate expirationDate
+        let parsedExpirationDate = null;
+        if (expirationDate !== undefined && expirationDate !== null && String(expirationDate).trim() !== '') {
+          const d = new Date(expirationDate);
+          if (isNaN(d.getTime())) {
+            errors.push({ row: rowNumber, field: 'expirationDate', message: 'Valid expiration date is required' });
+            skippedProducts.push(row);
+            continue;
+          }
+          parsedExpirationDate = d;
+        }
+
+        // Handle category (auto-create or reactivate missing categories up to 50 cap)
         let categoryId = null;
         if (categoryName) {
           const trimmedCatName = String(categoryName).trim();
@@ -1128,13 +1152,13 @@ exports.importProducts = async (req, res) => {
               continue;
             }
 
-            try {
-              let catShopId = shopId;
-              if (!catShopId && organizationId) {
-                const defaultShop = await Shop.findOne({ where: { organizationId, active: true }, attributes: ['id'] });
-                catShopId = defaultShop?.id;
-              }
+            let catShopId = shopId;
+            if (!catShopId && organizationId) {
+              const defaultShop = await Shop.findOne({ where: { organizationId, active: true }, attributes: ['id'] });
+              catShopId = defaultShop?.id;
+            }
 
+            try {
               const [newCategory, wasCreated] = await Category.findOrCreate({
                 where: {
                   name: trimmedCatName,
@@ -1143,13 +1167,19 @@ exports.importProducts = async (req, res) => {
                 defaults: {
                   name: trimmedCatName,
                   shopId: catShopId,
-                  organizationId
+                  organizationId,
+                  active: true
                 }
               });
 
+              const wasInactive = newCategory.active === false;
+              if (wasInactive) {
+                await newCategory.update({ active: true });
+              }
+
               categoryId = newCategory.id;
               categoryMap.set(catKey, newCategory.id);
-              if (wasCreated && !createdCategories.includes(newCategory.name)) {
+              if ((wasCreated || wasInactive) && !createdCategories.includes(newCategory.name) && createdCategories.length < 50) {
                 createdCategories.push(newCategory.name);
               }
             } catch (catErr) {
@@ -1160,8 +1190,15 @@ exports.importProducts = async (req, res) => {
                 }
               });
               if (existing) {
+                const wasInactive = existing.active === false;
+                if (wasInactive) {
+                  await existing.update({ active: true });
+                }
                 categoryId = existing.id;
                 categoryMap.set(catKey, existing.id);
+                if (wasInactive && !createdCategories.includes(existing.name) && createdCategories.length < 50) {
+                  createdCategories.push(existing.name);
+                }
               } else {
                 errors.push({ row: rowNumber, field: 'category', message: `Failed to create category "${trimmedCatName}": ${catErr.message}` });
                 skippedProducts.push(row);
@@ -1183,8 +1220,8 @@ exports.importProducts = async (req, res) => {
           CategoryId: categoryId,
           organizationId,
           shopId: organizationId ? null : shopId,
-          weightGrams: weightGrams ? parseInt(weightGrams, 10) : null,
-          expirationDate: expirationDate ? new Date(expirationDate) : null
+          weightGrams: parsedWeightGrams,
+          expirationDate: parsedExpirationDate
         };
 
         const product = await Product.create(productData);

@@ -653,6 +653,75 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
       expect(res.body.summary.successful).toBe(0);
       expect(res.body.summary.skipped).toBe(1);
     });
+
+    test('3.12: Reactivates soft-deleted (active: false) category and treats as created', async () => {
+      const ts = Date.now();
+      const catName = `SoftDeletedCat ${ts}`;
+      const cat = await Category.create({
+        name: catName,
+        organizationId: orgA.id,
+        shopId: shopA1.id
+      });
+      await cat.update({ active: false });
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['Product Name', 'Price (KES)', 'Category']);
+      worksheet.addRow([`Prod Reactivated ${ts}`, 350.00, catName]);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', Buffer.from(buffer), 'reactivate_cat.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.summary.successful).toBe(1);
+      expect(res.body.createdCategories).toContain(catName);
+
+      await cat.reload();
+      expect(cat.active).toBe(true);
+
+      const prod = await Product.findOne({
+        where: { name: `Prod Reactivated ${ts}`, organizationId: orgA.id }
+      });
+      expect(prod).not.toBeNull();
+      expect(prod.categoryId).toBe(cat.id);
+
+      // Clean up
+      await Product.destroy({ where: { id: prod.id } });
+      await Category.destroy({ where: { id: cat.id } });
+    });
+
+    test('3.13: Row with invalid expiration date creates no category and is reported in errors', async () => {
+      const ts = Date.now();
+      const nonExistentCatName = `NeverCreatedCat ${ts}`;
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['Product Name', 'Price (KES)', 'Category', 'Expiration Date']);
+      worksheet.addRow([`Invalid Date Prod ${ts}`, 200.00, nonExistentCatName, 'invalid-not-a-date']);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', Buffer.from(buffer), 'invalid_date.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.summary.successful).toBe(0);
+      expect(res.body.summary.skipped).toBe(1);
+      expect(res.body.errors.some(e => e.field === 'expirationDate')).toBe(true);
+
+      // Assert no category was created
+      const cat = await Category.findOne({
+        where: { name: nonExistentCatName, organizationId: orgA.id }
+      });
+      expect(cat).toBeNull();
+    });
   });
 
   // =========================================================================
