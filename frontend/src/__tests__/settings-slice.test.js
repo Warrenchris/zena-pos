@@ -1,5 +1,12 @@
-﻿import { configureStore } from '@reduxjs/toolkit';
-import settingsReducer, { fetchSettings, updateSettings, resetSettings } from '../store/slices/settingsSlice';
+import { configureStore } from '@reduxjs/toolkit';
+import fs from 'fs';
+import path from 'path';
+import settingsReducer, {
+  fetchSettings,
+  updateSettings,
+  resetSettings,
+  SETTINGS_ALLOWED_FIELDS,
+} from '../store/slices/settingsSlice';
 import { settingsAPI } from '../services/api';
 
 jest.mock('../services/api', () => ({
@@ -97,66 +104,92 @@ describe('settings slice with the API envelope', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Drift guard: fails when the model gains an attribute not covered by the
-// frontend whitelist and not in the deliberate exclusion list.
+// Drift guard: reads the REAL exported whitelist and parses the REAL model
+// file with fs so it cannot pass on a stale hand-typed list.
+//
+// To prove this guard works: temporarily remove 'taxRate' from
+// SETTINGS_ALLOWED_FIELDS in settingsSlice.js — this test will fail with
+// a message listing 'taxRate' as uncovered.  Restore it and it passes.
 // ---------------------------------------------------------------------------
 describe('cleanSettingsData drift guard', () => {
+  // Fields the frontend intentionally never sends (protected / no UI control).
+  // maxUnapprovedRefundAmount and returnWindowDays have no UI controls yet.
   const INTENTIONALLY_EXCLUDED = new Set([
-    'id', 'shopId', 'createdAt', 'updatedAt', 'Shop',
-    'maxUnapprovedRefundAmount', 'returnWindowDays',
+    'id',
+    'shopId',
+    'createdAt',
+    'updatedAt',
+    // Refund policy: read by saleController but no Settings page controls exist yet
+    'maxUnapprovedRefundAmount',
+    'returnWindowDays',
   ]);
 
-  const WHITELISTED = new Set([
-    'systemName', 'businessLogo', 'contactEmail', 'contactPhone',
-    'receiptHeader', 'receiptFooter', 'showLogoOnReceipt',
-    'timezone', 'language', 'theme',
-    'defaultCurrency', 'currencySymbol', 'currencyPosition', 'decimalPlaces',
-    'enableNotifications', 'enableSoundAlerts', 'enableEmailAlerts',
-    'enableSuccessToasts', 'enableErrorToasts',
-    'passwordMinLength', 'requireSpecialChars', 'sessionTimeout',
-    'enableTwoFactor', 'maxLoginAttempts',
-    'autoBackupEnabled', 'backupFrequency', 'backupRetentionDays',
-    'allowUserRegistration', 'requireEmailVerification', 'additionalSettings',
-    'taxRate', 'printerType', 'printerIP',
-    'paybillNumber', 'tillNumber', 'consumerKey', 'consumerSecret', 'passkey',
-    'enabledPaymentMethods',
-    'lowStockThreshold', 'skuPrefix', 'barcodeFormat', 'aiDigestFrequency',
-  ]);
+  /**
+   * Parse top-level attribute keys from the sequelize.define(...) call in
+   * SystemSettings.js using a regex.  We match every line of the form
+   *   <identifier>: {
+   * that appears inside the outermost define() argument object, stopping before
+   * the closing `}, {` that begins the options object.
+   */
+  function extractModelAttributes() {
+    const modelPath = path.resolve(
+      __dirname,
+      '../../../backend/src/models/SystemSettings.js'
+    );
+    const src = fs.readFileSync(modelPath, 'utf8');
+
+    // Isolate the first argument object passed to sequelize.define():
+    // everything between the opening `{` after `define('SystemSettings',` and
+    // the matching `}` that ends the attributes object.
+    const defineStart = src.indexOf("sequelize.define('SystemSettings',");
+    if (defineStart === -1) throw new Error('Could not locate sequelize.define in SystemSettings.js');
+
+    // Find the `{` that opens the attributes object
+    const attrObjStart = src.indexOf('{', defineStart);
+
+    // Walk to find the matching `}` (depth tracking)
+    let depth = 0;
+    let attrObjEnd = -1;
+    for (let i = attrObjStart; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') {
+        depth--;
+        if (depth === 0) { attrObjEnd = i; break; }
+      }
+    }
+    if (attrObjEnd === -1) throw new Error('Could not find end of attributes object in SystemSettings.js');
+
+    const attrBlock = src.slice(attrObjStart, attrObjEnd + 1);
+
+    // Extract top-level keys: lines matching /^  <word>: {/ (two-space indent = depth 1)
+    const attrs = [];
+    const keyRe = /^  ([a-zA-Z_][a-zA-Z0-9_]*)\s*:/gm;
+    let m;
+    while ((m = keyRe.exec(attrBlock)) !== null) {
+      attrs.push(m[1]);
+    }
+    return attrs;
+  }
 
   it('covers every model attribute (add new fields to the whitelist or INTENTIONALLY_EXCLUDED)', () => {
-    const MODEL_ATTRIBUTES = new Set([
-      'id', 'shopId',
-      'systemName', 'businessLogo', 'contactEmail', 'contactPhone',
-      'timezone', 'language', 'theme',
-      'defaultCurrency', 'currencySymbol', 'currencyPosition', 'decimalPlaces',
-      'enableNotifications', 'enableSoundAlerts', 'enableEmailAlerts',
-      'enableSuccessToasts', 'enableErrorToasts',
-      'passwordMinLength', 'requireSpecialChars', 'sessionTimeout',
-      'enableTwoFactor', 'maxLoginAttempts',
-      'autoBackupEnabled', 'backupFrequency', 'backupRetentionDays',
-      'allowUserRegistration', 'requireEmailVerification',
-      'taxRate',
-      'receiptHeader', 'receiptFooter', 'showLogoOnReceipt', 'printerType', 'printerIP',
-      'paybillNumber', 'tillNumber', 'consumerKey', 'consumerSecret', 'passkey',
-      'enabledPaymentMethods',
-      'lowStockThreshold', 'skuPrefix', 'barcodeFormat', 'aiDigestFrequency',
-      'maxUnapprovedRefundAmount', 'returnWindowDays',
-      'additionalSettings',
-      'createdAt', 'updatedAt',
-    ]);
+    const whitelist = new Set(SETTINGS_ALLOWED_FIELDS); // real exported list
+    const modelAttrs = extractModelAttributes();         // parsed from source
 
-    const uncovered = [...MODEL_ATTRIBUTES].filter(
-      (attr) => !WHITELISTED.has(attr) && !INTENTIONALLY_EXCLUDED.has(attr)
+    const uncovered = modelAttrs.filter(
+      (attr) => !whitelist.has(attr) && !INTENTIONALLY_EXCLUDED.has(attr)
     );
+
     if (uncovered.length > 0) {
       throw new Error(
-        `These model attributes are neither whitelisted in cleanSettingsData nor in ` +
-        `INTENTIONALLY_EXCLUDED: ${uncovered.join(', ')}`
+        `These model attributes are neither whitelisted in SETTINGS_ALLOWED_FIELDS nor in ` +
+        `INTENTIONALLY_EXCLUDED: ${uncovered.join(', ')}. ` +
+        `Add them to the whitelist (if there is a UI control) or to INTENTIONALLY_EXCLUDED.`
       );
     }
     expect(uncovered).toEqual([]);
 
-    const overlap = [...WHITELISTED].filter((f) => INTENTIONALLY_EXCLUDED.has(f));
+    // No field should appear in both sets
+    const overlap = [...whitelist].filter((f) => INTENTIONALLY_EXCLUDED.has(f));
     expect(overlap).toEqual([]);
   });
 });

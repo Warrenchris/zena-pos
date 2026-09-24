@@ -6,6 +6,7 @@
  *   - taxRate (and other previously-missing fields) persists correctly.
  *   - Protected fields (id, shopId) cannot be overwritten via PUT /api/settings.
  *   - Masked M-Pesa secret placeholders do NOT overwrite stored encrypted values.
+ *   - ignoredFields is returned when unrecognised/protected keys are sent.
  */
 
 const request = require('supertest');
@@ -92,30 +93,46 @@ describe('Settings allowlist & persistence', () => {
   // -------------------------------------------------------------------
   it('does NOT overwrite shopId even when the body contains shopId: <other>', async () => {
     const OTHER_SHOP = 999;
+
+    // Capture primary key before the request
+    const before = await SystemSettings.findOne({ where: { shopId: SHOP_ID } });
+    const originalPk = before.id;
+
     const res = await request(app)
       .put('/api/settings')
       .set('Authorization', adminToken)
       .send({ shopId: OTHER_SHOP, taxRate: 5 });
 
     expect(res.status).toBe(200);
-    const row = await SystemSettings.findOne({ where: { shopId: SHOP_ID } });
-    expect(row).not.toBeNull(); // row still belongs to SHOP_ID
-    expect(row.shopId).toBe(SHOP_ID);
+
+    // Re-fetch by primary key — row must still belong to SHOP_ID
+    const after = await SystemSettings.findByPk(originalPk);
+    expect(after).not.toBeNull();
+    expect(after.shopId).toBe(SHOP_ID);
+
+    // No settings row should have been created for the other shop
+    const intruder = await SystemSettings.findOne({ where: { shopId: OTHER_SHOP } });
+    expect(intruder).toBeNull();
   });
 
   // -------------------------------------------------------------------
   it('does NOT overwrite id even when the body contains id: <other>', async () => {
-    const row = await SystemSettings.findOne({ where: { shopId: SHOP_ID } });
-    const originalId = row.id;
+    // Capture primary key before the request
+    const before = await SystemSettings.findOne({ where: { shopId: SHOP_ID } });
+    const originalPk = before.id;
 
     const res = await request(app)
       .put('/api/settings')
       .set('Authorization', adminToken)
-      .send({ id: originalId + 9999, taxRate: 7 });
+      .send({ id: originalPk + 9999, taxRate: 7 });
 
     expect(res.status).toBe(200);
-    await row.reload();
-    expect(row.id).toBe(originalId);
+
+    // Re-fetch by the ORIGINAL primary key — it must still exist and be unchanged
+    const after = await SystemSettings.findByPk(originalPk);
+    expect(after).not.toBeNull();
+    expect(after.id).toBe(originalPk);
+    expect(after.shopId).toBe(SHOP_ID);
   });
 
   // -------------------------------------------------------------------
@@ -137,5 +154,20 @@ describe('Settings allowlist & persistence', () => {
     await row.reload();
     // The encrypted value in the DB must be unchanged
     expect(row.consumerKey).toBe(encrypted);
+  });
+
+  // -------------------------------------------------------------------
+  it('returns ignoredFields containing dropped key names when unrecognised/protected keys are sent', async () => {
+    const res = await request(app)
+      .put('/api/settings')
+      .set('Authorization', adminToken)
+      .send({ taxRate: 5, bogus: 1, shopId: 999 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ignoredFields).toBeDefined();
+    expect(res.body.ignoredFields).toContain('bogus');
+    expect(res.body.ignoredFields).toContain('shopId');
+    // taxRate is a legitimate field — it must NOT be in ignoredFields
+    expect(res.body.ignoredFields).not.toContain('taxRate');
   });
 });

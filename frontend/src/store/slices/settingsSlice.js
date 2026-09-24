@@ -83,58 +83,60 @@ export const fetchSettings = createAsyncThunk(
   }
 );
 
+// Exported so the drift-guard test can import the real list rather than maintaining
+// a hand-typed duplicate that can never fail.
+export const SETTINGS_ALLOWED_FIELDS = [
+  'systemName',
+  'businessLogo',
+  'contactEmail',
+  'contactPhone',
+  'receiptHeader',
+  'receiptFooter',
+  'showLogoOnReceipt',
+  'timezone',
+  'language',
+  'theme',
+  'defaultCurrency',
+  'currencySymbol',
+  'currencyPosition',
+  'decimalPlaces',
+  'enableNotifications',
+  'enableSoundAlerts',
+  'enableEmailAlerts',
+  'enableSuccessToasts',
+  'enableErrorToasts',
+  'passwordMinLength',
+  'requireSpecialChars',
+  'sessionTimeout',
+  'enableTwoFactor',
+  'maxLoginAttempts',
+  'autoBackupEnabled',
+  'backupFrequency',
+  'backupRetentionDays',
+  'allowUserRegistration',
+  'requireEmailVerification',
+  'additionalSettings',
+  // POS / payment / inventory fields added after original whitelist was written
+  'taxRate',
+  'printerType',
+  'printerIP',
+  'paybillNumber',
+  'tillNumber',
+  'consumerKey',
+  'consumerSecret',
+  'passkey',
+  'enabledPaymentMethods',
+  'lowStockThreshold',
+  'skuPrefix',
+  'barcodeFormat',
+  'aiDigestFrequency',
+];
+
 // Helper to clean settings data before sending to API
 const cleanSettingsData = (data) => {
-  const allowedFields = [
-    'systemName',
-    'businessLogo',
-    'contactEmail',
-    'contactPhone',
-    'receiptHeader',
-    'receiptFooter',
-    'showLogoOnReceipt',
-    'timezone',
-    'language',
-    'theme',
-    'defaultCurrency',
-    'currencySymbol',
-    'currencyPosition',
-    'decimalPlaces',
-    'enableNotifications',
-    'enableSoundAlerts',
-    'enableEmailAlerts',
-    'enableSuccessToasts',
-    'enableErrorToasts',
-    'passwordMinLength',
-    'requireSpecialChars',
-    'sessionTimeout',
-    'enableTwoFactor',
-    'maxLoginAttempts',
-    'autoBackupEnabled',
-    'backupFrequency',
-    'backupRetentionDays',
-    'allowUserRegistration',
-    'requireEmailVerification',
-    'additionalSettings',
-    // POS / payment / inventory fields added after original whitelist was written
-    'taxRate',
-    'printerType',
-    'printerIP',
-    'paybillNumber',
-    'tillNumber',
-    'consumerKey',
-    'consumerSecret',
-    'passkey',
-    'enabledPaymentMethods',
-    'lowStockThreshold',
-    'skuPrefix',
-    'barcodeFormat',
-    'aiDigestFrequency'
-  ];
-
   // Only include allowed fields
   const cleanedData = {};
-  allowedFields.forEach(field => {
+  SETTINGS_ALLOWED_FIELDS.forEach(field => {
     if (data[field] !== undefined) {
       cleanedData[field] = data[field];
     }
@@ -159,6 +161,7 @@ const cleanSettingsData = (data) => {
 
   return cleanedData;
 };
+
 
 export const updateSettings = createAsyncThunk(
   'settings/updateSettings',
