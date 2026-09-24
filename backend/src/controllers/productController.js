@@ -999,12 +999,14 @@ exports.importProducts = async (req, res) => {
     const existingBarcodes = new Set(existingProducts.map(p => p.barcode).filter(b => b));
 
     // Get all categories for validation
+    const categoryWhere = { active: true };
+    if (organizationId) {
+      categoryWhere.organizationId = organizationId;
+    } else if (shopId) {
+      categoryWhere.shopId = shopId;
+    }
     const categories = await Category.findAll({
-      where: { 
-        organizationId: organizationId || null,
-        shopId: organizationId ? null : shopId,
-        active: true
-      },
+      where: categoryWhere,
       attributes: ['id', 'name']
     });
     const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]));
