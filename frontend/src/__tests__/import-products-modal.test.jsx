@@ -1,0 +1,122 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import ImportProductsModal from '../components/ImportProductsModal';
+import api from '../services/api';
+
+jest.mock('../services/api', () => ({
+  __esModule: true,
+  default: {
+    post: jest.fn(),
+  },
+}));
+
+describe('ImportProductsModal handleUpload endpoint & error handling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('posts to /api/products/import with multipart Content-Type header on handleUpload', async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'Import completed. 1 products imported successfully.',
+        summary: { successful: 1, skipped: 0, errors: 0 },
+        successfulProducts: [{ name: 'Sample Product 1', sku: 'SKU001' }],
+        errors: [],
+      },
+    });
+
+    const onImportComplete = jest.fn();
+    render(<ImportProductsModal onClose={jest.fn()} onImportComplete={onImportComplete} />);
+
+    const file = new File(['name,price\nItem 1,100'], 'products.csv', { type: 'text/csv' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const importButton = screen.getByRole('button', { name: /import products/i });
+    expect(importButton).not.toBeDisabled();
+
+    fireEvent.click(importButton);
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/api/products/import',
+      expect.any(FormData),
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Import Completed')).toBeInTheDocument();
+      expect(screen.getByText(/Sample Product 1/)).toBeInTheDocument();
+    });
+
+    expect(onImportComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('displays err.response.data.error when import fails with an error property', async () => {
+    api.post.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: { error: 'Invalid product format or corrupted file' },
+      },
+    });
+
+    render(<ImportProductsModal onClose={jest.fn()} />);
+    const file = new File(['bad data'], 'products.csv', { type: 'text/csv' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole('button', { name: /import products/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid product format or corrupted file')).toBeInTheDocument();
+    });
+  });
+
+  it('displays err.response.data.message when error property is absent', async () => {
+    api.post.mockRejectedValueOnce({
+      response: {
+        status: 422,
+        data: { message: 'Unprocessable spreadsheet entity' },
+      },
+    });
+
+    render(<ImportProductsModal onClose={jest.fn()} />);
+    const file = new File(['data'], 'products.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole('button', { name: /import products/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Unprocessable spreadsheet entity')).toBeInTheDocument();
+    });
+  });
+
+  it('falls back to status code when data.error and data.message are missing', async () => {
+    api.post.mockRejectedValueOnce({
+      response: {
+        status: 404,
+        data: {},
+      },
+    });
+
+    render(<ImportProductsModal onClose={jest.fn()} />);
+    const file = new File(['data'], 'products.csv', { type: 'text/csv' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole('button', { name: /import products/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/HTTP 404/)).toBeInTheDocument();
+    });
+  });
+});

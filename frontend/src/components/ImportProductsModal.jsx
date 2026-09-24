@@ -41,7 +41,7 @@ export default function ImportProductsModal({ onClose, onImportComplete }) {
     formData.append('file', file);
 
     try {
-      const response = await api.post('/products/import', formData, {
+      const response = await api.post('/api/products/import', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -53,7 +53,10 @@ export default function ImportProductsModal({ onClose, onImportComplete }) {
       }
     } catch (err) {
       console.error('Import error:', err);
-      setError(err.response?.data?.error || 'Failed to import products. Please try again.');
+      const fallback = err.response?.status
+        ? `Failed to import products (HTTP ${err.response.status}). Please try again.`
+        : 'Failed to import products. Please try again.';
+      setError(err.response?.data?.error || err.response?.data?.message || fallback);
     } finally {
       setUploading(false);
     }
