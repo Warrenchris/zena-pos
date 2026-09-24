@@ -89,6 +89,13 @@ describe('Phase 1 Remediation Integration Tests', () => {
       shopId: 1
     });
 
+    await tokenRevocationService.clearUserStatus(101, false);
+    await tokenRevocationService.setUserStatus(101, false, 'active');
+    await tokenRevocationService.clearUserTokenCutoff(101, false);
+    await tokenRevocationService.clearUserStatus('550e8400-e29b-41d4-a716-446655440000', true);
+    await tokenRevocationService.setUserStatus('550e8400-e29b-41d4-a716-446655440000', true, 'active');
+    await tokenRevocationService.clearUserTokenCutoff('550e8400-e29b-41d4-a716-446655440000', true);
+
     // Seed 20 products
     for (let i = 1; i <= 20; i++) {
       const prod = await Product.create({
@@ -282,5 +289,13 @@ describe('Phase 1 Remediation Integration Tests', () => {
     expect(() => {
       require('../src/services/EnhancedSaleService');
     }).not.toThrow();
+  });
+
+  afterAll(async () => {
+    await cleanDb();
+    await tokenRevocationService.clearUserStatus(101, false);
+    await tokenRevocationService.clearUserTokenCutoff(101, false);
+    await tokenRevocationService.clearUserStatus('550e8400-e29b-41d4-a716-446655440000', true);
+    await tokenRevocationService.clearUserTokenCutoff('550e8400-e29b-41d4-a716-446655440000', true);
   });
 });

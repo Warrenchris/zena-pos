@@ -1,7 +1,8 @@
 const request = require('supertest');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
-const { Coupon, DiscountRule, Shop } = require('../src/models');
+const { Coupon, DiscountRule, Shop, User } = require('../src/models');
+const tokenRevocationService = require('../src/services/tokenRevocationService');
 
 function tokenFor(user) {
   const jwt = require('jsonwebtoken');
@@ -35,6 +36,21 @@ describe('Coupons and Discounts API Integration Tests', () => {
       where: { id: 1 },
       defaults: { name: 'Test Shop 1', organizationId: 1 }
     });
+
+    // Ensure Admin User 101 exists and is active in DB and Redis
+    await User.findOrCreate({
+      where: { id: 101 },
+      defaults: {
+        name: 'Coupon Admin',
+        email: 'coupon-admin@example.com',
+        password: 'Password123!',
+        role: 'admin',
+        shopId: 1
+      }
+    });
+    await tokenRevocationService.clearUserStatus(101, false);
+    await tokenRevocationService.setUserStatus(101, false, 'active');
+    await tokenRevocationService.clearUserTokenCutoff(101, false);
   });
 
   describe('Coupons Endpoints', () => {
