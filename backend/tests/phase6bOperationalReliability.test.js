@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const ExcelJS = require('exceljs');
 const app = require('../src/app');
 const sequelize = require('../src/config/database');
@@ -318,80 +319,100 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
   // =========================================================================
   describe('3. File Import Security & ExcelJS Integration', () => {
     test('3.1: Valid CSV file imports products successfully and assigns tenant context', async () => {
-      const csvData = [
-        'name,sku,barcode,price,cost,stockQuantity,category',
-        `CSV Test Prod ${Date.now()},SKUCSV${Date.now()},111222333444,150.00,80.00,25,`
-      ].join('\n');
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'csv-import-'));
+      const tempCsvPath = path.join(tmpDir, `test_import_${Date.now()}.csv`);
+      try {
+        const csvData = [
+          'name,sku,barcode,price,cost,stockQuantity,category',
+          `CSV Test Prod ${Date.now()},SKUCSV${Date.now()},111222333444,150.00,80.00,25,`
+        ].join('\n');
 
-      const tempCsvPath = path.join(__dirname, `test_import_${Date.now()}.csv`);
-      fs.writeFileSync(tempCsvPath, csvData);
-      testFilesToClean.push(tempCsvPath);
+        fs.writeFileSync(tempCsvPath, csvData);
 
-      const res = await request(app)
-        .post('/api/products/import')
-        .set('Authorization', tokenAdminA)
-        .attach('file', tempCsvPath);
+        const res = await request(app)
+          .post('/api/products/import')
+          .set('Authorization', tokenAdminA)
+          .attach('file', tempCsvPath);
 
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.summary.successful).toBeGreaterThanOrEqual(1);
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.summary.successful).toBeGreaterThanOrEqual(1);
 
-      // Clean up product from DB
-      await Product.destroy({ where: { organizationId: orgA.id, name: { [sequelize.Sequelize.Op.like]: 'CSV Test Prod%' } } });
+        // Clean up product from DB
+        await Product.destroy({ where: { organizationId: orgA.id, name: { [sequelize.Sequelize.Op.like]: 'CSV Test Prod%' } } });
+      } finally {
+        if (fs.existsSync(tempCsvPath)) fs.unlinkSync(tempCsvPath);
+        if (fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir);
+      }
     });
 
     test('3.2: Valid XLSX created with ExcelJS imports cleanly without prototype pollution', async () => {
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Products');
-      worksheet.addRow(['name', 'sku', 'barcode', 'price', 'cost', 'stockQuantity']);
-      worksheet.addRow([`XLSX Test Prod ${Date.now()}`, `SKUXLSX${Date.now()}`, '555666777888', 250.00, 120.00, 50]);
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xlsx-import-'));
+      const tempXlsxPath = path.join(tmpDir, `test_import_${Date.now()}.xlsx`);
+      try {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Products');
+        worksheet.addRow(['name', 'sku', 'barcode', 'price', 'cost', 'stockQuantity']);
+        worksheet.addRow([`XLSX Test Prod ${Date.now()}`, `SKUXLSX${Date.now()}`, '555666777888', 250.00, 120.00, 50]);
 
-      const tempXlsxPath = path.join(__dirname, `test_import_${Date.now()}.xlsx`);
-      await workbook.xlsx.writeFile(tempXlsxPath);
-      testFilesToClean.push(tempXlsxPath);
+        await workbook.xlsx.writeFile(tempXlsxPath);
 
-      const res = await request(app)
-        .post('/api/products/import')
-        .set('Authorization', tokenAdminA)
-        .attach('file', tempXlsxPath);
+        const res = await request(app)
+          .post('/api/products/import')
+          .set('Authorization', tokenAdminA)
+          .attach('file', tempXlsxPath);
 
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.summary.successful).toBe(1);
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.summary.successful).toBe(1);
 
-      // Verify prototype was not polluted
-      expect(Object.prototype.polluted).toBeUndefined();
+        // Verify prototype was not polluted
+        expect(Object.prototype.polluted).toBeUndefined();
 
-      // Clean up product
-      await Product.destroy({ where: { organizationId: orgA.id, name: { [sequelize.Sequelize.Op.like]: 'XLSX Test Prod%' } } });
+        // Clean up product
+        await Product.destroy({ where: { organizationId: orgA.id, name: { [sequelize.Sequelize.Op.like]: 'XLSX Test Prod%' } } });
+      } finally {
+        if (fs.existsSync(tempXlsxPath)) fs.unlinkSync(tempXlsxPath);
+        if (fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir);
+      }
     });
 
     test('3.3: Malformed/corrupted spreadsheet upload is rejected with safe 400 Bad Request', async () => {
-      const corruptPath = path.join(__dirname, `corrupt_${Date.now()}.xlsx`);
-      fs.writeFileSync(corruptPath, 'THIS_IS_CORRUPT_NON_ZIP_DATA');
-      testFilesToClean.push(corruptPath);
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'corrupt-import-'));
+      const corruptPath = path.join(tmpDir, `corrupt_${Date.now()}.xlsx`);
+      try {
+        fs.writeFileSync(corruptPath, 'THIS_IS_CORRUPT_NON_ZIP_DATA');
 
-      const res = await request(app)
-        .post('/api/products/import')
-        .set('Authorization', tokenAdminA)
-        .attach('file', corruptPath);
+        const res = await request(app)
+          .post('/api/products/import')
+          .set('Authorization', tokenAdminA)
+          .attach('file', corruptPath);
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBeDefined();
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBeDefined();
+      } finally {
+        if (fs.existsSync(corruptPath)) fs.unlinkSync(corruptPath);
+        if (fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir);
+      }
     });
 
     test('3.4: Disallowed file extension (.txt/.exe) is rejected by upload filter with 400', async () => {
-      const invalidPath = path.join(__dirname, `script_${Date.now()}.txt`);
-      fs.writeFileSync(invalidPath, 'some text');
-      testFilesToClean.push(invalidPath);
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'txt-import-'));
+      const invalidPath = path.join(tmpDir, `script_${Date.now()}.txt`);
+      try {
+        fs.writeFileSync(invalidPath, 'some text');
 
-      const res = await request(app)
-        .post('/api/products/import')
-        .set('Authorization', tokenAdminA)
-        .attach('file', invalidPath);
+        const res = await request(app)
+          .post('/api/products/import')
+          .set('Authorization', tokenAdminA)
+          .attach('file', invalidPath);
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain('Only CSV and XLSX files are allowed');
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('Only CSV and XLSX files are allowed');
+      } finally {
+        if (fs.existsSync(invalidPath)) fs.unlinkSync(invalidPath);
+        if (fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir);
+      }
     });
 
     test('3.5: In-memory XLSX containing "Product Name", "Price (KES)" and "Category" columns imports rows successfully', async () => {
@@ -466,6 +487,28 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
       expect(parseFloat(created.cost)).toBe(80.00);
 
       await Product.destroy({ where: { organizationId: orgA.id, name: `Alias Prod 1 ${ts}` } });
+    });
+
+    test('3.7: Fails fast with 400 and does not query categories when tenant context is missing', async () => {
+      const tokenNoTenant = tokenFor({
+        id: 99998,
+        email: 'notenant@example.com',
+        role: 'admin'
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['Product Name', 'Price (KES)']);
+      worksheet.addRow(['No Tenant Item', 100]);
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenNoTenant)
+        .attach('file', Buffer.from(buffer), 'tenantless.xlsx');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Tenant context required');
     });
   });
 
