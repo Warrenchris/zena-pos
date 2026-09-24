@@ -393,6 +393,79 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('Only CSV and XLSX files are allowed');
     });
+
+    test('3.5: In-memory XLSX containing "Product Name", "Price (KES)" and "Category" columns imports rows successfully', async () => {
+      const ts = Date.now();
+      const cat = await Category.create({
+        name: `Import Cat ${ts}`,
+        organizationId: orgA.id,
+        active: true
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['Product Name', 'Price (KES)', 'Category']);
+      worksheet.addRow([`Prod KES 1 ${ts}`, 2500.50, cat.name]);
+      worksheet.addRow([`Prod KES 2 ${ts}`, 990.00, cat.name]);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', Buffer.from(buffer), 'in_memory_products.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.summary.successful).toBe(2);
+      expect(res.body.summary.errors).toBe(0);
+
+      // Verify products were created and cost defaulted to 0 with warning recorded
+      const createdProducts = await Product.findAll({
+        where: {
+          organizationId: orgA.id,
+          name: [`Prod KES 1 ${ts}`, `Prod KES 2 ${ts}`]
+        }
+      });
+      expect(createdProducts.length).toBe(2);
+      expect(parseFloat(createdProducts[0].cost)).toBe(0);
+      expect(parseFloat(createdProducts[1].cost)).toBe(0);
+      expect(createdProducts[0].categoryId).toBe(cat.id);
+      expect(res.body.warnings).toBeDefined();
+      expect(res.body.warnings.length).toBeGreaterThanOrEqual(2);
+
+      // Clean up
+      await Product.destroy({ where: { organizationId: orgA.id, name: [`Prod KES 1 ${ts}`, `Prod KES 2 ${ts}`] } });
+      await Category.destroy({ where: { id: cat.id } });
+    });
+
+    test('3.6: Import resolves aliases: unit price/selling price, buying price/unit cost, and qty/stock', async () => {
+      const ts = Date.now();
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+      worksheet.addRow(['product_name', 'selling price', 'buying price', 'stock']);
+      worksheet.addRow([`Alias Prod 1 ${ts}`, 150.00, 80.00, 35]);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const res = await request(app)
+        .post('/api/products/import')
+        .set('Authorization', tokenAdminA)
+        .attach('file', Buffer.from(buffer), 'aliases_import.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.summary.successful).toBe(1);
+
+      const created = await Product.findOne({
+        where: { organizationId: orgA.id, name: `Alias Prod 1 ${ts}` }
+      });
+      expect(created).not.toBeNull();
+      expect(parseFloat(created.price)).toBe(150.00);
+      expect(parseFloat(created.cost)).toBe(80.00);
+
+      await Product.destroy({ where: { organizationId: orgA.id, name: `Alias Prod 1 ${ts}` } });
+    });
   });
 
   // =========================================================================
