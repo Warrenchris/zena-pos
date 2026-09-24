@@ -86,12 +86,19 @@ exports.updateSettings = async (req, res) => {
     );
 
     const cleanData = {};
+    const ignoredFields = [];
     Object.entries(updateData).forEach(([key, value]) => {
       // Only include model fields and defined values, allowing explicit null
       if (modelFields.includes(key) && value !== undefined) {
         cleanData[key] = value;
+      } else if (value !== undefined) {
+        ignoredFields.push(key);
       }
     });
+
+    if (ignoredFields.length > 0) {
+      console.warn('Settings update: ignoring unrecognised/protected keys:', ignoredFields);
+    }
 
     // Handle M-Pesa secrets: encrypt if provided and not masked placeholder
     const secretFields = ['consumerKey', 'consumerSecret', 'passkey'];
@@ -169,7 +176,8 @@ exports.updateSettings = async (req, res) => {
     res.json({
       success: true,
       message: 'Settings updated successfully',
-      data: sanitizeSettingsResponse(settings)
+      data: sanitizeSettingsResponse(settings),
+      ...(ignoredFields.length > 0 && { ignoredFields }),
     });
   } catch (error) {
     console.error('Error updating settings:', error);
