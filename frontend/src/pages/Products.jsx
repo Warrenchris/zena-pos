@@ -26,6 +26,7 @@ import { fetchCategories } from '../store/slices/categoriesSlice';
 import ProductModal from '../components/ProductModal';
 import StockModal from '../components/StockModal';
 import ImportProductsModal from '../components/ImportProductsModal';
+import { buildImportToast } from '../utils/importToast';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 function ProductsContent() {
@@ -358,7 +359,7 @@ function ProductsContent() {
                   value={searchTerm}
                   onChange={handleSearch}
                   disabled={loading}
-                  className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-surface-2/60 text-text-primary border border-border-default focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary focus:bg-surface text-small placeholder-text-muted transition-colors"
+                  className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-surface-2 text-text-primary border border-border-default focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary text-small placeholder-text-muted transition-colors"
                 />
                 {searchTerm && (
                   <button
@@ -380,7 +381,7 @@ function ProductsContent() {
                     setCurrentPage(1);
                   }}
                   disabled={loading}
-                  className="px-3.5 py-2.5 rounded-xl bg-surface-2/60 text-text-primary border border-border-default focus:outline-none focus:ring-2 focus:ring-primary/40 text-small transition-colors min-w-[150px]"
+                  className="px-3.5 py-2.5 rounded-xl bg-surface-2 text-text-primary border border-border-default focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary text-small transition-colors min-w-[150px]"
                 >
                   <option value="">All Categories</option>
                   {categories.map((c) => (
@@ -396,7 +397,7 @@ function ProductsContent() {
                     setCurrentPage(1);
                   }}
                   disabled={loading}
-                  className="px-3.5 py-2.5 rounded-xl bg-surface-2/60 text-text-primary border border-border-default focus:outline-none focus:ring-2 focus:ring-primary/40 text-small transition-colors min-w-[140px]"
+                  className="px-3.5 py-2.5 rounded-xl bg-surface-2 text-text-primary border border-border-default focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary text-small transition-colors min-w-[140px]"
                 >
                   <option value="all">All Availability</option>
                   <option value="in_stock">In Stock</option>
@@ -771,7 +772,7 @@ function ProductsContent() {
         {showImportModal && (
           <ImportProductsModal
             onClose={() => setShowImportModal(false)}
-            onImportComplete={() => {
+            onImportComplete={(result) => {
               // Refresh products after import
               dispatch(fetchProducts({ 
                 page: currentPage, 
@@ -782,7 +783,9 @@ function ProductsContent() {
                 minPrice: filters.minPrice || undefined,
                 maxPrice: filters.maxPrice || undefined,
               }));
+              showToast(buildImportToast(result));
             }}
+            onImportError={(message) => showToast({ type: 'error', title: 'Import Failed', message, duration: 7000 })}
           />
         )}
       </LoadingOverlay>

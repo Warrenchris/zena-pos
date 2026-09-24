@@ -59,6 +59,12 @@ describe('ImportProductsModal handleUpload endpoint & error handling', () => {
     });
 
     expect(onImportComplete).toHaveBeenCalledTimes(1);
+    expect(onImportComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        summary: { successful: 1, skipped: 0, errors: 0 }
+      })
+    );
   });
 
   it('displays err.response.data.error when import fails with an error property', async () => {
@@ -180,5 +186,28 @@ describe('ImportProductsModal handleUpload endpoint & error handling', () => {
       expect(screen.getByText('2 categories created: Electronics, Home Appliances')).toBeInTheDocument();
     });
   });
+
+  it('calls onImportError with error message when api.post rejects', async () => {
+    api.post.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: { error: 'Invalid product format or corrupted file' },
+      },
+    });
+
+    const onImportError = jest.fn();
+    render(<ImportProductsModal onClose={jest.fn()} onImportError={onImportError} />);
+    const file = new File(['bad data'], 'products.csv', { type: 'text/csv' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole('button', { name: /import products/i }));
+
+    await waitFor(() => {
+      expect(onImportError).toHaveBeenCalledTimes(1);
+      expect(onImportError).toHaveBeenCalledWith('Invalid product format or corrupted file');
+    });
+  });
 });
+
 
