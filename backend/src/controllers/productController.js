@@ -17,6 +17,7 @@ function formatProductWithInventory(product) {
   const inventories = plain.Inventories || (plain.Inventory ? [plain.Inventory] : []);
   const branchInv = inventories.length > 0 ? inventories[0] : null;
 
+  plain.carried = !!branchInv;
   plain.stockQuantity = branchInv ? branchInv.stockQuantity : (plain.stockQuantity !== undefined ? plain.stockQuantity : 0);
   plain.reorderPoint = branchInv ? branchInv.reorderPoint : (plain.reorderPoint !== undefined ? plain.reorderPoint : 10);
   return plain;
@@ -31,7 +32,7 @@ exports.getAllProducts = async (req, res) => {
     const {
       search,
       categoryId,
-      availability, // 'in_stock' | 'low_stock' | 'out_of_stock'
+      availability, // 'in_stock' | 'low_stock' | 'out_of_stock' | 'not_carried'
       minPrice,
       maxPrice,
       page = 1,
@@ -181,6 +182,10 @@ exports.getAllProducts = async (req, res) => {
         { '$Inventories.id$': null },
         { '$Inventories.stockQuantity$': 0 }
       ];
+      inventoryRequired = false;
+    } else if (availability === 'not_carried') {
+      // Products that have NO Inventory row for this shop
+      where['$Inventories.id$'] = null;
       inventoryRequired = false;
     }
 
@@ -663,7 +668,7 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-// Delete product (soft delete)
+// Remove product from this branch (delete branch Inventory row, NOT the Product itself)
 exports.deleteProduct = async (req, res) => {
   try {
     const shopId = req.shopId || req.user?.shopId;
@@ -673,15 +678,81 @@ exports.deleteProduct = async (req, res) => {
       organizationId = shop?.organizationId;
     }
 
-    const deleteWhere = { id: req.params.id, active: true };
+    const productWhere = { id: req.params.id, active: true };
     if (organizationId) {
-      deleteWhere.organizationId = organizationId;
+      productWhere.organizationId = organizationId;
     } else {
-      deleteWhere.shopId = req.user?.shopId;
+      productWhere.shopId = req.user?.shopId;
     }
 
     const product = await Product.findOne({
-      where: deleteWhere
+      where: productWhere
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    organizationId = organizationId || product.organizationId;
+
+    // Remove the branch Inventory row (product stays in org catalog)
+    const destroyed = await Inventory.destroy({
+      where: { productId: product.id, shopId }
+    });
+
+    if (organizationId) {
+      await invalidateOrgProductCaches(organizationId);
+    } else if (shopId) {
+      await invalidateShopProductCache(shopId);
+    }
+    res.json({
+      message: destroyed > 0
+        ? 'Product removed from this branch'
+        : 'Product was not carried at this branch',
+      carried: false
+    });
+    try {
+      await logActivity({
+        shopId: req.shopId || req.user?.shopId,
+        performedBy: req.user?.id,
+        performedByType: req.user?.isEmployee ? 'employee' : 'user',
+        action: 'PRODUCT_REMOVED_FROM_BRANCH',
+        entity: 'Product',
+        entityId: product.id,
+        details: `Removed from shopId=${shopId}`
+      });
+    } catch (_) {}
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove product from branch' });
+  }
+};
+
+// Deactivate product org-wide (admin only, requires confirmation)
+exports.deactivateProductOrgWide = async (req, res) => {
+  try {
+    const { confirm } = req.body;
+    if (!confirm) {
+      return res.status(400).json({
+        error: 'Confirmation required',
+        message: 'This will deactivate the product across ALL branches in the organization. Send { "confirm": true } to proceed.'
+      });
+    }
+
+    const shopId = req.shopId || req.user?.shopId;
+    let organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId && shopId) {
+      const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'] });
+      organizationId = shop?.organizationId;
+    }
+
+    const productWhere = { id: req.params.id, active: true };
+    if (organizationId) {
+      productWhere.organizationId = organizationId;
+    } else {
+      productWhere.shopId = shopId;
+    }
+
+    const product = await Product.findOne({
+      where: productWhere
     });
 
     if (!product) {
@@ -690,24 +761,26 @@ exports.deleteProduct = async (req, res) => {
     organizationId = organizationId || product.organizationId;
 
     await product.update({ active: false });
+
     if (organizationId) {
       await invalidateOrgProductCaches(organizationId);
     } else if (shopId) {
       await invalidateShopProductCache(shopId);
     }
-    res.json({ message: 'Product deleted successfully' });
+    res.json({ message: 'Product deactivated across all branches' });
     try {
       await logActivity({
         shopId: req.shopId || req.user?.shopId,
         performedBy: req.user?.id,
         performedByType: req.user?.isEmployee ? 'employee' : 'user',
-        action: 'PRODUCT_DELETED',
+        action: 'PRODUCT_DEACTIVATED_ORG_WIDE',
         entity: 'Product',
-        entityId: product.id
+        entityId: product.id,
+        details: `Org-wide deactivation for organizationId=${organizationId}`
       });
     } catch (_) {}
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete product' });
+    res.status(500).json({ error: 'Failed to deactivate product' });
   }
 };
 

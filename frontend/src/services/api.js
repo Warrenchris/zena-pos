@@ -354,6 +354,8 @@ export const productsAPI = {
   update: (id, productData) => api.put(`/api/products/${id}`, productData),
   delete: (id) => api.delete(`/api/products/${id}`),
   updateStock: (id, quantity) => api.patch(`/api/products/${id}/stock`, { quantity }),
+  addToBranch: (id) => api.patch(`/api/products/${id}/stock`, { quantity: 0 }),
+  deactivateOrgWide: (id) => api.post(`/api/products/${id}/deactivate`, { confirm: true }),
 };
 
 // Categories API
