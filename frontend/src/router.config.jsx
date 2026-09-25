@@ -53,6 +53,7 @@ const ToastExample = safeLazy(() => import('./pages/ToastExample'));
 const Products = safeLazy(() => import('./pages/Products'));
 const Customers = safeLazy(() => import('./pages/Customers'));
 const Employees = safeLazy(() => import('./pages/Employees'));
+const CompanySettings = safeLazy(() => import('./pages/CompanySettings'));
 const MySales = safeLazy(() => import('./pages/MySales'));
 const TestDatePicker = safeLazy(() => import('./pages/TestDatePicker'));
 const PlaceholderPage = safeLazy(() => import('./components/PlaceholderPage'));
@@ -211,6 +212,10 @@ export const routes = [
           {
             path: 'admin/users',
             element: <PrivateRoute><Employees /></PrivateRoute>
+          },
+          {
+            path: 'admin/company',
+            element: <PrivateRoute><CompanySettings /></PrivateRoute>
           },
           {
             path: 'users',
