@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { sentryVitePlugin } from '@sentry/vite-plugin'
 
 // Optional: PurgeCSS plugin for additional CSS optimization
 // NOTE: Tailwind CSS v3+ already has built-in JIT purging, so this is optional
@@ -72,6 +73,22 @@ export default defineConfig(({ mode }) => {
       },
       devOptions: { enabled: false },
     }),
+    ...(process.env.SENTRY_AUTH_TOKEN
+      ? [
+          sentryVitePlugin({
+            org: process.env.SENTRY_ORG || 'warrenchris-org',
+            project: process.env.SENTRY_PROJECT || 'zana-pos',
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            release: {
+              name: process.env.VITE_SENTRY_RELEASE || 'zana-pos-frontend@1.0.0',
+            },
+            sourcemaps: {
+              filesToDeleteAfterUpload: ['dist/**/*.map'],
+            },
+            telemetry: false,
+          }),
+        ]
+      : []),
   ]
   
   // Optional: Add PurgeCSS for additional CSS purging when installed.
