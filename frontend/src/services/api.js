@@ -454,6 +454,7 @@ export const settingsAPI = {
   getCurrency: () => api.get('/api/settings/currency'),
   getTheme: () => api.get('/api/settings/theme'),
   getNotifications: () => api.get('/api/settings/notifications'),
+  getBackupStatus: () => api.get('/api/settings/backup-status'),
 };
 
 export const permissionsAPI = {
