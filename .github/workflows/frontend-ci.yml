@@ -37,6 +37,10 @@ jobs:
 
       - name: Build frontend (TypeScript & Vite)
         run: npm run build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
 
       - name: Run unit tests
         run: npm test -- --passWithNoTests
