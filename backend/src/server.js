@@ -1,3 +1,4 @@
+require('./instrument');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
@@ -74,9 +75,21 @@ const startServer = async () => {
 // Catch unhandled errors
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled Promise Rejection', reason);
+  try {
+    const Sentry = require('./instrument');
+    Sentry.captureException(reason);
+  } catch (err) {
+    // Non-blocking
+  }
 });
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught Exception', err);
+  try {
+    const Sentry = require('./instrument');
+    Sentry.captureException(err);
+  } catch (sentryErr) {
+    // Non-blocking
+  }
 });
 
 startServer();

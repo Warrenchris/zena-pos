@@ -58,6 +58,21 @@ module.exports = (err, req, res, next) => {
   }
 
   // 4. Default 500 internal server error
+  // Report unexpected 5xx/internal errors to Sentry (non-blocking)
+  try {
+    const Sentry = require('../instrument');
+    Sentry.withScope((scope) => {
+      scope.setTag('requestId', requestId);
+      if (req.shopId) scope.setTag('shopId', String(req.shopId));
+      if (req.organizationId) scope.setTag('organizationId', String(req.organizationId));
+      scope.setExtra('statusCode', err.statusCode || 500);
+      scope.setExtra('code', err.code);
+      Sentry.captureException(err);
+    });
+  } catch (sentryErr) {
+    // Sentry reporting must never alter API error response
+  }
+
   const safeMessage = process.env.NODE_ENV === 'production'
     ? 'An internal server error occurred'
     : err.message;

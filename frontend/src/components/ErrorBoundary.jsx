@@ -1,4 +1,5 @@
 import React from 'react';
+import Sentry from '../instrument';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 class ErrorBoundary extends React.Component {
@@ -16,6 +17,12 @@ class ErrorBoundary extends React.Component {
     // Log the error to console in development
     if (process.env.NODE_ENV === 'development') {
       console.error('ErrorBoundary caught an error:', error, errorInfo);
+    }
+
+    try {
+      Sentry.captureException(error, { extra: errorInfo });
+    } catch (sentryErr) {
+      // Sentry must never cause boundary to fail
     }
     
     this.setState({

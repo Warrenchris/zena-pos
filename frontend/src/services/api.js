@@ -1,4 +1,5 @@
 import axios from 'axios';
+import Sentry from '../instrument';
 import { logger, loggerInterceptor } from '../utils/logger';
 
 // Safely read Vite / Node env var without throwing in browser (where
@@ -123,6 +124,30 @@ api.interceptors.response.use(
       logger.warn(`⚠️ Received 429. Retrying request to ${config.url} in ${delay}ms... (Attempt ${config._retryCount}/3)`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return api(config);
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Add diagnostic breadcrumbs for unexpected 5xx / network failures (ignore expected 4xx)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    if (!status || status >= 500) {
+      try {
+        Sentry.addBreadcrumb({
+          category: 'api',
+          message: `${error.config?.method?.toUpperCase() || 'GET'} ${error.config?.url || 'unknown'} failed (${status || 'network error'})`,
+          level: 'warning',
+          data: {
+            status: status || 0,
+            requestId: error.response?.headers?.['x-request-id'] || error.response?.data?.requestId,
+          }
+        });
+      } catch (sentryErr) {
+        // Non-blocking
+      }
     }
     return Promise.reject(error);
   }
