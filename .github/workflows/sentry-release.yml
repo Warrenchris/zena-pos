@@ -1,0 +1,56 @@
+name: Sentry Release Tracking
+
+on:
+  push:
+    branches: [master, main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+
+jobs:
+  sentry-releases:
+    name: Sentry Release & Commit Tracking
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'Warrenchris' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Backend Sentry Release
+        uses: getsentry/action-release@v1
+        continue-on-error: true
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
+        with:
+          version: zana-pos-backend@1.0.0
+          set_commits: auto
+          environment: production
+
+      - name: Create AI Service Sentry Release
+        uses: getsentry/action-release@v1
+        continue-on-error: true
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
+        with:
+          version: zana-pos-ai@1.0.0
+          set_commits: auto
+          environment: production
+
+      - name: Create Frontend Sentry Release
+        uses: getsentry/action-release@v1
+        continue-on-error: true
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
+        with:
+          version: zana-pos-frontend@1.0.0
+          set_commits: auto
+          environment: production
