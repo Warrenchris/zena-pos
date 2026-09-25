@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .instrument import init_sentry
+init_sentry()
+
 from .routers import financial_analysis, forecasting, insights
 
 app = FastAPI(

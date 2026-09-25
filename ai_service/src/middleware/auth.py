@@ -83,6 +83,16 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
                 detail="Invalid token: missing user ID"
             )
         
+        try:
+            import sentry_sdk
+            sentry_sdk.set_user({"id": str(user_id)})
+            if shop_id:
+                sentry_sdk.set_tag("shopId", str(shop_id))
+            if role:
+                sentry_sdk.set_tag("role", str(role))
+        except Exception:
+            pass
+
         return {
             "id": user_id,
             "role": role,
