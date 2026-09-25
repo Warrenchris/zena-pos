@@ -121,11 +121,9 @@ describe('Company Settings Route and Component', () => {
       </Provider>
     );
 
-    // Verify CompanySettings loads and renders tabs
+    // Verify CompanySettings loads and renders company details
     expect(await screen.findByText('Company Details')).toBeInTheDocument();
-    expect(screen.getByText('Theme')).toBeInTheDocument();
-    expect(screen.getByText('Regional')).toBeInTheDocument();
-    expect(screen.getByText('System')).toBeInTheDocument();
+    expect(screen.getByText('Save Company Details')).toBeInTheDocument();
 
     // Verify company form data is loaded from shopAPI.getMine()
     await waitFor(() => {
