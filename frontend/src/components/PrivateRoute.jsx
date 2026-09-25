@@ -10,31 +10,40 @@ export default function PrivateRoute({ children }) {
   const [attempt, setAttempt] = useState(0);
   const location = useLocation();
   const authCheckRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    let mounted = true;
-    
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Tri-state: true while we have a token but haven't verified the session yet.
+  // Only set false once getCurrentUser() settles (success or failure).
+  const [initializing, setInitializing] = useState(Boolean(token) && !user);
+
+  useEffect(() => {
     const checkAuth = async () => {
       // Only check auth once and when we have a token but no user
-      if (!authCheckRef.current && token && !user && !loading) {
+      if (!authCheckRef.current && token && !user) {
         authCheckRef.current = true;
         try {
           await dispatch(getCurrentUser()).unwrap();
         } catch (error) {
           console.error('Auth check failed:', error);
-          if (mounted && error === 'Your session has expired. Please sign in again.') {
+          if (isMountedRef.current && error === 'Your session has expired. Please sign in again.') {
             localStorage.removeItem('token');
+          }
+        } finally {
+          if (isMountedRef.current) {
+            setInitializing(false);
           }
         }
       }
     };
 
     checkAuth();
-
-    return () => {
-      mounted = false;
-    };
-  }, [token, user, loading, dispatch, attempt]);
+  }, [token, user, dispatch, attempt]);
 
   // The server can't be reached but the sign-in is still valid: wait here instead of bouncing to /login
   // (which would bounce straight back and loop).
@@ -42,6 +51,7 @@ export default function PrivateRoute({ children }) {
 
   const retryCheck = useCallback(() => {
     authCheckRef.current = false;
+    setInitializing(true);
     setAttempt((n) => n + 1);
   }, []);
 
@@ -51,8 +61,13 @@ export default function PrivateRoute({ children }) {
     return () => window.removeEventListener('online', retryCheck);
   }, [connectivityProblem, retryCheck]);
 
-  // Show loading state while we're fetching user data
-  if (loading) {
+  // No token at all — genuinely logged out, redirect immediately (no spinner)
+  if (!token) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Show loading state while we're initializing or actively fetching user data
+  if (initializing || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -67,8 +82,8 @@ export default function PrivateRoute({ children }) {
     return <ConnectionProblem onRetry={retryCheck} onSignOut={() => dispatch(logout())} />;
   }
 
-  // Redirect to login if there's no token or no user data
-  if (!token || !user) {
+  // Session verified but no user (expired/invalid token) — redirect to login
+  if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
