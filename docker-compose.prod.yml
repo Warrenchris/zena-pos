@@ -73,6 +73,13 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-2h}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8000}
+      BACKUP_DIR: /app/backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+    volumes:
+      # Read-only: the backend only reports on backups here, it never writes.
+      # backup-scheduler (below) is the only service that writes to this volume.
+      - mysql_prod_backups:/app/backups:ro
     depends_on:
       mysql:
         condition: service_healthy

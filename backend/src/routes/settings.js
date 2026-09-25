@@ -14,6 +14,7 @@ const {
   getCurrencyFormat,
   getThemeSettings,
   getNotificationSettings,
+  getBackupStatus,
   uploadLogo: uploadLogoController
 } = require('../controllers/settingsController');
 
@@ -179,5 +180,9 @@ router.post('/logo', handleLogoUploadMiddleware, uploadLogoController);
 
 // Reset settings to defaults
 router.post('/reset', resetSettings);
+
+// Read-only status of the env-driven backup scheduler (scripts/backup-scheduler.js).
+// Reporting only — this endpoint cannot start, stop, or reconfigure backups.
+router.get('/backup-status', getBackupStatus);
 
 module.exports = router;

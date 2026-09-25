@@ -1,6 +1,15 @@
+const fs = require('fs');
+const path = require('path');
 const { SystemSettings, Shop } = require('../models');
 const { validationResult } = require('express-validator');
 const { maskSecret, encrypt, isMaskedValue } = require('../utils/encryption');
+
+// Same defaults as scripts/backup-scheduler.js and scripts/backup-db.js —
+// this endpoint only *reads* that configuration, it never controls it.
+const BACKUP_DIR = process.env.BACKUP_DIR || path.resolve(__dirname, '../../../backups');
+const BACKUP_RETENTION_DAYS = parseInt(process.env.BACKUP_RETENTION_DAYS || '30', 10);
+const BACKUP_INTERVAL_HOURS = parseFloat(process.env.BACKUP_INTERVAL_HOURS || '24');
+const BACKUP_DB_NAME = process.env.DB_NAME || 'zana_pos';
 
 const sanitizeSettingsResponse = (settingsInstance) => {
   if (!settingsInstance) return null;
@@ -412,6 +421,71 @@ exports.getNotificationSettings = async (req, res) => {
     res.status(500).json({ 
       error: 'Failed to fetch notification settings',
       details: error.message 
+    });
+  }
+};
+
+// Get read-only status of the real, env-driven backup scheduler
+// (see scripts/backup-scheduler.js / scripts/backup-db.js). Nothing in this
+// app writes to the config it reports — it's a status view, not a control.
+exports.getBackupStatus = async (req, res) => {
+  try {
+    const configured = Boolean(process.env.BACKUP_DIR);
+    let dirAccessible = false;
+    let lastBackup = null;
+    let error = null;
+
+    try {
+      const entries = fs.readdirSync(BACKUP_DIR);
+      dirAccessible = true;
+
+      const backupFiles = entries
+        .filter((name) => name.startsWith(`${BACKUP_DB_NAME}_backup_`) && name.endsWith('.sql.gz'))
+        .map((name) => {
+          const filePath = path.join(BACKUP_DIR, name);
+          const stats = fs.statSync(filePath);
+          return { name, filePath, mtimeMs: stats.mtimeMs, sizeBytes: stats.size };
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+      if (backupFiles.length > 0) {
+        const newest = backupFiles[0];
+        let sha256 = null;
+        const checksumPath = `${newest.filePath}.sha256`;
+        if (fs.existsSync(checksumPath)) {
+          const checksumContent = fs.readFileSync(checksumPath, 'utf8').trim();
+          sha256 = checksumContent.split(/\s+/)[0] || null;
+        }
+        lastBackup = {
+          fileName: newest.name,
+          sizeBytes: newest.sizeBytes,
+          createdAt: new Date(newest.mtimeMs).toISOString(),
+          sha256
+        };
+      }
+    } catch (fsError) {
+      dirAccessible = false;
+      error = 'Backup directory is not accessible from this service. The scheduler may run in a separate ' +
+        'container/host that this API does not share a filesystem with.';
+    }
+
+    res.json({
+      success: true,
+      data: {
+        configured,
+        intervalHours: BACKUP_INTERVAL_HOURS,
+        retentionDays: BACKUP_RETENTION_DAYS,
+        backupDir: BACKUP_DIR,
+        dirAccessible,
+        lastBackup,
+        ...(error && { note: error })
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching backup status:', err);
+    res.status(500).json({
+      error: 'Failed to fetch backup status',
+      details: err.message
     });
   }
 };

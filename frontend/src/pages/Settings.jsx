@@ -59,6 +59,10 @@ const Settings = () => {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordStatus, setPasswordStatus] = useState(null);
   const [passwordLoading, setPasswordLoading] = useState(false);
+
+  const [backupStatus, setBackupStatus] = useState(null);
+  const [backupStatusLoading, setBackupStatusLoading] = useState(false);
+  const [backupStatusError, setBackupStatusError] = useState(null);
   
   // Enhanced error handling
   const {
@@ -98,6 +102,24 @@ const Settings = () => {
       setHasChanges(hasFormChanges);
     }
   }, [formData, settings]);
+
+  // Fetch the real backup scheduler status the first time the Data & Backup
+  // tab is opened (read-only — this view has nothing to save).
+  useEffect(() => {
+    if (activeTab !== 'backup' || backupStatus || backupStatusLoading) return;
+    (async () => {
+      try {
+        setBackupStatusLoading(true);
+        setBackupStatusError(null);
+        const res = await settingsAPI.getBackupStatus();
+        setBackupStatus(res?.data?.data || null);
+      } catch (err) {
+        setBackupStatusError(err?.response?.data?.error || err?.message || 'Failed to load backup status.');
+      } finally {
+        setBackupStatusLoading(false);
+      }
+    })();
+  }, [activeTab, backupStatus, backupStatusLoading]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -815,54 +837,92 @@ const Settings = () => {
     </div>
   );
 
-  const renderBackupSettings = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
-        <div>
-          <h4 className="text-small font-semibold text-text-primary">Auto Backup</h4>
-          <p className="text-caption text-text-muted mt-0.5">Automatically backup data</p>
+  const formatBytes = (bytes) => {
+    if (bytes == null) return '—';
+    const mb = bytes / (1024 * 1024);
+    return mb >= 1 ? `${mb.toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
+  };
+
+  const renderBackupSettings = () => {
+    if (backupStatusLoading && !backupStatus) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={formData.autoBackupEnabled || false}
-            onChange={(e) => handleInputChange('autoBackupEnabled', e.target.checked)}
-            className="sr-only peer"
-          />
-          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-        </label>
-      </div>
+      );
+    }
 
-      <div>
-        <label className="block text-small font-semibold text-text-primary mb-1.5">
-          Backup Frequency
-        </label>
-        <select
-          value={formData.backupFrequency || 'daily'}
-          onChange={(e) => handleInputChange('backupFrequency', e.target.value)}
-          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-        >
-          <option value="daily" className="bg-surface text-text-primary">Daily</option>
-          <option value="weekly" className="bg-surface text-text-primary">Weekly</option>
-          <option value="monthly" className="bg-surface text-text-primary">Monthly</option>
-        </select>
-      </div>
+    if (backupStatusError) {
+      return (
+        <div className="p-4 bg-danger-muted border border-danger-border rounded-2xl flex items-center gap-3 text-danger-text text-small">
+          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-danger" />
+          <span>{backupStatusError}</span>
+        </div>
+      );
+    }
 
-      <div>
-        <label className="block text-small font-semibold text-text-primary mb-1.5">
-          Backup Retention (days)
-        </label>
-        <input
-          type="number"
-          min="7"
-          max="365"
-          value={formData.backupRetentionDays || 30}
-          onChange={(e) => handleInputChange('backupRetentionDays', parseInt(e.target.value))}
-          className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-        />
+    const status = backupStatus || {};
+
+    return (
+      <div className="space-y-6">
+        <div className="p-4 bg-surface-2/40 border border-border-default rounded-xl flex items-start gap-3">
+          <InformationCircleIcon className="h-5 w-5 shrink-0 text-text-muted mt-0.5" />
+          <p className="text-caption text-text-muted">
+            Database backups run as an automated, infrastructure-level scheduler — they are not
+            controlled from this app. This tab shows the scheduler's actual configuration and
+            last run, so it can never say something that isn't true.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="p-3.5 rounded-xl border border-border-default bg-surface-2/40">
+            <h4 className="text-small font-semibold text-text-primary">Backup Interval</h4>
+            <p className="text-caption text-text-muted mt-0.5">
+              Every {status.intervalHours ?? '—'} hour{status.intervalHours === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl border border-border-default bg-surface-2/40">
+            <h4 className="text-small font-semibold text-text-primary">Retention</h4>
+            <p className="text-caption text-text-muted mt-0.5">
+              {status.retentionDays ?? '—'} days
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-xl border border-border-default bg-surface-2/40">
+          <h4 className="text-small font-semibold text-text-primary mb-2">Last Backup</h4>
+          {!status.dirAccessible ? (
+            <p className="text-caption text-text-muted">
+              {status.note || "The backup directory isn't accessible from this environment, so no status is available here."}
+            </p>
+          ) : status.lastBackup ? (
+            <dl className="text-small text-text-secondary space-y-1">
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-muted">File</dt>
+                <dd className="font-mono text-caption break-all text-right">{status.lastBackup.fileName}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-muted">Created</dt>
+                <dd>{new Date(status.lastBackup.createdAt).toLocaleString()}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-muted">Size</dt>
+                <dd>{formatBytes(status.lastBackup.sizeBytes)}</dd>
+              </div>
+              {status.lastBackup.sha256 && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-text-muted">SHA-256</dt>
+                  <dd className="font-mono text-caption break-all text-right">{status.lastBackup.sha256}</dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <p className="text-caption text-text-muted">No backup files found yet.</p>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderUserManagementSettings = () => (
     <div className="space-y-4">
