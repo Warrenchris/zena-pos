@@ -11,7 +11,6 @@ import {
   DocumentTextIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
-  ShieldCheckIcon,
   XMarkIcon,
   ArrowPathIcon
 } from '@heroicons/react/24/outline'
@@ -180,22 +179,15 @@ export default function CompanySettings() {
       {/* Main Settings Card */}
       <div className="bg-surface rounded-2xl border border-border-default shadow-sm overflow-hidden">
         {/* Card Header */}
-        <div className="px-6 py-5 sm:px-8 border-b border-border-default bg-surface flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
-              <BuildingOfficeIcon className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-h3 font-semibold text-text-primary">Company Details</h2>
-              <p className="text-caption text-text-secondary mt-0.5">
-                Printed on customer receipts, invoices, and fiscal reports
-              </p>
-            </div>
+        <div className="px-6 py-5 sm:px-8 border-b border-border-default bg-surface flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+            <BuildingOfficeIcon className="h-6 w-6" />
           </div>
-
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold bg-success-muted border border-success-border text-success-text self-start sm:self-auto">
-            <ShieldCheckIcon className="w-4 h-4 text-success" />
-            <span>KRA eTIMS Ready</span>
+          <div>
+            <h2 className="text-h3 font-semibold text-text-primary">Company Details</h2>
+            <p className="text-caption text-text-secondary mt-0.5">
+              Printed on customer receipts, invoices, and reports
+            </p>
           </div>
         </div>
 
@@ -296,7 +288,7 @@ export default function CompanySettings() {
                   />
                 </div>
                 <p className="mt-1.5 text-caption text-text-muted">
-                  Required for KRA eTIMS fiscalization and tax reporting.
+                  Official tax identification number.
                 </p>
               </div>
 
