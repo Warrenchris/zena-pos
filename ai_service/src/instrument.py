@@ -1,5 +1,23 @@
+import logging
 import os
-import sentry_sdk
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+    else:
+        load_dotenv()
+except ImportError:
+    pass
+
+try:
+    import sentry_sdk
+except ImportError:
+    sentry_sdk = None
 
 SENSITIVE_KEYS = {
     "password", "token", "secret", "privatekey", "cardnumber", "cvv", "pin",
@@ -52,6 +70,10 @@ def init_sentry():
     if not dsn:
         return
 
+    if sentry_sdk is None:
+        logger.warning("[sentry:ai] Sentry SDK is not installed; skipping Sentry initialization.")
+        return
+
     environment = os.getenv("SENTRY_ENVIRONMENT", "development")
     release = os.getenv("SENTRY_RELEASE", "zana-pos-ai@1.0.0")
     traces_sample_rate = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")) if environment == "production" else 0.0
@@ -65,5 +87,4 @@ def init_sentry():
             before_send=scrub_sentry_event,
         )
     except Exception as err:
-        import logging
-        logging.getLogger(__name__).warning(f"[sentry:ai] Sentry init failed: {err}")
+        logger.warning(f"[sentry:ai] Sentry init failed: {err}")
