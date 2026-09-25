@@ -63,6 +63,28 @@ const auth = async (req, res, next) => {
       req.organizationId = null;
     }
 
+    // Attach safe diagnostic tenant/user context to Sentry (non-blocking)
+    try {
+      const Sentry = require('../instrument');
+      if (decoded.id) {
+        Sentry.setUser({ id: String(decoded.id) });
+      }
+      if (req.shopId) {
+        Sentry.setTag('shopId', String(req.shopId));
+      }
+      if (req.organizationId) {
+        Sentry.setTag('organizationId', String(req.organizationId));
+      }
+      if (decoded.role) {
+        Sentry.setTag('role', String(decoded.role));
+      }
+      if (req.requestId) {
+        Sentry.setTag('requestId', String(req.requestId));
+      }
+    } catch (sentryErr) {
+      // Non-blocking: Sentry must never disrupt authentication
+    }
+
     // 3. Check organization suspension status (AUTH-01)
     if (req.organizationId) {
       const orgStatus = await tokenRevocationService.getOrgStatus(req.organizationId);

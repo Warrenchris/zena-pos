@@ -1,6 +1,28 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { authAPI } from '../../services/api'
 import { cacheProfile, clearCachedProfile, readCachedProfile } from '../../offline/authCache'
+import Sentry from '../../instrument'
+
+function syncSentryUser(user, shop) {
+  try {
+    if (user?.id) {
+      Sentry.setUser({ id: String(user.id) });
+      if (shop?.id || user.shopId) {
+        Sentry.setTag('shopId', String(shop?.id || user.shopId));
+      }
+      if (user.organizationId) {
+        Sentry.setTag('organizationId', String(user.organizationId));
+      }
+      if (user.role) {
+        Sentry.setTag('role', String(user.role));
+      }
+    } else {
+      Sentry.setUser(null);
+    }
+  } catch (err) {
+    // Non-blocking: Sentry sync must never disrupt auth state
+  }
+}
 
 // Shown when the server can't be reached. Deliberately different from the "session expired" message,
 // so a dropped connection never signs anyone out.
@@ -126,6 +148,7 @@ const authSlice = createSlice({
       state.error = null
       localStorage.removeItem('token')
       clearCachedProfile()
+      syncSentryUser(null)
     },
     clearError: (state) => {
       state.error = null
@@ -137,6 +160,7 @@ const authSlice = createSlice({
       if (action.payload.token) {
         localStorage.setItem('token', action.payload.token)
       }
+      syncSentryUser(action.payload.user, action.payload.user?.shop)
     },
   },
   extraReducers: (builder) => {
@@ -150,6 +174,7 @@ const authSlice = createSlice({
         state.user = action.payload.user
         state.shop = action.payload.shop || action.payload.user?.shop || null
         state.token = action.payload.token
+        syncSentryUser(action.payload.user, action.payload.shop || action.payload.user?.shop)
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false
@@ -164,6 +189,7 @@ const authSlice = createSlice({
         state.user = action.payload.user
         state.shop = action.payload?.shop || action.payload.user?.shop || null
         state.error = null
+        syncSentryUser(action.payload.user, action.payload?.shop || action.payload.user?.shop)
       })
       .addCase(getCurrentUser.rejected, (state, action) => {
         state.loading = false

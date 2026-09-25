@@ -112,8 +112,8 @@ export default defineConfig(({ mode }) => {
       dedupe: ['react', 'react-dom'],
     },
     build: {
-      // Generate source maps for analysis (can be disabled in production)
-      sourcemap: mode === 'analyze',
+      // Generate hidden source maps for production Sentry tracking (stack traces resolve without exposing source maps publicly)
+      sourcemap: mode === 'production' ? 'hidden' : (mode === 'analyze'),
       // CSS code splitting
       cssCodeSplit: true,
       // Rollup options for better tree-shaking
