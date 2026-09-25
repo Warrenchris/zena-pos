@@ -19,9 +19,11 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ArchiveBoxXMarkIcon,
-  DocumentArrowUpIcon
+  DocumentArrowUpIcon,
+  PlusCircleIcon,
+  EyeSlashIcon
 } from '@heroicons/react/24/outline';
-import { fetchProducts, deleteProduct } from '../store/slices/productsSlice';
+import { fetchProducts, deleteProduct, addToBranch, deactivateOrgWide } from '../store/slices/productsSlice';
 import { fetchCategories } from '../store/slices/categoriesSlice';
 import ProductModal from '../components/ProductModal';
 import StockModal from '../components/StockModal';
@@ -37,6 +39,8 @@ function ProductsContent() {
   const { format: formatCurrency } = useCurrency();
   const { products, loading, pagination } = useSelector((state) => state.products || { products: [], loading: false });
   const { categories } = useSelector((state) => state.categories || { categories: [] });
+  const user = useSelector((state) => state.auth.user);
+  const isAdmin = user?.role === 'admin';
   
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -118,27 +122,75 @@ function ProductsContent() {
   const hasActiveFilters = Boolean(searchTerm || filters.categoryId || filters.availability !== 'all' || filters.minPrice || filters.maxPrice);
 
   const handleDelete = async (productId, productName) => {
-    if (window.confirm(`Are you sure you want to delete "${productName}"?`)) {
+    if (window.confirm(`Remove "${productName}" from this branch's product list?`)) {
       try {
         setLocalLoading(prev => ({ ...prev, delete: true }));
         await dispatch(deleteProduct(productId)).unwrap();
         showToast({
           type: 'success',
-          title: 'Product Deleted',
-          message: `Successfully deleted ${productName}`,
+          title: 'Product Removed',
+          message: `Removed ${productName} from this branch`,
           duration: 4000
         });
       } catch (error) {
         handleError(error, {
           [errorTypes.AUTHORIZATION]: {
-            title: 'Cannot Delete Product',
-            message: 'You do not have permission to delete products',
+            title: 'Cannot Remove Product',
+            message: 'You do not have permission to remove products from this branch',
             type: 'error'
           },
           [errorTypes.NOT_FOUND]: {
             title: 'Product Not Found',
-            message: 'This product may have already been deleted',
+            message: 'This product may have already been removed',
             type: 'warning'
+          }
+        });
+      } finally {
+        setLocalLoading(prev => ({ ...prev, delete: false }));
+      }
+    }
+  };
+
+  const handleAddToBranch = async (product) => {
+    try {
+      setLocalLoading(prev => ({ ...prev, stock: true }));
+      await dispatch(addToBranch(product.id)).unwrap();
+      showToast({
+        type: 'success',
+        title: 'Added to Branch',
+        message: `${product.name} is now carried at this branch`,
+        duration: 4000
+      });
+    } catch (error) {
+      handleError(error, {
+        [errorTypes.NETWORK]: {
+          title: 'Connection Error',
+          message: 'Unable to add product to branch. Please try again.',
+          type: 'error'
+        }
+      });
+    } finally {
+      setLocalLoading(prev => ({ ...prev, stock: false }));
+    }
+  };
+
+  const handleDeactivateOrgWide = async (productId, productName) => {
+    if (window.confirm(`⚠️ PERMANENT ACTION: Deactivate "${productName}" across ALL branches in the organization?\n\nThis will remove it from every branch's catalog. To only remove from this branch, use the remove button instead.`)) {
+      try {
+        setLocalLoading(prev => ({ ...prev, delete: true }));
+        await dispatch(deactivateOrgWide(productId)).unwrap();
+        showToast({
+          type: 'success',
+          title: 'Product Deactivated',
+          message: `${productName} deactivated across all branches`,
+          duration: 5000
+        });
+      } catch (error) {
+        handleError(error, {
+          [errorTypes.AUTHORIZATION]: {
+            title: 'Admin Required',
+            message: 'Only admins can deactivate products org-wide',
+            type: 'error'
           }
         });
       } finally {
@@ -157,7 +209,21 @@ function ProductsContent() {
     setShowStockModal(true);
   };
 
-  const getStockStatus = (quantity, reorderPoint) => {
+  const getStockStatus = (product) => {
+    const carried = product.carried;
+    const quantity = product.stockQuantity;
+    const reorderPoint = product.reorderPoint;
+
+    if (carried === false) {
+      return {
+        status: 'not_carried',
+        label: 'Not stocked at this branch',
+        badgeStyle: 'bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20',
+        textColor: 'text-gray-500 dark:text-gray-400',
+        icon: EyeSlashIcon
+      };
+    }
+
     const point = reorderPoint !== undefined && reorderPoint !== null ? reorderPoint : 10;
     if (quantity === 0) {
       return { 
@@ -224,7 +290,7 @@ function ProductsContent() {
   };
 
   const handleBatchDelete = async () => {
-    if (!selectedProducts.length || !window.confirm(`Delete ${selectedProducts.length} selected products?`)) {
+    if (!selectedProducts.length || !window.confirm(`Remove ${selectedProducts.length} selected products from this branch?`)) {
       return;
     }
 
@@ -403,6 +469,7 @@ function ProductsContent() {
                   <option value="in_stock">In Stock</option>
                   <option value="low_stock">Low Stock</option>
                   <option value="out_of_stock">Out of Stock</option>
+                  <option value="not_carried">Not Carried</option>
                 </select>
 
                 {/* Reset Filters Button */}
@@ -458,7 +525,7 @@ function ProductsContent() {
               /* GRID VIEW */
               <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {sortedAndFilteredProducts.map((product) => {
-                  const stockStatus = getStockStatus(product.stockQuantity, product.reorderPoint);
+                  const stockStatus = getStockStatus(product);
                   const StatusIcon = stockStatus.icon;
 
                   return (
@@ -524,19 +591,31 @@ function ProductsContent() {
                             <span>Edit</span>
                           </button>
                           
-                          <button
-                            onClick={() => handleStockUpdate(product)}
-                            className="flex-1 py-1.5 px-2 rounded-xl bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-default text-caption font-medium transition-colors flex items-center justify-center gap-1"
-                            title="Adjust Stock Level"
-                          >
-                            <ArrowPathIcon className="h-3.5 w-3.5 text-primary" />
-                            <span>Stock</span>
-                          </button>
+                          {product.carried === false ? (
+                            <button
+                              onClick={() => handleAddToBranch(product)}
+                              className="flex-1 py-1.5 px-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-caption font-medium transition-colors flex items-center justify-center gap-1"
+                              title="Add to this branch"
+                              disabled={localLoading.stock}
+                            >
+                              <PlusCircleIcon className="h-3.5 w-3.5" />
+                              <span>Add to Branch</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleStockUpdate(product)}
+                              className="flex-1 py-1.5 px-2 rounded-xl bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-default text-caption font-medium transition-colors flex items-center justify-center gap-1"
+                              title="Adjust Stock Level"
+                            >
+                              <ArrowPathIcon className="h-3.5 w-3.5 text-primary" />
+                              <span>Stock</span>
+                            </button>
+                          )}
                           
                           <button
                             onClick={() => handleDelete(product.id, product.name)}
                             className="p-1.5 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
-                            title="Delete Product"
+                            title="Remove from this branch"
                           >
                             <TrashIcon className="h-4 w-4" />
                           </button>
@@ -604,7 +683,7 @@ function ProductsContent() {
                   </thead>
                   <tbody className="divide-y divide-border-default/60 bg-surface">
                     {sortedAndFilteredProducts.map((product) => {
-                      const stockStatus = getStockStatus(product.stockQuantity, product.reorderPoint);
+                      const stockStatus = getStockStatus(product);
                       const isSelected = selectedProducts.includes(product.id);
 
                       return (
@@ -649,21 +728,42 @@ function ProductsContent() {
                               >
                                 <PencilIcon className="h-4 w-4 text-text-secondary" />
                               </button>
-                              <button
-                                onClick={() => handleStockUpdate(product)}
-                                className="px-2.5 py-1 text-caption font-medium rounded-lg bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-default transition-colors flex items-center gap-1"
-                                title="Update Stock"
-                              >
-                                <ArrowPathIcon className="h-3.5 w-3.5 text-primary" />
-                                <span>Stock</span>
-                              </button>
+                              {product.carried === false ? (
+                                <button
+                                  onClick={() => handleAddToBranch(product)}
+                                  className="px-2.5 py-1 text-caption font-medium rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-colors flex items-center gap-1"
+                                  title="Add to this branch"
+                                  disabled={localLoading.stock}
+                                >
+                                  <PlusCircleIcon className="h-3.5 w-3.5" />
+                                  <span>Add to Branch</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleStockUpdate(product)}
+                                  className="px-2.5 py-1 text-caption font-medium rounded-lg bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-default transition-colors flex items-center gap-1"
+                                  title="Update Stock"
+                                >
+                                  <ArrowPathIcon className="h-3.5 w-3.5 text-primary" />
+                                  <span>Stock</span>
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleDelete(product.id, product.name)}
                                 className="p-1.5 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
-                                title="Delete Product"
+                                title="Remove from this branch"
                               >
                                 <TrashIcon className="h-4 w-4" />
                               </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleDeactivateOrgWide(product.id, product.name)}
+                                  className="p-1.5 rounded-lg bg-gray-500/10 hover:bg-gray-500/20 text-gray-500 transition-colors"
+                                  title="Deactivate org-wide (all branches)"
+                                >
+                                  <EyeSlashIcon className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

@@ -168,8 +168,14 @@ router.put('/:id',
 router.delete('/:id', 
   auth, 
   requireActiveSubscription(),
-  checkRole(['admin']), 
+  checkRole(['admin', 'manager']), 
   productController.deleteProduct
+);
+router.post('/:id/deactivate', 
+  auth, 
+  requireActiveSubscription(),
+  checkRole(['admin']), 
+  productController.deactivateProductOrgWide
 );
 router.patch('/:id/stock', 
   auth, 

@@ -61,6 +61,22 @@ export const updateStock = createAsyncThunk(
   }
 )
 
+export const addToBranch = createAsyncThunk(
+  'products/addToBranch',
+  async (id) => {
+    const response = await productsAPI.addToBranch(id)
+    return response.data
+  }
+)
+
+export const deactivateOrgWide = createAsyncThunk(
+  'products/deactivateOrgWide',
+  async (id) => {
+    await productsAPI.deactivateOrgWide(id)
+    return id
+  }
+)
+
 const productsSlice = createSlice({
   name: 'products',
   initialState,
@@ -132,6 +148,20 @@ const productsSlice = createSlice({
         if (state.currentProduct?.id === action.payload.id) {
           state.currentProduct = action.payload
         }
+      })
+      // Add to branch
+      .addCase(addToBranch.fulfilled, (state, action) => {
+        const index = state.products.findIndex(p => p.id === action.payload.id)
+        if (index !== -1) {
+          state.products[index] = action.payload
+        }
+        if (state.currentProduct?.id === action.payload.id) {
+          state.currentProduct = action.payload
+        }
+      })
+      // Deactivate org-wide
+      .addCase(deactivateOrgWide.fulfilled, (state, action) => {
+        state.products = state.products.filter(p => p.id !== action.payload)
       })
   }
 })
