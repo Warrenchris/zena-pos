@@ -71,7 +71,7 @@ router.get('/:id',
 
 router.post('/', 
   auth, 
-  checkRole(['admin', 'manager', 'cashier']), 
+  checkRole(['admin', 'manager', 'org_admin', 'cashier']), 
   validateCustomer,
   customerController.createCustomer
 );
@@ -91,7 +91,7 @@ router.delete('/:id',
 
 router.patch('/:id/loyalty-points', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateLoyaltyPoints,
   customerController.adjustLoyaltyPoints
 );

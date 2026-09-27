@@ -303,6 +303,11 @@ exports.updateEmployee = async (req, res) => {
     }
 
     const previousPosition = employee.position;
+    const isPromotingToAdmin = req.body.position && req.body.position.toLowerCase() === 'admin' && previousPosition !== 'admin';
+    if (isPromotingToAdmin && req.user.role !== 'admin') {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Access denied: only organization owners can grant the Administrator position.' });
+    }
 
     await employee.update(req.body, {
       transaction,
