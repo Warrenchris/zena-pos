@@ -25,11 +25,19 @@
 // checkRole(['admin']) route (staff writes, catalog/customer/sale deletes,
 // cache admin, etc.) with no extra allow-list. 2026-09-22 investigation:
 // never map Employee.position to JWT 'admin' under any spelling/casing.
+//
+// 2026-09-27: Introduced 'org_admin' as a resolved JWT role for employees
+// with position='admin' AND orgRole='admin'. Gets manager-equivalent
+// permissions in ROLE_PERMISSIONS without the unscoped 'admin' power.
 const AUTH_ROLES = new Set(['cashier', 'manager']);
 
-function resolveAuthRole(value) {
+function resolveAuthRole(value, orgRole = null) {
   const role = String(value || '').trim().toLowerCase();
-  return AUTH_ROLES.has(role) ? role : 'employee';
+  if (AUTH_ROLES.has(role)) return role;
+  // Delegated org admin: position 'admin' + orgRole 'admin' → 'org_admin'.
+  // Never resolves to literal 'admin' — that is reserved for User.role owners.
+  if (role === 'admin' && orgRole === 'admin') return 'org_admin';
+  return 'employee';
 }
 
 function buildAuthPayload({
@@ -72,8 +80,9 @@ function buildAuthPayload({
     email: entity?.email || '',
     // Users keep their User.role (including 'admin'). Employees go through
     // resolveAuthRole, which never emits JWT/payload 'admin' from position.
+    // orgRole is forwarded so position='admin' + orgRole='admin' → 'org_admin'.
     role: isEmployee
-      ? resolveAuthRole(entity?.position || entity?.role)
+      ? resolveAuthRole(entity?.position || entity?.role, resolvedOrgRole)
       : (entity?.role || 'employee'),
     orgRole: resolvedOrgRole,
     // serializedShop is the *active* branch (may differ from entity.shopId
