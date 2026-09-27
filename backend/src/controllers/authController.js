@@ -195,23 +195,8 @@ exports.login = async (req, res) => {
         const cutoff = await tokenRevocationService.getUserTokenCutoff(user.id, !!user.isEmployee);
         const nowSec = Math.floor(Date.now() / 1000);
         const iat = cutoff !== null ? Math.max(nowSec, cutoff + 1) : nowSec;
-        const token = jwt.sign(
-          { 
-            id: user.id, 
-            role: user.role, 
-            shopId: user.shopId,
-            organizationId: user.Shop?.organizationId || null,
-            isEmployee: !!user.isEmployee,
-            jti,
-            iat
-          },
-          getPrivateKey(),
-          { 
-            algorithm: 'RS256',
-            expiresIn: process.env.JWT_EXPIRES_IN || '2h'
-          }
-        );
 
+    // Resolve orgRole BEFORE minting the JWT so the role claim is authoritative
     let orgRole = null;
     let subscriptionStatus = null;
     const orgId = user.Shop?.organizationId;
@@ -224,6 +209,29 @@ exports.login = async (req, res) => {
     }
     const membership = await OrganizationMembership.findOne({ where: membershipWhere });
     orgRole = membership?.orgRole || (isEmployee ? 'member' : null);
+
+    // Re-resolve employee role with orgRole context so org_admin is reflected
+    // in both JWT claim and API response. Non-employees keep User.role as-is.
+    const resolvedRole = isEmployee
+      ? resolveAuthRole(user.position || user.role, orgRole)
+      : user.role;
+
+        const token = jwt.sign(
+          { 
+            id: user.id, 
+            role: resolvedRole, 
+            shopId: user.shopId,
+            organizationId: orgId || null,
+            isEmployee: !!user.isEmployee,
+            jti,
+            iat
+          },
+          getPrivateKey(),
+          { 
+            algorithm: 'RS256',
+            expiresIn: process.env.JWT_EXPIRES_IN || '2h'
+          }
+        );
 
     // Resolve authoritative subscription status if organization exists
     if (orgId) {
@@ -575,11 +583,26 @@ exports.switchShop = async (req, res) => {
     // ZERO DATABASE WRITES — hard design invariant (no create, update, delete)
 
     // 4. Mint new RS256 JWT with the same claim shape as login
+    // Fetch user/employee info to match login response structure
+    let userEntity = null;
+    let employeeEntity = null;
+    if (req.user.isEmployee) {
+      employeeEntity = await Employee.findByPk(req.user.id);
+    } else {
+      userEntity = await User.findByPk(req.user.id);
+    }
+
+    // Re-resolve role with orgRole context so org_admin is preserved across
+    // shop switches. Non-employees keep their User.role from the DB entity.
+    const switchedRole = req.user.isEmployee
+      ? resolveAuthRole(employeeEntity?.position || req.user.role, membership.orgRole)
+      : (userEntity?.role || req.user.role);
+
     const jti = crypto.randomUUID();
     const token = jwt.sign(
       {
         id: req.user.id,
-        role: req.user.role,
+        role: switchedRole,
         shopId: targetShopId,
         organizationId: orgId,
         isEmployee: !!req.user.isEmployee,
@@ -591,15 +614,6 @@ exports.switchShop = async (req, res) => {
         expiresIn: process.env.JWT_EXPIRES_IN || '2h'
       }
     );
-
-    // Fetch user/employee info to match login response structure
-    let userEntity = null;
-    let employeeEntity = null;
-    if (req.user.isEmployee) {
-      employeeEntity = await Employee.findByPk(req.user.id);
-    } else {
-      userEntity = await User.findByPk(req.user.id);
-    }
 
     const authPayload = buildAuthPayload({
       user: userEntity,

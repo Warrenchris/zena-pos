@@ -16,6 +16,22 @@ const ROLE_PERMISSIONS = {
     'manage_settings',
     'process_refunds'
   ],
+  // Delegated org admin: employee with orgRole='admin' on their
+  // OrganizationMembership. Gets manager-equivalent shop-level permissions
+  // within shops they have ShopAccess to. Does NOT get the unscoped 'all'
+  // permission that true admin (User.role='admin' = owner) has.
+  org_admin: [
+    'view_dashboard',
+    'manage_products',
+    'manage_categories',
+    'manage_employees',
+    'view_reports',
+    'manage_sales',
+    'manage_expenses',
+    'view_customers',
+    'manage_settings',
+    'process_refunds'
+  ],
   cashier: [
     'access_pos',
     'create_sales',
