@@ -68,10 +68,11 @@ const checkUserPermissionSync = (userRole, permission) => {
  * @param {number} userId - User ID
  * @param {string} userRole - User role
  * @param {string} permission - Permission to check
+ * @param {number} organizationId - Organization ID
  * @returns {Promise<boolean>} - True if user has permission
  */
-const checkUserPermissionAsync = async (userId, userRole, permission) => {
-  return permissionCache.userHasPermission(userId, userRole, permission);
+const checkUserPermissionAsync = async (userId, userRole, permission, organizationId) => {
+  return permissionCache.userHasPermission(userId, userRole, permission, organizationId);
 };
 
 /**
@@ -95,9 +96,16 @@ exports.checkPermission = (permission, options = {}) => {
 
       let hasPermission;
       
-      if (useCache && req.user.id) {
-        // Use cached database permissions
-        hasPermission = await checkUserPermissionAsync(req.user.id, req.user.role, permission);
+      if (useCache) {
+        const organizationId = req.organizationId || req.user?.organizationId;
+        if (!organizationId) {
+          return res.status(403).json({
+            error: 'Permission denied',
+            details: 'Organization context is required for permission check'
+          });
+        }
+        // Use cached database permissions scoped by organizationId
+        hasPermission = await checkUserPermissionAsync(req.user.id, req.user.role, permission, organizationId);
       } else {
         // Use hardcoded permissions (faster, synchronous)
         hasPermission = checkUserPermissionSync(req.user.role, permission);
@@ -124,18 +132,20 @@ exports.checkPermission = (permission, options = {}) => {
 /**
  * Get all permissions for a role (uses cache)
  * @param {string} role - User role
+ * @param {number} organizationId - Organization ID
  * @returns {Promise<Array<string>>} - Array of permission names
  */
-exports.getRolePermissions = async (role) => {
-  return permissionCache.getRolePermissions(role);
+exports.getRolePermissions = async (role, organizationId) => {
+  return permissionCache.getRolePermissions(role, organizationId);
 };
 
 /**
  * Get all permissions for a user (uses cache)
  * @param {number} userId - User ID
  * @param {string} role - User role
+ * @param {number} organizationId - Organization ID
  * @returns {Promise<Array<string>>} - Array of permission names
  */
-exports.getUserPermissions = async (userId, role) => {
-  return permissionCache.getUserPermissions(userId, role);
+exports.getUserPermissions = async (userId, role, organizationId) => {
+  return permissionCache.getUserPermissions(userId, role, organizationId);
 };

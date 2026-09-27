@@ -35,7 +35,7 @@ export default function RolePermissionMatrix() {
     } catch (err) {
       console.error('Failed to fetch role permission matrix:', err);
       setError(err.response?.data?.error || 'Failed to load permission matrix.');
-    } fontFinally: {
+    } finally {
       setLoading(false);
     }
   };
@@ -47,6 +47,12 @@ export default function RolePermissionMatrix() {
   const handleToggle = (role, permName) => {
     // Prevent toggling critical admin permissions in UI
     if (role === 'admin' && CRITICAL_ADMIN_PERMISSIONS.includes(permName)) {
+      return;
+    }
+
+    // Prevent toggling non-enforced permissions
+    const perm = permissions.find(p => p.name === permName);
+    if (perm && perm.enforced === false) {
       return;
     }
 
@@ -63,6 +69,7 @@ export default function RolePermissionMatrix() {
     const updates = [];
     roles.forEach(role => {
       permissions.forEach(perm => {
+        if (perm.enforced === false) return;
         const currentVal = !!matrix[role]?.[perm.name];
         const origVal = !!originalMatrix[role]?.[perm.name];
         if (currentVal !== origVal) {
@@ -193,26 +200,45 @@ export default function RolePermissionMatrix() {
             {permissions.map(perm => (
               <tr key={perm.id} className="hover:bg-surface-2/50 transition-colors">
                 <td className="px-6 py-4">
-                  <div className="font-mono text-small text-primary font-semibold">{perm.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-small text-primary font-semibold">{perm.name}</span>
+                    {perm.enforced === false && (
+                      <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-surface-3 text-text-muted border border-border-default">
+                        Not yet enforced
+                      </span>
+                    )}
+                  </div>
                   <div className="text-caption text-text-muted mt-0.5">{perm.description}</div>
                 </td>
 
                 {roles.map(role => {
                   const isChecked = !!matrix[role]?.[perm.name];
                   const isProtected = role === 'admin' && CRITICAL_ADMIN_PERMISSIONS.includes(perm.name);
+                  const isEnforced = perm.enforced !== false;
 
                   return (
                     <td key={`${role}-${perm.id}`} className="px-6 py-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        disabled={isProtected}
-                        onChange={() => handleToggle(role, perm.name)}
-                        title={isProtected ? 'Protected system setting permission' : ''}
-                        className={`h-5 w-5 rounded-lg border-border-default text-primary focus:ring-primary/30 bg-surface cursor-pointer ${
-                          isProtected ? 'opacity-40 cursor-not-allowed' : ''
-                        }`}
-                      />
+                      {isEnforced ? (
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isProtected}
+                          onChange={() => handleToggle(role, perm.name)}
+                          title={isProtected ? 'Protected system setting permission' : ''}
+                          className={`h-5 w-5 rounded-lg border-border-default text-primary focus:ring-primary/30 bg-surface cursor-pointer ${
+                            isProtected ? 'opacity-40 cursor-not-allowed' : ''
+                          }`}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center">
+                          <span
+                            className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-medium bg-surface-2 text-text-muted border border-border-default/60 opacity-60 cursor-not-allowed select-none"
+                            title="This permission is not yet enforced in the system"
+                          >
+                            Not yet enforced
+                          </span>
+                        </div>
+                      )}
                     </td>
                   );
                 })}

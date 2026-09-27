@@ -5,7 +5,7 @@ const { auth } = require('../middleware/auth');
 const { checkPermission } = require('../middleware/rolePermissions');
 const shopAuth = require('../middleware/shopAuth');
 
-router.post('/', auth, shopAuth, checkPermission('create_sales'), async (req, res, next) => {
+router.post('/', auth, shopAuth, checkPermission('create_sales', { useCache: true }), async (req, res, next) => {
   try {
     const sale = await EnhancedSaleService.createSplitPaymentSale(req.body, req);
     res.status(201).json(sale);

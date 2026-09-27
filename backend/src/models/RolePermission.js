@@ -9,6 +9,14 @@ const RolePermission = sequelize.define('RolePermission', {
     primaryKey: true,
     autoIncrement: true
   },
+  organizationId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Organizations',
+      key: 'id'
+    }
+  },
   role: {
     type: DataTypes.ENUM('admin', 'manager', 'cashier'),
     allowNull: false
@@ -23,24 +31,33 @@ const RolePermission = sequelize.define('RolePermission', {
   }
 }, {
   tableName: 'RolePermissions',
+  indexes: [
+    {
+      unique: true,
+      fields: ['organizationId', 'role', 'permissionId']
+    }
+  ],
   hooks: {
     afterCreate: async (rolePermission) => {
       // Invalidate role cache when a new permission is assigned
-      await permissionCache.invalidateRoleCache(rolePermission.role);
+      await permissionCache.invalidateRoleCache(rolePermission.role, rolePermission.organizationId);
       permissionCache.invalidateAllUserCaches(); // Users with this role need cache refresh
     },
     afterUpdate: async (rolePermission) => {
       // Invalidate role cache when permission assignment is updated
-      await permissionCache.invalidateRoleCache(rolePermission.role);
+      await permissionCache.invalidateRoleCache(rolePermission.role, rolePermission.organizationId);
       // Also invalidate old role if role was changed
       if (rolePermission.previous('role')) {
-        await permissionCache.invalidateRoleCache(rolePermission.previous('role'));
+        await permissionCache.invalidateRoleCache(
+          rolePermission.previous('role'),
+          rolePermission.previous('organizationId') || rolePermission.organizationId
+        );
       }
       permissionCache.invalidateAllUserCaches(); // Users with this role need cache refresh
     },
     afterDestroy: async (rolePermission) => {
       // Invalidate role cache when a permission is removed
-      await permissionCache.invalidateRoleCache(rolePermission.role);
+      await permissionCache.invalidateRoleCache(rolePermission.role, rolePermission.organizationId);
       permissionCache.invalidateAllUserCaches(); // Users with this role need cache refresh
     }
   }

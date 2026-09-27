@@ -1,4 +1,4 @@
-const { Permission, RolePermission, User } = require('../models');
+const { Permission, RolePermission, User, OrganizationMembership } = require('../models');
 const sequelize = require('../config/database');
 const permissionCache = require('../services/permissionCache');
 
@@ -20,36 +20,77 @@ const DEFAULT_PERMISSIONS = [
 ];
 
 const ROLES = ['admin', 'manager', 'cashier'];
+const ENFORCED_PERMISSIONS = ['create_sales', 'manage_settings', 'view_own_sales', 'process_refunds'];
 
-// Seed default permissions if database table is empty
-async function ensurePermissionsSeeded() {
+async function getRequesterOrgRole(req, transaction = null) {
+  if (req.user?.orgRole) return req.user.orgRole;
+  const orgId = req.organizationId || req.user?.organizationId;
+  const where = {
+    ...(orgId ? { organizationId: orgId } : {}),
+    ...(req.user?.isEmployee ? { employeeId: req.user.id } : { userId: req.user?.id })
+  };
+  const membership = await OrganizationMembership.findOne({
+    where,
+    ...(transaction ? { transaction } : {})
+  });
+  const orgRole = membership?.orgRole || null;
+  if (req.user) req.user.orgRole = orgRole;
+  return orgRole;
+}
+
+// Seed default permissions if database table is empty for THIS organizationId
+async function ensurePermissionsSeeded(organizationId) {
   let permissions = await Permission.findAll({ order: [['id', 'ASC']] });
   if (permissions.length === 0) {
     permissions = await Permission.bulkCreate(DEFAULT_PERMISSIONS);
-    
-    // Seed default role-permission mappings
-    const adminPerms = permissions.map(p => ({ role: 'admin', permissionId: p.id }));
-    const managerPermNames = ['view_dashboard', 'manage_products', 'manage_categories', 'manage_employees', 'view_reports', 'manage_sales', 'manage_expenses', 'view_customers', 'manage_settings', 'process_refunds'];
-    const cashierPermNames = ['access_pos', 'create_sales', 'view_products'];
-
-    const managerPerms = permissions
-      .filter(p => managerPermNames.includes(p.name))
-      .map(p => ({ role: 'manager', permissionId: p.id }));
-      
-    const cashierPerms = permissions
-      .filter(p => cashierPermNames.includes(p.name))
-      .map(p => ({ role: 'cashier', permissionId: p.id }));
-
-    await RolePermission.bulkCreate([...adminPerms, ...managerPerms, ...cashierPerms], { ignoreDuplicates: true });
   }
+
+  if (organizationId) {
+    const existingCount = await RolePermission.count({
+      where: { organizationId }
+    });
+
+    if (existingCount === 0) {
+      // Seed default role-permission mappings for this organization
+      const adminPerms = permissions.map(p => ({
+        organizationId,
+        role: 'admin',
+        permissionId: p.id
+      }));
+      const managerPermNames = [
+        'view_dashboard', 'manage_products', 'manage_categories', 'manage_employees',
+        'view_reports', 'manage_sales', 'manage_expenses', 'view_customers',
+        'manage_settings', 'process_refunds'
+      ];
+      const cashierPermNames = ['access_pos', 'create_sales', 'view_products'];
+
+      const managerPerms = permissions
+        .filter(p => managerPermNames.includes(p.name))
+        .map(p => ({ organizationId, role: 'manager', permissionId: p.id }));
+        
+      const cashierPerms = permissions
+        .filter(p => cashierPermNames.includes(p.name))
+        .map(p => ({ organizationId, role: 'cashier', permissionId: p.id }));
+
+      await RolePermission.bulkCreate([...adminPerms, ...managerPerms, ...cashierPerms], { ignoreDuplicates: true });
+    }
+  }
+
   return permissions;
 }
 
 // GET /api/permissions/matrix
 exports.getPermissionMatrix = async (req, res) => {
   try {
-    const permissions = await ensurePermissionsSeeded();
-    const rolePermissions = await RolePermission.findAll();
+    const organizationId = req.organizationId || req.user?.organizationId;
+    if (!organizationId) {
+      return res.status(400).json({ error: 'Organization context is required' });
+    }
+
+    const permissions = await ensurePermissionsSeeded(organizationId);
+    const rolePermissions = await RolePermission.findAll({
+      where: { organizationId }
+    });
 
     // Construct boolean lookup matrix: { admin: { manage_settings: true }, cashier: { ... } }
     const matrix = {};
@@ -83,7 +124,12 @@ exports.getPermissionMatrix = async (req, res) => {
     res.json({
       success: true,
       roles: ROLES,
-      permissions: permissions.map(p => ({ id: p.id, name: p.name, description: p.description })),
+      permissions: permissions.map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        enforced: ENFORCED_PERMISSIONS.includes(p.name)
+      })),
       matrix
     });
   } catch (error) {
@@ -94,8 +140,14 @@ exports.getPermissionMatrix = async (req, res) => {
 
 // PUT /api/permissions/matrix
 exports.updatePermissionMatrix = async (req, res) => {
-  if (req.user?.role !== 'super_admin') {
-    return res.status(403).json({ error: 'Permission denied', details: 'Only super_admin can modify global role permissions' });
+  const requesterOrgRole = await getRequesterOrgRole(req);
+  if (requesterOrgRole !== 'owner') {
+    return res.status(403).json({ error: 'Permission denied', details: 'Only the organization owner can modify role permissions' });
+  }
+
+  const organizationId = req.organizationId || req.user?.organizationId;
+  if (!organizationId) {
+    return res.status(400).json({ error: 'Organization context is required' });
   }
 
   const transaction = await sequelize.transaction();
@@ -127,7 +179,7 @@ exports.updatePermissionMatrix = async (req, res) => {
       }
     }
 
-    // Process updates
+    // Process updates scoped by organizationId
     for (const update of updates) {
       const role = update.role;
       let permissionId = update.permissionId;
@@ -141,13 +193,13 @@ exports.updatePermissionMatrix = async (req, res) => {
 
       if (update.enabled) {
         await RolePermission.findOrCreate({
-          where: { role, permissionId },
-          defaults: { role, permissionId },
+          where: { organizationId, role, permissionId },
+          defaults: { organizationId, role, permissionId },
           transaction
         });
       } else {
         await RolePermission.destroy({
-          where: { role, permissionId },
+          where: { organizationId, role, permissionId },
           transaction
         });
       }
@@ -156,6 +208,9 @@ exports.updatePermissionMatrix = async (req, res) => {
     await transaction.commit();
 
     // Invalidate Redis/memory permission cache
+    for (const role of ROLES) {
+      await permissionCache.invalidateRoleCache(role, organizationId);
+    }
     if (permissionCache.invalidateAllPermissionCache) {
       await permissionCache.invalidateAllPermissionCache();
     } else if (permissionCache.clearAllCaches) {

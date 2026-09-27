@@ -268,7 +268,7 @@ router.get('/admin/all',
 
 // Cashier route to get only their own sales
 router.get('/my-sales',
-  checkPermission('view_own_sales'),
+  checkPermission('view_own_sales', { useCache: true }),
   validateDateRange,
   saleController.getMySales
 );
@@ -292,7 +292,7 @@ router.get('/:id',
 
 // Create new sale - Cashiers can only create sales for their shop
 router.post('/',
-  checkPermission('create_sales'),
+  checkPermission('create_sales', { useCache: true }),
   validateSale,
   saleController.createSale
 );
@@ -321,7 +321,7 @@ router.patch('/:id/payment-status',
 
 // POST /api/sales/:saleId/refund - Process itemized refund
 router.post('/:saleId/refund',
-  checkPermission('process_refunds'),
+  checkPermission('process_refunds', { useCache: true }),
   saleController.processRefund
 );
 
