@@ -52,6 +52,7 @@ export const usePermissions = () => {
           { path: '/billing', label: 'Billing & Plans' },
           { path: '/reports', label: 'Reports' },
         ];
+      case 'org_admin':
       case 'manager':
         return [
           { path: '/dashboard', label: 'Dashboard' },
