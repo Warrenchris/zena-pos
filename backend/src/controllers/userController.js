@@ -49,13 +49,32 @@ exports.list = async (req, res) => {
   }
 };
 
+async function getRequesterOrgRole(req, transaction = null) {
+  if (req.user?.orgRole) return req.user.orgRole;
+  const orgId = req.organizationId || req.user?.organizationId;
+  const where = {
+    ...(orgId ? { organizationId: orgId } : {}),
+    ...(req.user?.isEmployee ? { employeeId: req.user.id } : { userId: req.user?.id })
+  };
+  const membership = await OrganizationMembership.findOne({
+    where,
+    ...(transaction ? { transaction } : {})
+  });
+  const orgRole = membership?.orgRole || null;
+  if (req.user) req.user.orgRole = orgRole;
+  return orgRole;
+}
+
 exports.create = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const requestedRole = String(req.body.role || '').trim().toLowerCase();
-  if (requestedRole === 'admin' && req.user?.orgRole !== 'owner') {
-    return res.status(403).json({ error: 'Only the organization owner can create admin accounts.' });
+  if (requestedRole === 'admin') {
+    const requesterOrgRole = await getRequesterOrgRole(req);
+    if (requesterOrgRole !== 'owner') {
+      return res.status(403).json({ error: 'Only the organization owner can create admin accounts.' });
+    }
   }
 
   try {
@@ -106,6 +125,7 @@ exports.updateRole = async (req, res) => {
   try {
     const { id } = req.params;
     const { role, active } = req.body;
+    const requesterOrgRole = await getRequesterOrgRole(req, transaction);
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
 
     if (isUuid) {
@@ -123,7 +143,7 @@ exports.updateRole = async (req, res) => {
         transaction
       });
 
-      if (membership?.orgRole === 'owner' && req.user?.orgRole !== 'owner') {
+      if (membership?.orgRole === 'owner' && requesterOrgRole !== 'owner') {
         await transaction.rollback();
         return res.status(403).json({ error: "Cannot modify the organization owner's account." });
       }
@@ -169,7 +189,7 @@ exports.updateRole = async (req, res) => {
       transaction
     });
 
-    if (membership?.orgRole === 'owner' && req.user?.orgRole !== 'owner') {
+    if (membership?.orgRole === 'owner' && requesterOrgRole !== 'owner') {
       await transaction.rollback();
       return res.status(403).json({ error: "Cannot modify the organization owner's account." });
     }
