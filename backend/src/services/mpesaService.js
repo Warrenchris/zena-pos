@@ -32,12 +32,26 @@ async function getMpesaConfig(shopId) {
   const dbConsumerKey = dbSettings?.consumerKey ? decrypt(dbSettings.consumerKey) : null;
   const dbConsumerSecret = dbSettings?.consumerSecret ? decrypt(dbSettings.consumerSecret) : null;
   const dbPasskey = dbSettings?.passkey ? decrypt(dbSettings.passkey) : null;
-  const dbShortcode = dbSettings?.paybillNumber || dbSettings?.tillNumber || null;
+
+  // If both paybillNumber and tillNumber are set, paybill wins intentionally
+  let shortcode = null;
+  let transactionType = 'CustomerPayBillOnline';
+  if (dbSettings?.paybillNumber) {
+    shortcode = dbSettings.paybillNumber;
+    transactionType = 'CustomerPayBillOnline';
+  } else if (dbSettings?.tillNumber) {
+    shortcode = dbSettings.tillNumber;
+    transactionType = 'CustomerBuyGoodsOnline';
+  } else {
+    shortcode = process.env.MPESA_SHORTCODE || null;
+    transactionType = 'CustomerPayBillOnline';
+  }
 
   return {
     consumerKey: dbConsumerKey || process.env.MPESA_CONSUMER_KEY,
     consumerSecret: dbConsumerSecret || process.env.MPESA_CONSUMER_SECRET,
-    shortcode: dbShortcode || process.env.MPESA_SHORTCODE,
+    shortcode,
+    transactionType,
     passkey: dbPasskey || process.env.MPESA_PASSKEY,
     callbackUrl: process.env.MPESA_CALLBACK_URL
   };
@@ -77,7 +91,7 @@ async function initiateStkPush({ phone, amount, orderId, shopId, callbackToken }
   const config = await getMpesaConfig(shopId);
   const accessToken = await getOAuthToken(shopId);
   
-  const { shortcode, passkey, callbackUrl } = config;
+  const { shortcode, passkey, callbackUrl, transactionType } = config;
 
   if (!shortcode || !passkey || !callbackUrl) {
     throw new Error('M-Pesa configuration missing (MPESA_SHORTCODE, MPESA_PASSKEY, MPESA_CALLBACK_URL).');
@@ -100,7 +114,7 @@ async function initiateStkPush({ phone, amount, orderId, shopId, callbackToken }
     BusinessShortCode: shortcode,
     Password: password,
     Timestamp: timestamp,
-    TransactionType: 'CustomerPayBillOnline',
+    TransactionType: transactionType || 'CustomerPayBillOnline',
     Amount: roundedAmount,
     PartyA: formattedPhone,
     PartyB: shortcode,
