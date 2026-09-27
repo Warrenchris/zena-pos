@@ -51,7 +51,7 @@ const validateCategoryQuery = [
 // Routes
 router.get('/', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateDateRange,
   validateCategoryQuery,
   expenseController.getAllExpenses
@@ -59,34 +59,34 @@ router.get('/',
 
 router.get('/statistics', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateDateRange,
   expenseController.getExpenseStatistics
 );
 
 router.get('/:id', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   expenseController.getExpenseById
 );
 
 router.post('/', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateExpense,
   expenseController.createExpense
 );
 
 router.put('/:id', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateExpense,
   expenseController.updateExpense
 );
 
 router.delete('/:id', 
   auth, 
-  checkRole(['admin']), 
+  checkRole(['admin', 'org_admin']), 
   expenseController.deleteExpense
 );
 

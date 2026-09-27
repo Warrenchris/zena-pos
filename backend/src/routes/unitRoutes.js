@@ -15,19 +15,19 @@ router.get('/:id', unitController.getUnitById);
 
 // Create a new unit - requires admin or manager role
 router.post('/', 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   unitValidation.create, 
   unitController.createUnit
 );
 
 // Update a unit - requires admin or manager role
 router.put('/:id', 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   unitValidation.update, 
   unitController.updateUnit
 );
 
 // Delete a unit - requires admin role
-router.delete('/:id', checkRole(['admin']), unitController.deleteUnit);
+router.delete('/:id', checkRole(['admin', 'org_admin']), unitController.deleteUnit);
 
 module.exports = router;

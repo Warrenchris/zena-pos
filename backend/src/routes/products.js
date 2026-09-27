@@ -147,7 +147,7 @@ router.get('/:id', auth, productController.getProductById);
 router.post('/import', 
   auth, 
   requireActiveSubscription(),
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   handleImportMiddleware,
   productController.importProducts
 );
@@ -174,13 +174,13 @@ router.delete('/:id',
 router.post('/:id/deactivate', 
   auth, 
   requireActiveSubscription(),
-  checkRole(['admin']), 
+  checkRole(['admin', 'org_admin']), 
   productController.deactivateProductOrgWide
 );
 router.patch('/:id/stock', 
   auth, 
   requireActiveSubscription(),
-  checkRole(['admin', 'manager', 'cashier']), 
+  checkRole(['admin', 'manager', 'org_admin', 'cashier']), 
   validateStockUpdate,
   productController.updateStock
 );

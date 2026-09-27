@@ -19,19 +19,19 @@ router.get('/:id', categoryController.getCategoryById);
 
 // Create a new category - requires admin or manager role
 router.post('/', 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   categoryValidation.create, 
   categoryController.createCategory
 );
 
 // Update a category - requires admin or manager role
 router.put('/:id', 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   categoryValidation.update, 
   categoryController.updateCategory
 );
 
 // Delete a category - requires admin role
-router.delete('/:id', checkRole(['admin']), categoryController.deleteCategory);
+router.delete('/:id', checkRole(['admin', 'org_admin']), categoryController.deleteCategory);
 
 module.exports = router;

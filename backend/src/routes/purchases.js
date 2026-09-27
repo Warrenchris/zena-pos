@@ -25,7 +25,7 @@ const generateRefNo = async () => {
 };
 
 // GET /api/purchases — List paginated purchases with server-side KPIs
-router.get('/', checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   try {
     const shopId = req.shopId || req.user?.shopId;
     if (!shopId) {
@@ -123,7 +123,7 @@ router.get('/', checkRole(['admin', 'manager']), async (req, res) => {
 });
 
 // GET /api/purchases/:id — Fetch single purchase
-router.get('/:id', checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/:id', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   try {
     const shopId = req.shopId || req.user?.shopId;
     if (!shopId) {
@@ -150,7 +150,7 @@ router.get('/:id', checkRole(['admin', 'manager']), async (req, res) => {
 });
 
 // POST /api/purchases — Create a purchase and update stock with atomic transaction & strict input validation
-router.post('/', checkRole(['admin', 'manager']), async (req, res) => {
+router.post('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const shopId = req.shopId || req.user?.shopId;
@@ -336,7 +336,7 @@ router.post('/', checkRole(['admin', 'manager']), async (req, res) => {
 });
 
 // PUT /api/purchases/:id — Update purchase notes / metadata
-router.put('/:id', checkRole(['admin', 'manager']), async (req, res) => {
+router.put('/:id', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   try {
     const shopId = req.shopId || req.user?.shopId;
     if (!shopId) return res.status(403).json({ error: 'Shop context required' });
@@ -372,7 +372,7 @@ router.put('/:id', checkRole(['admin', 'manager']), async (req, res) => {
 });
 
 // PATCH /api/purchases/:id/receive — Mark pending purchase as received and increment inventory atomically
-router.patch('/:id/receive', checkRole(['admin', 'manager']), async (req, res) => {
+router.patch('/:id/receive', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const shopId = req.shopId || req.user?.shopId;
@@ -442,7 +442,7 @@ router.patch('/:id/receive', checkRole(['admin', 'manager']), async (req, res) =
 });
 
 // POST /api/purchases/:id/payments — Record installment or complete payment on a purchase
-router.post('/:id/payments', checkRole(['admin', 'manager']), async (req, res) => {
+router.post('/:id/payments', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const shopId = req.shopId || req.user?.shopId;
@@ -526,7 +526,7 @@ router.post('/:id/payments', checkRole(['admin', 'manager']), async (req, res) =
 });
 
 // PATCH /api/purchases/:id/cancel — Safely cancel a purchase and reverse inventory if previously received
-router.patch('/:id/cancel', checkRole(['admin']), async (req, res) => {
+router.patch('/:id/cancel', checkRole(['admin', 'org_admin']), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const shopId = req.shopId || req.user?.shopId;
@@ -593,7 +593,7 @@ router.patch('/:id/cancel', checkRole(['admin']), async (req, res) => {
 });
 
 // DELETE /api/purchases/:id — Soft-cancel and audit (enforces inventory integrity)
-router.delete('/:id', checkRole(['admin']), async (req, res) => {
+router.delete('/:id', checkRole(['admin', 'org_admin']), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const shopId = req.shopId || req.user?.shopId;

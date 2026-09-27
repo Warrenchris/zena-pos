@@ -5,7 +5,7 @@ const validateDateRange = require('../middleware/validateDateRange');
 
 const router = express.Router();
 
-router.use(auth, checkRole(['admin', 'manager']));
+router.use(auth, checkRole(['admin', 'manager', 'org_admin']));
 
 router.get('/sales-summary', validateDateRange, controller.getSalesSummary);
 router.get('/profit-loss', validateDateRange, controller.getProfitAndLoss);

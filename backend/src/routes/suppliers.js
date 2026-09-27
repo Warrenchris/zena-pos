@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/suppliers — Create supplier
-router.post('/', checkRole(['admin', 'manager']), async (req, res) => {
+router.post('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   try {
     const organizationId = req.organizationId || req.user?.organizationId;
     const shopId = req.shopId || req.user?.shopId || null;

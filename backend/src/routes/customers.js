@@ -52,20 +52,20 @@ const { validateDateRange } = require('../middleware/validators');
 // Routes
 router.get('/', 
   auth, 
-  checkRole(['admin', 'manager', 'cashier']), 
+  checkRole(['admin', 'manager', 'org_admin', 'cashier']), 
   customerController.getAllCustomers
 );
 
 router.get('/statistics', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateDateRange,
   customerController.getCustomerStatistics
 );
 
 router.get('/:id', 
   auth, 
-  checkRole(['admin', 'manager', 'cashier']), 
+  checkRole(['admin', 'manager', 'org_admin', 'cashier']), 
   customerController.getCustomerById
 );
 
@@ -78,14 +78,14 @@ router.post('/',
 
 router.put('/:id', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateCustomer,
   customerController.updateCustomer
 );
 
 router.delete('/:id', 
   auth, 
-  checkRole(['admin']), 
+  checkRole(['admin', 'org_admin']), 
   customerController.deleteCustomer
 );
 

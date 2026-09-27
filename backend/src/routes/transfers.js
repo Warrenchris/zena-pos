@@ -37,7 +37,7 @@ const validateTransfer = [
     .withMessage('Notes must be less than 500 characters')
 ];
 
-router.post('/', checkRole(['admin', 'manager']), validateTransfer, transferController.createTransfer);
-router.get('/', checkRole(['admin', 'manager', 'cashier']), transferController.getTransfers);
+router.post('/', checkRole(['admin', 'manager', 'org_admin']), validateTransfer, transferController.createTransfer);
+router.get('/', checkRole(['admin', 'manager', 'org_admin', 'cashier']), transferController.getTransfers);
 
 module.exports = router;
