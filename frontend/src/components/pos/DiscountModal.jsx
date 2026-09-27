@@ -70,7 +70,7 @@ export default function DiscountModal({
       employeesAPI.getAll()
         .then((res) => {
           const list = Array.isArray(res.data) ? res.data : (res.data?.employees || []);
-          const managers = list.filter((e) => e.role === 'manager' || e.role === 'admin');
+          const managers = list.filter((e) => e.role === 'manager' || e.role === 'admin' || e.role === 'org_admin');
           setManagersList(managers);
           if (managers.length > 0) {
             setSelectedManagerId(String(managers[0].id));

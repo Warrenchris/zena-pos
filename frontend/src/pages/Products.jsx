@@ -40,7 +40,7 @@ function ProductsContent() {
   const { products, loading, pagination } = useSelector((state) => state.products || { products: [], loading: false });
   const { categories } = useSelector((state) => state.categories || { categories: [] });
   const user = useSelector((state) => state.auth.user);
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'org_admin';
   
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
