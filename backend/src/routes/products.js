@@ -154,21 +154,21 @@ router.post('/import',
 router.post('/', 
   auth, 
   requireActiveSubscription(),
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateProduct,
   productController.createProduct
 );
 router.put('/:id', 
   auth, 
   requireActiveSubscription(),
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateProduct,
   productController.updateProduct
 );
 router.delete('/:id', 
   auth, 
   requireActiveSubscription(),
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   productController.deleteProduct
 );
 router.post('/:id/deactivate', 

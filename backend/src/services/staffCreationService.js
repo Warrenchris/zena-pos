@@ -80,6 +80,13 @@ async function createStaffMember({ actor, body = {}, reqOrgId = null }) {
   }
 
   const position = String(body.position || body.role || 'cashier').trim();
+  const isGrantingAdmin = position.toLowerCase() === 'admin' || String(body.role || '').trim().toLowerCase() === 'admin';
+  if (isGrantingAdmin && actor.role !== 'admin') {
+    const err = new Error('Access denied: only organization owners can grant the Administrator position.');
+    err.statusCode = 403;
+    err.code = 'OWNER_ROLE_REQUIRED';
+    throw err;
+  }
   const status = body.status === 'inactive' ? 'inactive' : 'active';
   const salary = body.salary != null && !isNaN(Number(body.salary)) ? Number(body.salary) : 0;
   const hireDate = body.hireDate ? new Date(body.hireDate) : new Date();

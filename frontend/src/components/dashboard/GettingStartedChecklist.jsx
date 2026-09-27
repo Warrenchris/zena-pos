@@ -15,6 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
+import { isOwnerRole } from '../../utils/roles';
 
 /**
  * GettingStartedChecklist Component
@@ -66,7 +67,7 @@ export default function GettingStartedChecklist({
         Array.isArray(employees) &&
         (employees.length > 1 ||
           employees.some(
-            (e) => (e.role && e.role !== 'admin') || String(e.id) !== String(user?.id)
+            (e) => (e.role && !isOwnerRole(e.role) && e.role !== 'org_admin') || (String(e.id) !== String(user?.id) && String(e.userId || '') !== String(user?.id))
           ))
       );
 

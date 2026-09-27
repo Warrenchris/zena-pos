@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import { isManagerTier } from '../utils/roles';
 import forecastingService from '../services/forecasting.service';
 import {
   ShoppingBagIcon,
@@ -120,7 +121,7 @@ export default function Dashboard() {
     // whose shop-level `role` field isn't literally 'admin' (e.g. added to
     // the org a different way than self-registration) would otherwise
     // silently get an empty employees list here with no error surfaced.
-    if (userRole === 'admin' || userOrgRole === 'owner' || userOrgRole === 'admin') {
+    if (isManagerTier(userRole) || userOrgRole === 'owner' || userOrgRole === 'admin') {
       loadEmployees();
     }
     // Org-wide seat usage (independent of which branch is currently active) is
@@ -266,7 +267,7 @@ export default function Dashboard() {
 
   // Check for low stock products (alert only once per unique low-stock condition)
   useEffect(() => {
-    if (products && products.length > 0 && userRole === 'admin') {
+    if (products && products.length > 0 && isManagerTier(userRole)) {
       const lowStockProducts = products.filter(product =>
         product.stockQuantity <= product.reorderPoint && product.active
       );
@@ -371,8 +372,8 @@ export default function Dashboard() {
     );
   }
 
-  // Only render cashier dashboard for non-admin users
-  if (user?.role !== 'admin') {
+  // Only render cashier dashboard for non-manager-tier users
+  if (!isManagerTier(user?.role)) {
     return <CashierDashboard />;
   }
 

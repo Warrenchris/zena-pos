@@ -23,6 +23,7 @@ import { useToast } from '../components/Toast';
 import { salesAPI, employeesAPI } from '../services/api';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import PageHeader from '../components/ui/PageHeader';
+import { isManagerTier } from '../utils/roles';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -284,7 +285,7 @@ export default function SalesReturns() {
     try {
       const res = await employeesAPI.getAll();
       const list = Array.isArray(res.data) ? res.data : (res.data?.employees || []);
-      const managers = list.filter(e => e.role === 'manager' || e.role === 'admin');
+      const managers = list.filter(e => isManagerTier(e.role));
       setManagersList(managers);
       if (managers.length > 0) {
         setSelectedManagerId(String(managers[0].id));
@@ -651,7 +652,7 @@ export default function SalesReturns() {
           )}
 
           {/* Priority 3: Admin Override Notice */}
-          {showOverrideOption && (user?.role === 'admin' || user?.role === 'manager') && (
+          {showOverrideOption && isManagerTier(user?.role) && (
             <div className="p-3.5 rounded-xl bg-warning/10 border border-warning/30 space-y-2">
               <div className="flex items-center space-x-2 text-warning font-semibold text-small">
                 <ShieldExclamationIcon className="h-5 w-5" />

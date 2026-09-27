@@ -25,8 +25,8 @@ router.post('/', invoiceValidation.create, invoiceController.createInvoice);
 // Update invoice
 router.put('/:id', invoiceValidation.update, invoiceController.updateInvoice);
 
-// Delete invoice (admin only)
-router.delete('/:id', checkRole(['admin']), invoiceController.deleteInvoice);
+// Delete invoice (admin or org_admin)
+router.delete('/:id', checkRole(['admin', 'org_admin']), invoiceController.deleteInvoice);
 
 // Generate PDF
 router.get('/:id/pdf', invoiceController.generatePDF);

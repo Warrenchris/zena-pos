@@ -254,7 +254,7 @@ router.get('/statistics',
 
 router.get('/cashier-stats',
   auth,
-  checkRole(['admin', 'manager', 'cashier', 'employee']),
+  checkRole(['admin', 'manager', 'org_admin', 'cashier', 'employee']),
   validateDateRange,
   saleController.getCashierStats
 );
@@ -275,7 +275,7 @@ router.get('/my-sales',
 
 // Get all sales returns for shop
 router.get('/returns/all',
-  checkRole(['admin', 'manager', 'cashier', 'employee']),
+  checkRole(['admin', 'manager', 'org_admin', 'cashier', 'employee']),
   saleController.getAllReturns
 );
 
@@ -286,7 +286,7 @@ router.get('/:saleId/payments',
 
 // Get specific sale - Scoped to shop for authorized roles
 router.get('/:id',
-  checkRole(['admin', 'manager', 'cashier', 'employee']),
+  checkRole(['admin', 'manager', 'org_admin', 'cashier', 'employee']),
   saleController.getSaleById
 );
 
