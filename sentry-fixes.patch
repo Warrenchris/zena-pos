@@ -1,0 +1,106 @@
+diff --git a/.github/workflows/frontend-ci.yml b/.github/workflows/frontend-ci.yml
+index 8450275..9a26a2d 100644
+--- a/.github/workflows/frontend-ci.yml
++++ b/.github/workflows/frontend-ci.yml
+@@ -41,6 +41,9 @@ jobs:
+           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
+           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
++          # Must match the version sentry-release.yml creates, so the running
++          # app's Sentry.init({release}) and the uploaded source maps agree.
++          VITE_SENTRY_RELEASE: zana-pos-frontend@${{ github.sha }}
+ 
+       - name: Run unit tests
+         run: npm test -- --passWithNoTests
+diff --git a/.github/workflows/sentry-release.yml b/.github/workflows/sentry-release.yml
+index 5da7179..ab9cb29 100644
+--- a/.github/workflows/sentry-release.yml
++++ b/.github/workflows/sentry-release.yml
+@@ -27,7 +27,7 @@ jobs:
+           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
+           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
+         with:
+-          version: zana-pos-backend@1.0.0
++          version: zana-pos-backend@${{ github.sha }}
+           set_commits: auto
+           environment: production
+ 
+@@ -39,7 +39,7 @@ jobs:
+           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
+           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
+         with:
+-          version: zana-pos-ai@1.0.0
++          version: zana-pos-ai@${{ github.sha }}
+           set_commits: auto
+           environment: production
+ 
+@@ -51,6 +51,6 @@ jobs:
+           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
+           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
+         with:
+-          version: zana-pos-frontend@1.0.0
++          version: zana-pos-frontend@${{ github.sha }}
+           set_commits: auto
+           environment: production
+diff --git a/backend/src/middleware/auth.js b/backend/src/middleware/auth.js
+index dd1012b..3cb7b99 100644
+--- a/backend/src/middleware/auth.js
++++ b/backend/src/middleware/auth.js
+@@ -63,27 +63,14 @@ const auth = async (req, res, next) => {
+       req.organizationId = null;
+     }
+ 
+-    // Attach safe diagnostic tenant/user context to Sentry (non-blocking)
+-    try {
+-      const Sentry = require('../instrument');
+-      if (decoded.id) {
+-        Sentry.setUser({ id: String(decoded.id) });
+-      }
+-      if (req.shopId) {
+-        Sentry.setTag('shopId', String(req.shopId));
+-      }
+-      if (req.organizationId) {
+-        Sentry.setTag('organizationId', String(req.organizationId));
+-      }
+-      if (decoded.role) {
+-        Sentry.setTag('role', String(decoded.role));
+-      }
+-      if (req.requestId) {
+-        Sentry.setTag('requestId', String(req.requestId));
+-      }
+-    } catch (sentryErr) {
+-      // Non-blocking: Sentry must never disrupt authentication
+-    }
++    // Note: tenant/user context for Sentry is deliberately NOT set here.
++    // Sentry.setUser()/setTag() write to Node's ambient async-context scope,
++    // which has documented cross-request leakage reports under concurrent
++    // load (see getsentry/sentry-javascript#13205) — in a multi-tenant app
++    // that risks attaching Shop A's identifiers to an error actually caused
++    // by Shop B. errorHandler.js attaches shopId/organizationId/requestId
++    // safely instead, via an explicit Sentry.withScope() wrapped around the
++    // single captureException call, which is inherently request-local.
+ 
+     // 3. Check organization suspension status (AUTH-01)
+     if (req.organizationId) {
+diff --git a/docker-compose.prod.yml b/docker-compose.prod.yml
+index 863f7af..55681bc 100644
+--- a/docker-compose.prod.yml
++++ b/docker-compose.prod.yml
+@@ -76,6 +76,17 @@ services:
+       BACKUP_DIR: /app/backups
+       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+       BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
++      SENTRY_DSN: ${SENTRY_DSN:-}
++      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
++      # No deploy workflow exists in this repo yet, so this can't be set
++      # automatically to the commit SHA the way the frontend build does it.
++      # Export it yourself before `docker compose up`, e.g.:
++      #   SENTRY_RELEASE=zana-pos-backend@$(git rev-parse HEAD) docker compose -f docker-compose.prod.yml up -d --build
++      # Left blank here on purpose: instrument.js's own fallback
++      # (zana-pos-backend@<package.json version>) is more honest than a
++      # second hardcoded guess would be.
++      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
++      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+     volumes:
+       # Read-only: the backend only reports on backups here, it never writes.
+       # backup-scheduler (below) is the only service that writes to this volume.

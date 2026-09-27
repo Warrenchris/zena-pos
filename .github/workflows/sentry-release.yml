@@ -27,7 +27,7 @@ jobs:
           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
         with:
-          version: zana-pos-backend@1.0.0
+          version: zana-pos-backend@${{ github.sha }}
           set_commits: auto
           environment: production
 
@@ -39,7 +39,7 @@ jobs:
           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
         with:
-          version: zana-pos-ai@1.0.0
+          version: zana-pos-ai@${{ github.sha }}
           set_commits: auto
           environment: production
 
@@ -51,6 +51,6 @@ jobs:
           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
         with:
-          version: zana-pos-frontend@1.0.0
+          version: zana-pos-frontend@${{ github.sha }}
           set_commits: auto
           environment: production

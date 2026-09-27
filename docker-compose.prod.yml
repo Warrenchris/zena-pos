@@ -76,6 +76,17 @@ services:
       BACKUP_DIR: /app/backups
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
       BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      # No deploy workflow exists in this repo yet, so this can't be set
+      # automatically to the commit SHA the way the frontend build does it.
+      # Export it yourself before `docker compose up`, e.g.:
+      #   SENTRY_RELEASE=zana-pos-backend@$(git rev-parse HEAD) docker compose -f docker-compose.prod.yml up -d --build
+      # Left blank here on purpose: instrument.js's own fallback
+      # (zana-pos-backend@<package.json version>) is more honest than a
+      # second hardcoded guess would be.
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
     volumes:
       # Read-only: the backend only reports on backups here, it never writes.
       # backup-scheduler (below) is the only service that writes to this volume.
