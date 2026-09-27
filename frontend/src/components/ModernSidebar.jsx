@@ -103,9 +103,15 @@ const ModernSidebar = ({
       title: 'Settings',
       items: [
         { name: 'Settings', path: '/settings', icon: CogIcon },
-        { name: 'Billing & Plans', path: '/billing', icon: CreditCardIcon },
-        { name: 'User Access', path: '/admin/users', icon: UserIcon },
-        { name: 'Company Profile', path: '/admin/company', icon: BuildingOfficeIcon },
+        // Billing: owner-only (non-owners land on a dead-end page)
+        ...(user?.orgRole === 'owner' ? [{ name: 'Billing & Plans', path: '/billing', icon: CreditCardIcon }] : []),
+        // User Access & Company Profile: owner or org admin
+        ...(['owner', 'admin'].includes(user?.orgRole)
+          ? [
+              { name: 'User Access', path: '/admin/users', icon: UserIcon },
+              { name: 'Company Profile', path: '/admin/company', icon: BuildingOfficeIcon },
+            ]
+          : []),
       ]
     }
   ];
@@ -131,7 +137,8 @@ const ModernSidebar = ({
       title: 'Account',
       items: [
         { name: 'Settings', path: '/settings', icon: CogIcon },
-        { name: 'Billing & Plans', path: '/billing', icon: CreditCardIcon },
+        // Billing: owner-only (non-owners land on a dead-end page)
+        ...(user?.orgRole === 'owner' ? [{ name: 'Billing & Plans', path: '/billing', icon: CreditCardIcon }] : []),
       ]
     }
   ];
