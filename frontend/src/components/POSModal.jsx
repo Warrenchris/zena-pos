@@ -123,7 +123,7 @@ export default function POSModal({ products = [], customers = [], onClose }) {
   const availableMethods = [];
   if (enabledMethodsObj.cash !== false) availableMethods.push({ id: 'cash', label: 'Cash' });
   if (enabledMethodsObj.mobile !== false) availableMethods.push({ id: 'mobile', label: 'Mobile Money' });
-  if (enabledMethodsObj.bank !== false || enabledMethodsObj.card !== false) availableMethods.push({ id: 'card', label: 'Card / Bank' });
+  if (enabledMethodsObj.bank !== false) availableMethods.push({ id: 'card', label: 'Card / Bank' });
   if (availableMethods.length === 0) availableMethods.push({ id: 'cash', label: 'Cash' });
 
   const getTax = () => {

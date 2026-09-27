@@ -295,8 +295,32 @@ exports.createSale = async (req, res) => {
     const rawKey = req.header('Idempotency-Key') || req.header('idempotency-key') || req.body?.idempotencyKey;
     const idempotencyKey = normalizeIdempotencyKey(rawKey);
 
-    const shopId = req.shopId || req.user.shopId;
+    const shopId = req.shopId || req.user?.shopId;
     const organizationId = req.organizationId || req.user?.organizationId;
+
+    const paymentMethod = req.body?.paymentMethod || 'cash';
+    let methodKey = null;
+    if (paymentMethod === 'cash') {
+      methodKey = 'cash';
+    } else if (paymentMethod === 'mobile' || paymentMethod === 'mobile_money') {
+      methodKey = 'mobile';
+    } else if (paymentMethod === 'card' || paymentMethod === 'bank') {
+      methodKey = 'bank';
+    }
+
+    if (shopId && methodKey) {
+      const settings = await SystemSettings.findOne({
+        where: { shopId },
+        attributes: ['enabledPaymentMethods']
+      });
+      const enabledPaymentMethods = settings?.enabledPaymentMethods;
+      if (enabledPaymentMethods && enabledPaymentMethods[methodKey] === false) {
+        return res.status(400).json({
+          error: `Payment method '${paymentMethod}' is disabled for this shop`
+        });
+      }
+    }
+
     const salePayload = {
       ...req.body,
       idempotencyKey
