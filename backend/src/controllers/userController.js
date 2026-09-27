@@ -53,6 +53,11 @@ exports.create = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
+  const requestedRole = String(req.body.role || '').trim().toLowerCase();
+  if (requestedRole === 'admin' && req.user?.orgRole !== 'owner') {
+    return res.status(403).json({ error: 'Only the organization owner can create admin accounts.' });
+  }
+
   try {
     const { employee } = await staffCreationService.createStaffMember({
       actor: req.user,
@@ -113,21 +118,25 @@ exports.updateRole = async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
       }
 
+      const membership = await OrganizationMembership.findOne({
+        where: { employeeId: emp.id },
+        transaction
+      });
+
+      if (membership?.orgRole === 'owner' && req.user?.orgRole !== 'owner') {
+        await transaction.rollback();
+        return res.status(403).json({ error: "Cannot modify the organization owner's account." });
+      }
+
       if (role) emp.position = role;
       if (active !== undefined) emp.status = active ? 'active' : 'inactive';
       await emp.save({ transaction });
 
       // Synchronize OrganizationMembership
-      if (active !== undefined) {
+      if (active !== undefined && membership) {
         const membershipStatus = active ? 'active' : 'suspended';
-        const membership = await OrganizationMembership.findOne({
-          where: { employeeId: emp.id },
-          transaction
-        });
-        if (membership) {
-          membership.status = membershipStatus;
-          await membership.save({ transaction });
-        }
+        membership.status = membershipStatus;
+        await membership.save({ transaction });
       }
 
       await transaction.commit();
@@ -155,21 +164,25 @@ exports.updateRole = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    const membership = await OrganizationMembership.findOne({
+      where: { userId: user.id },
+      transaction
+    });
+
+    if (membership?.orgRole === 'owner' && req.user?.orgRole !== 'owner') {
+      await transaction.rollback();
+      return res.status(403).json({ error: "Cannot modify the organization owner's account." });
+    }
+
     if (role) user.role = role;
     if (active !== undefined) user.active = active;
     await user.save({ transaction });
 
     // Synchronize OrganizationMembership
-    if (active !== undefined) {
+    if (active !== undefined && membership) {
       const membershipStatus = active ? 'active' : 'suspended';
-      const membership = await OrganizationMembership.findOne({
-        where: { userId: user.id },
-        transaction
-      });
-      if (membership) {
-        membership.status = membershipStatus;
-        await membership.save({ transaction });
-      }
+      membership.status = membershipStatus;
+      await membership.save({ transaction });
     }
 
     await transaction.commit();

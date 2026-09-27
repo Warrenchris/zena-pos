@@ -266,4 +266,142 @@ describe('Org Admin Access Control & Security Invariants', () => {
       expect(res.body.error).toMatch(/only organization owners can grant the Administrator position/i);
     });
   });
+
+  describe('Invariant 5: Shop-level admin (User.role="admin") cannot create admin accounts or modify owner account', () => {
+    let shopAdminUser;
+    let shopAdminToken;
+
+    beforeAll(async () => {
+      const ts = Date.now();
+      shopAdminUser = await User.create({
+        name: 'Shop Admin Non-Owner',
+        email: `shop_admin_${ts}@example.com`,
+        password: 'Password123!',
+        role: 'admin',
+        shopId: shopA.id,
+        active: true
+      });
+
+      await OrganizationMembership.create({
+        organizationId: org.id,
+        userId: shopAdminUser.id,
+        orgRole: 'admin',
+        status: 'active'
+      });
+
+      const login = await request(app)
+        .post('/api/auth/login')
+        .send({ email: shopAdminUser.email, password: 'Password123!' });
+      shopAdminToken = `Bearer ${login.body.token}`;
+    });
+
+    test('non-owner shop admin attempting POST /api/users with role="admin" receives 403', async () => {
+      const res = await request(app)
+        .post('/api/users')
+        .set('Authorization', shopAdminToken)
+        .send({
+          name: 'Unauthorized Admin',
+          email: `unauth_admin_${Date.now()}@example.com`,
+          password: 'Password123!',
+          role: 'admin'
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Only the organization owner can create admin accounts.');
+    });
+
+    test('non-owner shop admin attempting POST /api/users with role="cashier" or "manager" succeeds', async () => {
+      const cashierRes = await request(app)
+        .post('/api/users')
+        .set('Authorization', shopAdminToken)
+        .send({
+          name: 'Allowed Cashier',
+          email: `allowed_cashier_${Date.now()}@example.com`,
+          password: 'Password123!',
+          role: 'cashier'
+        });
+
+      expect(cashierRes.status).toBe(201);
+      expect(cashierRes.body.role).toBe('cashier');
+
+      const managerRes = await request(app)
+        .post('/api/users')
+        .set('Authorization', shopAdminToken)
+        .send({
+          name: 'Allowed Manager',
+          email: `allowed_manager_${Date.now()}@example.com`,
+          password: 'Password123!',
+          role: 'manager'
+        });
+
+      expect(managerRes.status).toBe(201);
+      expect(managerRes.body.role).toBe('manager');
+    });
+
+    test('non-owner shop admin attempting PUT /api/users/:ownerId/role receives 403 and leaves DB unchanged', async () => {
+      // Attempt to demote and deactivate the organization owner
+      const res = await request(app)
+        .put(`/api/users/${ownerUser.id}/role`)
+        .set('Authorization', shopAdminToken)
+        .send({
+          role: 'cashier',
+          active: false
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("Cannot modify the organization owner's account.");
+
+      // Verify owner row in User table is unchanged
+      const ownerInDb = await User.findByPk(ownerUser.id);
+      expect(ownerInDb.role).toBe('admin');
+      expect(ownerInDb.active).toBe(true);
+
+      // Verify owner membership in OrganizationMembership is unchanged
+      const membershipInDb = await OrganizationMembership.findOne({
+        where: { userId: ownerUser.id }
+      });
+      expect(membershipInDb.orgRole).toBe('owner');
+      expect(membershipInDb.status).toBe('active');
+    });
+
+    test('actual organization owner can still create admin accounts via POST /api/users', async () => {
+      const res = await request(app)
+        .post('/api/users')
+        .set('Authorization', ownerToken)
+        .send({
+          name: 'Owner Created Admin',
+          email: `owner_created_admin_${Date.now()}@example.com`,
+          password: 'Password123!',
+          role: 'admin'
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.role).toBe('admin');
+    });
+
+    test('actual organization owner can edit any user in their shop including themselves', async () => {
+      // Owner edits another user
+      const editOtherRes = await request(app)
+        .put(`/api/users/${shopAdminUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({
+          role: 'manager',
+          active: true
+        });
+
+      expect(editOtherRes.status).toBe(200);
+      expect(editOtherRes.body.role).toBe('manager');
+
+      // Owner edits themselves (no regression)
+      const editSelfRes = await request(app)
+        .put(`/api/users/${ownerUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({
+          role: 'admin',
+          active: true
+        });
+
+      expect(editSelfRes.status).toBe(200);
+    });
+  });
 });
