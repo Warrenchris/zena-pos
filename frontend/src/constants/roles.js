@@ -1,6 +1,7 @@
 export const SYSTEM_ROLES = {
   ADMIN: 'admin',
   MANAGER: 'manager',
+  ORG_ADMIN: 'org_admin',
   CASHIER: 'cashier',
   EMPLOYEE: 'employee'
 };
@@ -14,6 +15,21 @@ export const ROLE_PERMISSIONS = {
   [SYSTEM_ROLES.MANAGER]: {
     name: 'Manager',
     description: 'Store management and reporting',
+    permissions: [
+      'view_dashboard',
+      'manage_products',
+      'manage_categories',
+      'manage_employees',
+      'view_reports',
+      'manage_sales',
+      'manage_expenses',
+      'view_customers',
+      'process_refunds'
+    ]
+  },
+  [SYSTEM_ROLES.ORG_ADMIN]: {
+    name: 'Org Admin',
+    description: 'Delegated org admin with manager-equivalent shop access',
     permissions: [
       'view_dashboard',
       'manage_products',

@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { usePermissions } from '../hooks/usePermissions';
 import { logout } from '../store/slices/authSlice';
+import { isManagerTier } from '../utils/roles';
 import ModernSidebar from './ModernSidebar';
 import TopNavBar from './navigation/TopNavBar';
 import SubscriptionBanner from './SubscriptionBanner';
@@ -100,7 +101,7 @@ export default function Layout() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         user={user}
-        variant={user?.role === 'admin' ? 'admin' : 'cashier'}
+        variant={isManagerTier(user?.role) ? 'admin' : 'cashier'}
         isCollapsed={isCollapsed}
         onToggleCollapse={handleToggleCollapse}
       />
