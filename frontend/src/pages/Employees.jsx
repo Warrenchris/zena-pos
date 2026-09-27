@@ -668,7 +668,7 @@ export default function Employees() {
                 <option value="">Select a position</option>
                 <option value="cashier">Cashier</option>
                 <option value="manager">Manager</option>
-                {user?.role === 'admin' && <option value="admin">Administrator</option>}
+                {user?.orgRole === 'owner' && <option value="admin">Administrator</option>}
               </select>
             </div>
           </div>
