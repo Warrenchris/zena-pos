@@ -41,6 +41,9 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'warrenchris-org' }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'zana-pos' }}
+          # Must match the version sentry-release.yml creates, so the running
+          # app's Sentry.init({release}) and the uploaded source maps agree.
+          VITE_SENTRY_RELEASE: zana-pos-frontend@${{ github.sha }}
 
       - name: Run unit tests
         run: npm test -- --passWithNoTests
