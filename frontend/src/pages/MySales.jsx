@@ -126,7 +126,7 @@ const MySales = () => {
   const onDrawerOpen = () => setIsDrawerOpen(true);
   const onDrawerClose = () => setIsDrawerOpen(false);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'org_admin';
 
   const handleSaleClick = (sale) => {
     // Get the original sale data from the API response before normalization

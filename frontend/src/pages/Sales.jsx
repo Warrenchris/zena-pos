@@ -43,7 +43,7 @@ export default function Sales() {
     sortOrder: 'DESC'
   });
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'org_admin';
   const urlCustomerId = (() => {
     try { return new URLSearchParams(window.location.search).get('customerId') || ''; } catch { return ''; }
   })();
