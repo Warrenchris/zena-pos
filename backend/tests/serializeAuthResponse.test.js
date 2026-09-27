@@ -89,4 +89,25 @@ describe('buildAuthPayload', () => {
   test('trimmed cashier position maps to cashier', () => {
     expect(resolveAuthRole(' cashier ')).toBe('cashier');
   });
+
+  test('employee position admin with orgRole admin resolves to org_admin, never literal admin', () => {
+    for (const position of ['admin', 'ADMIN', 'Admin']) {
+      expect(resolveAuthRole(position, 'admin')).toBe('org_admin');
+      expect(resolveAuthRole(position, 'admin')).not.toBe('admin');
+      const payload = buildAuthPayload({
+        employee: {
+          id: 'emp-admin',
+          firstName: 'A',
+          lastName: 'Dmin',
+          email: 'a@test.com',
+          position,
+          shopId: 1
+        },
+        shop: { id: 1, name: 'HQ', organizationId: 1 },
+        orgRole: 'admin'
+      });
+      expect(payload.user.role).toBe('org_admin');
+      expect(payload.user.role).not.toBe('admin');
+    }
+  });
 });
