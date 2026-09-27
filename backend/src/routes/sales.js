@@ -242,12 +242,12 @@ const validatePaymentStatus = [
 
 // Basic routes with role-based access
 router.get('/',
-  checkRole(['admin', 'manager', 'cashier']),
+  checkRole(['admin', 'manager', 'org_admin', 'cashier']),
   saleController.getAllSales
 );
 
 router.get('/statistics',
-  checkRole(['admin', 'manager']),
+  checkRole(['admin', 'manager', 'org_admin']),
   validateDateRange,
   saleController.getSalesStatistics
 );
@@ -261,7 +261,7 @@ router.get('/cashier-stats',
 
 // Admin route to get all sales with filtering
 router.get('/admin/all',
-  checkRole(['admin', 'manager']),
+  checkRole(['admin', 'manager', 'org_admin']),
   validateDateRange,
   saleController.getAllSalesForAdmin
 );
@@ -299,7 +299,7 @@ router.post('/',
 
 // Update sale - Only managers and admin can update sales
 router.put('/:id',
-  checkRole(['admin', 'manager']),
+  checkRole(['admin', 'manager', 'org_admin']),
   body('status').optional().isIn(['completed', 'cancelled', 'refunded']),
   body('notes').optional().isString(),
   validateRequest,
@@ -308,13 +308,13 @@ router.put('/:id',
 
 // Delete sale - Only admin can delete sales
 router.delete('/:id',
-  checkRole(['admin']),
+  checkRole(['admin', 'org_admin']),
   saleController.deleteSale
 );
 
 router.patch('/:id/payment-status',
   auth,
-  checkRole(['admin', 'manager']),
+  checkRole(['admin', 'manager', 'org_admin']),
   validatePaymentStatus,
   saleController.updatePaymentStatus
 );

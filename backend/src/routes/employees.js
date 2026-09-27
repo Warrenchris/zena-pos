@@ -10,7 +10,7 @@ const {
 } = require('../controllers/employeeController');
 
 const checkAdminOrSelf = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') return next();
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'org_admin')) return next();
   const userId = req.user ? String(req.user.id) : null;
   const employeeId = req.user && req.user.employeeId ? String(req.user.employeeId) : null;
   const targetId = String(req.params.id);
@@ -21,18 +21,18 @@ const checkAdminOrSelf = (req, res, next) => {
 };
 
 // Get all employees (admin, manager, cashier) – tenant scoped
-router.get('/', auth, checkRole(['admin', 'manager', 'cashier']), getAllEmployees);
+router.get('/', auth, checkRole(['admin', 'manager', 'org_admin', 'cashier']), getAllEmployees);
 
 // Get employee by ID (admin or self)
 router.get('/:id', auth, checkAdminOrSelf, getEmployeeById);
 
-// Create new employee (admin only) – tenant validated and branch authorized
-router.post('/', auth, checkRole(['admin']), createEmployee);
+// Create new employee (admin or org_admin) – tenant validated and branch authorized
+router.post('/', auth, checkRole(['admin', 'org_admin']), createEmployee);
 
-// Update employee (admin only) – tenant scoped and shopId forced
-router.put('/:id', auth, checkRole(['admin']), ensureShopIsolation, updateEmployee);
+// Update employee (admin or org_admin) – tenant scoped and shopId forced
+router.put('/:id', auth, checkRole(['admin', 'org_admin']), ensureShopIsolation, updateEmployee);
 
-// Delete employee (admin only)
-router.delete('/:id', auth, checkRole(['admin']), deleteEmployee);
+// Delete employee (admin or org_admin)
+router.delete('/:id', auth, checkRole(['admin', 'org_admin']), deleteEmployee);
 
 module.exports = router;

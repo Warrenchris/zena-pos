@@ -3,6 +3,12 @@ const Permission = require('../models/Permission');
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
 
+// NOTE: The 'org_admin' resolved role is intentionally excluded from this
+// DB-driven permission cache. org_admin permissions are served exclusively by
+// the hardcoded ROLE_PERMISSIONS lookup in rolePermissions.js (synchronous
+// path). No routes currently use useCache:true, but if that changes, either:
+//   (a) seed RolePermission rows for 'org_admin' in permissionController.js, or
+//   (b) fall back to ROLE_PERMISSIONS for roles without DB rows (preferred).
 const CACHE_TTL = 3600; // 1 hour in seconds
 
 async function getRolePermissions(role) {

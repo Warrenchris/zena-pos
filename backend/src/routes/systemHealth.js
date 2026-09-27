@@ -46,7 +46,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Admin-only route to get detailed cache stats
+// Admin-only route to get detailed cache stats (system infrastructure — owner only)
 router.get('/cache-stats', auth, checkRole(['admin']), (req, res) => {
   try {
     const stats = permissionCache.getCacheStats();

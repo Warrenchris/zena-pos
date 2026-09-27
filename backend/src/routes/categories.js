@@ -24,19 +24,19 @@ router.get('/', auth, categoryController.getAllCategories);
 router.get('/:id', auth, categoryController.getCategoryById);
 router.post('/', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateCategory,
   categoryController.createCategory
 );
 router.put('/:id', 
   auth, 
-  checkRole(['admin', 'manager']), 
+  checkRole(['admin', 'manager', 'org_admin']), 
   validateCategory,
   categoryController.updateCategory
 );
 router.delete('/:id', 
   auth, 
-  checkRole(['admin']), 
+  checkRole(['admin', 'org_admin']), 
   categoryController.deleteCategory
 );
 

@@ -34,7 +34,7 @@ const validateCreateShop = [
 router.get('/accessible', controller.getAccessibleShops);
 router.post('/', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), validateCreateShop, controller.createShop);
 router.get('/me', controller.getMine);
-router.put('/me', checkRole(['admin', 'manager']), controller.updateMine);
+router.put('/me', checkRole(['admin', 'manager', 'org_admin']), controller.updateMine);
 
 // Reversible branch lifecycle (P2-04)
 router.patch('/:id/deactivate', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.deactivateShop);

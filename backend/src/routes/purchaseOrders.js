@@ -21,7 +21,7 @@ const generatePoNumber = async () => {
 };
 
 // GET /api/purchase-orders — List all POs with pagination & server-side summary KPIs
-router.get('/', checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   try {
     const shopId = req.shopId || req.user?.shopId;
     if (!shopId) {
@@ -102,7 +102,7 @@ router.get('/', checkRole(['admin', 'manager']), async (req, res) => {
 });
 
 // GET /api/purchase-orders/:id — Fetch single PO
-router.get('/:id', checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/:id', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   try {
     const shopId = req.shopId || req.user?.shopId;
     if (!shopId) {
@@ -129,7 +129,7 @@ router.get('/:id', checkRole(['admin', 'manager']), async (req, res) => {
 });
 
 // POST /api/purchase-orders — Create PO with strict input validation & line items
-router.post('/', checkRole(['admin', 'manager']), async (req, res) => {
+router.post('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const shopId = req.shopId || req.user?.shopId;
@@ -284,7 +284,7 @@ router.post('/', checkRole(['admin', 'manager']), async (req, res) => {
 });
 
 // PUT /api/purchase-orders/:id — Edit PO if still in DRAFT or ORDERED status
-router.put('/:id', checkRole(['admin', 'manager']), async (req, res) => {
+router.put('/:id', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const shopId = req.shopId || req.user?.shopId;
@@ -342,12 +342,12 @@ router.put('/:id', checkRole(['admin', 'manager']), async (req, res) => {
 });
 
 // PATCH /api/purchase-orders/:id/receive — Itemized or full receiving with row locks and stock delta tracking
-router.patch('/:id/receive', checkRole(['admin', 'manager']), async (req, res) => {
+router.patch('/:id/receive', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   return handleReceiveOperation(req, res);
 });
 
 // Support PATCH /:id/status for lifecycle transitions (DRAFT -> ORDERED, CANCELLED, RECEIVED)
-router.patch('/:id/status', checkRole(['admin', 'manager']), async (req, res) => {
+router.patch('/:id/status', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   const { status } = req.body;
   const shopId = req.shopId || req.user?.shopId;
   if (!shopId) {
@@ -608,7 +608,7 @@ async function handleReceiveOperation(req, res) {
 }
 
 // PATCH /api/purchase-orders/:id/cancel — Cancel PO
-router.patch('/:id/cancel', checkRole(['admin', 'manager']), async (req, res) => {
+router.patch('/:id/cancel', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
   return handleCancelOperation(req, res);
 });
 
@@ -648,7 +648,7 @@ async function handleCancelOperation(req, res) {
 }
 
 // DELETE /api/purchase-orders/:id — Delete PO (only if not received)
-router.delete('/:id', checkRole(['admin']), async (req, res) => {
+router.delete('/:id', checkRole(['admin', 'org_admin']), async (req, res) => {
   try {
     const shopId = req.shopId || req.user?.shopId;
     if (!shopId) return res.status(403).json({ error: 'Shop context required' });
