@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF Visual Inspection</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #1a1a1a; color: #fff; margin: 0; padding: 20px; }
+    h1 { font-size: 20px; margin-bottom: 20px; }
+    .pdf-container { margin-bottom: 40px; background: #262626; padding: 20px; border-radius: 8px; border: 1px solid #404040; }
+    .pdf-title { font-size: 16px; font-weight: bold; margin-bottom: 12px; color: #f59e0b; }
+    canvas { background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.5); border-radius: 4px; display: block; max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <h1>PDF Generation Visual Verification (jsPDF 4.2.1 + jspdf-autotable 5.0.8)</h1>
+
+  <div class="pdf-container" id="invoice-section">
+    <div class="pdf-title">1. Invoice PDF (INV-2026-0042) — Header, autoTable items, and Subtotal/Tax/Total positioning</div>
+    <canvas id="invoice-canvas"></canvas>
+  </div>
+
+  <div class="pdf-container" id="expenses-section">
+    <div class="pdf-title">2. Expenses PDF — Header and autoTable table</div>
+    <canvas id="expenses-canvas"></canvas>
+  </div>
+
+  <div class="pdf-container" id="reports-section">
+    <div class="pdf-title">3. Reports PDF — Sales Trend text and title</div>
+    <canvas id="reports-canvas"></canvas>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    async function renderPdf(url, canvasId) {
+      const loadingTask = pdfjsLib.getDocument(url);
+      const pdf = await loadingTask.promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.getElementById(canvasId);
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      await page.render({ canvasContext: context, viewport: viewport }).promise;
+      console.log('Rendered ' + url);
+    }
+
+    Promise.all([
+      renderPdf('/invoice.pdf', 'invoice-canvas'),
+      renderPdf('/expenses.pdf', 'expenses-canvas'),
+      renderPdf('/sales-report.pdf', 'reports-canvas')
+    ]).then(() => {
+      const doneEl = document.createElement('div');
+      doneEl.id = 'render-complete';
+      doneEl.textContent = 'ALL_PDFS_RENDERED';
+      document.body.appendChild(doneEl);
+    });
+  </script>
+</body>
+</html>

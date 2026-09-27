@@ -419,7 +419,7 @@ export default function Reports() {
   const exportPdf = async () => {
     try {
       const jsPDFmod = await import('jspdf')
-      const jsPDF = jsPDFmod.jsPDF || jsPDFmod.default
+      const jsPDF = jsPDFmod.jsPDF || jsPDFmod.default?.jsPDF || jsPDFmod.default
       const doc = new jsPDF('p','pt','a4')
       doc.setFontSize(14)
       doc.text(`Zana Reports - ${tab.toUpperCase()}`, 40, 40)
