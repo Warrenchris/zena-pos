@@ -2,6 +2,8 @@ import React from 'react';
 
 export default function ProductScreenshot({
   children,
+  src,
+  alt = '',
   variant = 'light',
   className = '',
   floatingMetrics = [],
@@ -39,7 +41,17 @@ export default function ProductScreenshot({
           </div>
         </div>
 
-        <div className="relative overflow-hidden">{children}</div>
+        <div className="relative overflow-hidden">
+          {src && (
+            <img
+              src={src}
+              alt={alt}
+              className="w-full h-auto max-h-[560px] object-cover object-top block select-none"
+              loading="lazy"
+            />
+          )}
+          {children}
+        </div>
       </div>
 
       {floatingMetrics.map((metric, i) => (

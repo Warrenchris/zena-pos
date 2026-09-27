@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 export default function ExportButtons({ expenses = [], formatCurrency, filters }) {
   const exportCSV = () => {
@@ -29,7 +29,7 @@ export default function ExportButtons({ expenses = [], formatCurrency, filters }
       e.paymentMethod,
       e.recordedBy?.name || e.user?.name || '',
     ])
-    doc.autoTable({
+    autoTable(doc, {
       head: [['Description', 'Category', 'Amount', 'Date', 'Payment', 'Added By']],
       body,
       startY: 22,

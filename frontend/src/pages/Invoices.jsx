@@ -11,8 +11,8 @@ import {
   DocumentTextIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { formatDateLong, formatDateShort, formatDateTime } from '../utils/formatters';
 import Spinner from '../components/ui/Spinner';
 import { useCurrency } from '../hooks/useCurrency';
@@ -409,14 +409,22 @@ export default function Invoices() {
       doc.setFontSize(8);
       doc.text(`Date: ${inv.dateIssued ? formatDateShort(inv.dateIssued) : ''}`, metaX + 10, y + 32);
 
-      doc.setStrokeColor(120, 68, 33);
+      if (doc.setDrawColor) {
+        doc.setDrawColor(120, 68, 33);
+      } else if (doc.setStrokeColor) {
+        doc.setStrokeColor(120, 68, 33);
+      }
       doc.setLineWidth(1.5);
       doc.line(margin, y + 65, pageWidth - margin, y + 65);
     };
 
     const drawFooter = (pageNum, totalPages) => {
       const y = pageHeight - margin + 10;
-      doc.setStrokeColor(220, 220, 220);
+      if (doc.setDrawColor) {
+        doc.setDrawColor(220, 220, 220);
+      } else if (doc.setStrokeColor) {
+        doc.setStrokeColor(220, 220, 220);
+      }
       doc.setLineWidth(0.5);
       doc.line(margin, y - 5, pageWidth - margin, y - 5);
       doc.setFontSize(8);
@@ -447,7 +455,7 @@ export default function Invoices() {
         ])
       : [[1, 'Sale items', 1, formatCurrency(inv.subtotal || inv.total), formatCurrency(inv.subtotal || inv.total)]];
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: clientY + 60,
       margin: { left: margin, right: margin },
       head: [['#', 'Item', 'Qty', 'Unit Price', 'Total']],
@@ -472,7 +480,7 @@ export default function Invoices() {
       theme: 'striped'
     });
 
-    const finalY = doc.lastAutoTable.finalY + 25;
+    const finalY = (doc.lastAutoTable?.finalY ?? (clientY + 60)) + 25;
     const summaryX = pageWidth - margin - 180;
     doc.setFontSize(9);
     doc.setFont(undefined, 'normal');
