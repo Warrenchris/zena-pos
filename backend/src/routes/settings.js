@@ -170,7 +170,7 @@ router.get('/theme', getThemeSettings);
 router.get('/notifications', getNotificationSettings);
 
 // Modification endpoints - Require admin permission
-router.use(checkPermission('manage_settings'));
+router.use(checkPermission('manage_settings', { useCache: true }));
 
 // Update settings
 router.put('/', settingsValidation, updateSettings);
