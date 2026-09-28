@@ -13,6 +13,7 @@ const authLimiter = createDistributedRateLimiter({
   namespace: 'auth',
   windowMs: 15 * 60 * 1000,
   max: 10,
+  skip: (req) => process.env.NODE_ENV === 'test' && !req.headers['x-forwarded-for'],
   message: { error: 'Too many attempts. Please try again in a few minutes.' },
   keyGenerator: (req) => `${getClientIp(req)}:${(req.body && req.body.email) || ''}`,
 });
