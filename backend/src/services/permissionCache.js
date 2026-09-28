@@ -1,5 +1,5 @@
-const RolePermission = require('../models/RolePermission');
-const Permission = require('../models/Permission');
+'use strict';
+
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
 
@@ -35,6 +35,11 @@ async function getRolePermissions(role, organizationId) {
 
   logger.debug(`Permission cache MISS for org: ${organizationId}, role: ${role}, fetching from database`);
   try {
+    // Call the seeder for this organizationId after Redis miss and before DB read
+    const { ensureOrgRolePermissionsSeeded } = require('./rolePermissionSeeder');
+    await ensureOrgRolePermissionsSeeded(organizationId);
+
+    const { RolePermission, Permission } = require('../models');
     const rolePermissions = await RolePermission.findAll({
       include: [{
         model: Permission,
