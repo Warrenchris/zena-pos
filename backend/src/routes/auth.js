@@ -5,9 +5,7 @@ const { auth } = require('../middleware/auth');
 const { createDistributedRateLimiter } = require('../utils/distributedRateLimiter');
 const router = express.Router();
 
-const getClientIp = (req) => {
-  return (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.ip) || 'unknown';
-};
+const getClientIp = require('../utils/getClientIp');
 
 // Distributed limiter for credential/reset endpoints (10 attempts / 15 mins)
 // Keyed by IP + email so a single IP can't lock out unrelated accounts

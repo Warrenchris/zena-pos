@@ -71,6 +71,7 @@ app.set('trust proxy', 1);
 // Middleware
 const requestContext = require('./middleware/requestContext');
 const { createDistributedRateLimiter } = require('./utils/distributedRateLimiter');
+const getClientIp = require('./utils/getClientIp');
 app.use(requestContext);
 
 // Force HTTPS in production. Render (and most PaaS) terminate TLS at the edge and
@@ -109,7 +110,7 @@ const generalLimiter = createDistributedRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 500,
   skip: () => process.env.NODE_ENV === 'test',
-  keyGenerator: (req) => (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.ip) || 'unknown'
+  keyGenerator: (req) => getClientIp(req)
 });
 app.use(generalLimiter);
 
