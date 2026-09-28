@@ -13,7 +13,61 @@ if (!isEmailConfigured()) {
 }
 
 /**
+ * Tiny in-process TTL cache (bounded). Used only for facts that are safe to
+ * remember briefly:
+ *  - "user X has verified their email": this never reverts, so a positive
+ *    result can be cached; negative results are always re-read from the DB so
+ *    verifying takes effect on the very next request.
+ *  - "user X is/is not an org owner" for tokens that lack an orgRole claim.
+ * Per-process only; a miss just costs one primary-key query.
+ */
+function createTtlCache(ttlMs, maxEntries) {
+  const store = new Map();
+  return {
+    get(key) {
+      const hit = store.get(key);
+      if (!hit) return undefined;
+      if (hit.expiresAt <= Date.now()) {
+        store.delete(key);
+        return undefined;
+      }
+      return hit.value;
+    },
+    set(key, value) {
+      if (store.size >= maxEntries) store.clear();
+      store.set(key, { value, expiresAt: Date.now() + ttlMs });
+    },
+    clear() {
+      store.clear();
+    }
+  };
+}
+
+const VERIFIED_CACHE_TTL_MS = 10 * 60 * 1000;
+const OWNER_LOOKUP_CACHE_TTL_MS = 60 * 1000;
+const CACHE_MAX_ENTRIES = 10000;
+
+const verifiedCache = createTtlCache(VERIFIED_CACHE_TTL_MS, CACHE_MAX_ENTRIES);
+const ownerLookupCache = createTtlCache(OWNER_LOOKUP_CACHE_TTL_MS, CACHE_MAX_ENTRIES);
+
+/**
+ * Normalise a request path for exemption matching: strip query/hash, lowercase,
+ * collapse repeated slashes and drop trailing slashes so "/api/auth/profile/"
+ * matches "/api/auth/profile". Exemptions are exact-match only.
+ */
+function normalizePath(rawPath) {
+  let p = String(rawPath || '').split('?')[0].split('#')[0].toLowerCase();
+  p = p.replace(/\/{2,}/g, '/');
+  if (p.length > 1) p = p.replace(/\/+$/, '');
+  return p || '/';
+}
+
+/**
  * Helper to determine if a user has orgRole === 'owner'.
+ *
+ * The JWT carries an orgRole claim, so a definite non-owner value (e.g.
+ * 'admin', 'member') answers without touching the database. Only tokens that
+ * lack the claim fall back to an OrganizationMembership lookup, cached briefly.
  */
 async function resolveIsOwner(userPayload) {
   if (!userPayload || userPayload.isEmployee) {
@@ -22,21 +76,32 @@ async function resolveIsOwner(userPayload) {
   if (userPayload.orgRole === 'owner') {
     return true;
   }
-  // If orgRole is not on payload, check OrganizationMembership
-  if (userPayload.id) {
-    const membership = await OrganizationMembership.findOne({
-      where: {
-        userId: userPayload.id,
-        orgRole: 'owner',
-        status: 'active'
-      }
-    });
-    if (membership) {
-      userPayload.orgRole = 'owner';
-      return true;
-    }
+  if (typeof userPayload.orgRole === 'string' && userPayload.orgRole) {
+    return false;
   }
-  return false;
+  if (!userPayload.id) {
+    return false;
+  }
+
+  const cached = ownerLookupCache.get(userPayload.id);
+  if (cached !== undefined) {
+    if (cached) userPayload.orgRole = 'owner';
+    return cached;
+  }
+
+  const membership = await OrganizationMembership.findOne({
+    where: {
+      userId: userPayload.id,
+      orgRole: 'owner',
+      status: 'active'
+    }
+  });
+  const isOwner = Boolean(membership);
+  ownerLookupCache.set(userPayload.id, isOwner);
+  if (isOwner) {
+    userPayload.orgRole = 'owner';
+  }
+  return isOwner;
 }
 
 /**
@@ -55,18 +120,23 @@ async function requireVerifiedEmail(req, res, next) {
       return next();
     }
 
+    if (verifiedCache.get(req.user.id)) {
+      return next();
+    }
+
     const user = await User.findByPk(req.user.id, {
       attributes: ['id', 'emailVerifiedAt']
     });
 
-    if (!user || !user.emailVerifiedAt) {
-      return res.status(403).json({
-        code: 'EMAIL_NOT_VERIFIED',
-        error: 'Email verification required. Please verify your email address to perform this action.'
-      });
+    if (user && user.emailVerifiedAt) {
+      verifiedCache.set(req.user.id, true);
+      return next();
     }
 
-    next();
+    return res.status(403).json({
+      code: 'EMAIL_NOT_VERIFIED',
+      error: 'Email verification required. Please verify your email address to perform this action.'
+    });
   } catch (error) {
     logger.error('Error in requireVerifiedEmail middleware:', error);
     return res.status(500).json({ error: 'Internal server error verifying email status.' });
@@ -92,8 +162,8 @@ async function emailVerification7DayGate(req, res, next) {
     }
 
     // 2. Route exemptions: two verification routes, logout, auth profile/me, and health
-    const origUrl = (req.originalUrl || '').split('?')[0].toLowerCase();
-    const fullPath = (((req.baseUrl || '') + (req.path || '')) || '').toLowerCase();
+    const origUrl = normalizePath(req.originalUrl);
+    const fullPath = normalizePath((req.baseUrl || '') + (req.path || ''));
 
     const exemptExact = new Set([
       '/',
@@ -137,6 +207,11 @@ async function emailVerification7DayGate(req, res, next) {
       return next();
     }
 
+    // Verified users are remembered briefly so the common case costs no query
+    if (verifiedCache.get(userPayload.id)) {
+      return next();
+    }
+
     // Query User by PK
     const user = await User.findByPk(userPayload.id, {
       attributes: ['id', 'emailVerifiedAt', 'createdAt']
@@ -148,6 +223,7 @@ async function emailVerification7DayGate(req, res, next) {
 
     // If verified (or grandfathered), never blocked
     if (user.emailVerifiedAt) {
+      verifiedCache.set(userPayload.id, true);
       return next();
     }
 
@@ -173,5 +249,11 @@ async function emailVerification7DayGate(req, res, next) {
 
 module.exports = {
   requireVerifiedEmail,
-  emailVerification7DayGate
+  emailVerification7DayGate,
+  // Exposed for unit tests only
+  normalizePath,
+  __resetCachesForTests: () => {
+    verifiedCache.clear();
+    ownerLookupCache.clear();
+  }
 };

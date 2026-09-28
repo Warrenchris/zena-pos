@@ -9,6 +9,7 @@ const emailService = require('../services/emailService');
 // Helper to retrieve private key dynamically
 const getPrivateKey = () => (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const crypto = require('crypto');
+const { getFrontendUrl } = require('../utils/frontendUrl');
 const Shop = require('../models/Shop');
 const { sequelize, Organization, OrganizationMembership, ShopAccess, Subscription, Plan } = require('../models');
 const { buildAuthPayload, resolveAuthRole } = require('../utils/serializeAuthResponse');
@@ -134,7 +135,7 @@ exports.register = async (req, res) => {
         emailVerificationSentAt: sentAt
       });
 
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const frontendUrl = getFrontendUrl();
       const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
 
       emailService.sendVerificationEmail({ to: user.email, verificationUrl })
@@ -371,7 +372,7 @@ exports.forgotPassword = async (req, res) => {
       }
     );
 
-    const resetBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetBaseUrl = getFrontendUrl();
     const resetUrl = `${resetBaseUrl}/reset-password?token=${token}`;
 
     // Dispatch email asynchronously without awaiting to prevent response timing enumeration (SEC-04)
@@ -787,7 +788,7 @@ exports.resendVerification = async (req, res) => {
       emailVerificationSentAt: sentAt
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
 
     emailService.sendVerificationEmail({ to: user.email, verificationUrl })

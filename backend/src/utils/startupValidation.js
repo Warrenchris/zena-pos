@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const { getFrontendUrlProblems } = require('./frontendUrl');
 
 const REQUIRED_ENV_VARS = [
   'JWT_PRIVATE_KEY',
@@ -44,6 +45,16 @@ function validateStartup() {
     throw new Error('Missing required environment variables: ' + missingEnv.join(', '));
   }
   diagnostics.checks.push({ name: 'environment', ok: true });
+
+  // Emailed links (verification, password reset) are built from FRONTEND_URL.
+  // In production a missing/localhost value would ship dead links, so fail fast.
+  const frontendUrlProblems = getFrontendUrlProblems();
+  if (frontendUrlProblems.length > 0) {
+    diagnostics.checks.push({ name: 'frontendUrl', ok: false, problems: frontendUrlProblems });
+    logger.error('[startup] Invalid FRONTEND_URL:', frontendUrlProblems.join('; '));
+    throw new Error('Invalid FRONTEND_URL: ' + frontendUrlProblems.join('; '));
+  }
+  diagnostics.checks.push({ name: 'frontendUrl', ok: true });
 
   const pkgPath = path.join(root, 'package.json');
   if (!fs.existsSync(pkgPath)) {
