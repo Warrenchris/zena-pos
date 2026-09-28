@@ -683,3 +683,35 @@ The Zana POS platform has reached an advanced state of production hardening, exh
 
 ---
 *Report compiled and certified under strict read-only audit protocol.*
+
+---
+
+## Erratum (2026-09-28)
+
+The following items document historical discrepancies between the original Phase 6B-07 audit observations and the verified codebase state as of Phase 7.0 baseline reconciliation:
+
+1. **Offline POS Queuing (`POS-P3-01` / Section 27 & 34):**
+   - *Original Claim:* Stated that POS requires an active network connection, lacks local IndexedDB offline storage, and that offline queuing is deferred to post-launch.
+   - *Reality / Evolution:* An IndexedDB-backed offline queue was already implemented in `frontend/src/offline/salesQueue.js` and `frontend/src/offline/salesSync.js` with comprehensive automated tests (`salesQueue.test.js`, `salesSync.test.js`).
+   - *Reason for Discrepancy:* The audit evaluated `frontend/src/pages/POS.jsx` without accounting for the modular client-side offline and PWA caching infrastructure in `frontend/src/offline/`.
+
+2. **Presence of `.bak` Files (Section 29):**
+   - *Original Claim:* Stated "Clean Working Tree: No backup files (`.bak`), orphaned migration scripts, or conflicting timestamps exist in `backend/migrations/`."
+   - *Reality / Evolution:* While the active `backend/migrations/` directory contained no `.bak` files, 17 legacy `.bak` script copies remained in `backend/migrations/archive/`, and 1 `docker-compose.override.yml.bak` was present in the repository root.
+   - *Reason for Discrepancy:* The search glob evaluated `backend/migrations/*.bak` directly, omitting subdirectories (`backend/migrations/archive/`) and root-level configuration files.
+
+3. **Backend Test Suite Counts (Section 30 & 35):**
+   - *Original Claim:* Cited 231 backend regression tests across 18 test suites.
+   - *Reality / Evolution:* The full backend Jest test suite comprises **50 suites / 544 passing tests**.
+   - *Reason for Discrepancy:* The audit cited only the 18 dedicated Phase 6B hardening test suites rather than executing and tallying the full 50-suite repository test suite.
+
+4. **Migration Status (Section 18 & 29):**
+   - *Original Claim:* Cited 90 migrations executed UP / 0 pending.
+   - *Reality / Evolution:* As of Phase 7.0 baseline, **94 migrations are executed UP (0 pending)**.
+   - *Reason for Discrepancy:* Post-audit migrations were added: `20260923180000-ensure-idempotency-unique-constraints.js`, `20260927000000-add-organization-id-to-role-permissions.js`, `20260928000000-add-view-own-sales-and-view-products-permissions.js`, and `20260928010000-add-email-verification-to-users.js`.
+
+5. **Working-Tree Drift & Stray Root Files:**
+   - *Original Claim:* Working tree reported as clean.
+   - *Reality / Evolution:* Working tree contained uncommitted email verification hardening changes across 8 files, 18 root `.patch` files, `serverTotal`, `pre_reset_backup.sql`, and stray root `test-*.js` test scripts.
+   - *Reason for Discrepancy:* Files were accumulated during local development across multiple commits and remained untracked or partially staged until reconciled in Phase 7.0 commits.
+
