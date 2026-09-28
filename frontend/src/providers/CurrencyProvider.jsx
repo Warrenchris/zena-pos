@@ -33,9 +33,15 @@ export function CurrencyProvider({ children }) {
     const value = Number(amount);
     if (isNaN(value)) return '';
 
-    const formatted = value.toFixed(currency.decimalPlaces);
+    const minDecimals = options.minimumFractionDigits ?? currency.decimalPlaces;
+    const maxDecimals = options.maximumFractionDigits ?? currency.decimalPlaces;
+    const formatted = value.toLocaleString('en-US', {
+      minimumFractionDigits: minDecimals,
+      maximumFractionDigits: maxDecimals,
+      ...options
+    });
     return currency.position === 'before' 
-      ? `${currency.symbol}${formatted}`
+      ? `${currency.symbol} ${formatted}`
       : `${formatted} ${currency.symbol}`;
   };
 
