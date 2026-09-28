@@ -15,6 +15,7 @@ jest.mock('react-redux', () => ({
 
 jest.mock('../store/slices/shopSlice', () => ({
   fetchMyShop: jest.fn(() => ({ type: 'shop/fetchMyShop' })),
+  fetchAccessibleShops: jest.fn(() => ({ type: 'shop/fetchAccessibleShops' })),
 }));
 
 jest.mock('../store/slices/authSlice', () => ({
@@ -67,29 +68,25 @@ describe('Responsive navigation primitives', () => {
       </MemoryRouter>
     );
 
-    const navigation = screen.getByRole('navigation', { name: /admin panel/i });
+    const navigation = screen.getByRole('navigation', { name: /zana suite/i });
     expect(navigation).toHaveAttribute('aria-hidden', 'false');
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles the mobile search overlay in TopNavBar', () => {
+  it('triggers onMenuClick when mobile menu button is clicked in TopNavBar', () => {
+    const handleMenuClick = jest.fn();
     render(
       <MemoryRouter>
-        <TopNavBar onMenuClick={jest.fn()} isSidebarOpen={false} />
+        <TopNavBar onMenuClick={handleMenuClick} isSidebarOpen={false} />
       </MemoryRouter>
     );
 
-    const openSearch = screen.getByLabelText(/open search/i);
-    fireEvent.click(openSearch);
-
-    expect(screen.getByRole('heading', { name: /search/i })).toBeInTheDocument();
-
-    const closeSearch = screen.getByLabelText(/close search/i);
-    fireEvent.click(closeSearch);
-
-    expect(screen.queryByRole('heading', { name: /search/i })).not.toBeInTheDocument();
+    const menuButton = screen.getByLabelText(/open navigation menu/i);
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(menuButton);
+    expect(handleMenuClick).toHaveBeenCalledTimes(1);
   });
 });
 
