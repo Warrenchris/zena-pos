@@ -1,23 +1,9 @@
-const { Permission, RolePermission, User, OrganizationMembership } = require('../models');
+'use strict';
+
+const { Permission, RolePermission, OrganizationMembership } = require('../models');
 const sequelize = require('../config/database');
 const permissionCache = require('../services/permissionCache');
-
-const DEFAULT_PERMISSIONS = [
-  { name: 'manage_settings', description: 'Manage System & Shop Settings' },
-  { name: 'manage_users', description: 'Manage Users & Role Permissions' },
-  { name: 'manage_products', description: 'Manage Products & Inventory Catalog' },
-  { name: 'manage_categories', description: 'Manage Product Categories' },
-  { name: 'view_reports', description: 'View Financial & Sales Reports' },
-  { name: 'access_pos', description: 'Access POS Checkout Screen' },
-  { name: 'create_sales', description: 'Create & Process Sales Orders' },
-  { name: 'manage_sales', description: 'Manage Sales History & Invoices' },
-  { name: 'process_refunds', description: 'Process Refunds & Returns' },
-  { name: 'manage_expenses', description: 'Manage Business Expenses' },
-  { name: 'view_customers', description: 'View Customer Information' },
-  { name: 'manage_customers', description: 'Create & Edit Customers' },
-  { name: 'manage_employees', description: 'Manage Employee Profiles' },
-  { name: 'view_dashboard', description: 'View Business Dashboard Metrics' }
-];
+const { ensureOrgRolePermissionsSeeded, DEFAULT_PERMISSIONS } = require('../services/rolePermissionSeeder');
 
 const ROLES = ['admin', 'manager', 'cashier'];
 const ENFORCED_PERMISSIONS = ['create_sales', 'manage_settings', 'view_own_sales', 'process_refunds'];
@@ -38,47 +24,6 @@ async function getRequesterOrgRole(req, transaction = null) {
   return orgRole;
 }
 
-// Seed default permissions if database table is empty for THIS organizationId
-async function ensurePermissionsSeeded(organizationId) {
-  let permissions = await Permission.findAll({ order: [['id', 'ASC']] });
-  if (permissions.length === 0) {
-    permissions = await Permission.bulkCreate(DEFAULT_PERMISSIONS);
-  }
-
-  if (organizationId) {
-    const existingCount = await RolePermission.count({
-      where: { organizationId }
-    });
-
-    if (existingCount === 0) {
-      // Seed default role-permission mappings for this organization
-      const adminPerms = permissions.map(p => ({
-        organizationId,
-        role: 'admin',
-        permissionId: p.id
-      }));
-      const managerPermNames = [
-        'view_dashboard', 'manage_products', 'manage_categories', 'manage_employees',
-        'view_reports', 'manage_sales', 'manage_expenses', 'view_customers',
-        'manage_settings', 'process_refunds'
-      ];
-      const cashierPermNames = ['access_pos', 'create_sales', 'view_products'];
-
-      const managerPerms = permissions
-        .filter(p => managerPermNames.includes(p.name))
-        .map(p => ({ organizationId, role: 'manager', permissionId: p.id }));
-        
-      const cashierPerms = permissions
-        .filter(p => cashierPermNames.includes(p.name))
-        .map(p => ({ organizationId, role: 'cashier', permissionId: p.id }));
-
-      await RolePermission.bulkCreate([...adminPerms, ...managerPerms, ...cashierPerms], { ignoreDuplicates: true });
-    }
-  }
-
-  return permissions;
-}
-
 // GET /api/permissions/matrix
 exports.getPermissionMatrix = async (req, res) => {
   try {
@@ -87,7 +32,7 @@ exports.getPermissionMatrix = async (req, res) => {
       return res.status(400).json({ error: 'Organization context is required' });
     }
 
-    const permissions = await ensurePermissionsSeeded(organizationId);
+    const permissions = await ensureOrgRolePermissionsSeeded(organizationId);
     const rolePermissions = await RolePermission.findAll({
       where: { organizationId }
     });
