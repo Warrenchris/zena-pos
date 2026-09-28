@@ -16,7 +16,9 @@ const DEFAULT_PERMISSIONS = [
   { name: 'view_customers', description: 'View Customer Information' },
   { name: 'manage_customers', description: 'Create & Edit Customers' },
   { name: 'manage_employees', description: 'Manage Employee Profiles' },
-  { name: 'view_dashboard', description: 'View Business Dashboard Metrics' }
+  { name: 'view_dashboard', description: 'View Business Dashboard Metrics' },
+  { name: 'view_own_sales', description: 'View Own Sales History' },
+  { name: 'view_products', description: 'View Products' }
 ];
 
 const managerPermNames = [
@@ -32,7 +34,7 @@ const managerPermNames = [
   'process_refunds'
 ];
 
-const cashierPermNames = ['access_pos', 'create_sales', 'view_products'];
+const cashierPermNames = ['access_pos', 'create_sales', 'view_products', 'view_own_sales'];
 
 /**
  * Ensure default permissions exist globally and default role-permission mappings
