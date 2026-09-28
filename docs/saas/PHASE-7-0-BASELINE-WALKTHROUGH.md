@@ -146,7 +146,14 @@ Untracked files:
 
 ---
 
-## 5. Phase 7.0 Gate Determination
+## 5. Remaining Risks
+
+1. **Email-Verification In-Memory TTL Cache Across Replicas:** The email-verification TTL cache in `requireVerifiedEmail.js` is in-memory and per-process; a user who verifies their email on Replica A will have their cache invalidated immediately on Replica A, but may remain blocked for up to 5 minutes on another replica until its local TTL expires.
+2. **Reset-Password IP-Only Keying in Production:** The `/reset-password` endpoint submits `{ token, password }` with no email attribute, causing `authLimiter` to key strictly by client IP address in production. Users sharing a single corporate NAT/proxy IP share the 10-attempt bucket.
+
+---
+
+## 6. Phase 7.0 Gate Determination
 
 ```text
 ======================================================================
@@ -156,6 +163,6 @@ PHASE 7.0 — BASELINE RECONCILIATION & REPO HYGIENE GATE: PASS
 - All 4 test tiers (Backend, Frontend, AI Service, Migrations) 100% green.
 - Zero unverified claims; zero skipped test suites.
 - Working tree hygiene fully restored.
-- Ready for Phase 7A: Offline POS & Sync Architecture.
+- Ready for Phase 7A: Billing notifications and lifecycle emails.
 ======================================================================
 ```
