@@ -1,10 +1,16 @@
+# Environment files
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+!**/.env.example
+
 # Node
 backend/node_modules/
-backend/.env
 
 # React
 frontend/node_modules/
-frontend/.env
 
 # Mobile
 mobile/node_modules/
@@ -17,7 +23,6 @@ mobile/android/local.properties
 
 # Python
 ai_service/__pycache__/
-ai_service/.env
 **/.venv/
 **/.pytest_cache/
 **/__pycache__/
@@ -42,10 +47,16 @@ jwt_public_key.pem
 backend/backups/
 backups/
 *.dump
+*.sql
+*.sql.gz
+*.bak
+!backend/database/**/*.sql
+!docs/archive/**/*.sql
 
 # Test debris
 backend/tests/corrupt_*.xlsx
 backend/tests/script_*.txt
 backend/tests/test_import_*.csv
 backend/tests/test_import_*.xlsx
+
 
