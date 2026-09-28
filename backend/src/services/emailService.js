@@ -79,11 +79,21 @@ const emailService = {
   },
 
   async sendPasswordReset({ to, resetUrl }) {
-    if (!transporter) {
+    const mailer = transporter || (isEmailConfigured() ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      },
+      family: 4
+    }) : null);
+    if (!mailer) {
       throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
     }
     try {
-      const info = await transporter.sendMail({
+      const info = await mailer.sendMail({
         from: '"' + process.env.COMPANY_NAME + '" <' + process.env.SMTP_FROM + '>',
         to: to,
         subject: 'Reset your ' + process.env.COMPANY_NAME + ' password',
@@ -103,7 +113,54 @@ const emailService = {
       logger.error('Error sending password reset email:', error);
       throw error;
     }
+  },
+
+  async sendVerificationEmail({ to, verificationUrl }) {
+    const mailer = transporter || (isEmailConfigured() ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      },
+      family: 4
+    }) : null);
+    if (!mailer) {
+      throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
+    }
+    try {
+      const companyName = process.env.COMPANY_NAME || 'Zana POS';
+      const fromAddress = process.env.SMTP_FROM || 'noreply@zanapos.com';
+      const info = await mailer.sendMail({
+        from: '"' + companyName + '" <' + fromAddress + '>',
+        to: to,
+        subject: 'Verify your ' + companyName + ' email address',
+        html:
+          '<h2>Verify your email address</h2>' +
+          '<p>Welcome to ' + companyName + '! Please verify your email address to keep full access to your account.</p>' +
+          '<p><a href="' + verificationUrl + '">Verify email address</a></p>' +
+          '<p>This verification link expires in 24 hours.</p>' +
+          '<p>If you did not sign up for this account, you can safely ignore this email.</p>' +
+          '<br>' +
+          '<p>Best regards,</p>' +
+          '<p>' + companyName + '</p>'
+      });
+
+      logger.info('Verification email sent:', info.messageId);
+      return info;
+    } catch (error) {
+      logger.error('Error sending verification email:', error);
+      throw error;
+    }
   }
 };
 
+function isEmailConfigured() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT);
+}
+
+emailService.isEmailConfigured = isEmailConfigured;
+
 module.exports = emailService;
+module.exports.isEmailConfigured = isEmailConfigured;

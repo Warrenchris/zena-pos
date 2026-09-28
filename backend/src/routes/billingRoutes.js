@@ -4,6 +4,7 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const { auth } = require('../middleware/auth');
 const { requireOrgOwner } = require('../middleware/requireOrgOwner');
+const { requireVerifiedEmail } = require('../middleware/requireVerifiedEmail');
 const billingService = require('../services/billingService');
 const billingPaymentService = require('../services/billingPaymentService');
 const entitlementService = require('../services/entitlementService');
@@ -250,7 +251,7 @@ router.get('/invoices', auth, requireOrgOwner, async (req, res) => {
  * Initiates subscription renewal via M-Pesa STK Push or Flutterwave Card Checkout.
  * Access Control: Organization Owner ONLY.
  */
-router.post('/subscription/renew', auth, requireOrgOwner, async (req, res) => {
+router.post('/subscription/renew', auth, requireOrgOwner, requireVerifiedEmail, async (req, res) => {
   try {
     const { channel, phone, planId } = req.body;
     const organizationId = req.organizationId;
@@ -320,7 +321,7 @@ router.post('/subscription/renew', auth, requireOrgOwner, async (req, res) => {
  * Schedules subscription cancellation at period end.
  * Access Control: Organization Owner ONLY.
  */
-router.post('/subscription/cancel', auth, requireOrgOwner, async (req, res) => {
+router.post('/subscription/cancel', auth, requireOrgOwner, requireVerifiedEmail, async (req, res) => {
   try {
     const organizationId = req.organizationId;
     const subscription = await billingService.cancelSubscription(organizationId);
@@ -342,7 +343,7 @@ router.post('/subscription/cancel', auth, requireOrgOwner, async (req, res) => {
  * Reactivates a subscription pending cancellation.
  * Access Control: Organization Owner ONLY.
  */
-router.post('/subscription/reactivate', auth, requireOrgOwner, async (req, res) => {
+router.post('/subscription/reactivate', auth, requireOrgOwner, requireVerifiedEmail, async (req, res) => {
   try {
     const organizationId = req.organizationId;
     const subscription = await billingService.reactivateSubscription(organizationId);

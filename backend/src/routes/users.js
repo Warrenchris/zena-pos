@@ -1,6 +1,7 @@
 const express = require('express');
 const { body } = require('express-validator');
 const { auth, checkRole } = require('../middleware/auth');
+const { requireVerifiedEmail } = require('../middleware/requireVerifiedEmail');
 const controller = require('../controllers/userController');
 
 const router = express.Router();
@@ -10,6 +11,7 @@ router.use(auth, checkRole(['admin']));
 router.get('/', controller.list);
 router.post(
   '/',
+  requireVerifiedEmail,
   [
     body('name').trim().notEmpty(),
     body('email').isEmail(),

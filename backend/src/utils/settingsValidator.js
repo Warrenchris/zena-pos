@@ -28,8 +28,7 @@ const cleanAndValidateSettings = (data) => {
     autoBackupEnabled: { type: 'boolean' },
     backupFrequency: { type: 'string', values: ['daily', 'weekly', 'monthly'] },
     backupRetentionDays: { type: 'number', min: 7, max: 365 },
-    allowUserRegistration: { type: 'boolean' },
-    requireEmailVerification: { type: 'boolean' }
+    allowUserRegistration: { type: 'boolean' }
   };
 
   // Clean and validate each field

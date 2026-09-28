@@ -172,6 +172,10 @@ app.get('/', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Zana Backend API is running' });
 });
 
+// App-level 7-day email verification hard gate
+const { emailVerification7DayGate } = require('./middleware/requireVerifiedEmail');
+app.use(emailVerification7DayGate);
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);

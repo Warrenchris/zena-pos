@@ -69,6 +69,38 @@ router.post(
   authController.resetPassword
 );
 
+// Distributed limiter for email verification (20 attempts / 15 mins)
+const verifyEmailLimiter = createDistributedRateLimiter({
+  namespace: 'verify-email',
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many verification attempts. Please try again in a few minutes.' },
+  keyGenerator: (req) => `${getClientIp(req)}:${(req.body && req.body.token) || ''}`,
+});
+
+// Distributed limiter for resending verification (5 per hour per user/IP)
+const resendLimiter = createDistributedRateLimiter({
+  namespace: 'resend-verification',
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many verification requests. Maximum 5 per hour.' },
+  keyGenerator: (req) => `${getClientIp(req)}:${req.user?.id || ''}`,
+});
+
+router.post(
+  '/verify-email',
+  verifyEmailLimiter,
+  [body('token').trim().notEmpty().withMessage('Token is required')],
+  authController.verifyEmail
+);
+
+router.post(
+  '/resend-verification',
+  auth,
+  resendLimiter,
+  authController.resendVerification
+);
+
 router.get('/profile', auth, authController.getProfile);
 router.post('/change-password', auth, authController.changePassword);
 router.post('/logout', auth, authController.logout);
@@ -89,3 +121,5 @@ router.post(
 module.exports = router;
 module.exports.authLimiter = authLimiter;
 module.exports.registerLimiter = registerLimiter;
+module.exports.verifyEmailLimiter = verifyEmailLimiter;
+module.exports.resendLimiter = resendLimiter;

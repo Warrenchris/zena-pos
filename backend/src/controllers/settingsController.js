@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { SystemSettings, Shop } = require('../models');
+const { SystemSettings, Shop, User, OrganizationMembership } = require('../models');
 const { validationResult } = require('express-validator');
 const { maskSecret, encrypt, isMaskedValue } = require('../utils/encryption');
 
@@ -74,6 +74,39 @@ exports.updateSettings = async (req, res) => {
     if (!shopId) {
       console.error('Shop context missing in settings update');
       return res.status(400).json({ error: 'Shop context required' });
+    }
+
+    // Check payment credentials modification by unverified owners
+    const PAYMENT_CREDENTIAL_FIELDS = ['consumerKey', 'consumerSecret', 'passkey', 'tillNumber', 'paybillNumber'];
+    const hasPaymentCredentials = PAYMENT_CREDENTIAL_FIELDS.some(field => req.body && req.body[field] !== undefined);
+
+    if (hasPaymentCredentials && req.user) {
+      let isOwner = req.user.orgRole === 'owner';
+      if (!isOwner && !req.user.isEmployee && req.user.role === 'admin') {
+        const membership = await OrganizationMembership.findOne({
+          where: {
+            userId: req.user.id,
+            orgRole: 'owner',
+            status: 'active'
+          }
+        });
+        if (membership) {
+          isOwner = true;
+          req.user.orgRole = 'owner';
+        }
+      }
+
+      if (isOwner) {
+        const callerUser = await User.findByPk(req.user.id, {
+          attributes: ['id', 'emailVerifiedAt']
+        });
+        if (!callerUser || !callerUser.emailVerifiedAt) {
+          return res.status(403).json({
+            code: 'EMAIL_NOT_VERIFIED',
+            error: 'Email verification required. Please verify your email address to update payment credentials.'
+          });
+        }
+      }
     }
 
     // 3. Clean and validate update data
