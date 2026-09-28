@@ -572,3 +572,30 @@ PAYMENT CALLBACK SECURITY VERIFIED
 TENANT ISOLATION VERIFIED
 ```
 
+---
+
+## Erratum (2026-09-28)
+
+The following items document historical discrepancies between the original Phase 6B-07 post-remediation verification report and the verified codebase state as of Phase 7.0 baseline reconciliation:
+
+1. **Regression Test Scope & Counts (Section 18 & 21):**
+   - *Original Claim:* Cited 126 backend tests verified across 9 suites (8 Phase 6B suites + Phase 6A release blockers).
+   - *Reality / Evolution:* The full backend Jest regression suite comprises **50 suites / 544 passing tests**. The frontend suite comprises **47 suites / 367 passing tests**, and the Python AI service comprises **12 passing tests**.
+   - *Reason for Discrepancy:* Verification was executed against the targeted Phase 6B security test suites rather than executing the entire repository-wide test suite in a single run.
+
+2. **Migration Count (Section 18 & 22):**
+   - *Original Claim:* Cited 91 UP / 0 pending migrations.
+   - *Reality / Evolution:* As of Phase 7.0 baseline, **94 migrations are executed UP (0 pending)**.
+   - *Reason for Discrepancy:* Subsequent migrations `20260927000000-add-organization-id-to-role-permissions.js`, `20260928000000-add-view-own-sales-and-view-products-permissions.js`, and `20260928010000-add-email-verification-to-users.js` were applied after this verification gate.
+
+3. **Offline Sales Infrastructure:**
+   - *Original Claim:* Preserved the prior audit's characterization that offline POS capabilities were absent/deferred.
+   - *Reality / Evolution:* Offline POS sales queueing and catalog caching were already implemented in `frontend/src/offline/` (`salesQueue.js`, `salesSync.js`, `catalog.js`, `idb.js`) with dedicated test suites.
+   - *Reason for Discrepancy:* Inherited previous documentation assumptions without dedicated inspection of the frontend offline module tree.
+
+4. **Working Tree Cleanliness & Hygiene Baseline:**
+   - *Original Claim:* Clean working tree reported.
+   - *Reality / Evolution:* Working tree contained uncommitted email-verification hardening changes across 8 files, 18 root `.patch` files, `docker-compose.override.yml.bak`, `serverTotal`, `pre_reset_backup.sql`, and stray root `test-*.js` scripts.
+   - *Reason for Discrepancy:* Development debris accumulated after the Sept 24 release gate and remained in the working tree until resolved during Phase 7.0 remediation commits.
+
+

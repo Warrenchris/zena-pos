@@ -463,3 +463,25 @@ git diff --stat:
 ```
 
 **AUDIT COMPLETE — HARD STOP.** Awaiting human review and approval.
+
+---
+
+## Erratum (2026-09-28)
+
+The following items document historical discrepancies between the original Phase 6 audit observations and the verified codebase state as of Phase 7.0 baseline reconciliation:
+
+1. **Offline Sales Queuing (`POS-P3-01` / Section 25.1):**
+   - *Original Claim:* Stated that no offline queuing exists and that POS terminals cannot ring up sales or cache operations during outages.
+   - *Reality / Evolution:* Comprehensive client-side offline queuing infrastructure exists in `frontend/src/offline/` (`salesQueue.js`, `salesSync.js`, `catalog.js`, `catalogFallback.js`, `idb.js`) with IndexedDB storage, localStorage fallback, and dedicated automated test suites.
+   - *Reason for Discrepancy:* The initial audit assessed backend transactional APIs and main entry points (`POS.jsx`) without discovering the modular offline storage subsystems implemented under `frontend/src/offline/`.
+
+2. **Test Matrix Baseline (Section 20 & 26):**
+   - *Original Claim:* Cited 119 passing regression tests with zero automated test coverage across invoices and expenses.
+   - *Reality / Evolution:* Through Phase 6B hardening and subsequent feature work, backend automated test coverage expanded to **50 suites / 544 passing tests**, and the frontend suite expanded to **47 suites / 367 passing tests** alongside 12 Python AI service tests.
+   - *Reason for Discrepancy:* The original count was an early pre-remediation snapshot prior to the addition of Phase 6A/6B security, isolation, idempotency, and session test suites.
+
+3. **Database Migration Count:**
+   - *Original Claim:* Referenced an earlier baseline of ~80 migrations.
+   - *Reality / Evolution:* Migration count has advanced to **94 migrations executed UP (0 pending)**, incorporating SaaS multi-tenant role permissions, inventory schema splits, and email verification.
+   - *Reason for Discrepancy:* Natural evolution of the database schema across Phases 6A, 6B, and subsequent baseline updates.
+
