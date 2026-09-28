@@ -3,12 +3,17 @@
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
 
-// NOTE: The 'org_admin' resolved role is intentionally excluded from this
-// DB-driven permission cache. org_admin permissions are served exclusively by
-// the hardcoded ROLE_PERMISSIONS lookup in rolePermissions.js (synchronous
-// path). No routes currently use useCache:true, but if that changes, either:
-//   (a) seed RolePermission rows for 'org_admin' in permissionController.js, or
-//   (b) fall back to ROLE_PERMISSIONS for roles without DB rows (preferred).
+// Role normalization map: maps operational/resolved auth roles to their
+// corresponding RolePermissions matrix effective role.
+// Source of equivalence: ROLE_PERMISSIONS in backend/src/middleware/rolePermissions.js
+// ('employee' has cashier-equivalent permissions; 'org_admin' has manager-equivalent permissions).
+const ROLE_NORMALIZATION_MAP = {
+  employee: 'cashier',
+  org_admin: 'manager',
+  cashier: 'cashier',
+  manager: 'manager'
+};
+
 const CACHE_TTL = 3600; // 1 hour in seconds
 
 async function getRolePermissions(role, organizationId) {
@@ -16,24 +21,29 @@ async function getRolePermissions(role, organizationId) {
     return ['all'];
   }
 
+  const effectiveRole = ROLE_NORMALIZATION_MAP[role];
+  if (!effectiveRole) {
+    return [];
+  }
+
   if (!organizationId) {
     logger.warn(`getRolePermissions called without organizationId for role: ${role}`);
     return [];
   }
 
-  const cacheKey = `permissions:org:${organizationId}:role:${role}`;
+  const cacheKey = `permissions:org:${organizationId}:role:${effectiveRole}`;
 
   try {
     const cachedData = redisClient.status === 'ready' ? await redisClient.get(cacheKey) : null;
     if (cachedData) {
-      logger.debug(`Permission cache HIT for org: ${organizationId}, role: ${role}`);
+      logger.debug(`Permission cache HIT for org: ${organizationId}, role: ${effectiveRole}`);
       return JSON.parse(cachedData);
     }
   } catch (err) {
-    logger.warn(`Redis error fetching permissions for org ${organizationId} role ${role}, falling back to DB:`, err);
+    logger.warn(`Redis error fetching permissions for org ${organizationId} role ${effectiveRole}, falling back to DB:`, err);
   }
 
-  logger.debug(`Permission cache MISS for org: ${organizationId}, role: ${role}, fetching from database`);
+  logger.debug(`Permission cache MISS for org: ${organizationId}, role: ${effectiveRole}, fetching from database`);
   try {
     // Call the seeder for this organizationId after Redis miss and before DB read
     const { ensureOrgRolePermissionsSeeded } = require('./rolePermissionSeeder');
@@ -45,7 +55,7 @@ async function getRolePermissions(role, organizationId) {
         model: Permission,
         attributes: ['name']
       }],
-      where: { role, organizationId }
+      where: { role: effectiveRole, organizationId }
     });
 
     const permissions = rolePermissions.map(rp => rp.Permission ? rp.Permission.name : null).filter(Boolean);
@@ -55,12 +65,12 @@ async function getRolePermissions(role, organizationId) {
         await redisClient.setex(cacheKey, CACHE_TTL, JSON.stringify(permissions));
       }
     } catch (err) {
-      logger.warn(`Redis error saving permissions for org ${organizationId} role ${role}:`, err);
+      logger.warn(`Redis error saving permissions for org ${organizationId} role ${effectiveRole}:`, err);
     }
 
     return permissions;
   } catch (error) {
-    logger.error(`Error fetching permissions for org ${organizationId} role ${role}:`, error);
+    logger.error(`Error fetching permissions for org ${organizationId} role ${effectiveRole}:`, error);
     throw error;
   }
 }
@@ -74,7 +84,13 @@ async function roleHasPermission(role, permissionName, organizationId) {
   if (role === 'admin') {
     return true;
   }
-  const permissions = await getRolePermissions(role, organizationId);
+
+  const effectiveRole = ROLE_NORMALIZATION_MAP[role];
+  if (!effectiveRole) {
+    return false;
+  }
+
+  const permissions = await getRolePermissions(effectiveRole, organizationId);
   return permissions.includes('all') || permissions.includes(permissionName);
 }
 
@@ -86,14 +102,15 @@ async function invalidateRoleCache(role, organizationId) {
   if (!organizationId) {
     return;
   }
-  const cacheKey = `permissions:org:${organizationId}:role:${role}`;
+  const effectiveRole = ROLE_NORMALIZATION_MAP[role] || role;
+  const cacheKey = `permissions:org:${organizationId}:role:${effectiveRole}`;
   try {
     if (redisClient && redisClient.status === 'ready') {
       await redisClient.del(cacheKey);
-      logger.info(`Invalidated permission cache in Redis for org ${organizationId} role: ${role}`);
+      logger.info(`Invalidated permission cache in Redis for org ${organizationId} role: ${effectiveRole}`);
     }
   } catch (error) {
-    logger.warn(`Redis error invalidating cache for org ${organizationId} role ${role}:`, error);
+    logger.warn(`Redis error invalidating cache for org ${organizationId} role ${effectiveRole}:`, error);
   }
 }
 
