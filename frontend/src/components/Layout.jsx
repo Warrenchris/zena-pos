@@ -7,6 +7,7 @@ import { isManagerTier } from '../utils/roles';
 import ModernSidebar from './ModernSidebar';
 import TopNavBar from './navigation/TopNavBar';
 import SubscriptionBanner from './SubscriptionBanner';
+import EmailVerificationBanner from './EmailVerificationBanner';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(
@@ -113,6 +114,7 @@ export default function Layout() {
           isSidebarOpen={sidebarOpen}
         />
         <SubscriptionBanner />
+        <EmailVerificationBanner />
         <main id="main-content" className="flex-1 pb-12 safe-area-padding">
           <div className={location.pathname === '/pos' ? 'w-full px-3 sm:px-6' : 'app-shell app-shell--wide'}>
             <Outlet />

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth, checkRole, ensureShopIsolation } = require('../middleware/auth');
+const { requireVerifiedEmail } = require('../middleware/requireVerifiedEmail');
 const {
   getAllEmployees,
   getEmployeeById,
@@ -27,7 +28,7 @@ router.get('/', auth, checkRole(['admin', 'manager', 'org_admin', 'cashier']), g
 router.get('/:id', auth, checkAdminOrSelf, getEmployeeById);
 
 // Create new employee (admin or org_admin) – tenant validated and branch authorized
-router.post('/', auth, checkRole(['admin', 'org_admin']), createEmployee);
+router.post('/', auth, checkRole(['admin', 'org_admin']), requireVerifiedEmail, createEmployee);
 
 // Update employee (admin or org_admin) – tenant scoped and shopId forced
 router.put('/:id', auth, checkRole(['admin', 'org_admin']), ensureShopIsolation, updateEmployee);

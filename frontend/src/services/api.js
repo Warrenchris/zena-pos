@@ -309,6 +309,42 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+
+    if (error.response?.status === 403) {
+      const code = error.response.data?.code;
+      if (code === 'EMAIL_NOT_VERIFIED') {
+        const errorMsg = error.response.data?.error || 'Email verification is required for this sensitive action.';
+        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+          window.showToast({
+            type: 'warning',
+            title: 'Email Verification Required',
+            message: `${errorMsg} Please use the "Resend Verification Email" action in the banner above.`,
+            duration: 8000
+          });
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('email-verification-required', {
+            detail: { code, message: errorMsg }
+          }));
+        }
+      } else if (code === 'EMAIL_VERIFICATION_REQUIRED') {
+        const errorMsg = error.response.data?.error || 'Your 7-day grace period has expired. Please verify your email address to continue using Zana POS.';
+        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+          window.showToast({
+            type: 'error',
+            title: 'Access Restricted: Email Unverified',
+            message: `${errorMsg} Check your inbox or request a new verification link.`,
+            duration: 10000
+          });
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('email-verification-required', {
+            detail: { code, message: errorMsg, hardGate: true }
+          }));
+        }
+      }
+    }
+
     return Promise.reject(error);
   }
 );
@@ -324,6 +360,10 @@ export const authAPI = {
     api.post('/api/auth/login', credentials),
   register: (userData) =>
     api.post('/api/auth/register', userData),
+  verifyEmail: (token) =>
+    api.post('/api/auth/verify-email', { token }),
+  resendVerification: () =>
+    api.post('/api/auth/resend-verification'),
   getProfile: () => {
     // Return cached promise if it exists
     if (profileRequestPromise) {

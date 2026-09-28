@@ -43,6 +43,22 @@ const User = sequelize.define('User', {
       model: 'Shops',
       key: 'id'
     }
+  },
+  emailVerifiedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  emailVerificationTokenHash: {
+    type: DataTypes.STRING(64),
+    allowNull: true
+  },
+  emailVerificationExpiresAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  emailVerificationSentAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   hooks: {
@@ -100,6 +116,7 @@ User.prototype.validatePassword = async function(password) {
 User.prototype.toJSON = function() {
   const values = { ...this.get() };
   delete values.password;
+  delete values.emailVerificationTokenHash;
   return values;
 };
 

@@ -121,6 +121,29 @@ exports.register = async (req, res) => {
       return { user: createdUser, createdShop: newShop, createdOrg };
     });
 
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const sentAt = new Date();
+
+    try {
+      await user.update({
+        emailVerificationTokenHash: tokenHash,
+        emailVerificationExpiresAt: expiresAt,
+        emailVerificationSentAt: sentAt
+      });
+
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
+
+      emailService.sendVerificationEmail({ to: user.email, verificationUrl })
+        .catch((emailErr) => {
+          logger.error('Failed to send verification email on register:', emailErr.message);
+        });
+    } catch (err) {
+      logger.error('Failed to save email verification token on register:', err.message);
+    }
+
     const jti = crypto.randomUUID();
     const token = jwt.sign(
       { 
@@ -129,6 +152,7 @@ exports.register = async (req, res) => {
         shopId: createdShop?.id,
         organizationId: createdOrg?.id || createdShop?.organizationId || null,
         isEmployee: false,
+        orgRole: createdOrg ? 'owner' : null,
         jti
       },
       getPrivateKey(),
@@ -680,4 +704,101 @@ exports.switchShop = async (req, res) => {
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
+
+// Verify email address with single-use token
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Invalid or expired verification token.' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+
+    const user = await User.findOne({
+      where: { emailVerificationTokenHash: tokenHash }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired verification token.' });
+    }
+
+    if (user.emailVerificationExpiresAt && new Date() > new Date(user.emailVerificationExpiresAt)) {
+      return res.status(400).json({ error: 'Invalid or expired verification token.' });
+    }
+
+    const now = new Date();
+    await user.update({
+      emailVerifiedAt: user.emailVerifiedAt || now,
+      emailVerificationTokenHash: null,
+      emailVerificationExpiresAt: null
+    });
+
+    return res.status(200).json({
+      message: 'Email verified successfully.'
+    });
+  } catch (error) {
+    logger.error('Error during email verification:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Resend email verification
+exports.resendVerification = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Already verified -> 200 no-op
+    if (user.emailVerifiedAt) {
+      return res.status(200).json({ message: 'Email is already verified.' });
+    }
+
+    // 60s cooldown via emailVerificationSentAt
+    if (user.emailVerificationSentAt) {
+      const COOLDOWN_MS = 60 * 1000;
+      const elapsed = Date.now() - new Date(user.emailVerificationSentAt).getTime();
+      if (elapsed < COOLDOWN_MS) {
+        const retryAfterSeconds = Math.max(1, Math.ceil((COOLDOWN_MS - elapsed) / 1000));
+        res.setHeader('Retry-After', retryAfterSeconds);
+        return res.status(429).json({
+          error: `Please wait ${retryAfterSeconds} seconds before requesting another verification email.`,
+          retryAfter: `${retryAfterSeconds} seconds`
+        });
+      }
+    }
+
+    // Generate new 32-byte hex token, store sha256 hash, 24h expiry
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const sentAt = new Date();
+
+    await user.update({
+      emailVerificationTokenHash: tokenHash,
+      emailVerificationExpiresAt: expiresAt,
+      emailVerificationSentAt: sentAt
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
+
+    emailService.sendVerificationEmail({ to: user.email, verificationUrl })
+      .catch((emailErr) => {
+        logger.error('Failed to send verification email on resend:', emailErr.message);
+      });
+
+    return res.status(200).json({ message: 'Verification email sent.' });
+  } catch (error) {
+    logger.error('Error resending verification email:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
 

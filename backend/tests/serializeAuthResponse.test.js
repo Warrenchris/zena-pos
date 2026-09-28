@@ -110,4 +110,35 @@ describe('buildAuthPayload', () => {
       expect(payload.user.role).not.toBe('admin');
     }
   });
+
+  test('emailVerified is false for user with null emailVerifiedAt', () => {
+    const payload = buildAuthPayload({
+      user: { id: 1, name: 'Owner', email: 'owner@test.com', role: 'admin', emailVerifiedAt: null },
+      shop: { id: 1, name: 'HQ', organizationId: 1 }
+    });
+    expect(payload.user.emailVerified).toBe(false);
+  });
+
+  test('emailVerified is true for user with emailVerifiedAt date', () => {
+    const payload = buildAuthPayload({
+      user: { id: 1, name: 'Owner', email: 'owner@test.com', role: 'admin', emailVerifiedAt: new Date() },
+      shop: { id: 1, name: 'HQ', organizationId: 1 }
+    });
+    expect(payload.user.emailVerified).toBe(true);
+  });
+
+  test('emailVerified is always true for employees', () => {
+    const payload = buildAuthPayload({
+      employee: {
+        id: 'emp-1',
+        firstName: 'Emp',
+        lastName: 'Loyee',
+        email: 'emp@test.com',
+        position: 'cashier',
+        shopId: 1
+      },
+      shop: { id: 1, name: 'HQ', organizationId: 1 }
+    });
+    expect(payload.user.emailVerified).toBe(true);
+  });
 });

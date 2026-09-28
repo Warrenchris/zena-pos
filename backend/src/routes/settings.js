@@ -139,7 +139,6 @@ const settingsValidation = [
   body('backupFrequency').optional().isIn(['daily', 'weekly', 'monthly']),
   body('backupRetentionDays').optional().isInt({ min: 7, max: 365 }),
   body('allowUserRegistration').optional().isBoolean(),
-  body('requireEmailVerification').optional().isBoolean(),
   body('taxRate').optional().isFloat({ min: 0, max: 100 }).withMessage('Tax rate must be between 0 and 100'),
   body('receiptHeader').optional({ nullable: true }).isString(),
   body('receiptFooter').optional({ nullable: true }).isString(),
