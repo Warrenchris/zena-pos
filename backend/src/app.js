@@ -66,7 +66,35 @@ const transferRoutes = require('./routes/transfers');
 const organizationRoutes = require('./routes/organizationRoutes');
 
 const app = express();
-app.set('trust proxy', 1);
+
+/**
+ * Parses TRUST_PROXY_HOPS environment variable.
+ * Must be an integer between 0 and 5. Defaults to 1.
+ * Logs a warning on invalid values.
+ *
+ * @param {string|undefined} val
+ * @param {boolean} [logWarning=true]
+ * @returns {number}
+ */
+function parseTrustProxyHops(val, logWarning = true) {
+  if (val === undefined || val === null || (typeof val === 'string' && val.trim() === '')) {
+    return 1;
+  }
+  const str = typeof val === 'string' ? val.trim() : String(val);
+  const parsed = Number(str);
+  if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 5 && str === String(parsed)) {
+    return parsed;
+  }
+  if (logWarning) {
+    logger.warn(`[app] Invalid TRUST_PROXY_HOPS="${val}". Expected integer between 0 and 5. Falling back to default 1.`);
+  }
+  return 1;
+}
+
+const trustProxyHops = parseTrustProxyHops(process.env.TRUST_PROXY_HOPS, true);
+app.set('trust proxy', trustProxyHops);
+logger.info(`[app] Configured 'trust proxy' hops: ${trustProxyHops}`);
+app.parseTrustProxyHops = parseTrustProxyHops;
 
 // Middleware
 const requestContext = require('./middleware/requestContext');
