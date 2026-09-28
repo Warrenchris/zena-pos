@@ -62,6 +62,23 @@ services:
       NODE_ENV: production
       PORT: 5000
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      # Public https URL of the app, used to build links in verification / password-reset
+      # emails. Required: compose refuses to start without it (and the backend refuses to
+      # boot in production if it is missing or points at localhost).
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL to the public https URL, e.g. https://app.example.com}
+      # Leave empty to allow only FRONTEND_URL; set a comma-separated list to allow more origins.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      # Secret used to encrypt stored M-Pesa credentials (openssl rand -hex 32). Without it,
+      # saving Daraja credentials in Settings fails with a server error.
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:?Set ENCRYPTION_SECRET (openssl rand -hex 32)}
+      # Outgoing email. If SMTP_HOST/SMTP_PORT are unset, no email is sent and the 7-day
+      # email-verification gate stays disabled (fails open).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       DB_HOST: mysql
       DB_PORT: 3306
       DB_NAME: ${DB_NAME:-zana_pos}

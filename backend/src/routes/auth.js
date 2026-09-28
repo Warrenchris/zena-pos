@@ -69,13 +69,16 @@ router.post(
   authController.resetPassword
 );
 
-// Distributed limiter for email verification (20 attempts / 15 mins)
+// Distributed limiter for email verification (20 attempts / 15 mins per IP).
+// Keyed by IP ONLY: including the submitted token in the key would give every
+// guessed token its own fresh bucket and make the limit meaningless.
+const verifyEmailKeyGenerator = (req) => getClientIp(req);
 const verifyEmailLimiter = createDistributedRateLimiter({
   namespace: 'verify-email',
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: 'Too many verification attempts. Please try again in a few minutes.' },
-  keyGenerator: (req) => `${getClientIp(req)}:${(req.body && req.body.token) || ''}`,
+  keyGenerator: verifyEmailKeyGenerator,
 });
 
 // Distributed limiter for resending verification (5 per hour per user/IP)
@@ -122,4 +125,5 @@ module.exports = router;
 module.exports.authLimiter = authLimiter;
 module.exports.registerLimiter = registerLimiter;
 module.exports.verifyEmailLimiter = verifyEmailLimiter;
+module.exports.verifyEmailKeyGenerator = verifyEmailKeyGenerator;
 module.exports.resendLimiter = resendLimiter;
