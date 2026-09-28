@@ -2,6 +2,7 @@ const express = require('express');
 const aiClient = require('../utils/aiClient');
 const aiCacheService = require('../services/aiCacheService');
 const { createDistributedRateLimiter } = require('../utils/distributedRateLimiter');
+const getClientIp = require('../utils/getClientIp');
 const logger = require('../utils/logger');
 const router = express.Router();
 const { auth, checkRole } = require('../middleware/auth');
@@ -33,7 +34,7 @@ const aiRateLimiter = createDistributedRateLimiter({
     if (shopId) {
       return `shop:${shopId}`;
     }
-    const clientIp = (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.ip) || 'unknown';
+    const clientIp = getClientIp(req);
     return `ip:${clientIp}`;
   }
 });

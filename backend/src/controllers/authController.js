@@ -15,6 +15,24 @@ const { buildAuthPayload, resolveAuthRole } = require('../utils/serializeAuthRes
 const logger = require('../utils/logger');
 const tokenRevocationService = require('../services/tokenRevocationService');
 
+class PlanNotFoundError extends Error {
+  constructor(planCode = 'growth') {
+    super(`Subscription plan '${planCode}' not found`);
+    this.name = 'PlanNotFoundError';
+    this.planCode = planCode;
+  }
+}
+
+class UserAlreadyExistsError extends Error {
+  constructor(message = 'User already exists') {
+    super(message);
+    this.name = 'UserAlreadyExistsError';
+  }
+}
+
+exports.PlanNotFoundError = PlanNotFoundError;
+exports.UserAlreadyExistsError = UserAlreadyExistsError;
+
 exports.register = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -25,14 +43,14 @@ exports.register = async (req, res) => {
     const { name, email, password, shop } = req.body;
     const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    const userExists = await User.findOne({ where: { email: normalizedEmail } });
-    const empExists = await Employee.findOne({ where: { email: normalizedEmail } });
-    if (userExists || empExists) {
-      return res.status(400).json({ error: 'User already exists' });
-    }
-
-    // Atomic transaction: Organization, Shop, User, OrganizationMembership, and Subscription
+    // Atomic transaction: existence checks, Organization, Shop, User, OrganizationMembership, and Subscription
     const { user, createdShop, createdOrg } = await sequelize.transaction(async (t) => {
+      const userExists = await User.findOne({ where: { email: normalizedEmail }, transaction: t });
+      const empExists = await Employee.findOne({ where: { email: normalizedEmail }, transaction: t });
+      if (userExists || empExists) {
+        throw new UserAlreadyExistsError();
+      }
+
       let createdOrg = null;
       let newShop = null;
 
@@ -81,21 +99,23 @@ exports.register = async (req, res) => {
           transaction: t
         });
 
-        if (growthPlan) {
-          const now = new Date();
-          const trialEndsAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-
-          await Subscription.create({
-            organizationId: createdOrg.id,
-            planId: growthPlan.id,
-            status: 'trialing',
-            billingCycle: 'monthly',
-            currentPeriodStart: now,
-            currentPeriodEnd: trialEndsAt,
-            trialEndsAt: trialEndsAt,
-            cancelAtPeriodEnd: false
-          }, { transaction: t });
+        if (!growthPlan) {
+          throw new PlanNotFoundError('growth');
         }
+
+        const now = new Date();
+        const trialEndsAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+        await Subscription.create({
+          organizationId: createdOrg.id,
+          planId: growthPlan.id,
+          status: 'trialing',
+          billingCycle: 'monthly',
+          currentPeriodStart: now,
+          currentPeriodEnd: trialEndsAt,
+          trialEndsAt: trialEndsAt,
+          cancelAtPeriodEnd: false
+        }, { transaction: t });
       }
 
       return { user: createdUser, createdShop: newShop, createdOrg };
@@ -130,6 +150,33 @@ exports.register = async (req, res) => {
       token
     });
   } catch (error) {
+    if (error instanceof UserAlreadyExistsError || error.name === 'UserAlreadyExistsError') {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    if (error instanceof PlanNotFoundError || error.name === 'PlanNotFoundError') {
+      logger.error(`Registration error: plan '${error.planCode || 'growth'}' not found`, {
+        planCode: error.planCode || 'growth'
+      });
+      return res.status(503).json({ error: 'Registration is temporarily unavailable.' });
+    }
+
+    const isUniqueConstraint = error.name === 'SequelizeUniqueConstraintError' || error.name === 'UniqueConstraintError';
+    const hasEmailField = Boolean(
+      (error.fields && (
+        error.fields.email !== undefined ||
+        error.fields['Users.email'] !== undefined ||
+        error.fields['users.email'] !== undefined ||
+        (Array.isArray(error.fields) && (error.fields.includes('email') || error.fields.includes('Users.email') || error.fields.includes('users.email')))
+      )) ||
+      (Array.isArray(error.errors) && error.errors.some(e => e.path === 'email' || e.path === 'Users.email' || e.path === 'users.email')) ||
+      (error.parent && error.parent.code === 'ER_DUP_ENTRY' && /email/i.test(error.parent.sqlMessage || ''))
+    );
+
+    if (isUniqueConstraint && hasEmailField) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
     logger.error('Registration error:', error);
     res.status(500).json({ error: 'Server error' });
   }
