@@ -83,6 +83,7 @@ exports.register = async (req, res) => {
         password,
         role: 'admin',
         shopId: newShop?.id,
+        emailVerifiedAt: null
       }, { transaction: t });
 
       if (createdOrg) {

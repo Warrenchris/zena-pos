@@ -46,7 +46,8 @@ const User = sequelize.define('User', {
   },
   emailVerifiedAt: {
     type: DataTypes.DATE,
-    allowNull: true
+    allowNull: true,
+    defaultValue: DataTypes.NOW
   },
   emailVerificationTokenHash: {
     type: DataTypes.STRING(64),
