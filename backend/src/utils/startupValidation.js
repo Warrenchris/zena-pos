@@ -38,6 +38,13 @@ function validateStartup() {
     env: diagnostics.environment,
   });
 
+  // Server runtime must never run in test mode (which bypasses schedulers, rate limits, and audit logs)
+  if (process.env.NODE_ENV === 'test') {
+    diagnostics.checks.push({ name: 'environment', ok: false, error: 'NODE_ENV cannot be set to "test" for running servers' });
+    logger.error('[startup] NODE_ENV cannot be set to "test" when starting the server.');
+    throw new Error('NODE_ENV cannot be set to "test" when starting the server.');
+  }
+
   const missingEnv = REQUIRED_ENV_VARS.filter((key) => !process.env[key]);
   if (missingEnv.length > 0) {
     diagnostics.checks.push({ name: 'environment', ok: false, missing: missingEnv });
