@@ -29,7 +29,7 @@
 | 7.0 | Baseline reconciliation and repo hygiene | DONE | `26bfbac` | `docs/saas/PHASE-7-0-BASELINE-WALKTHROUGH.md` |
 | 7A | Billing notifications and lifecycle emails | DONE | `663765f` | `docs/saas/PHASE-7A-BILLING-NOTIFICATIONS-WALKTHROUGH.md` |
 | 7B | Platform operator (super-admin) console | DONE | `7c5dfbb` | `docs/saas/PHASE-7B-PLATFORM-CONSOLE-WALKTHROUGH.md` |
-| 7C | Tax integrity and eTIMS groundwork | NOT STARTED | | |
+| 7C | Tax integrity and eTIMS groundwork | PARTIAL (Step 1 DONE; Step 2 BLOCKED) | `4483bbc` | `docs/saas/PHASE-7C-STEP1-TAX-INTEGRITY-WALKTHROUGH.md` |
 | 7D | Account, data and entitlement gaps | NOT STARTED | | |
 | 7E | Operations: offsite backups and dependency plan | NOT STARTED | | |
 | 7F | Final production readiness audit | NOT STARTED | | |
