@@ -6,6 +6,8 @@ const User = require('../models/User');
 const Employee = require('../models/Employee');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
+const Category = require('../models/Category');
+const SystemSettings = require('../models/SystemSettings');
 const SaleRefund = require('../models/SaleRefund');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
@@ -362,20 +364,162 @@ exports.getProfitAndLoss = async (req, res) => {
 exports.getTaxEstimate = async (req, res) => {
   try {
     const { startDate, endDate, rate } = req.query;
-    const taxRate = rate ? Number(rate) : 0.16; // default 16%
-    const where = { shopId: req.user.shopId, ...NON_CANCELLED_SALE_FILTER };
+    const targetShopId = req.shopId || req.user?.shopId;
+    const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
+
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
       const e = endDate ? new Date(endDate) : new Date();
-      s.setHours(0,0,0,0);
-      e.setHours(23,59,59,999);
-      where.createdAt = { [Op.between]: [ s, e ] };
+      s.setHours(0, 0, 0, 0);
+      e.setHours(23, 59, 59, 999);
+      where.createdAt = { [Op.between]: [s, e] };
     }
 
-    const taxableRevenue = Number(await Sale.sum('subtotal', { where }) || 0);
-    const estimatedTax = taxableRevenue * taxRate;
-    res.json({ taxableRevenue, taxRate, estimatedTax });
+    const shopSettings = await SystemSettings.findOne({ where: { shopId: targetShopId } });
+    const defaultTaxRate = rate !== undefined ? parseFloat(rate) : (parseFloat(shopSettings?.taxRate ?? 16.00) / 100);
+
+    // Query sale items with product and category associations to categorize revenue and recorded tax
+    const saleItems = await SaleItem.findAll({
+      include: [
+        {
+          model: Sale,
+          required: true,
+          where,
+          attributes: ['id', 'createdAt', 'taxRate']
+        },
+        {
+          model: Product,
+          required: false,
+          attributes: ['id', 'taxCategory'],
+          include: [
+            {
+              model: Category,
+              required: false,
+              attributes: ['id', 'taxCategory']
+            }
+          ]
+        }
+      ],
+      attributes: ['id', 'productId', 'quantity', 'unitPrice', 'price', 'subtotal', 'discount', 'taxRate', 'taxAmount', 'metadata']
+    });
+
+    // Query refunds for sales within date range to deduct refunded tax and revenue
+    const refundWhere = { shopId: targetShopId, status: 'processed' };
+    if (where.createdAt) {
+      refundWhere.createdAt = where.createdAt;
+    }
+    const refunds = await SaleRefund.findAll({ where: refundWhere });
+
+    const breakdown = {
+      standard: { taxableAmount: 0, taxAmount: 0, taxRate: 16.00, count: 0 },
+      zero_rated: { taxableAmount: 0, taxAmount: 0, taxRate: 0.00, count: 0 },
+      exempt: { taxableAmount: 0, taxAmount: 0, taxRate: 0.00, count: 0 }
+    };
+
+    let totalRecordedTax = 0;
+    let totalTaxableRevenue = 0;
+
+    for (const item of saleItems) {
+      const effectiveCategory = item.metadata?.taxCategory ||
+        item.Product?.taxCategory ||
+        item.Product?.Category?.taxCategory ||
+        (parseFloat(item.taxRate || 0) > 0 ? 'standard' : 'exempt');
+
+      const cat = ['standard', 'zero_rated', 'exempt'].includes(effectiveCategory)
+        ? effectiveCategory
+        : 'standard';
+
+      const lineQuantity = parseInt(item.quantity || 1, 10);
+      const unitPrice = parseFloat(item.unitPrice || item.price || 0);
+      const gross = lineQuantity * unitPrice;
+      const subtotal = parseFloat(item.subtotal !== undefined && item.subtotal !== null ? item.subtotal : gross);
+      const lineTax = parseFloat(item.taxAmount || 0);
+
+      breakdown[cat].taxableAmount += subtotal;
+      breakdown[cat].taxAmount += lineTax;
+      breakdown[cat].count += lineQuantity;
+
+      totalRecordedTax += lineTax;
+      totalTaxableRevenue += subtotal;
+    }
+
+    // Deduct refunded tax and amounts by category
+    for (const ref of refunds) {
+      const refCategory = ref.metadata?.taxCategory || (parseFloat(ref.metadata?.taxRate || 0) > 0 ? 'standard' : 'exempt');
+      const cat = ['standard', 'zero_rated', 'exempt'].includes(refCategory) ? refCategory : 'standard';
+      const refTax = parseFloat(ref.metadata?.taxAmount || 0);
+      const refNet = parseFloat(ref.metadata?.netAmount || ref.amount || 0);
+
+      breakdown[cat].taxAmount = Math.max(0, breakdown[cat].taxAmount - refTax);
+      breakdown[cat].taxableAmount = Math.max(0, breakdown[cat].taxableAmount - refNet);
+      totalRecordedTax = Math.max(0, totalRecordedTax - refTax);
+      totalTaxableRevenue = Math.max(0, totalTaxableRevenue - refNet);
+    }
+
+    // If no SaleItems exist (e.g. legacy sales without item rows), fall back to Sale sums
+    if (saleItems.length === 0) {
+      const [saleSubtotalSum, saleTaxSum] = await Promise.all([
+        Sale.sum('subtotal', { where }),
+        Sale.sum('tax', { where })
+      ]);
+      const legacyTax = parseFloat(saleTaxSum || 0);
+      const legacySubtotal = parseFloat(saleSubtotalSum || 0);
+      totalRecordedTax = legacyTax;
+      totalTaxableRevenue = legacySubtotal;
+      breakdown.standard.taxableAmount = legacySubtotal;
+      breakdown.standard.taxAmount = legacyTax;
+    }
+
+    const round2 = (num) => Math.round((parseFloat(num || 0) + Number.EPSILON) * 100) / 100;
+
+    res.json({
+      taxableRevenue: round2(totalTaxableRevenue),
+      taxRate: defaultTaxRate,
+      estimatedTax: round2(totalRecordedTax),
+      totalTax: round2(totalRecordedTax),
+      categories: {
+        standard: {
+          taxableAmount: round2(breakdown.standard.taxableAmount),
+          taxAmount: round2(breakdown.standard.taxAmount),
+          taxRate: 16.00
+        },
+        zero_rated: {
+          taxableAmount: round2(breakdown.zero_rated.taxableAmount),
+          taxAmount: 0.00,
+          taxRate: 0.00
+        },
+        exempt: {
+          taxableAmount: round2(breakdown.exempt.taxableAmount),
+          taxAmount: 0.00,
+          taxRate: 0.00
+        }
+      },
+      breakdown: [
+        {
+          category: 'standard',
+          name: 'Standard Rated (16%)',
+          taxableAmount: round2(breakdown.standard.taxableAmount),
+          taxAmount: round2(breakdown.standard.taxAmount),
+          rate: 16.00
+        },
+        {
+          category: 'zero_rated',
+          name: 'Zero-Rated (0%)',
+          taxableAmount: round2(breakdown.zero_rated.taxableAmount),
+          taxAmount: 0.00,
+          rate: 0.00
+        },
+        {
+          category: 'exempt',
+          name: 'Exempt (0%)',
+          taxableAmount: round2(breakdown.exempt.taxableAmount),
+          taxAmount: 0.00,
+          rate: 0.00
+        }
+      ]
+    });
   } catch (e) {
+    console.error('getTaxEstimate error:', e);
     res.status(500).json({ error: 'Failed to estimate tax' });
   }
 };
