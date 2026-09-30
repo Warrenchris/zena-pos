@@ -229,6 +229,14 @@ describe('Phase 7B Step 3: Platform Operator Read-Only Routes Suite', () => {
       expect(res.status).toBe(403);
       expect(res.body.code).toBe('EMAIL_VERIFICATION_REQUIRED');
     });
+
+    it('should reject super-admin token on tenant endpoints (e.g. /api/sales) with 403 Shop context required', async () => {
+      const res = await request(app)
+        .get('/api/sales')
+        .set('Authorization', `Bearer ${superAdminToken}`);
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('Shop context required');
+    });
   });
 
   describe('2. GET /api/platform/overview', () => {
