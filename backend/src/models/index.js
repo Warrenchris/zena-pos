@@ -37,6 +37,7 @@ const Plan = require('./Plan');
 const Subscription = require('./Subscription');
 const SubscriptionInvoice = require('./SubscriptionInvoice');
 const StockTransfer = require('./StockTransfer');
+const BillingNotificationLog = require('./BillingNotificationLog');
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -209,6 +210,14 @@ SubscriptionInvoice.belongsTo(Subscription, { foreignKey: 'subscriptionId' });
 SubscriptionInvoice.belongsTo(Organization, { foreignKey: 'organizationId' });
 SubscriptionInvoice.belongsTo(Plan, { foreignKey: 'planId' });
 
+// BillingNotificationLog associations
+Organization.hasMany(BillingNotificationLog, { foreignKey: 'organizationId' });
+BillingNotificationLog.belongsTo(Organization, { foreignKey: 'organizationId' });
+Subscription.hasMany(BillingNotificationLog, { foreignKey: 'subscriptionId' });
+BillingNotificationLog.belongsTo(Subscription, { foreignKey: 'subscriptionId' });
+SubscriptionInvoice.hasMany(BillingNotificationLog, { foreignKey: 'invoiceId' });
+BillingNotificationLog.belongsTo(SubscriptionInvoice, { foreignKey: 'invoiceId' });
+
 // StockTransfer associations
 StockTransfer.belongsTo(Organization, { foreignKey: 'organizationId' });
 Organization.hasMany(StockTransfer, { foreignKey: 'organizationId' });
@@ -256,7 +265,8 @@ module.exports = {
   Plan,
   Subscription,
   SubscriptionInvoice,
-  StockTransfer
+  StockTransfer,
+  BillingNotificationLog
 };
 
 
