@@ -23,6 +23,8 @@ const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
 const { invalidateShopProductCache } = require('../services/productCache');
 const { normalizeIdempotencyKey, generateSaleFingerprint, isIdempotencyUniqueError } = require('../utils/idempotencyUtils');
 
+const round2 = (num) => Math.round((parseFloat(num || 0) + Number.EPSILON) * 100) / 100;
+
 const fetchCompleteSaleByIdempotencyKey = async (idempotencyKey, shopId) => {
   return Sale.findOne({
     where: {
@@ -1347,27 +1349,73 @@ exports.processRefund = async (req, res) => {
     }
 
     // Calculate total net refund amount across all requested items (net price accounting for discounts)
+    // Retrieve whether sale was tax-inclusive
+    const isTaxInclusive = Boolean(sale.metadata?.taxInclusive);
+
+    // Calculate total net refund amount across all requested items (net price accounting for discounts and tax)
     let calculatedTotalRefund = 0;
     const itemsWithNetPrice = itemsToRefund.map(item => {
       const saleItem = saleItemsMap.get(item.productId);
       const lineQuantity = saleItem.quantity || 1;
-      const lineSubtotal = parseFloat(saleItem.subtotal || (parseFloat(saleItem.unitPrice || saleItem.price || saleItem.originalPrice || 0) * lineQuantity));
+      const unitPrice = parseFloat(saleItem.unitPrice || saleItem.price || saleItem.originalPrice || 0);
+      const grossLineAmount = lineQuantity * unitPrice;
+      const recordedSubtotal = parseFloat(saleItem.subtotal !== undefined && saleItem.subtotal !== null ? saleItem.subtotal : grossLineAmount);
       const lineDiscount = parseFloat(saleItem.discount || 0);
 
-      const netLineAmount = Math.max(0, lineSubtotal - lineDiscount);
-      const netUnitPrice = netLineAmount / lineQuantity;
+      // If recordedSubtotal is already net of discount, avoid double-subtracting
+      let netLineAmount;
+      if (recordedSubtotal <= grossLineAmount - lineDiscount && grossLineAmount > 0 && lineDiscount > 0) {
+        netLineAmount = recordedSubtotal;
+      } else {
+        netLineAmount = Math.max(0, recordedSubtotal - lineDiscount);
+      }
 
-      const lineRefundAmount = parseFloat((item.quantity * netUnitPrice).toFixed(2));
+      const netUnitPrice = lineQuantity > 0 ? netLineAmount / lineQuantity : 0;
+      const lineNetRefund = round2(item.quantity * netUnitPrice);
+
+      // Proportional tax allocation
+      const lineTaxAmount = parseFloat(saleItem.taxAmount || 0);
+      const lineTaxRate = parseFloat(saleItem.taxRate || 0);
+      const effectiveTaxCategory = saleItem.metadata?.taxCategory || (lineTaxRate > 0 ? 'standard' : 'exempt');
+
+      const prevQty = previouslyRefundedMap.get(item.productId) || 0;
+      const isFinalItemRefund = (prevQty + item.quantity) >= lineQuantity;
+
+      let lineRefundTax = 0;
+      if (lineTaxAmount > 0) {
+        if (isFinalItemRefund) {
+          const prevRefundedTaxOnItem = previousRefunds
+            .filter(r => r.productId === item.productId)
+            .reduce((sum, r) => sum + parseFloat(r.metadata?.taxAmount || 0), 0);
+          lineRefundTax = Math.max(0, round2(lineTaxAmount - prevRefundedTaxOnItem));
+        } else {
+          lineRefundTax = round2(lineTaxAmount * (item.quantity / lineQuantity));
+        }
+      }
+
+      // Total refund for line: in inclusive mode, shelf price includes tax; in exclusive mode, tax is refunded on top
+      let lineRefundAmount;
+      if (isTaxInclusive) {
+        lineRefundAmount = lineNetRefund;
+      } else {
+        lineRefundAmount = round2(lineNetRefund + lineRefundTax);
+      }
+
       calculatedTotalRefund += lineRefundAmount;
 
       return {
         ...item,
         netUnitPrice,
+        lineNetRefund,
+        lineRefundTax,
+        lineTaxRate,
+        effectiveTaxCategory,
         lineRefundAmount
       };
     });
 
-    const totalRefundAmount = parseFloat(calculatedTotalRefund.toFixed(2));
+    const totalRefundAmount = round2(calculatedTotalRefund);
+    const totalRefundTax = round2(itemsWithNetPrice.reduce((sum, it) => sum + it.lineRefundTax, 0));
 
     // Approval Threshold & Credential Check
     let verifiedManagerId = null;
@@ -1465,7 +1513,11 @@ exports.processRefund = async (req, res) => {
           refundedAt: new Date(),
           metadata: {
             disposition,
-            isWriteOff: disposition === 'damaged_writeoff'
+            isWriteOff: disposition === 'damaged_writeoff',
+            taxAmount: item.lineRefundTax,
+            taxRate: item.lineTaxRate,
+            taxCategory: item.effectiveTaxCategory,
+            netAmount: item.lineNetRefund
           }
         }, { transaction: t });
 
@@ -1561,8 +1613,17 @@ exports.processRefund = async (req, res) => {
 
       const saleStatus = allFullyRefunded ? 'refunded' : 'partial_refund';
 
-      // Update Sales.saleStatus
-      await sale.update({ saleStatus }, { transaction: t });
+      // Update Sales.saleStatus and cumulative metadata.refundedTax
+      const previousRefundedTax = parseFloat(sale.metadata?.refundedTax || 0);
+      const newTotalRefundedTax = round2(previousRefundedTax + totalRefundTax);
+
+      await sale.update({
+        saleStatus,
+        metadata: {
+          ...(sale.metadata || {}),
+          refundedTax: newTotalRefundedTax
+        }
+      }, { transaction: t });
 
       // e. Decrement customer totalPurchases and loyaltyPoints if sale was for a registered customer
       if (sale.customerId) {
@@ -1597,7 +1658,9 @@ exports.processRefund = async (req, res) => {
       res.json({
         refunds: createdRefunds,
         saleStatus,
-        totalRefundAmount
+        totalRefundAmount,
+        totalTaxRefunded: totalRefundTax,
+        taxRefunded: totalRefundTax
       });
     } catch (error) {
       await t.rollback();
@@ -1846,11 +1909,14 @@ exports.getCreditNote = async (req, res) => {
         sku: r.product?.sku || 'N/A',
         quantity: r.quantity,
         amount: parseFloat(r.amount),
+        taxAmount: parseFloat(r.metadata?.taxAmount || 0),
+        taxCategory: r.metadata?.taxCategory || 'standard',
         disposition: r.disposition || 'restock',
         reasonCode: r.reasonCode || 'OTHER',
         reasonNotes: r.reasonNotes || r.reason || ''
       })),
       totalRefundAmount: parseFloat(totalRefundedAmount.toFixed(2)),
+      totalTaxRefunded: parseFloat(refunds.reduce((sum, r) => sum + parseFloat(r.metadata?.taxAmount || 0), 0).toFixed(2)),
       paymentMethod: refunds[0]?.refundMethod || sale.paymentMethod,
       shop: {
         systemName: settings?.systemName || 'Zana POS',
