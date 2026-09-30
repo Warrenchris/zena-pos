@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
+const Category = require('../models/Category');
 const Customer = require('../models/Customer');
 const sequelize = require('../config/database');
 const { logActivity } = require('../middleware/logger');
@@ -368,7 +369,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     discountReason,
     managerApprovalId,
     managerPassword,
-    tax = 0,
+    tax,
     notes,
     total: frontendTotal,
     change: frontendChange,
@@ -419,14 +420,22 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     }
   }
 
+  const round2 = (num) => Math.round((parseFloat(num || 0) + Number.EPSILON) * 100) / 100;
+
+  // Retrieve shop settings for tax rate and tax-inclusive setting
+  const shopSettings = await SystemSettings.findOne({ where: { shopId } });
+  const shopTaxRate = parseFloat(shopSettings?.taxRate !== undefined && shopSettings?.taxRate !== null ? shopSettings.taxRate : 0);
+  const isTaxInclusive = Boolean(shopSettings?.taxInclusive);
+
   const executeSaleCreation = async (t) => {
-    let subtotal = 0;
+    let grossSubtotal = 0;
     const lockedProducts = [];
-    const saleItems = [];
+    const intermediateItems = [];
 
     for (const item of items) {
       const product = await Product.findOne({
         where: organizationId ? { id: item.productId, active: true, organizationId } : { id: item.productId, active: true, shopId },
+        include: [{ model: Category, attributes: ['id', 'taxCategory'] }],
         transaction: t
       });
 
@@ -458,38 +467,102 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
         throw err;
       }
 
-      const itemPrice = product.price;
-      const itemSubtotal = itemPrice * item.quantity;
-      subtotal += itemSubtotal;
+      const itemPrice = parseFloat(product.price);
+      const itemQuantity = parseInt(item.quantity, 10);
+      const itemGross = itemPrice * itemQuantity;
+      const itemDiscount = parseFloat(item.discount || 0);
+      const itemNet = Math.max(0, itemGross - itemDiscount);
+      grossSubtotal += itemGross;
 
-      lockedProducts.push({ product, inventory, item, itemPrice, itemSubtotal });
+      // Determine effective tax category and tax rate (Product -> Category -> 'standard')
+      const effectiveTaxCategory = product.taxCategory || product.Category?.taxCategory || 'standard';
+      const itemTaxRate = effectiveTaxCategory === 'standard' ? shopTaxRate : 0.00;
 
-      saleItems.push({
-        productId: product.id,
-        quantity: item.quantity,
-        unitPrice: product.price,
-        price: itemPrice,
-        subtotal: Math.max(0, itemSubtotal - (parseFloat(item.discount || 0))),
-        discount: parseFloat(item.discount || 0),
-        discountType: item.discountType || null,
-        discountValue: item.discountValue ? parseFloat(item.discountValue) : null,
-        discountReason: item.discountReason || null,
-        // Never trust a client-supplied approver name — only record the name
-        // we ourselves just verified above, and only for items whose discount
-        // actually required approval.
+      lockedProducts.push({ product, inventory, item, itemPrice, itemSubtotal: itemGross });
+
+      intermediateItems.push({
+        product,
+        item,
+        itemPrice,
+        itemQuantity,
+        itemGross,
+        itemDiscount,
+        itemNet,
+        effectiveTaxCategory,
+        itemTaxRate,
         discountApprovedBy: discountRequiresApproval(item.discountType, item.discountValue)
           ? verifiedApproverName
           : null
       });
     }
 
-    const totalItemDiscounts = saleItems.reduce((sum, si) => sum + (parseFloat(si.discount || 0)), 0);
+    const totalItemDiscounts = intermediateItems.reduce((sum, si) => sum + si.itemDiscount, 0);
     const cartDiscountAmount = parseFloat(discount || 0);
-    const totalDiscount = totalItemDiscounts + cartDiscountAmount;
-    const serverTotal = Math.max(0, subtotal + parseFloat(tax || 0) - totalDiscount);
+    const totalDiscount = round2(totalItemDiscounts + cartDiscountAmount);
+    const totalItemsNet = intermediateItems.reduce((sum, si) => sum + si.itemNet, 0);
 
-    if (frontendTotal !== undefined && Math.abs(serverTotal - parseFloat(frontendTotal)) > 0.01) {
-      const err = new Error('Price mismatch. Please refresh and retry.');
+    // Compute line-item tax and build saleItems
+    let totalServerTax = 0;
+    const saleItems = [];
+
+    for (const d of intermediateItems) {
+      // Allocate cart discount proportionally across items based on net share
+      const itemCartDiscount = totalItemsNet > 0 ? (d.itemNet / totalItemsNet) * cartDiscountAmount : 0;
+      const taxableBase = Math.max(0, d.itemNet - itemCartDiscount);
+
+      let lineTaxAmount = 0;
+      if (d.itemTaxRate > 0) {
+        if (isTaxInclusive) {
+          // Inclusive: shelf price includes tax -> Tax = TaxableBase * (Rate / (100 + Rate))
+          lineTaxAmount = round2(taxableBase * (d.itemTaxRate / (100 + d.itemTaxRate)));
+        } else {
+          // Exclusive: shelf price is net -> Tax = TaxableBase * (Rate / 100)
+          lineTaxAmount = round2(taxableBase * (d.itemTaxRate / 100));
+        }
+      }
+
+      totalServerTax += lineTaxAmount;
+
+      saleItems.push({
+        productId: d.product.id,
+        quantity: d.itemQuantity,
+        unitPrice: d.itemPrice,
+        price: d.itemPrice,
+        subtotal: d.itemNet,
+        discount: d.itemDiscount,
+        discountType: d.item.discountType || null,
+        discountValue: d.item.discountValue ? parseFloat(d.item.discountValue) : null,
+        discountReason: d.item.discountReason || null,
+        discountApprovedBy: d.discountApprovedBy,
+        taxRate: d.itemTaxRate,
+        taxAmount: lineTaxAmount,
+        taxCategory: d.effectiveTaxCategory
+      });
+    }
+
+    totalServerTax = round2(totalServerTax);
+
+    let serverTotal;
+    let finalSaleSubtotal;
+
+    if (isTaxInclusive) {
+      serverTotal = round2(Math.max(0, grossSubtotal - totalDiscount));
+      finalSaleSubtotal = round2(grossSubtotal - totalServerTax);
+    } else {
+      serverTotal = round2(Math.max(0, grossSubtotal - totalDiscount + totalServerTax));
+      finalSaleSubtotal = round2(grossSubtotal);
+    }
+
+    // Verify client total within ±0.02 tolerance
+    if (frontendTotal !== undefined && Math.abs(serverTotal - parseFloat(frontendTotal)) > 0.02) {
+      const err = new Error(`Price mismatch. Expected ${serverTotal.toFixed(2)}, received ${parseFloat(frontendTotal).toFixed(2)}.`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Reject client tax tampering exceeding ±0.02 tolerance
+    if (tax !== undefined && tax !== null && Math.abs(totalServerTax - parseFloat(tax)) > 0.02) {
+      const err = new Error(`Tax mismatch. Expected ${totalServerTax.toFixed(2)}, received ${parseFloat(tax).toFixed(2)}.`);
       err.statusCode = 400;
       throw err;
     }
@@ -534,8 +607,9 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     const sale = await Sale.create({
       invoiceNumber,
       idempotencyKey: idempotencyKey || null,
-      subtotal,
-      tax,
+      subtotal: finalSaleSubtotal,
+      tax: totalServerTax,
+      taxRate: shopTaxRate,
       discount: totalDiscount,
       discountType: discountType || null,
       discountValue: discountValue ? parseFloat(discountValue) : null,
@@ -561,6 +635,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
         discountApprovedBy: cartDiscountNeedsApproval ? verifiedApproverName : null,
         managerApprovalId: verifiedApproverName ? managerApprovalId : null,
         requestHash,
+        taxInclusive: isTaxInclusive,
         ...(saleData.metadata || {})
       }
     }, { transaction: t });
@@ -575,9 +650,12 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
         discount: item.discount,
         discountType: item.discountType,
         discountValue: item.discountValue,
+        taxRate: item.taxRate,
+        taxAmount: item.taxAmount,
         metadata: {
           discountReason: item.discountReason,
-          discountApprovedBy: item.discountApprovedBy
+          discountApprovedBy: item.discountApprovedBy,
+          taxCategory: item.taxCategory
         },
         saleId: sale.id,
         shopId
