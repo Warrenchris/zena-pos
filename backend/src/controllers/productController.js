@@ -373,7 +373,8 @@ exports.createProduct = async (req, res) => {
       CategoryId,
       categoryId,
       expirationDate,
-      weightGrams
+      weightGrams,
+      taxCategory
     } = req.body;
 
     const shopId = req.shopId || req.user?.shopId;
@@ -470,6 +471,7 @@ exports.createProduct = async (req, res) => {
             CategoryId: parsedCategoryId,
             expirationDate: expirationDate || null,
             weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : null),
+            taxCategory: taxCategory || null,
             shopId,
             organizationId
           }, { transaction: t });
@@ -578,7 +580,8 @@ exports.updateProduct = async (req, res) => {
       CategoryId,
       categoryId,
       expirationDate,
-      weightGrams
+      weightGrams,
+      taxCategory
     } = req.body;
 
     const targetCategoryId = categoryId || CategoryId;
@@ -613,6 +616,9 @@ exports.updateProduct = async (req, res) => {
       expirationDate: expirationDate || null,
       weightGrams: typeof weightGrams === 'number' ? weightGrams : (weightGrams ? parseInt(weightGrams, 10) : product.weightGrams)
     };
+    if (taxCategory !== undefined) {
+      updateFields.taxCategory = taxCategory || null;
+    }
     if (parsedCategoryId !== undefined) {
       updateFields.categoryId = parsedCategoryId;
       updateFields.CategoryId = parsedCategoryId;

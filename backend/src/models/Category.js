@@ -19,6 +19,11 @@ const Category = sequelize.define('Category', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
+  taxCategory: {
+    type: DataTypes.ENUM('standard', 'zero_rated', 'exempt'),
+    allowNull: true,
+    defaultValue: null
+  },
   shopId: {
     type: DataTypes.INTEGER,
     allowNull: false,

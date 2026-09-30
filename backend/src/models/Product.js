@@ -43,6 +43,11 @@ const Product = sequelize.define('Product', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
+  taxCategory: {
+    type: DataTypes.ENUM('standard', 'zero_rated', 'exempt'),
+    allowNull: true,
+    defaultValue: null
+  },
   nonReturnable: {
     type: DataTypes.BOOLEAN,
     defaultValue: false

@@ -61,10 +61,11 @@ exports.createCategory = async (req, res) => {
     }
 
     const { shopId, organizationId } = await resolveTenantContext(req);
-    const { name, description } = req.body;
+    const { name, description, taxCategory } = req.body;
     const category = await Category.create({
       name,
       description,
+      taxCategory: taxCategory || null,
       shopId,
       organizationId
     });
@@ -86,7 +87,7 @@ exports.updateCategory = async (req, res) => {
     }
 
     const { shopId, organizationId } = await resolveTenantContext(req);
-    const { name, description } = req.body;
+    const { name, description, taxCategory } = req.body;
     const where = { id: req.params.id, active: true };
     if (organizationId) {
       where.organizationId = organizationId;
@@ -100,7 +101,12 @@ exports.updateCategory = async (req, res) => {
       return res.status(404).json({ error: 'Category not found' });
     }
 
-    await category.update({ name, description });
+    const updateFields = { name, description };
+    if (taxCategory !== undefined) {
+      updateFields.taxCategory = taxCategory || null;
+    }
+
+    await category.update(updateFields);
     res.json(category);
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
