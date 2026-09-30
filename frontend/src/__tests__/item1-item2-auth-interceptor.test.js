@@ -64,8 +64,8 @@ describe('ITEM 1 & ITEM 2: Auth Interceptor 401 Tolerance & Diagnostic Logging',
     return error;
   };
 
-  describe('Verification Requirement 1: Login & Register fail immediately (0-tolerance)', () => {
-    test('POST /api/auth/login with 401 triggers immediate forced logout on the first attempt without retry tolerance', async () => {
+  describe('Verification Requirement 1: Login & Register 401 surface to the caller (no logout, no redirect)', () => {
+    test('POST /api/auth/login with 401 rejects to the caller without wiping the token or redirecting', async () => {
       api.defaults.adapter = jest.fn().mockImplementation((config) => {
         return Promise.reject(
           createAxios401Error('/api/auth/login', 'post', { error: 'Invalid email or password' })
@@ -79,11 +79,11 @@ describe('ITEM 1 & ITEM 2: Auth Interceptor 401 Tolerance & Diagnostic Logging',
         },
       });
 
-      // Assert terminal auth behavior: removes token on strike 1
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith('token');
+      expect(window.localStorage.removeItem).not.toHaveBeenCalled();
+      expect(mockStorage['sessionExpiredMessage']).toBeUndefined();
     });
 
-    test('POST /api/auth/register with 401 triggers immediate forced logout on the first attempt', async () => {
+    test('POST /api/auth/register with 401 rejects to the caller without wiping the token', async () => {
       api.defaults.adapter = jest.fn().mockImplementation((config) => {
         return Promise.reject(
           createAxios401Error('/api/auth/register', 'post', { error: 'Registration rejected' })
@@ -97,7 +97,28 @@ describe('ITEM 1 & ITEM 2: Auth Interceptor 401 Tolerance & Diagnostic Logging',
         },
       });
 
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith('token');
+      expect(window.localStorage.removeItem).not.toHaveBeenCalled();
+    });
+
+    test('repeated failed logins never count toward the 3-strikes session limit', async () => {
+      api.defaults.adapter = jest.fn().mockImplementation((config) => {
+        return Promise.reject(
+          createAxios401Error('/api/auth/login', 'post', { error: 'Invalid email or password' })
+        );
+      });
+
+      // 5 consecutive failed login attempts
+      for (let i = 0; i < 5; i++) {
+        await expect(authAPI.login({ email: 'bad@test.com', password: 'bad' })).rejects.toMatchObject({
+          response: {
+            status: 401,
+            data: { error: 'Invalid email or password' },
+          },
+        });
+      }
+
+      // Assert that removeItem was never called across all 5 attempts
+      expect(window.localStorage.removeItem).not.toHaveBeenCalled();
     });
   });
 

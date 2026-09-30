@@ -259,6 +259,11 @@ api.interceptors.response.use(
   },
   async (error) => {
     if (error.response?.status === 401) {
+      // Login/register 401 = wrong credentials, not an expired session.
+      // Let the caller (authSlice -> Login.jsx) render the error. No token wipe, no redirect, no reload.
+      if (isTerminalAuthEndpoint(error.config?.url)) {
+        return Promise.reject(error);
+      }
       unauthorized401Count++;
       
       // ITEM 2: Diagnostic logging on mid-session failure paths (switch-shop, profile)
@@ -293,15 +298,13 @@ api.interceptors.response.use(
         logger.error('🚨 [Auth Diagnostic] 401 Unauthorized encountered on mid-session auth endpoint:', diagnostic);
       }
 
-      // ITEM 1: Only terminal auth endpoints (login, register) bypass the 401 tolerance count.
-      // Mid-session authenticated endpoints (switch-shop, profile, etc.) are granted the standard 3-strikes tolerance.
-      const isTerminalAuth = isTerminalAuthEndpoint(error.config?.url);
+      // Mid-session authenticated endpoints (switch-shop, profile, etc.) get the standard 3-strikes tolerance.
       const hasAuthHeader = Boolean(
         error.config?.headers?.Authorization ||
         (typeof error.config?.headers?.get === 'function' && error.config.headers.get('Authorization'))
       );
 
-      if (unauthorized401Count >= MAX_401_COUNT || isTerminalAuth) {
+      if (unauthorized401Count >= MAX_401_COUNT) {
         localStorage.removeItem('token');
         if (hasAuthHeader) {
           localStorage.setItem('sessionExpiredMessage', 'Your session expired — please log in again.');
