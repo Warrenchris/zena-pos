@@ -1,13 +1,35 @@
 const request = require('supertest');
 const app = require('../../src/app');
-const { Sale, Product, Inventory, Expense, SaleItem, SalePayment, SaleRefund, Invoice, Shop } = require('../../src/models');
+const { Sale, Product, Inventory, Expense, SaleItem, SalePayment, SaleRefund, Invoice, Shop, User } = require('../../src/models');
 const sequelize = require('../../src/config/database');
+const tokenRevocationService = require('../../src/services/tokenRevocationService');
 
 describe('Insights Controller', () => {
   let token;
 
   beforeAll(async () => {
     await sequelize.authenticate();
+
+    await Shop.findOrCreate({
+      where: { id: 1 },
+      defaults: { name: 'Test Shop', organizationId: 1, active: true }
+    });
+
+    await User.findOrCreate({
+      where: { id: 101 },
+      defaults: {
+        name: 'Insights Test Admin',
+        email: 'insights-admin-101@test.com',
+        password: 'hashedPassword123',
+        role: 'admin',
+        shopId: 1,
+        active: true,
+        emailVerifiedAt: new Date()
+      }
+    });
+    await tokenRevocationService.clearUserStatus(101, false);
+    await tokenRevocationService.setUserStatus(101, false, 'active');
+    await tokenRevocationService.clearUserTokenCutoff(101, false);
 
     const jwt = require('jsonwebtoken');
     const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');

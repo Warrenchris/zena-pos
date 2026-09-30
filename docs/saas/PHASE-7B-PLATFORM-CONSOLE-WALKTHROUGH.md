@@ -209,3 +209,44 @@ Awaiting user approval before commencing Phase 7C (Tax Integrity &
 eTIMS Groundwork).
 ======================================================================
 ```
+
+---
+
+## 8. Addendum: Destructive Rollback Safeguard & Foreign Key Confirmation
+
+### 1. Production Safeguard Implementation
+Updated `backend/migrations/20260930120000-add-super-admin-role-and-nullable-shop-id.js`:
+- Added a prominent safety warning comment block at the top of the `down()` function.
+- Added an execution gate requiring `process.env.ALLOW_DESTRUCTIVE_ROLLBACK === 'true'`, throwing a descriptive refusal error if not set.
+- Added foreign-key disassociation for referencing tables (`UPDATE ActivityLogs SET userId = NULL WHERE userId IN (...)`) prior to deleting super-admin rows.
+- Added console logging of deleted row counts via `deleteResult.affectedRows`.
+
+### 2. Negative Test (Refusal without Environment Variable)
+Executed `npx sequelize-cli db:migrate:undo` without `ALLOW_DESTRUCTIVE_ROLLBACK`:
+```text
+== 20260930120000-add-super-admin-role-and-nullable-shop-id: reverting =======
+ERROR: Refusing to run down-migration on 20260930120000-add-super-admin-role-and-nullable-shop-id: This migration permanently deletes all super-admin users (role='super_admin' or shopId IS NULL) before restoring the NOT NULL constraint on Users.shopId. To proceed, set environment variable ALLOW_DESTRUCTIVE_ROLLBACK=true.
+```
+Execution was cleanly blocked; no schema changes or data modifications occurred.
+
+### 3. Positive Test with Live Super-Admin & Referencing ActivityLog
+1. Created super-admin via CLI: `node scripts/createSuperAdmin.js --name "Test Rollback Operator" --email "rollback-operator@zanapos.com" --password "RollbackSecurePass123!"` (created User ID `12`).
+2. Inserted referencing audit record: `ActivityLogs` ID `19` with `userId = 12`.
+3. Executed authorized rollback:
+   ```text
+   $env:ALLOW_DESTRUCTIVE_ROLLBACK="true"; npx sequelize-cli db:migrate:undo; Remove-Item Env:\ALLOW_DESTRUCTIVE_ROLLBACK
+   == 20260930120000-add-super-admin-role-and-nullable-shop-id: reverting =======
+   Executing (default): SHOW INDEX FROM `Organizations` WHERE Key_name = 'idx_organizations_created_at';
+   Executing (default): ALTER TABLE `Organizations` DROP INDEX `idx_organizations_created_at`;
+   Executing (default): UPDATE `ActivityLogs` SET `userId` = NULL WHERE `userId` IN (SELECT `id` FROM (SELECT `id` FROM `Users` WHERE `role` = 'super_admin' OR `shopId` IS NULL) AS `sa_users`);
+   Executing (default): DELETE FROM `Users` WHERE `role` = 'super_admin' OR `shopId` IS NULL;
+   [rollback] Removed 1 super_admin / null-shopId user row(s).
+   Executing (default): ALTER TABLE `Users` MODIFY COLUMN `shopId` INT NOT NULL;
+   Executing (default): UPDATE `Users` SET `role` = 'admin' WHERE `role` NOT IN ('admin', 'manager', 'cashier');
+   Executing (default): ALTER TABLE `Users` MODIFY COLUMN `role` ENUM('admin', 'manager', 'cashier') NOT NULL DEFAULT 'cashier';
+   == 20260930120000-add-super-admin-role-and-nullable-shop-id: reverted (2.052s)
+   ```
+4. **Deleted row count:** Exactly **1** user row was removed.
+5. **Foreign key check:** `ActivityLog 19` survived with `userId = null` and zero foreign-key constraint violations.
+6. **Re-migration:** `npx sequelize-cli db:migrate` completed successfully in 1.036s.
+
