@@ -228,7 +228,8 @@ const billingNotificationService = {
           name: owner.name,
           daysRemaining,
           trialEndsAt,
-          upgradeUrl
+          upgradeUrl,
+          isEmailVerified: owner.emailVerified
         });
 
         const log = await recordNotification({
@@ -322,7 +323,8 @@ const billingNotificationService = {
           amount,
           currency,
           currentPeriodEnd,
-          renewalUrl
+          renewalUrl,
+          isEmailVerified: owner.emailVerified
         });
 
         const log = await recordNotification({
@@ -403,7 +405,8 @@ const billingNotificationService = {
           currency: invoice.currency || 'KES',
           paymentMethod,
           newPeriodEnd: subscription?.currentPeriodEnd || invoice.billingPeriodEnd,
-          receiptUrl
+          receiptUrl,
+          isEmailVerified: owner.emailVerified
         });
 
         const log = await recordNotification({
@@ -491,7 +494,8 @@ const billingNotificationService = {
           amount: invoice.amount,
           currency: invoice.currency || 'KES',
           reason,
-          retryUrl
+          retryUrl,
+          isEmailVerified: owner.emailVerified
         });
 
         const log = await recordNotification({
@@ -578,7 +582,8 @@ const billingNotificationService = {
           to: owner.email,
           name: owner.name,
           gracePeriodEnd,
-          reactivateUrl
+          reactivateUrl,
+          isEmailVerified: owner.emailVerified
         });
 
         const log = await recordNotification({
@@ -659,7 +664,8 @@ const billingNotificationService = {
           to: owner.email,
           name: owner.name,
           planName: planName || 'Standard',
-          currentPeriodEnd: subscription?.currentPeriodEnd
+          currentPeriodEnd: subscription?.currentPeriodEnd,
+          isEmailVerified: owner.emailVerified
         });
 
         const log = await recordNotification({
