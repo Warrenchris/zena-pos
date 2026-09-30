@@ -16,7 +16,8 @@ export default function ProductModal({ product, categories = [], onClose }) {
     cost: '',
     stockQuantity: '',
     reorderPoint: '10',
-    CategoryId: ''
+    CategoryId: '',
+    taxCategory: 'standard'
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -34,7 +35,8 @@ export default function ProductModal({ product, categories = [], onClose }) {
         stockQuantity: product.stockQuantity !== undefined ? String(product.stockQuantity) : '',
         reorderPoint: product.reorderPoint !== undefined ? String(product.reorderPoint) : '10',
         CategoryId: product.CategoryId || product.categoryId || (product.Category?.id ? String(product.Category.id) : ''),
-        categoryId: product.categoryId || product.CategoryId || (product.Category?.id ? String(product.Category.id) : '')
+        categoryId: product.categoryId || product.CategoryId || (product.Category?.id ? String(product.Category.id) : ''),
+        taxCategory: product.taxCategory || product.Category?.taxCategory || 'standard'
       });
     }
   }, [product]);
@@ -267,6 +269,23 @@ export default function ProductModal({ product, categories = [], onClose }) {
                   <span>{errors.CategoryId}</span>
                 </p>
               )}
+            </div>
+
+            {/* Tax Category */}
+            <div>
+              <label className="block text-small font-semibold text-text-secondary mb-1.5">
+                Tax Category
+              </label>
+              <select
+                name="taxCategory"
+                value={formData.taxCategory || 'standard'}
+                onChange={handleChange}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2/70 text-text-primary border border-border-default focus:border-primary focus:ring-2 focus:ring-primary/40 focus:bg-surface text-small transition-colors"
+              >
+                <option value="standard">Standard (16%)</option>
+                <option value="zero_rated">Zero-Rated (0%)</option>
+                <option value="exempt">Exempt (0%)</option>
+              </select>
             </div>
 
             {/* Price */}

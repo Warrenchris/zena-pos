@@ -27,6 +27,7 @@ export default function POSModal({ products = [], customers = [], onClose }) {
 
   const addToCart = (product) => {
     const existingItem = cart.find(item => item.productId === product.id);
+    const taxCategory = product.taxCategory || product.Category?.taxCategory || 'standard';
     if (existingItem) {
       setCart(cart.map(item => 
         item.productId === product.id 
@@ -38,7 +39,8 @@ export default function POSModal({ products = [], customers = [], onClose }) {
         productId: product.id,
         quantity: 1,
         unitPrice: product.price,
-        subtotal: product.price
+        subtotal: product.price,
+        taxCategory
       }]);
     }
   };
@@ -118,6 +120,7 @@ export default function POSModal({ products = [], customers = [], onClose }) {
 
   const settings = useSelector((state) => state.settings?.settings || {});
   const taxRateNum = parseFloat(settings.taxRate !== undefined && settings.taxRate !== null ? settings.taxRate : 0);
+  const isTaxInclusive = Boolean(settings.taxInclusive);
 
   const enabledMethodsObj = settings.enabledPaymentMethods || { cash: true, mobile: true, bank: false };
   const availableMethods = [];
@@ -127,11 +130,30 @@ export default function POSModal({ products = [], customers = [], onClose }) {
   if (availableMethods.length === 0) availableMethods.push({ id: 'cash', label: 'Cash' });
 
   const getTax = () => {
-    return getDiscountedSubtotal() * (taxRateNum / 100);
+    const discountedSub = getDiscountedSubtotal();
+    const rawSub = getSubtotal();
+    if (rawSub <= 0) return 0;
+    const discountRatio = discountedSub / rawSub;
+
+    let totalTax = 0;
+    for (const item of cart) {
+      const itemTaxRate = (item.taxCategory === 'standard' || !item.taxCategory) ? taxRateNum : 0;
+      if (itemTaxRate <= 0) continue;
+      const itemBase = item.subtotal * discountRatio;
+      if (isTaxInclusive) {
+        totalTax += itemBase * (itemTaxRate / (100 + itemTaxRate));
+      } else {
+        totalTax += itemBase * (itemTaxRate / 100);
+      }
+    }
+    return Math.round((totalTax + Number.EPSILON) * 100) / 100;
   };
 
   const getTotal = () => {
-    return getDiscountedSubtotal() + getTax();
+    if (isTaxInclusive) {
+      return Math.round((getDiscountedSubtotal() + Number.EPSILON) * 100) / 100;
+    }
+    return Math.round((getDiscountedSubtotal() + getTax() + Number.EPSILON) * 100) / 100;
   };
 
   const handleCheckout = async () => {
@@ -146,6 +168,7 @@ export default function POSModal({ products = [], customers = [], onClose }) {
         discount: couponDiscount,
         couponCode: appliedCoupon?.code || null,
         tax: getTax(),
+        total: getTotal(),
         notes: appliedCoupon ? `Applied Coupon: ${appliedCoupon.code}` : ''
       };
 
@@ -266,7 +289,15 @@ export default function POSModal({ products = [], customers = [], onClose }) {
                 return (
                   <div key={item.productId} className="flex items-center justify-between p-3 rounded-xl border border-border-default bg-surface-2/40">
                     <div className="flex-1 min-w-0 pr-2">
-                      <div className="text-small font-semibold text-text-primary truncate">{product?.name}</div>
+                      <div className="text-small font-semibold text-text-primary truncate flex items-center gap-1.5">
+                        <span className="truncate">{product?.name}</span>
+                        {item.taxCategory === 'zero_rated' && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">0% VAT</span>
+                        )}
+                        {item.taxCategory === 'exempt' && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 shrink-0">Exempt</span>
+                        )}
+                      </div>
                       <div className="text-caption text-text-muted">{format(item.unitPrice)} each</div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -394,7 +425,7 @@ export default function POSModal({ products = [], customers = [], onClose }) {
                 </div>
               )}
               <div className="flex justify-between text-text-secondary">
-                <span>Tax ({taxRateNum}%)</span>
+                <span>{isTaxInclusive ? `VAT Included (${taxRateNum}%)` : `Tax (${taxRateNum}%)`}</span>
                 <span>{format(getTax())}</span>
               </div>
               <div className="flex justify-between text-h3 font-bold text-text-primary pt-2 border-t border-border-default">

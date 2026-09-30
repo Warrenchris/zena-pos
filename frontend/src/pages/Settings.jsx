@@ -965,6 +965,24 @@ const Settings = () => {
         </p>
       </div>
 
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
+        <div>
+          <h4 className="text-small font-semibold text-text-primary">Tax-Inclusive Pricing</h4>
+          <p className="text-caption text-text-muted mt-0.5">
+            Catalog product prices already include VAT / tax (KRA retail standard). If unchecked, tax is added on top at checkout.
+          </p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.taxInclusive || false}
+            onChange={(e) => handleInputChange('taxInclusive', e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+        </label>
+      </div>
+
       <div>
         <label className="block text-small font-semibold text-text-primary mb-1.5">
           Max Refund Without Manager Approval ({formData.currencySymbol || 'KSh'})

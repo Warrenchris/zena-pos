@@ -22,6 +22,7 @@ const initialForm = {
   stockQuantity: '0',
   reorderPoint: '10',
   CategoryId: '',
+  taxCategory: 'standard',
   expirationDate: 'never',
   weightGrams: ''
 }
@@ -76,6 +77,16 @@ export default function CreateProduct() {
   const onChange = (e) => {
     const { name, value } = e.target
     setForm((f) => ({ ...f, [name]: value }))
+  }
+
+  const onCategoryChange = (e) => {
+    const catId = e.target.value
+    const selectedCat = categories.find(c => String(c.id) === String(catId))
+    setForm((f) => ({
+      ...f,
+      CategoryId: catId,
+      ...(selectedCat?.taxCategory ? { taxCategory: selectedCat.taxCategory } : {})
+    }))
   }
 
   // click outside to close calendar
@@ -168,11 +179,19 @@ export default function CreateProduct() {
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Category</label>
-              <select name="CategoryId" value={form.CategoryId} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow">
+              <select name="CategoryId" value={form.CategoryId} onChange={onCategoryChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow">
                 <option value="">Select category</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Tax Category</label>
+              <select name="taxCategory" value={form.taxCategory || 'standard'} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow">
+                <option value="standard">Standard (16%)</option>
+                <option value="zero_rated">Zero-Rated (0%)</option>
+                <option value="exempt">Exempt (0%)</option>
               </select>
             </div>
             <div>
