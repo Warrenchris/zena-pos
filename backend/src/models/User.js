@@ -29,7 +29,7 @@ const User = sequelize.define('User', {
     allowNull: false
   },
   role: {
-    type: DataTypes.ENUM('admin', 'cashier', 'manager'),
+    type: DataTypes.ENUM('admin', 'cashier', 'manager', 'super_admin'),
     defaultValue: 'cashier'
   },
   active: {
@@ -38,7 +38,7 @@ const User = sequelize.define('User', {
   },
   shopId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     references: {
       model: 'Shops',
       key: 'id'
@@ -64,8 +64,11 @@ const User = sequelize.define('User', {
 }, {
   hooks: {
     beforeValidate: async (user) => {
-      if (user.role && !['admin', 'manager', 'cashier'].includes(user.role)) {
+      if (user.role && !['admin', 'manager', 'cashier', 'super_admin'].includes(user.role)) {
         throw new Error('Invalid role specified');
+      }
+      if (user.role !== 'super_admin' && !user.shopId) {
+        throw new Error('shopId is required for tenant users');
       }
     },
     beforeCreate: async (user) => {
