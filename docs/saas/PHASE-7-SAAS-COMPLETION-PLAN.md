@@ -27,7 +27,7 @@
 | Sub-phase | Title | Status | Commit | Walkthrough doc |
 | :--- | :--- | :--- | :--- | :--- |
 | 7.0 | Baseline reconciliation and repo hygiene | DONE | `26bfbac` | `docs/saas/PHASE-7-0-BASELINE-WALKTHROUGH.md` |
-| 7A | Billing notifications and lifecycle emails | NOT STARTED | | |
+| 7A | Billing notifications and lifecycle emails | DONE | `663765f` | `docs/saas/PHASE-7A-BILLING-NOTIFICATIONS-WALKTHROUGH.md` |
 | 7B | Platform operator (super-admin) console | NOT STARTED | | |
 | 7C | Tax integrity and eTIMS groundwork | NOT STARTED | | |
 | 7D | Account, data and entitlement gaps | NOT STARTED | | |
