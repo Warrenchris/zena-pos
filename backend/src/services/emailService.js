@@ -61,6 +61,14 @@ function getMailer() {
   return null;
 }
 
+function getEmailVerificationBanner(isEmailVerified = true) {
+  if (isEmailVerified) return '';
+  return `
+        <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin: 20px 0; border-radius: 4px; color: #92400e; font-size: 13px;">
+          <strong>Action Recommended:</strong> Your account email is not yet verified. Please verify your email to ensure uninterrupted access to security and billing settings.
+        </div>`;
+}
+
 const emailService = {
   async sendInvoice({ to, invoiceNumber, pdf }) {
     if (!transporter) {
@@ -172,7 +180,7 @@ const emailService = {
     }
   },
 
-  async sendTrialEndingEmail({ to, name, daysRemaining, trialEndsAt, upgradeUrl }) {
+  async sendTrialEndingEmail({ to, name, daysRemaining, trialEndsAt, upgradeUrl, isEmailVerified = true }) {
     const mailer = getMailer();
     if (!mailer) {
       throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
@@ -191,6 +199,7 @@ const emailService = {
         <p>To ensure uninterrupted access to your POS system, inventory management, and sales reports, please choose a subscription plan before your trial ends.</p>
         ${upgradeUrl ? `<div style="margin: 24px 0;"><a href="${upgradeUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Choose a Plan</a></div>` : ''}
         <p style="font-size: 13px; color: #666;">If your trial expires, your account will enter a limited grace period before features are suspended.</p>
+        ${getEmailVerificationBanner(isEmailVerified)}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
         <p style="font-size: 13px; color: #666;">Best regards,<br/>The ${companyName} Team</p>
       </div>
@@ -211,7 +220,7 @@ const emailService = {
     }
   },
 
-  async sendRenewalDueEmail({ to, name, planName, amount, currency, currentPeriodEnd, renewalUrl }) {
+  async sendRenewalDueEmail({ to, name, planName, amount, currency, currentPeriodEnd, renewalUrl, isEmailVerified = true }) {
     const mailer = getMailer();
     if (!mailer) {
       throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
@@ -234,6 +243,7 @@ const emailService = {
         </div>
         ${renewalUrl ? `<div style="margin: 24px 0;"><a href="${renewalUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Manage Subscription</a></div>` : ''}
         <p style="font-size: 13px; color: #666;">Please ensure your payment details are up to date to prevent any service interruption.</p>
+        ${getEmailVerificationBanner(isEmailVerified)}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
         <p style="font-size: 13px; color: #666;">Best regards,<br/>The ${companyName} Team</p>
       </div>
@@ -254,7 +264,7 @@ const emailService = {
     }
   },
 
-  async sendPaymentReceiptEmail({ to, name, invoiceNumber, amount, currency, paymentMethod, newPeriodEnd, receiptUrl }) {
+  async sendPaymentReceiptEmail({ to, name, invoiceNumber, amount, currency, paymentMethod, newPeriodEnd, receiptUrl, isEmailVerified = true }) {
     const mailer = getMailer();
     if (!mailer) {
       throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
@@ -280,6 +290,7 @@ const emailService = {
         <div style="margin: 24px 0;">
           <a href="${receiptUrl}" style="background-color: #059669; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Invoice</a>
         </div>` : ''}
+        ${getEmailVerificationBanner(isEmailVerified)}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
         <p style="font-size: 13px; color: #666;">Best regards,<br/>The ${companyName} Team</p>
       </div>
@@ -300,7 +311,7 @@ const emailService = {
     }
   },
 
-  async sendPaymentFailedEmail({ to, name, invoiceNumber, amount, currency, reason, retryUrl }) {
+  async sendPaymentFailedEmail({ to, name, invoiceNumber, amount, currency, reason, retryUrl, isEmailVerified = true }) {
     const mailer = getMailer();
     if (!mailer) {
       throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
@@ -321,6 +332,7 @@ const emailService = {
         <div style="margin: 24px 0;">
           <a href="${retryUrl}" style="background-color: #dc2626; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Retry Payment</a>
         </div>` : ''}
+        ${getEmailVerificationBanner(isEmailVerified)}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
         <p style="font-size: 13px; color: #666;">Best regards,<br/>The ${companyName} Team</p>
       </div>
@@ -341,7 +353,7 @@ const emailService = {
     }
   },
 
-  async sendAccountSuspendedEmail({ to, name, gracePeriodEnd, reactivateUrl }) {
+  async sendAccountSuspendedEmail({ to, name, gracePeriodEnd, reactivateUrl, isEmailVerified = true }) {
     const mailer = getMailer();
     if (!mailer) {
       throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
@@ -361,6 +373,7 @@ const emailService = {
         <div style="margin: 24px 0;">
           <a href="${reactivateUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reactivate Account</a>
         </div>` : ''}
+        ${getEmailVerificationBanner(isEmailVerified)}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
         <p style="font-size: 13px; color: #666;">Best regards,<br/>The ${companyName} Team</p>
       </div>
@@ -381,7 +394,7 @@ const emailService = {
     }
   },
 
-  async sendAccountReactivatedEmail({ to, name, planName, currentPeriodEnd }) {
+  async sendAccountReactivatedEmail({ to, name, planName, currentPeriodEnd, isEmailVerified = true }) {
     const mailer = getMailer();
     if (!mailer) {
       throw new Error('Email is not configured on this server (SMTP_HOST/SMTP_PORT missing).');
@@ -398,6 +411,7 @@ const emailService = {
         <p>Your <strong>${companyName}</strong> account has been successfully reactivated on the <strong>${planName || 'Standard'}</strong> plan.</p>
         ${formattedDate ? `<p>Your current subscription period is active through <strong>${formattedDate}</strong>.</p>` : ''}
         <p>All system features and services are fully restored.</p>
+        ${getEmailVerificationBanner(isEmailVerified)}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
         <p style="font-size: 13px; color: #666;">Best regards,<br/>The ${companyName} Team</p>
       </div>
@@ -416,6 +430,10 @@ const emailService = {
       logger.error('Error sending account reactivated email:', error);
       throw error;
     }
+  },
+
+  setTransporter(t) {
+    transporter = t;
   }
 };
 
@@ -424,6 +442,8 @@ function isEmailConfigured() {
 }
 
 emailService.isEmailConfigured = isEmailConfigured;
+emailService.getEmailVerificationBanner = getEmailVerificationBanner;
 
 module.exports = emailService;
 module.exports.isEmailConfigured = isEmailConfigured;
+module.exports.getEmailVerificationBanner = getEmailVerificationBanner;

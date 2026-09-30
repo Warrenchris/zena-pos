@@ -104,6 +104,10 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('1 & 2. Trial Ending Reminders (5 Days and 1 Day)', () => {
     it('should trigger TRIAL_ENDING_5D reminder and record log in BillingNotificationLog', async () => {
       const sendTrialSpy = jest.spyOn(emailService, 'sendTrialEndingEmail').mockResolvedValue({ messageId: 'msg-trial-5d' });
@@ -430,6 +434,34 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
       expect(secondResult.reason).toBe('ALREADY_SENT');
       expect(sendRenewalSpy).toHaveBeenCalledTimes(1); // Still 1!
     });
+
+    it('should reject a direct duplicate write attempt at the database unique constraint level', async () => {
+      const periodKey = `2026-11-dup-${Date.now()}`;
+
+      // First direct create succeeds
+      const firstEntry = await BillingNotificationLog.create({
+        organizationId: org.id,
+        eventType: 'RENEWAL_DUE_7D',
+        periodKey,
+        recipientEmail: ownerUser.email,
+        status: 'sent',
+        sentAt: new Date()
+      });
+      expect(firstEntry).toBeDefined();
+
+      // Second write attempt with identical (organizationId, eventType, periodKey) tuple
+      // MUST throw SequelizeUniqueConstraintError from MySQL
+      await expect(
+        BillingNotificationLog.create({
+          organizationId: org.id,
+          eventType: 'RENEWAL_DUE_7D',
+          periodKey,
+          recipientEmail: ownerUser.email,
+          status: 'sent',
+          sentAt: new Date()
+        })
+      ).rejects.toThrow();
+    });
   });
 
   describe('10. CHECK A: Grandfathered Plan Exclusion', () => {
@@ -538,7 +570,8 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
 
       expect(res.success).toBe(true);
       expect(sendReceiptSpy).toHaveBeenCalledWith(expect.objectContaining({
-        to: refreshedOwner.email
+        to: refreshedOwner.email,
+        isEmailVerified: false
       }));
 
       const log = await BillingNotificationLog.findOne({
@@ -550,6 +583,50 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
       });
       expect(log.status).toBe('sent');
       expect(log.recipientEmail).toBe(refreshedOwner.email);
+    });
+
+    it('should include unverified email warning banner in rendered email HTML when isEmailVerified is false', async () => {
+      const mockSendMail = jest.fn().mockResolvedValue({ messageId: 'msg-banner-test-1' });
+      emailService.setTransporter({ sendMail: mockSendMail });
+
+      try {
+        await emailService.sendPaymentReceiptEmail({
+          to: ownerUser.email,
+          name: ownerUser.name,
+          invoiceNumber: 'INV-TEST-BANNER',
+          amount: 1500,
+          currency: 'KES',
+          paymentMethod: 'card',
+          newPeriodEnd: new Date(),
+          receiptUrl: 'http://localhost/billing',
+          isEmailVerified: false
+        });
+
+        expect(mockSendMail).toHaveBeenCalledTimes(1);
+        const sentMailArgs = mockSendMail.mock.calls[0][0];
+        expect(sentMailArgs.to).toBe(ownerUser.email);
+        expect(sentMailArgs.html).toContain('Action Recommended:');
+        expect(sentMailArgs.html).toContain('Your account email is not yet verified');
+
+        // And verify that when isEmailVerified is true, banner is omitted
+        mockSendMail.mockClear();
+        await emailService.sendPaymentReceiptEmail({
+          to: ownerUser.email,
+          name: ownerUser.name,
+          invoiceNumber: 'INV-TEST-BANNER-2',
+          amount: 1500,
+          currency: 'KES',
+          paymentMethod: 'card',
+          newPeriodEnd: new Date(),
+          receiptUrl: 'http://localhost/billing',
+          isEmailVerified: true
+        });
+
+        expect(mockSendMail).toHaveBeenCalledTimes(1);
+        expect(mockSendMail.mock.calls[0][0].html).not.toContain('Your account email is not yet verified');
+      } finally {
+        emailService.setTransporter(null);
+      }
     });
   });
 
@@ -590,6 +667,63 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
       expect(log).not.toBeNull();
       expect(log.status).toBe('failed');
       expect(log.error).toContain('SMTP service connection timed out');
+    });
+
+    it('should allow enclosing operation (processConfirmedRenewal) to complete and commit despite email transport failure', async () => {
+      jest.spyOn(emailService, 'sendPaymentReceiptEmail').mockRejectedValue(new Error('SMTP connect ECONNREFUSED 127.0.0.1:25'));
+
+      const invoice = await SubscriptionInvoice.create({
+        invoiceNumber: `INV-ENCLOSING-${Date.now()}`,
+        organizationId: org.id,
+        subscriptionId: subscription.id,
+        planId: starterPlan.id,
+        amount: 3000,
+        currency: 'KES',
+        paymentChannel: 'card',
+        status: 'pending'
+      });
+
+      const initialPeriodEnd = subscription.currentPeriodEnd;
+
+      const t = await sequelize.transaction();
+      try {
+        await billingService.processConfirmedRenewal({
+          invoice,
+          paymentMethod: 'card',
+          receiptOrTxRef: 'TX_ENCLOSING_FAIL',
+          gatewayReference: 'GW_ENCLOSING_FAIL',
+          rawMetadata: { test: true },
+          transaction: t
+        });
+        await t.commit();
+      } catch (err) {
+        await t.rollback();
+        throw err;
+      }
+
+      // Allow afterCommit hook to finish executing
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Assert enclosing operation completed successfully
+      await invoice.reload();
+      expect(invoice.status).toBe('paid');
+      expect(invoice.paidAt).not.toBeNull();
+
+      await subscription.reload();
+      expect(subscription.status).toBe('active');
+      expect(new Date(subscription.currentPeriodEnd).getTime()).toBeGreaterThan(new Date(initialPeriodEnd).getTime());
+
+      // Assert failure log was recorded in BillingNotificationLog
+      const log = await BillingNotificationLog.findOne({
+        where: {
+          organizationId: org.id,
+          eventType: 'PAYMENT_RECEIPT',
+          periodKey: invoice.invoiceNumber
+        }
+      });
+      expect(log).not.toBeNull();
+      expect(log.status).toBe('failed');
+      expect(log.error).toContain('ECONNREFUSED');
     });
   });
 });
