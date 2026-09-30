@@ -9,20 +9,20 @@ module.exports = async () => {
     if (process.env.RECREATE_TEST_DB === 'true') {
       console.log('[Test Setup] Dropping test database if exists...');
       try {
-        execSync('npx sequelize-cli db:drop --env test', { stdio: 'inherit' });
+        execSync('node ./node_modules/sequelize-cli/lib/sequelize db:drop --env test', { stdio: 'inherit' });
       } catch (e) {
         console.log('[Test Setup] Database drop skipped:', e.message);
       }
       console.log('[Test Setup] Creating test database...');
-      execSync('npx sequelize-cli db:create --env test', { stdio: 'inherit' });
+      execSync('node ./node_modules/sequelize-cli/lib/sequelize db:create --env test', { stdio: 'inherit' });
       console.log('[Test Setup] Running migrations on test database...');
-      execSync('npx sequelize-cli db:migrate --env test', { stdio: 'inherit' });
+      execSync('node ./node_modules/sequelize-cli/lib/sequelize db:migrate --env test', { stdio: 'inherit' });
     } else {
       try {
-        execSync('npx sequelize-cli db:create --env test', { stdio: 'pipe' });
+        execSync('node ./node_modules/sequelize-cli/lib/sequelize db:create --env test', { stdio: 'pipe' });
       } catch (e) {}
       try {
-        execSync('npx sequelize-cli db:migrate --env test', { stdio: 'inherit' });
+        execSync('node ./node_modules/sequelize-cli/lib/sequelize db:migrate --env test', { stdio: 'inherit' });
       } catch (migErr) {
         console.warn('[Test Setup] db:migrate warning (schema may already be migrated):', migErr.message);
       }
