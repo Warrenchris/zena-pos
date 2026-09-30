@@ -28,6 +28,12 @@ import {
   BuildingOfficeIcon,
   BanknotesIcon,
   DocumentTextIcon,
+  Squares2X2Icon,
+  ShieldCheckIcon,
+  PrinterIcon,
+  QrCodeIcon,
+  DocumentDuplicateIcon,
+  TicketIcon,
   ArrowUturnLeftIcon,
   ChartBarIcon,
   ChevronLeftIcon,
@@ -60,6 +66,7 @@ const ModernSidebar = ({
         { name: 'Sales Orders', path: '/sales', icon: BanknotesIcon },
         { name: 'Invoices', path: '/invoices', icon: DocumentTextIcon },
         { name: 'Sales Returns', path: '/sales/returns', icon: ArrowUturnLeftIcon },
+        { name: 'Quotations', path: '/quotations', icon: DocumentDuplicateIcon },
       ]
     },
     {
@@ -71,6 +78,10 @@ const ModernSidebar = ({
         { name: 'Sub Categories', path: '/categories/sub', icon: FolderIcon },
         { name: 'Brands', path: '/brands', icon: BuildingStorefrontIcon },
         { name: 'Units', path: '/units', icon: ScaleIcon },
+        { name: 'Variants', path: '/variants', icon: Squares2X2Icon },
+        { name: 'Warranties', path: '/warranties', icon: ShieldCheckIcon },
+        { name: 'Print Barcode', path: '/print/barcode', icon: PrinterIcon },
+        { name: 'Print QR', path: '/print/qr', icon: QrCodeIcon },
         { name: 'Stock Management', path: '/stock/manage', icon: ArchiveBoxIcon },
       ]
     },
@@ -88,6 +99,7 @@ const ModernSidebar = ({
         { name: 'Purchase Orders', path: '/purchase-orders', icon: ClipboardDocumentListIcon },
         { name: 'Expenses', path: '/expenses', icon: CurrencyDollarIcon },
         { name: 'Coupons & Discounts', path: '/coupons', icon: GiftIcon },
+        { name: 'Gift Cards', path: '/gift-cards', icon: TicketIcon },
       ]
     },
     {
