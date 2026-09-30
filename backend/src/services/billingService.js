@@ -11,6 +11,7 @@ const {
 } = require('../models');
 const { logActivity } = require('../middleware/logger');
 const entitlementService = require('./entitlementService');
+const billingNotificationService = require('./billingNotificationService');
 
 /**
  * Helper to record audit logs for billing events using the existing ActivityLog infrastructure
@@ -271,6 +272,29 @@ async function processConfirmedRenewal({
     details: `${paymentMethod.toUpperCase()} renewal confirmed for invoice ${invoice.invoiceNumber}.${refString} Amount: ${invoice.amount} ${invoice.currency}. Period extended to ${newPeriodEnd.toISOString()}`
   }, transaction);
 
+  // Dispatch payment receipt notification (non-blocking after commit)
+  if (transaction && typeof transaction.afterCommit === 'function') {
+    transaction.afterCommit(async () => {
+      try {
+        await billingNotificationService.notifyPaymentReceipt({
+          organizationId: invoice.organizationId,
+          invoice,
+          subscription,
+          paymentMethod
+        });
+      } catch (err) {
+        console.error('Failed to notify payment receipt:', err);
+      }
+    });
+  } else {
+    billingNotificationService.notifyPaymentReceipt({
+      organizationId: invoice.organizationId,
+      invoice,
+      subscription,
+      paymentMethod
+    }).catch(err => console.error('Failed to notify payment receipt:', err));
+  }
+
   return {
     invoice,
     subscription,
@@ -325,6 +349,15 @@ async function checkAndTransitionExpiredSubscriptions(asOfDate = new Date()) {
 
       if (isPastGrace) {
         transitionedToSuspended++;
+        try {
+          await billingNotificationService.notifyAccountSuspended({
+            organizationId: sub.organizationId,
+            subscription: sub,
+            gracePeriodEnd: trialEnd
+          });
+        } catch (err) {
+          console.error('Failed to notify account suspended for trial:', err);
+        }
       } else {
         transitionedToPastDue++;
       }
@@ -399,6 +432,15 @@ async function checkAndTransitionExpiredSubscriptions(asOfDate = new Date()) {
       await t.commit();
       await entitlementService.invalidateOrgEntitlements(sub.organizationId);
       transitionedToSuspended++;
+      try {
+        await billingNotificationService.notifyAccountSuspended({
+          organizationId: sub.organizationId,
+          subscription: sub,
+          gracePeriodEnd: sub.currentPeriodEnd
+        });
+      } catch (err) {
+        console.error('Failed to notify account suspended:', err);
+      }
     } catch (err) {
       await t.rollback();
       console.error(`Failed to transition subscription ${sub.id} to suspended:`, err);
@@ -479,6 +521,29 @@ async function reactivateSubscription(organizationId, transaction = null) {
   }, transaction);
 
   await entitlementService.invalidateOrgEntitlements(organizationId);
+
+  // Dispatch account reactivated notification
+  if (transaction && typeof transaction.afterCommit === 'function') {
+    transaction.afterCommit(async () => {
+      try {
+        await billingNotificationService.notifyAccountReactivated({
+          organizationId,
+          subscription
+        });
+      } catch (err) {
+        console.error('Failed to notify account reactivated:', err);
+      }
+    });
+  } else {
+    try {
+      await billingNotificationService.notifyAccountReactivated({
+        organizationId,
+        subscription
+      });
+    } catch (err) {
+      console.error('Failed to notify account reactivated:', err);
+    }
+  }
 
   return subscription;
 }

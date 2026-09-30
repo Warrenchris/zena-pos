@@ -8,6 +8,7 @@ const { requireVerifiedEmail } = require('../middleware/requireVerifiedEmail');
 const billingService = require('../services/billingService');
 const billingPaymentService = require('../services/billingPaymentService');
 const entitlementService = require('../services/entitlementService');
+const billingNotificationService = require('../services/billingNotificationService');
 const {
   Plan,
   Subscription,
@@ -587,6 +588,18 @@ router.post('/flutterwave/webhook', async (req, res) => {
       }, t);
 
       await t.commit();
+
+      // Dispatch payment failed notification after commit
+      try {
+        await billingNotificationService.notifyPaymentFailed({
+          organizationId: invoice.organizationId,
+          invoice,
+          reason: !isSuccessful ? `Card transaction was unsuccessful (status: ${data.status})` : 'Payment amount or currency mismatch'
+        });
+      } catch (notifErr) {
+        console.error('Failed to dispatch payment failed notification:', notifErr);
+      }
+
       return res.status(400).json({ error: 'Payment validation failed or payment unsuccessful.' });
     }
 
