@@ -1,6 +1,8 @@
 import React, { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import PrivateRoute from './components/PrivateRoute';
+import PlatformRoute from './components/platform/PlatformRoute';
+import PlatformLayout from './components/platform/PlatformLayout';
 import RootLayout from './components/RootLayout';
 import Layout from './components/Layout';
 import DashboardRouter from './components/DashboardRouter';
@@ -91,10 +93,19 @@ const CreateProduct = safeLazy(() => import('./pages/CreateProduct'));
 const LandingPage = safeLazy(() => import('./components/landing/LandingPage'));
 const TermsOfService = safeLazy(() => import('./pages/TermsOfService'));
 const PrivacyPolicy = safeLazy(() => import('./pages/PrivacyPolicy'));
+const PlatformOverview = safeLazy(() => import('./pages/platform/PlatformOverview'));
+const PlatformOrganizations = safeLazy(() => import('./pages/platform/PlatformOrganizations'));
+const PlatformOrgDetail = safeLazy(() => import('./pages/platform/PlatformOrgDetail'));
+const PlatformPlans = safeLazy(() => import('./pages/platform/PlatformPlans'));
+const PlatformInvoices = safeLazy(() => import('./pages/platform/PlatformInvoices'));
+const PlatformNotifications = safeLazy(() => import('./pages/platform/PlatformNotifications'));
 
 const HomeRoute = () => {
   const { token, user } = useSelector((state) => state.auth);
   if (token && user) {
+    if (user.role === 'super_admin') {
+      return <Navigate to="/platform" replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
   return <LandingPage />;
@@ -344,6 +355,41 @@ export const routes = [
           {
             path: 'expenses',
             element: <PrivateRoute><ExpensesPage /></PrivateRoute>
+          }
+        ]
+      },
+      // Platform Console routes (strictly for super_admin)
+      {
+        path: 'platform',
+        element: (
+          <PlatformRoute>
+            <PlatformLayout />
+          </PlatformRoute>
+        ),
+        children: [
+          {
+            index: true,
+            element: <PlatformOverview />
+          },
+          {
+            path: 'organizations',
+            element: <PlatformOrganizations />
+          },
+          {
+            path: 'organizations/:id',
+            element: <PlatformOrgDetail />
+          },
+          {
+            path: 'plans',
+            element: <PlatformPlans />
+          },
+          {
+            path: 'invoices',
+            element: <PlatformInvoices />
+          },
+          {
+            path: 'notifications',
+            element: <PlatformNotifications />
           }
         ]
       }

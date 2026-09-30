@@ -65,7 +65,11 @@ export default function Login() {
       
       const resultAction = await dispatch(login(formData))
       if (login.fulfilled.match(resultAction)) {
-        navigate('/dashboard')
+        if (resultAction.payload?.user?.role === 'super_admin') {
+          navigate('/platform')
+        } else {
+          navigate('/dashboard')
+        }
       } else if (login.rejected.match(resultAction)) {
         setLoginError(resultAction.payload || resultAction.error?.message || 'Invalid email or password')
       }
