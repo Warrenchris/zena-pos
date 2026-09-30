@@ -16,7 +16,11 @@ const validateCategory = [
     .optional()
     .trim()
     .isLength({ max: 500 })
-    .withMessage('Description must be less than 500 characters')
+    .withMessage('Description must be less than 500 characters'),
+  body('taxCategory')
+    .optional({ nullable: true })
+    .isIn(['standard', 'zero_rated', 'exempt'])
+    .withMessage('taxCategory must be standard, zero_rated, or exempt')
 ];
 
 // Routes

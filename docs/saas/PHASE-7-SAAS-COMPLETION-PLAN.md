@@ -70,9 +70,10 @@ Items marked Missing are from my static review of the code. Test results are the
 | D3 | Is auto-renewal in scope, given M-Pesa STK needs customer approval each time? | 7A | Card auto-renew only, via Flutterwave tokenization; M-Pesa stays reminder-driven |
 | D4 | Formal grace window before hard lockout (PRD-01 left this open; code uses 7 days) | 7A | Keep 7 days and document it |
 | D5 | Super-admin scope: read-only support view, or also mutations (extend trial, suspend, refund)? | 7B | Read-only first, then audited mutations |
-| D6 | Do you already hold KRA eTIMS sandbox credentials? | 7C | If no, 7C stops after step 1 (tax integrity) |
+| D6 | Do you already hold KRA eTIMS sandbox credentials? | 7C | Confirmed: BLOCKED - no KRA sandbox credentials as of 2026-09-30. Step 2 parked until credentials arrive. |
 | D7 | Offsite backup target (S3, Cloudflare R2, other)? | 7E | R2 or S3 with encryption at rest |
 | D8 | Raise password minimum to 8? Breaks existing tests and UX copy | 7D | Yes; enforce on new passwords only |
+| D9 | Tax-inclusive vs tax-exclusive shelf pricing: should Step 1 recompute treat product price as exclusive (current UI default) or inclusive (KRA retail norm)? | 7C Step 1 | Support configurable taxInclusive setting defaulting to exclusive (false) for backward compatibility, with inclusive calculation supported when enabled |
 
 ---
 
@@ -138,7 +139,7 @@ Items marked Missing are from my static review of the code. Test results are the
 - Fix `/api/reports/tax-estimate` to use recorded per-sale tax rather than a flat 16% guess.
 - Show tax category in the product UI; carry it into sale items.
 
-**Step 2 (needs D6 answered):**
+**Step 2 (BLOCKED — no KRA sandbox credentials as of 2026-09-30):**
 - Per-shop eTIMS credential storage, encrypted, with sandbox/production toggle.
 - VSCU submission service against KRA sandbox, using the offline queue's async pattern.
 - Receipt changes: QR code, control unit number, buyer PIN. Refund to credit-note submission.
@@ -179,6 +180,7 @@ Items marked Missing are from my static review of the code. Test results are the
 ### 7F — Final production readiness audit
 - Re-run the full regression: backend, frontend build, AI service, migrations.
 - Re-verify tenant isolation, payment callbacks, and every new surface from 7A to 7E (especially `/platform`).
+- Test suite isolation remediation: systematically resolve shared Redis state leakage (such as 24h tombstone keys leaking across test suites) and database row residue via automated per-suite namespace isolation or global teardown hooks.
 - Produce `docs/saas/FINAL-PRODUCTION-READINESS-AUDIT.md` with a release gate matrix in the same format as 6B-07.
 - Update the progress tracker in section 0.
 
@@ -204,6 +206,8 @@ Items marked Missing are from my static review of the code. Test results are the
 | eTIMS blocked on credentials | Split so Step 1 delivers value alone |
 | Org deletion destroys data needed for tax records | Soft delete with retention window; confirm retention rules with an accountant |
 | Drift between docs and code (already happened once) | Each walkthrough must cite commit hash and file:line; 7F re-verifies |
+| Test isolation & Redis state leakage across test suites | Workaround applied in 0435c1c. Diagnostic scan found 6+ suites (phase2-4, purchases-and-orders, mpesaSecurity, mysql-salepayments) sharing user IDs (101/102/201/999) without status reset; 7F will systematically isolate test keys via prefixing/global flush to eliminate cross-suite auth failures. |
+| Offline sync tax rate mismatch | Client-supplied offlineSnapshotTaxRate dropped from Step 1 to prevent client tampering; log reconciliation risk for when sync occurs after tax rate adjustments |
 
 ## 6. Session-end checklist (do this every time we stop)
 

@@ -127,7 +127,11 @@ const validateProduct = [
   body('weightGrams')
     .optional({ nullable: true })
     .isInt({ min: 0 })
-    .withMessage('Weight (grams) must be a non-negative integer')
+    .withMessage('Weight (grams) must be a non-negative integer'),
+  body('taxCategory')
+    .optional({ nullable: true })
+    .isIn(['standard', 'zero_rated', 'exempt'])
+    .withMessage('taxCategory must be standard, zero_rated, or exempt')
 ];
 
 const validateStockUpdate = [

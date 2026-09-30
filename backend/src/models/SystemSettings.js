@@ -144,6 +144,10 @@ const SystemSettings = sequelize.define('SystemSettings', {
     type: DataTypes.DECIMAL(5, 2),
     defaultValue: 0.00
   },
+  taxInclusive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
 
   // Receipt Customization & Printer Settings
   receiptHeader: {
@@ -310,6 +314,7 @@ SystemSettings.getDefaultSettings = function() {
     allowUserRegistration: false,
     requireEmailVerification: true,
     taxRate: 0.00,
+    taxInclusive: false,
     receiptHeader: null,
     receiptFooter: null,
     showLogoOnReceipt: true,

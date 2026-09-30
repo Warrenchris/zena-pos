@@ -140,6 +140,7 @@ const settingsValidation = [
   body('backupRetentionDays').optional().isInt({ min: 7, max: 365 }),
   body('allowUserRegistration').optional().isBoolean(),
   body('taxRate').optional().isFloat({ min: 0, max: 100 }).withMessage('Tax rate must be between 0 and 100'),
+  body('taxInclusive').optional().isBoolean().withMessage('Tax inclusive setting must be a boolean'),
   body('receiptHeader').optional({ nullable: true }).isString(),
   body('receiptFooter').optional({ nullable: true }).isString(),
   body('showLogoOnReceipt').optional().isBoolean(),
