@@ -44,6 +44,7 @@ const initialState = {
 
   // POS / payment / inventory / refund settings (match getDefaultSettings())
   taxRate: 0,
+  taxInclusive: false,
   printerType: 'browser',
   printerIP: null,
   paybillNumber: null,
@@ -132,6 +133,7 @@ export const SETTINGS_ALLOWED_FIELDS = [
   'additionalSettings',
   // POS / payment / inventory / refund fields added after original whitelist was written
   'taxRate',
+  'taxInclusive',
   'printerType',
   'printerIP',
   'paybillNumber',

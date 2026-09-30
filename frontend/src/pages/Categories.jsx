@@ -143,8 +143,17 @@ const Categories = () => {
             ) : (
               <Squares2X2Icon className="h-5 w-5 text-white/70 flex-shrink-0" title="Subcategory" />
             )}
-            <div className="truncate">
+            <div className="truncate flex items-center gap-2">
               <span className="font-semibold text-white">{category.name}</span>
+              <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${
+                category.taxCategory === 'zero_rated'
+                  ? 'border-blue-500/40 text-blue-400 bg-blue-500/10'
+                  : category.taxCategory === 'exempt'
+                  ? 'border-purple-500/40 text-purple-400 bg-purple-500/10'
+                  : 'border-brand-yellow/30 text-brand-yellow bg-brand-yellow/10'
+              }`}>
+                {category.taxCategory === 'zero_rated' ? 'Zero-Rated (0%)' : category.taxCategory === 'exempt' ? 'Exempt (0%)' : 'Standard (16%)'}
+              </span>
               {category.description && (
                 <p className="text-sm text-white/60 truncate">{category.description}</p>
               )}

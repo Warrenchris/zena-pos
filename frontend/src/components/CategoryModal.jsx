@@ -9,7 +9,8 @@ export default function CategoryModal({ category, onClose, defaultParentId = nul
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    parentCategoryId: ''
+    parentCategoryId: '',
+    taxCategory: 'standard'
   })
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
@@ -19,14 +20,16 @@ export default function CategoryModal({ category, onClose, defaultParentId = nul
       setFormData({
         name: category.name || '',
         description: category.description || '',
-        parentCategoryId: category.parentCategoryId ? String(category.parentCategoryId) : ''
+        parentCategoryId: category.parentCategoryId ? String(category.parentCategoryId) : '',
+        taxCategory: category.taxCategory || 'standard'
       })
     } else {
       // Reset form; preselect defaultParentId if provided
       setFormData({
         name: '',
         description: '',
-        parentCategoryId: defaultParentId ? String(defaultParentId) : ''
+        parentCategoryId: defaultParentId ? String(defaultParentId) : '',
+        taxCategory: 'standard'
       })
     }
   }, [category, defaultParentId])
@@ -208,6 +211,25 @@ export default function CategoryModal({ category, onClose, defaultParentId = nul
                   title="Describe this category (optional)"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-1">
+                Default Tax Category
+              </label>
+              <div className="relative">
+                <select
+                  name="taxCategory"
+                  value={formData.taxCategory || 'standard'}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 text-white border border-white/10 focus:outline-none focus:ring-2 focus:ring-brand-yellow/60 [&>option]:bg-neutral-900 [&>option]:text-white"
+                >
+                  <option value="standard">Standard (16%)</option>
+                  <option value="zero_rated">Zero-Rated (0%)</option>
+                  <option value="exempt">Exempt (0%)</option>
+                </select>
+              </div>
+              <p className="text-white/50 text-xs mt-1">Products assigned to this category will inherit this tax rate unless overridden.</p>
             </div>
 
             {errors.submit && (
