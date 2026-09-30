@@ -1,6 +1,9 @@
 'use strict';
 
 const { checkAndTransitionExpiredSubscriptions } = require('./billingService');
+const billingNotificationService = require('./billingNotificationService');
+const { Subscription, Plan } = require('../models');
+const { Op } = require('sequelize');
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
 
@@ -47,16 +50,28 @@ async function runSubscriptionTransitionJob(asOfDate = new Date()) {
   });
 
   try {
-    const result = await checkAndTransitionExpiredSubscriptions(asOfDate);
+    const transitionResult = await checkAndTransitionExpiredSubscriptions(asOfDate);
+    let reminderResult = { trialEnding5d: 0, trialEnding1d: 0, renewalDue7d: 0, renewalDue1d: 0 };
+    try {
+      reminderResult = await checkAndSendBillingReminders(asOfDate);
+    } catch (reminderErr) {
+      logger.error(`[BillingScheduler] (jobRunId=${jobRunId}) Error checking billing reminders: ${reminderErr.message}`);
+    }
+
     const durationMs = Date.now() - startTime.getTime();
+    const result = {
+      ...transitionResult,
+      reminders: reminderResult
+    };
 
     lastRunAt = startTime;
     lastRunResult = result;
 
-    logger.info(`[BillingScheduler] (jobRunId=${jobRunId}) Completed subscription transition check in ${durationMs}ms:`, {
+    logger.info(`[BillingScheduler] (jobRunId=${jobRunId}) Completed subscription transition and reminder check in ${durationMs}ms:`, {
       jobRunId,
       transitionedToPastDue: result.transitionedToPastDue,
       transitionedToSuspended: result.transitionedToSuspended,
+      reminders: result.reminders,
       completedAt: new Date().toISOString()
     });
 
@@ -161,8 +176,95 @@ function getSchedulerStatus() {
   };
 }
 
+/**
+ * Evaluates subscriptions approaching trial expiration (5d, 1d)
+ * or active period renewal (7d, 1d) and dispatches reminder notifications.
+ *
+ * @param {Date} [asOfDate] - Cutoff reference date (defaults to current date)
+ * @returns {Promise<{ trialEnding5d: number, trialEnding1d: number, renewalDue7d: number, renewalDue1d: number }>}
+ */
+async function checkAndSendBillingReminders(asOfDate = new Date()) {
+  const currentDate = new Date(asOfDate);
+  const results = {
+    trialEnding5d: 0,
+    trialEnding1d: 0,
+    renewalDue7d: 0,
+    renewalDue1d: 0
+  };
+
+  function getCalendarDaysDiff(targetDate, baseDate) {
+    if (!targetDate || !baseDate) return null;
+    const t = new Date(targetDate);
+    const b = new Date(baseDate);
+    const tUtc = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
+    const bUtc = Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
+    return Math.round((tUtc - bUtc) / (24 * 60 * 60 * 1000));
+  }
+
+  // 1. Trial ending reminders (5 days, 1 day)
+  const trialingSubscriptions = await Subscription.findAll({
+    where: {
+      status: 'trialing',
+      trialEndsAt: { [Op.ne]: null }
+    },
+    include: [{ model: Plan, where: { code: { [Op.ne]: 'grandfathered' } } }]
+  });
+
+  for (const sub of trialingSubscriptions) {
+    const diffDays = getCalendarDaysDiff(sub.trialEndsAt, currentDate);
+    if (diffDays === 5 || diffDays === 1) {
+      try {
+        const res = await billingNotificationService.notifyTrialEnding({
+          organizationId: sub.organizationId,
+          daysRemaining: diffDays,
+          subscription: sub
+        });
+        if (res.success && !res.skipped) {
+          if (diffDays === 5) results.trialEnding5d++;
+          else results.trialEnding1d++;
+        }
+      } catch (err) {
+        logger.error(`[BillingScheduler] Error sending trial reminder for org ${sub.organizationId}:`, err);
+      }
+    }
+  }
+
+  // 2. Renewal due reminders (7 days, 1 day)
+  const activeSubscriptions = await Subscription.findAll({
+    where: {
+      status: 'active',
+      currentPeriodEnd: {
+        [Op.lte]: new Date('2090-01-01')
+      }
+    },
+    include: [{ model: Plan, where: { code: { [Op.ne]: 'grandfathered' } } }]
+  });
+
+  for (const sub of activeSubscriptions) {
+    const diffDays = getCalendarDaysDiff(sub.currentPeriodEnd, currentDate);
+    if (diffDays === 7 || diffDays === 1) {
+      try {
+        const res = await billingNotificationService.notifyRenewalDue({
+          organizationId: sub.organizationId,
+          daysRemaining: diffDays,
+          subscription: sub
+        });
+        if (res.success && !res.skipped) {
+          if (diffDays === 7) results.renewalDue7d++;
+          else results.renewalDue1d++;
+        }
+      } catch (err) {
+        logger.error(`[BillingScheduler] Error sending renewal reminder for org ${sub.organizationId}:`, err);
+      }
+    }
+  }
+
+  return results;
+}
+
 module.exports = {
   runSubscriptionTransitionJob,
+  checkAndSendBillingReminders,
   startBillingScheduler,
   stopBillingScheduler,
   getSchedulerStatus
