@@ -125,7 +125,26 @@ exports.createShop = async (req, res) => {
         transaction: t
       });
 
-      // Step C.1: Multi-shop feature gate
+      // Step C.1: Branch quota check (maxShops limit)
+      if (maxShops !== -1 && currentActiveShopCount >= maxShops) {
+        const err = new Error(`Branch limit reached. Your plan allows up to ${maxShops} branches.`);
+        err.statusCode = 403;
+        err.code = 'QUOTA_EXCEEDED';
+        err.isUpgradePrompt = true;
+        err.promptData = {
+          type: 'quota',
+          key: 'maxShops',
+          current: currentActiveShopCount,
+          limit: maxShops,
+          currentPlan: plan.toJSON(),
+          requiredPlan: 'growth',
+          reason: `Branch limit reached (${currentActiveShopCount}/${maxShops}). Upgrade to add more branches.`,
+          code: 'QUOTA_EXCEEDED'
+        };
+        throw err;
+      }
+
+      // Step C.2: Multi-shop feature gate
       // If organization already has 1 or more active branches, creating an additional
       // branch requires the multi_shop plan feature (Growth or Enterprise tier).
       if (currentActiveShopCount >= 1) {
@@ -145,24 +164,6 @@ exports.createShop = async (req, res) => {
           };
           throw err;
         }
-      }
-
-      if (maxShops !== -1 && currentActiveShopCount >= maxShops) {
-        const err = new Error(`Branch limit reached. Your plan allows up to ${maxShops} branches.`);
-        err.statusCode = 403;
-        err.code = 'QUOTA_EXCEEDED';
-        err.isUpgradePrompt = true;
-        err.promptData = {
-          type: 'quota',
-          key: 'maxShops',
-          current: currentActiveShopCount,
-          limit: maxShops,
-          currentPlan: plan.toJSON(),
-          requiredPlan: 'growth',
-          reason: `Branch limit reached (${currentActiveShopCount}/${maxShops}). Upgrade to add more branches.`,
-          code: 'QUOTA_EXCEEDED'
-        };
-        throw err;
       }
 
       // Step D: Insert Shop
