@@ -6,6 +6,10 @@ exports.list = async (req, res) => {
   try {
     const { limit = 50, userId } = req.query;
     const where = {};
+    const shopId = req.shopId || req.user?.shopId;
+    if (shopId) {
+      where.shopId = shopId;
+    }
     if (userId) where.userId = userId;
     const rows = await ActivityLog.findAll({
       where,
