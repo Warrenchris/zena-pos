@@ -35,8 +35,8 @@ router.post(
     body('name').trim().notEmpty().withMessage('Name is required'),
     body('email').isEmail().withMessage('Please enter a valid email'),
     body('password')
-      .isLength({ min: 6 })
-      .withMessage('Password must be at least 6 characters long'),
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters long'),
     body('role').optional(),
     body('shop.name').notEmpty().withMessage('Shop name is required')
   ],
@@ -65,7 +65,7 @@ router.post(
   authLimiter,
   [
     body('token').notEmpty().withMessage('Token is required'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
   ],
   authController.resetPassword
 );

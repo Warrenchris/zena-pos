@@ -20,7 +20,7 @@ const cleanAndValidateSettings = (data) => {
     enableEmailAlerts: { type: 'boolean' },
     enableSuccessToasts: { type: 'boolean' },
     enableErrorToasts: { type: 'boolean' },
-    passwordMinLength: { type: 'number', min: 6, max: 20 },
+    passwordMinLength: { type: 'number', min: 8, max: 20 },
     requireSpecialChars: { type: 'boolean' },
     sessionTimeout: { type: 'number', min: 30, max: 1440 },
     enableTwoFactor: { type: 'boolean' },

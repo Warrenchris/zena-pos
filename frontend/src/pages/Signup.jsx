@@ -101,8 +101,8 @@ export default function Signup() {
                 type="password"
                 label="Password"
                 required
-                minLength={6}
-                helperText="Must be at least 6 characters long"
+                minLength={8}
+                helperText="Must be at least 8 characters long"
                 placeholder="Choose a strong password"
                 value={form.password}
                 onChange={onChange}

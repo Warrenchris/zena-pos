@@ -130,7 +130,7 @@ const settingsValidation = [
   body('enableEmailAlerts').optional().isBoolean(),
   body('enableSuccessToasts').optional().isBoolean(),
   body('enableErrorToasts').optional().isBoolean(),
-  body('passwordMinLength').optional().isInt({ min: 6, max: 20 }),
+  body('passwordMinLength').optional().isInt({ min: 8, max: 20 }),
   body('requireSpecialChars').optional().isBoolean(),
   body('sessionTimeout').optional().isInt({ min: 30, max: 1440 }),
   body('enableTwoFactor').optional().isBoolean(),

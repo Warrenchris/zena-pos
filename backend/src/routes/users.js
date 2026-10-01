@@ -15,7 +15,7 @@ router.post(
   [
     body('name').trim().notEmpty(),
     body('email').isEmail(),
-    body('password').isLength({ min: 6 }),
+    body('password').isLength({ min: 8 }),
     body('role').isIn(['admin', 'cashier', 'manager'])
   ],
   controller.create
