@@ -4,7 +4,7 @@ const controller = require('../controllers/activityController');
 
 const router = express.Router();
 
-router.use(auth, checkRole(['admin', 'manager']));
+router.use(auth, checkRole(['admin', 'manager', 'org_admin']));
 
 router.get('/', controller.list);
 
