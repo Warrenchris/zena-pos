@@ -21,7 +21,7 @@ const envelope = (data) => ({ data: { success: true, data } });
 describe('settings slice with the API envelope', () => {
   it('flattens fetched settings into state so components can read them', async () => {
     settingsAPI.getAll.mockResolvedValue(
-      envelope({ receiptHeader: 'Welcome!', receiptFooter: 'Bye', showLogoOnReceipt: false, businessLogo: '/uploads/logos/a.png' })
+      envelope({ receiptHeader: 'Welcome!', receiptFooter: 'Bye', showLogoOnReceipt: false, businessLogo: '/uploads/logos/a.png', taxInclusive: true })
     );
     const store = makeStore();
     await store.dispatch(fetchSettings());
@@ -31,6 +31,7 @@ describe('settings slice with the API envelope', () => {
       receiptFooter: 'Bye',
       showLogoOnReceipt: false,
       businessLogo: '/uploads/logos/a.png',
+      taxInclusive: true,
     });
   });
 
@@ -76,6 +77,7 @@ describe('settings slice with the API envelope', () => {
     await store.dispatch(
       updateSettings({
         taxRate: 16,
+        taxInclusive: true,
         printerType: 'thermal',
         printerIP: '192.168.1.10',
         paybillNumber: '522522',
@@ -92,6 +94,7 @@ describe('settings slice with the API envelope', () => {
     const sent = settingsAPI.update.mock.calls.at(-1)[0];
     expect(sent).toMatchObject({
       taxRate: 16,
+      taxInclusive: true,
       printerType: 'thermal',
       printerIP: '192.168.1.10',
       paybillNumber: '522522',
@@ -104,6 +107,15 @@ describe('settings slice with the API envelope', () => {
       returnWindowDays: 14,
     });
     expect(sent).not.toHaveProperty('__junkKey');
+  });
+
+  it('preserves and round-trips taxInclusive boolean in updateSettings payload and state', async () => {
+    settingsAPI.update.mockResolvedValue(envelope({ taxInclusive: true, taxRate: 16 }));
+    const store = makeStore();
+    await store.dispatch(updateSettings({ taxInclusive: true, taxRate: 16 }));
+    const sent = settingsAPI.update.mock.calls.at(-1)[0];
+    expect(sent.taxInclusive).toBe(true);
+    expect(store.getState().settings.taxInclusive).toBe(true);
   });
 });
 
