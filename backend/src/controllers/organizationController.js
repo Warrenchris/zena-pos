@@ -10,9 +10,12 @@ const {
   Customer,
   Sale,
   SaleItem,
+  Subscription,
   SubscriptionInvoice,
   ActivityLog
 } = require('../models');
+const tokenRevocationService = require('../services/tokenRevocationService');
+const billingService = require('../services/billingService');
 
 function arrayToCsv(headers, rows) {
   const escapeCell = (val) => {
@@ -277,3 +280,128 @@ exports.getOrganizationMembers = async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch organization members', details: error.message });
   }
 };
+
+/**
+ * Owner-Initiated Account Closure (7D)
+ * POST /api/organizations/close-account
+ *
+ * Sets deletedAt and scheduledPurgeAt (+30 days), cancels subscription,
+ * revokes all active member tokens, logs audit activity.
+ */
+exports.closeOrganizationAccount = async (req, res) => {
+  try {
+    const orgId = req.organizationId
+      ? parseInt(req.organizationId, 10)
+      : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
+
+    const { currentPassword } = req.body;
+    if (!currentPassword) {
+      return res.status(401).json({ error: 'Password confirmation is required to close the account.' });
+    }
+
+    // Verify caller is an active owner of this organization
+    const membershipWhere = {
+      organizationId: orgId,
+      status: 'active'
+    };
+    if (req.user.isEmployee) {
+      membershipWhere.employeeId = req.user.id;
+    } else {
+      membershipWhere.userId = req.user.id;
+    }
+
+    const callerMembership = await OrganizationMembership.findOne({ where: membershipWhere });
+    if (!callerMembership || callerMembership.orgRole !== 'owner') {
+      return res.status(403).json({ error: 'Access denied: Only organization owners can close the account.' });
+    }
+
+    // Verify caller password
+    let isPasswordValid = false;
+    if (req.user.isEmployee) {
+      const employee = await Employee.findByPk(req.user.id);
+      if (employee) {
+        isPasswordValid = await employee.validatePassword(currentPassword);
+      }
+    } else {
+      const user = await User.findByPk(req.user.id);
+      if (user) {
+        isPasswordValid = await user.validatePassword(currentPassword);
+      }
+    }
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid password. Account closure refused.' });
+    }
+
+    const org = await Organization.findByPk(orgId);
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found.' });
+    }
+
+    if (org.deletedAt) {
+      return res.status(400).json({ error: 'Organization account is already closed.' });
+    }
+
+    const now = new Date();
+    const scheduledPurgeAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    org.deletedAt = now;
+    org.scheduledPurgeAt = scheduledPurgeAt;
+    await org.save();
+
+    // Cancel subscription and mark canceled
+    try {
+      await billingService.cancelSubscription(orgId);
+    } catch (subErr) {
+      console.warn(`[7D-CLOSE] Note on subscription cancellation for org ${orgId}:`, subErr.message);
+    }
+
+    const sub = await Subscription.findOne({ where: { organizationId: orgId } });
+    if (sub) {
+      sub.status = 'canceled';
+      await sub.save();
+    }
+
+    // Revoke all tokens for all members of this organization
+    const memberships = await OrganizationMembership.findAll({ where: { organizationId: orgId } });
+    for (const m of memberships) {
+      if (m.userId) {
+        await tokenRevocationService.revokeAllUserTokens(m.userId, false);
+      }
+      if (m.employeeId) {
+        await tokenRevocationService.revokeAllUserTokens(m.employeeId, true);
+      }
+    }
+
+    // Audit log
+    const shops = await Shop.findAll({ where: { organizationId: orgId }, attributes: ['id'] });
+    if (shops.length && req.user?.id && !req.user.isEmployee) {
+      try {
+        await ActivityLog.create({
+          shopId: shops[0].id,
+          userId: req.user.id,
+          action: 'ORGANIZATION_ACCOUNT_CLOSED',
+          entity: 'Organization',
+          entityId: String(orgId),
+          details: `Organization "${org.name}" account closed by owner. Data scheduled for purge at ${scheduledPurgeAt.toISOString()}.`
+        });
+      } catch (logErr) {
+        console.error('Failed to log account closure activity:', logErr);
+      }
+    }
+
+    return res.json({
+      message: 'Organization account closed. All data scheduled for purge in 30 days.',
+      deletedAt: now,
+      scheduledPurgeAt
+    });
+  } catch (error) {
+    console.error('Error in closeOrganizationAccount:', error);
+    return res.status(500).json({ error: 'Failed to close organization account', details: error.message });
+  }
+};
+
