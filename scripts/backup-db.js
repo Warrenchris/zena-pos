@@ -109,7 +109,7 @@ async function createBackup() {
       stderrData += chunk.toString();
     });
 
-    fileStream.on('finish', () => {
+    fileStream.on('finish', async () => {
       // Check if file is non-empty
       const stats = fs.statSync(backupFilePath);
       if (stats.size === 0) {
@@ -125,9 +125,42 @@ async function createBackup() {
       console.log(`  File: ${backupFileName} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`);
       console.log(`  SHA256: ${sha256}`);
 
-      // Apply retention policy
+      // Apply retention policy to local backup directory
       pruneOldBackups();
-      resolve({ backupFilePath, checksumFilePath, sha256, sizeBytes: stats.size });
+
+      // Offsite S3 upload with failure isolation:
+      // Failure to upload to S3 does NOT invalidate or delete the local backup.
+      let s3Result = null;
+      try {
+        s3Result = await uploadToS3({ backupFilePath, checksumFilePath, backupFileName });
+      } catch (s3Err) {
+        console.error(`[DR-01 Backup] WARNING: Offsite S3 upload failed: ${s3Err.message}`);
+        try {
+          let Sentry;
+          try {
+            Sentry = require('@sentry/node');
+          } catch (e) {
+            Sentry = require(path.resolve(__dirname, '../backend/node_modules/@sentry/node'));
+          }
+          if (process.env.SENTRY_DSN && Sentry && typeof Sentry.captureException === 'function') {
+            Sentry.captureException(s3Err, {
+              tags: { alert: 'backup_failure', component: 'backup-s3-upload' },
+              extra: { backupFileName, backupFilePath }
+            });
+          }
+        } catch (sentryErr) {
+          // Ignore sentry notification failure
+        }
+        s3Result = { uploaded: false, error: s3Err.message };
+      }
+
+      resolve({
+        backupFilePath,
+        checksumFilePath,
+        sha256,
+        sizeBytes: stats.size,
+        s3: s3Result
+      });
     });
 
     dumpProcess.on('error', (err) => {
@@ -140,6 +173,93 @@ async function createBackup() {
       }
     });
   });
+}
+
+/**
+ * Uploads local backup archive (.sql.gz) and checksum (.sha256) to S3 with server-side encryption.
+ */
+async function uploadToS3({ backupFilePath, checksumFilePath, backupFileName }) {
+  const bucket = process.env.BACKUP_S3_BUCKET;
+  if (!bucket) {
+    console.log('[DR-01 Backup] BACKUP_S3_BUCKET not configured. Skipping offsite S3 upload.');
+    return { skipped: true, reason: 'BUCKET_NOT_CONFIGURED' };
+  }
+
+  let S3Client, PutObjectCommand;
+  try {
+    ({ S3Client, PutObjectCommand } = require('@aws-sdk/client-s3'));
+  } catch (e) {
+    try {
+      ({ S3Client, PutObjectCommand } = require(path.resolve(__dirname, '../backend/node_modules/@aws-sdk/client-s3')));
+    } catch (innerErr) {
+      throw new Error(`AWS S3 SDK (@aws-sdk/client-s3) is not installed: ${innerErr.message}`);
+    }
+  }
+
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'af-south-1';
+  const clientConfig = { region };
+  if (process.env.BACKUP_S3_ENDPOINT) {
+    clientConfig.endpoint = process.env.BACKUP_S3_ENDPOINT;
+  }
+  if (process.env.BACKUP_S3_FORCE_PATH_STYLE === 'true') {
+    clientConfig.forcePathStyle = true;
+  }
+
+  const s3 = new S3Client(clientConfig);
+
+  let prefix = process.env.BACKUP_S3_PREFIX !== undefined ? process.env.BACKUP_S3_PREFIX : 'backups/';
+  if (prefix && !prefix.endsWith('/')) {
+    prefix += '/';
+  }
+
+  const sse = process.env.BACKUP_S3_SSE || 'aws:kms';
+  const archiveKey = `${prefix}${backupFileName}`;
+  const checksumKey = `${prefix}${backupFileName}.sha256`;
+
+  console.log(`[DR-01 Backup] Uploading offsite archive to s3://${bucket}/${archiveKey} (SSE: ${sse})...`);
+
+  // Upload archive stream
+  const archiveStream = fs.createReadStream(backupFilePath);
+  archiveStream.on('error', (err) => {
+    // Avoid unhandled stream error if consumer closes or unlinks early
+    if (err.code !== 'ENOENT') {
+      console.warn(`[DR-01 Backup] Stream notice: ${err.message}`);
+    }
+  });
+  const archiveParams = {
+    Bucket: bucket,
+    Key: archiveKey,
+    Body: archiveStream,
+    ServerSideEncryption: sse,
+    ContentType: 'application/gzip'
+  };
+  if (sse === 'aws:kms' && process.env.BACKUP_S3_KMS_KEY_ID) {
+    archiveParams.SSEKMSKeyId = process.env.BACKUP_S3_KMS_KEY_ID;
+  }
+  await s3.send(new PutObjectCommand(archiveParams));
+
+  // Upload checksum file
+  const checksumBody = fs.readFileSync(checksumFilePath, 'utf8');
+  const checksumParams = {
+    Bucket: bucket,
+    Key: checksumKey,
+    Body: checksumBody,
+    ServerSideEncryption: sse,
+    ContentType: 'text/plain'
+  };
+  if (sse === 'aws:kms' && process.env.BACKUP_S3_KMS_KEY_ID) {
+    checksumParams.SSEKMSKeyId = process.env.BACKUP_S3_KMS_KEY_ID;
+  }
+  await s3.send(new PutObjectCommand(checksumParams));
+
+  console.log(`[DR-01 Backup] Offsite S3 upload SUCCESS: s3://${bucket}/${archiveKey}`);
+  return {
+    uploaded: true,
+    bucket,
+    archiveKey,
+    checksumKey,
+    sse
+  };
 }
 
 function pruneOldBackups() {
@@ -173,4 +293,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { createBackup, pruneOldBackups };
+module.exports = { createBackup, pruneOldBackups, uploadToS3 };

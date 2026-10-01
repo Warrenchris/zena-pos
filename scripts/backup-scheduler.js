@@ -77,8 +77,11 @@ async function runScheduledBackupPass() {
   try {
     const result = await createBackup();
     const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
+    const s3Status = result.s3?.uploaded
+      ? `s3=s3://${result.s3.bucket}/${result.s3.archiveKey}`
+      : (result.s3?.skipped ? 's3=skipped' : `s3=failed(${result.s3?.error})`);
     console.log(`[BackupScheduler] === Backup Pass Successfully Completed in ${durationSec}s ===`);
-    console.log(`[BackupScheduler] Details: file=${path.basename(result.backupFilePath)}, size=${(result.sizeBytes / (1024 * 1024)).toFixed(2)}MB, sha256=${result.sha256}`);
+    console.log(`[BackupScheduler] Details: file=${path.basename(result.backupFilePath)}, size=${(result.sizeBytes / (1024 * 1024)).toFixed(2)}MB, sha256=${result.sha256}, ${s3Status}`);
     return { success: true, result, durationSec };
   } catch (err) {
     console.error(`[BackupScheduler] ERROR: Scheduled backup failed: ${err.message}`);

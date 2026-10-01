@@ -21,6 +21,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1144.0",
     "@sentry/node": "^10.75.3",
     "archiver": "^5.3.2",
     "axios": "^1.12.2",
