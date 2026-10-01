@@ -391,6 +391,11 @@ exports.forgotPassword = async (req, res) => {
 // Reset password using token
 exports.resetPassword = async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array(), error: errors.array()[0]?.msg });
+    }
+
     const { token, password } = req.body;
     const decoded = jwt.verify(token, getPrivateKey(), { algorithms: ['RS256'] });
     if (decoded.purpose !== 'password_reset') {
@@ -556,8 +561,8 @@ exports.changePassword = async (req, res) => {
       return res.status(400).json({ error: 'New password and confirmation do not match.' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters long.' });
     }
 
     let account = null;

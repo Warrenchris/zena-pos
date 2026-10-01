@@ -210,8 +210,8 @@ const Settings = () => {
       return;
     }
 
-    if (passwordForm.newPassword.length < 6) {
-      setPasswordStatus({ type: 'error', message: 'New password must be at least 6 characters long.' });
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordStatus({ type: 'error', message: 'New password must be at least 8 characters long.' });
       return;
     }
 

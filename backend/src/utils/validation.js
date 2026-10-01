@@ -16,7 +16,7 @@ function validateEmployee(payload) {
   
   // Validate password only for new employees or if provided for existing ones
   if (!payload.id && !payload.password) return 'Password is required for new employees';
-  if (payload.password && payload.password.length < 6) return 'Password must be at least 6 characters long';
+  if (payload.password && payload.password.length < 8) return 'Password must be at least 8 characters long';
   if (!payload.position || String(payload.position).trim().length === 0) return 'Position is required';
 
   const status = payload.status || 'active';

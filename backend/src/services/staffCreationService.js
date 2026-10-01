@@ -57,8 +57,8 @@ async function createStaffMember({ actor, body = {}, reqOrgId = null }) {
     throw err;
   }
 
-  if (!body.password || String(body.password).length < 6) {
-    const err = new Error('Password must be at least 6 characters long');
+  if (!body.password || String(body.password).length < 8) {
+    const err = new Error('Password must be at least 8 characters long');
     err.statusCode = 400;
     throw err;
   }
