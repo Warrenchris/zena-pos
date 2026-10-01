@@ -31,7 +31,7 @@
 | 7B | Platform operator (super-admin) console | DONE | `7c5dfbb` | `docs/saas/PHASE-7B-PLATFORM-CONSOLE-WALKTHROUGH.md` |
 | 7C | Tax integrity and eTIMS groundwork | PARTIAL (Step 1 DONE; Step 2 BLOCKED) | `4483bbc` | `docs/saas/PHASE-7C-STEP1-TAX-INTEGRITY-WALKTHROUGH.md` |
 | 7D | Account, data and entitlement gaps | DONE | `0d107cb` | `docs/saas/PHASE-7D-ACCOUNT-DATA-ENTITLEMENT-WALKTHROUGH.md` |
-| 7E | Operations: offsite backups and dependency plan | NOT STARTED | | |
+| 7E | Operations: offsite backups and dependency plan | DONE | `1ba9d9e` | `docs/saas/PHASE-7E-OPERATIONS-WALKTHROUGH.md` |
 | 7F | Final production readiness audit | NOT STARTED | | |
 
 ---
@@ -207,7 +207,7 @@ Items marked Missing are from my static review of the code. Test results are the
 | Org deletion destroys data needed for tax records | Soft delete with retention window; confirm retention rules with an accountant |
 | Drift between docs and code (already happened once) | Each walkthrough must cite commit hash and file:line; 7F re-verifies |
 | Test isolation & shared state leakage across test suites | Three confirmed instances: (1) Redis 24h tombstone keys leaking across suites patched in 0435c1c; (2) hardcoded low-numbered user IDs (101/102/201/999) exposed in 6+ suites (phase2-4, purchases-and-orders, mpesaSecurity, mysql-salepayments); (3) billingNotifications.test.js date-collision bug where hardcoded real-world dates collided with active 14-day trials created on 2026-10-01 by earlier suites in zana_pos_test. Tests that hardcode real-world dates or IDs collide with state left by other suites or by the actual system clock, and 7F needs a systemic fix (isolated test DB/Redis namespace per suite, or a fixed/mocked clock across the whole test run) rather than one-off date/ID patches. |
-| ActivityLog cross-tenant leakage via activityController.js | Discovered during 7D: `activityController.js:list` queries `ActivityLog.findAll({ where })` without scoping to `req.user.shopId` or `req.user.organizationId` for `admin`/`manager` callers. Phase 7F must enforce tenant scoping by `shopId`/`organizationId` on activity logs, update route permissions (`org_admin`), and add integration tests in `phase3UserTenantSecurity.test.js`. |
+| ActivityLog cross-tenant leakage via activityController.js | Discovered during 7D; RESOLVED in 7E (`1ba9d9e`): `activityController.js:list` now strictly scopes `where.shopId = req.shopId || req.user?.shopId`, `activity.js` route permits `['admin', 'manager', 'org_admin']`, and verified with 17 integration tests in `phase3UserTenantSecurity.test.js`. |
 | Offline sync tax rate mismatch | Client-supplied offlineSnapshotTaxRate dropped from Step 1 to prevent client tampering; log reconciliation risk for when sync occurs after tax rate adjustments |
 
 ## 6. Session-end checklist (do this every time we stop)
