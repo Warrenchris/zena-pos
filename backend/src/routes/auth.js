@@ -3,6 +3,7 @@ const { body } = require('express-validator');
 const authController = require('../controllers/authController');
 const { auth } = require('../middleware/auth');
 const { createDistributedRateLimiter } = require('../utils/distributedRateLimiter');
+const { isDisposableEmail } = require('../utils/disposableEmail');
 const router = express.Router();
 
 const getClientIp = require('../utils/getClientIp');
@@ -33,7 +34,14 @@ router.post(
   registerLimiter,
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
-    body('email').isEmail().withMessage('Please enter a valid email'),
+    body('email')
+      .isEmail().withMessage('Please enter a valid email')
+      .custom((email) => {
+        if (isDisposableEmail(email)) {
+          throw new Error('Disposable or temporary email addresses are not permitted.');
+        }
+        return true;
+      }),
     body('password')
       .isLength({ min: 8 })
       .withMessage('Password must be at least 8 characters long'),
