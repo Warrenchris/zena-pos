@@ -25,6 +25,16 @@ const Organization = sequelize.define('Organization', {
     type: DataTypes.STRING(3),
     allowNull: false,
     defaultValue: 'KES'
+  },
+  deletedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    defaultValue: null
+  },
+  scheduledPurgeAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    defaultValue: null
   }
 }, {
   tableName: 'Organizations',

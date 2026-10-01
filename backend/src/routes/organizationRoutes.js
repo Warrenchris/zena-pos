@@ -24,4 +24,7 @@ router.get('/members', organizationController.getOrganizationMembers);
 // Owner-only organization data export (7D)
 router.get('/export', dataExportLimiter, organizationController.exportOrganizationData);
 
+// Owner-initiated account closure (7D)
+router.post('/close-account', organizationController.closeOrganizationAccount);
+
 module.exports = router;
