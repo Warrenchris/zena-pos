@@ -782,4 +782,40 @@ describe('Phase 3: User Creation, Tenant Membership & Quota Integrity', () => {
       expect(membership.orgRole).toBe('member');
     });
   });
+
+  // =========================================================================
+  // GET /api/activity tenant isolation
+  // =========================================================================
+  describe('GET /api/activity tenant isolation', () => {
+    test('scopes activity log list to caller shop and excludes rows from other shops', async () => {
+      const ts = Date.now();
+      const actionA = `ACTION_SHOP_A_${ts}`;
+      const actionB = `ACTION_SHOP_B_${ts}`;
+
+      await ActivityLog.create({
+        action: actionA,
+        shopId: shopA1.id,
+        userId: userA1.id
+      });
+
+      await ActivityLog.create({
+        action: actionB,
+        shopId: shopB1.id,
+        userId: userB1.id
+      });
+
+      const res = await request(app)
+        .get('/api/activity')
+        .set('Authorization', tokenA1)
+        .expect(200);
+
+      const returnedActions = res.body.map(r => r.action);
+      expect(returnedActions).toContain(actionA);
+      expect(returnedActions).not.toContain(actionB);
+      for (const row of res.body) {
+        expect(row.shopId).toBe(shopA1.id);
+      }
+    });
+  });
 });
+
