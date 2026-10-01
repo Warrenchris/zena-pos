@@ -112,8 +112,8 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
     it('should trigger TRIAL_ENDING_5D reminder and record log in BillingNotificationLog', async () => {
       const sendTrialSpy = jest.spyOn(emailService, 'sendTrialEndingEmail').mockResolvedValue({ messageId: 'msg-trial-5d' });
 
-      const today = new Date('2026-10-10T12:00:00Z');
-      const trialEndsAt = new Date('2026-10-15T12:00:00Z'); // exactly 5 calendar days later
+      const today = new Date('2035-10-10T12:00:00Z');
+      const trialEndsAt = new Date('2035-10-15T12:00:00Z'); // exactly 5 calendar days later
 
       await subscription.update({
         status: 'trialing',
@@ -139,14 +139,14 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
       expect(log).not.toBeNull();
       expect(log.status).toBe('sent');
       expect(log.recipientEmail).toBe(ownerUser.email);
-      expect(log.periodKey).toBe('2026-10-15');
+      expect(log.periodKey).toBe('2035-10-15');
     });
 
     it('should trigger TRIAL_ENDING_1D reminder and record log in BillingNotificationLog', async () => {
       const sendTrialSpy = jest.spyOn(emailService, 'sendTrialEndingEmail').mockResolvedValue({ messageId: 'msg-trial-1d' });
 
-      const today = new Date('2026-10-14T12:00:00Z');
-      const trialEndsAt = new Date('2026-10-15T12:00:00Z'); // exactly 1 calendar day later
+      const today = new Date('2035-10-14T12:00:00Z');
+      const trialEndsAt = new Date('2035-10-15T12:00:00Z'); // exactly 1 calendar day later
 
       await subscription.update({
         status: 'trialing',
@@ -171,7 +171,7 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
       });
       expect(log).not.toBeNull();
       expect(log.status).toBe('sent');
-      expect(log.periodKey).toBe('2026-10-15');
+      expect(log.periodKey).toBe('2035-10-15');
     });
   });
 
@@ -179,8 +179,8 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
     it('should trigger RENEWAL_DUE_7D reminder and record log in BillingNotificationLog', async () => {
       const sendRenewalSpy = jest.spyOn(emailService, 'sendRenewalDueEmail').mockResolvedValue({ messageId: 'msg-renewal-7d' });
 
-      const today = new Date('2026-10-08T00:00:00Z');
-      const currentPeriodEnd = new Date('2026-10-15T00:00:00Z'); // 7 days later
+      const today = new Date('2035-10-08T00:00:00Z');
+      const currentPeriodEnd = new Date('2035-10-15T00:00:00Z'); // 7 days later
 
       await subscription.update({
         status: 'active',
@@ -206,14 +206,14 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
       });
       expect(log).not.toBeNull();
       expect(log.status).toBe('sent');
-      expect(log.periodKey).toBe('2026-10-15');
+      expect(log.periodKey).toBe('2035-10-15');
     });
 
     it('should trigger RENEWAL_DUE_1D reminder and record log in BillingNotificationLog', async () => {
       const sendRenewalSpy = jest.spyOn(emailService, 'sendRenewalDueEmail').mockResolvedValue({ messageId: 'msg-renewal-1d' });
 
-      const today = new Date('2026-10-14T00:00:00Z');
-      const currentPeriodEnd = new Date('2026-10-15T00:00:00Z'); // 1 day later
+      const today = new Date('2035-10-14T00:00:00Z');
+      const currentPeriodEnd = new Date('2035-10-15T00:00:00Z'); // 1 day later
 
       await subscription.update({
         status: 'active',
@@ -233,7 +233,7 @@ describe('Phase 7A: Billing Notifications & Lifecycle Emails Suite', () => {
       });
       expect(log).not.toBeNull();
       expect(log.status).toBe('sent');
-      expect(log.periodKey).toBe('2026-10-15');
+      expect(log.periodKey).toBe('2035-10-15');
     });
   });
 
