@@ -125,6 +125,28 @@ exports.createShop = async (req, res) => {
         transaction: t
       });
 
+      // Step C.1: Multi-shop feature gate
+      // If organization already has 1 or more active branches, creating an additional
+      // branch requires the multi_shop plan feature (Growth or Enterprise tier).
+      if (currentActiveShopCount >= 1) {
+        const multiShopRes = await entitlementService.canUseFeature(orgId, 'multi_shop');
+        if (!multiShopRes.allowed) {
+          const err = new Error(multiShopRes.reason || 'Multi-branch feature is not included in your current plan.');
+          err.statusCode = 403;
+          err.code = 'FEATURE_LOCKED';
+          err.isUpgradePrompt = true;
+          err.promptData = {
+            type: 'feature',
+            key: 'multi_shop',
+            currentPlan: plan.toJSON(),
+            requiredPlan: 'growth',
+            reason: 'Operating multiple branches requires the Growth or Enterprise plan.',
+            code: 'FEATURE_LOCKED'
+          };
+          throw err;
+        }
+      }
+
       if (maxShops !== -1 && currentActiveShopCount >= maxShops) {
         const err = new Error(`Branch limit reached. Your plan allows up to ${maxShops} branches.`);
         err.statusCode = 403;
