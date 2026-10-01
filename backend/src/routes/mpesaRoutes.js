@@ -7,6 +7,7 @@ const mpesaService = require('../services/mpesaService');
 const { PendingPayment, Sale } = require('../models');
 const saleController = require('../controllers/saleController');
 const logger = require('../utils/logger');
+const { recordWebhookAuthFailure } = require('../utils/webhookAlerting');
 
 // POST /api/mpesa/initiate (authenticated)
 router.post('/initiate', auth, async (req, res) => {
@@ -64,6 +65,7 @@ router.post('/callback', async (req, res) => {
   try {
     const token = req.query.token;
     if (!token) {
+      await recordWebhookAuthFailure({ provider: 'mpesa_pos', ip: req.ip, details: 'missing token' });
       return res.status(401).json({ error: 'Unauthorized callback: missing verification token.' });
     }
 
@@ -95,6 +97,11 @@ router.post('/callback', async (req, res) => {
         crypto.timingSafeEqual(providedBuffer, expectedBuffer);
 
       if (!tokensMatch) {
+        await recordWebhookAuthFailure({
+          provider: 'mpesa_pos',
+          ip: req.ip,
+          details: `invalid token for POS payment ${checkoutRequestId}`
+        });
         logger.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for POS payment ${checkoutRequestId}`, {
           requestId: req.requestId || req.id,
           checkoutRequestId

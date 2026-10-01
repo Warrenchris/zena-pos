@@ -1,6 +1,6 @@
 'use strict';
 
-const { checkAndTransitionExpiredSubscriptions } = require('./billingService');
+const billingService = require('./billingService');
 const billingNotificationService = require('./billingNotificationService');
 const { Subscription, Plan } = require('../models');
 const { Op } = require('sequelize');
@@ -50,7 +50,7 @@ async function runSubscriptionTransitionJob(asOfDate = new Date()) {
   });
 
   try {
-    const transitionResult = await checkAndTransitionExpiredSubscriptions(asOfDate);
+    const transitionResult = await billingService.checkAndTransitionExpiredSubscriptions(asOfDate);
     let reminderResult = { trialEnding5d: 0, trialEnding1d: 0, renewalDue7d: 0, renewalDue1d: 0 };
     try {
       reminderResult = await checkAndSendBillingReminders(asOfDate);
@@ -81,6 +81,17 @@ async function runSubscriptionTransitionJob(asOfDate = new Date()) {
       jobRunId,
       error: error.message
     });
+    try {
+      const Sentry = require('@sentry/node');
+      if (process.env.SENTRY_DSN && Sentry && typeof Sentry.captureException === 'function') {
+        Sentry.captureException(error, {
+          tags: { alert: 'billing_scheduler_failure', component: 'billing-scheduler' },
+          extra: { jobRunId }
+        });
+      }
+    } catch (sentryErr) {
+      // Ignore Sentry dispatch error
+    }
     throw error;
   } finally {
     if (acquiredLock && redisClient && redisClient.status === 'ready') {
