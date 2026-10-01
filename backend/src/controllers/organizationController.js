@@ -1,12 +1,141 @@
-'use strict';
-
+const archiver = require('archiver');
 const {
+  Organization,
   OrganizationMembership,
   Shop,
   ShopAccess,
   User,
-  Employee
+  Employee,
+  Product,
+  Customer,
+  Sale,
+  SaleItem,
+  SubscriptionInvoice,
+  ActivityLog
 } = require('../models');
+
+function arrayToCsv(headers, rows) {
+  const escapeCell = (val) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+  const headerLine = headers.map(h => escapeCell(h)).join(',');
+  const rowLines = (rows || []).map(row => headers.map(h => escapeCell(row[h])).join(','));
+  return [headerLine, ...rowLines].join('\r\n');
+}
+
+/**
+ * Owner-Only Organization Data Export (7D)
+ * GET /api/organizations/export
+ *
+ * Packages tenant-isolated data into a zipped bundle of CSVs.
+ */
+exports.exportOrganizationData = async (req, res) => {
+  try {
+    const orgId = req.organizationId
+      ? parseInt(req.organizationId, 10)
+      : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
+
+    // Strictly enforce that only organization owners can export organization data
+    const membershipWhere = {
+      organizationId: orgId,
+      status: 'active'
+    };
+    if (req.user.isEmployee) {
+      membershipWhere.employeeId = req.user.id;
+    } else {
+      membershipWhere.userId = req.user.id;
+    }
+
+    const callerMembership = await OrganizationMembership.findOne({ where: membershipWhere });
+    if (!callerMembership || callerMembership.orgRole !== 'owner') {
+      return res.status(403).json({ error: 'Access denied: Only organization owners can export organization data.' });
+    }
+
+    const org = await Organization.findByPk(orgId);
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found.' });
+    }
+
+    // Fetch all branches under this organization
+    const shops = await Shop.findAll({ where: { organizationId: orgId }, raw: true });
+    const shopIds = shops.map(s => s.id);
+
+    // Fetch products, customers, sales, and billing invoices scoped strictly to this organization
+    const [products, customers, sales, invoices] = await Promise.all([
+      Product.findAll({ where: { organizationId: orgId }, raw: true }),
+      shopIds.length ? Customer.findAll({ where: { shopId: shopIds }, raw: true }) : [],
+      shopIds.length ? Sale.findAll({ where: { shopId: shopIds }, raw: true }) : [],
+      SubscriptionInvoice.findAll({ where: { organizationId: orgId }, raw: true })
+    ]);
+
+    const saleIds = sales.map(s => s.id);
+    const saleItems = saleIds.length ? await SaleItem.findAll({ where: { saleId: saleIds }, raw: true }) : [];
+
+    // Audit log before streaming
+    try {
+      if (shopIds.length && req.user?.id && !req.user.isEmployee) {
+        await ActivityLog.create({
+          shopId: shopIds[0],
+          userId: req.user.id,
+          action: 'ORGANIZATION_DATA_EXPORTED',
+          entity: 'Organization',
+          entityId: String(orgId),
+          details: `Organization "${org.name}" data exported by owner`
+        });
+      }
+    } catch (logErr) {
+      console.error('Failed to log data export activity:', logErr);
+    }
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="zana-pos-export-org-${orgId}-${Date.now()}.zip"`);
+
+    archive.pipe(res);
+
+    archive.append(
+      arrayToCsv(['id', 'name', 'address', 'phone', 'kraPin', 'registrationNumber', 'active', 'createdAt'], shops),
+      { name: 'shops.csv' }
+    );
+    archive.append(
+      arrayToCsv(['id', 'organizationId', 'shopId', 'name', 'sku', 'barcode', 'price', 'cost', 'taxCategory', 'active', 'createdAt'], products),
+      { name: 'products.csv' }
+    );
+    archive.append(
+      arrayToCsv(['id', 'shopId', 'name', 'email', 'phone', 'address', 'balance', 'loyaltyPoints', 'createdAt'], customers),
+      { name: 'customers.csv' }
+    );
+    archive.append(
+      arrayToCsv(['id', 'shopId', 'invoiceNumber', 'customerId', 'subtotal', 'tax', 'total', 'paymentMethod', 'saleStatus', 'createdAt'], sales),
+      { name: 'sales.csv' }
+    );
+    archive.append(
+      arrayToCsv(['id', 'saleId', 'shopId', 'productId', 'quantity', 'unitPrice', 'price', 'subtotal', 'taxRate', 'taxAmount', 'taxCategory', 'createdAt'], saleItems),
+      { name: 'sale_items.csv' }
+    );
+    archive.append(
+      arrayToCsv(['id', 'invoiceNumber', 'planId', 'amount', 'currency', 'status', 'paidAt', 'createdAt'], invoices),
+      { name: 'subscription_invoices.csv' }
+    );
+
+    await archive.finalize();
+  } catch (error) {
+    console.error('Error in exportOrganizationData:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Failed to export organization data', details: error.message });
+    }
+  }
+};
 
 /**
  * Tenant-Wide Member Management (P1-04)
