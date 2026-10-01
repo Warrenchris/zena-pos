@@ -393,6 +393,9 @@ const Plan = sequelize.define('Plan', {
 });
 ```
 
+> [!NOTE] Plan Feature Metadata: `api_access`
+> The `api_access` flag present in plan seed data (`features: { ..., api_access: true }`) is reserved future plan metadata for external developer API integrations and third-party webhook gateways. It is not currently backed by an active enforcement controller or public API key subsystem in Phase 7. It is retained as forward-compatible plan metadata without schema churn.
+
 #### 4.1.2 Model: `Subscription`
 Table: `Subscriptions`  
 Scope: Tenant Root (`organizationId`)
