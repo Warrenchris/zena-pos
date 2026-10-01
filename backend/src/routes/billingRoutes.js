@@ -9,6 +9,7 @@ const billingService = require('../services/billingService');
 const billingPaymentService = require('../services/billingPaymentService');
 const entitlementService = require('../services/entitlementService');
 const billingNotificationService = require('../services/billingNotificationService');
+const { recordWebhookAuthFailure } = require('../utils/webhookAlerting');
 const {
   Plan,
   Subscription,
@@ -369,6 +370,7 @@ router.post('/subscription/reactivate', auth, requireOrgOwner, requireVerifiedEm
 router.post('/mpesa/callback', async (req, res) => {
   const token = req.query.token;
   if (!token) {
+    await recordWebhookAuthFailure({ provider: 'mpesa_billing', ip: req.ip, details: 'missing token' });
     return res.status(401).json({ error: 'Unauthorized callback: missing verification token.' });
   }
 
@@ -410,6 +412,11 @@ router.post('/mpesa/callback', async (req, res) => {
 
     if (!tokensMatch) {
       await t.rollback();
+      await recordWebhookAuthFailure({
+        provider: 'mpesa_billing',
+        ip: req.ip,
+        details: `invalid token for invoice ${invoice.invoiceNumber}`
+      });
       console.warn(`[SECURITY ALERT] Invalid M-Pesa verification token for invoice ${invoice.invoiceNumber}. Provided: ${token}`);
       return res.status(401).json({ error: 'Unauthorized callback: invalid verification token.' });
     }
@@ -527,6 +534,11 @@ router.post('/flutterwave/webhook', async (req, res) => {
   const signature = req.headers['verif-hash'];
 
   if (!secretHash || !signature || signature !== secretHash) {
+    await recordWebhookAuthFailure({
+      provider: 'flutterwave_billing',
+      ip: req.ip,
+      details: 'invalid verif-hash signature header'
+    });
     return res.status(401).json({ error: 'Invalid or missing Flutterwave webhook signature header.' });
   }
 

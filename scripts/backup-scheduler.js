@@ -14,7 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createBackup, pruneOldBackups } = require('./backup-db');
+const backupDb = require('./backup-db');
 
 try {
   require(path.resolve(__dirname, '../backend/node_modules/dotenv')).config({ path: path.resolve(__dirname, '../backend/.env') });
@@ -75,7 +75,7 @@ async function runScheduledBackupPass() {
   }
 
   try {
-    const result = await createBackup();
+    const result = await backupDb.createBackup();
     const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
     const s3Status = result.s3?.uploaded
       ? `s3=s3://${result.s3.bucket}/${result.s3.archiveKey}`
@@ -85,6 +85,21 @@ async function runScheduledBackupPass() {
     return { success: true, result, durationSec };
   } catch (err) {
     console.error(`[BackupScheduler] ERROR: Scheduled backup failed: ${err.message}`);
+    try {
+      let Sentry;
+      try {
+        Sentry = require('@sentry/node');
+      } catch (e) {
+        Sentry = require(path.resolve(__dirname, '../backend/node_modules/@sentry/node'));
+      }
+      if (process.env.SENTRY_DSN && Sentry && typeof Sentry.captureException === 'function') {
+        Sentry.captureException(err, {
+          tags: { alert: 'backup_scheduler_failure', component: 'backup-scheduler' }
+        });
+      }
+    } catch (sentryErr) {
+      // ignore sentry notification failure
+    }
     throw err;
   } finally {
     releaseLock();
