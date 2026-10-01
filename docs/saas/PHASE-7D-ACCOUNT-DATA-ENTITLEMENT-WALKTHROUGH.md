@@ -112,4 +112,4 @@ Key implementations:
 
 ### Database Migrations
 - **Command:** `npx sequelize-cli db:migrate:status` (in `backend/`)
-- **Result:** All 73 migrations `up` including `20261001120000-add-deleted-at-and-purge-to-organizations.js`.
+- **Result:** All 98 migrations `up` (97 existing from 7C + 1 added in 7D: `20261001120000-add-deleted-at-and-purge-to-organizations.js`). Verified on database `zana_pos` at `127.0.0.1:3307` via `SequelizeMeta` count and CLI status. Reversible cycle verified with `db:migrate:undo` and `db:migrate`.
