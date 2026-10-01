@@ -631,7 +631,7 @@ describe('Phase 6B-06: Operational Reliability, AI Cache Hardening, Distributed 
           name: { [sequelize.Sequelize.Op.like]: `CapCat_${ts}_%` }
         }
       });
-    }, 120000);
+    }, 60000);
 
     test('3.11: Returns success:false and specific summary message when 0 products are imported', async () => {
       const ts = Date.now();
