@@ -105,6 +105,7 @@ HeldCart.belongsTo(Shop, { foreignKey: 'shopId' });
 Shop.hasMany(HeldCart, { foreignKey: 'shopId' });
 
 // ActivityLog employee associations
+ActivityLog.belongsTo(User, { foreignKey: 'userId', constraints: false });
 ActivityLog.belongsTo(Employee, { foreignKey: 'performedByEmployee', as: 'employee' });
 Employee.hasMany(ActivityLog, { foreignKey: 'performedByEmployee', as: 'activityLogs' });
 
