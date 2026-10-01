@@ -816,6 +816,81 @@ describe('Phase 3: User Creation, Tenant Membership & Quota Integrity', () => {
         expect(row.shopId).toBe(shopA1.id);
       }
     });
+
+    test('org_admin in Organization A receives zero cross-tenant rows and 403 when querying Organization B activity', async () => {
+      const ts = Date.now();
+      const actionOrgA1 = `ACTION_ORGA_SHOP1_${ts}`;
+      const actionOrgA2 = `ACTION_ORGA_SHOP2_${ts}`;
+      const actionOrgB = `ACTION_ORGB_${ts}`;
+
+      // Create an org admin user in Organization A
+      const orgAdminUser = await User.create({
+        name: `OrgAdmin A ${ts}`,
+        email: `orgadmin-a-${ts}@test.com`,
+        password: 'Password123!',
+        role: 'admin',
+        shopId: shopA1.id
+      });
+
+      await OrganizationMembership.create({
+        organizationId: orgA.id,
+        userId: orgAdminUser.id,
+        orgRole: 'admin',
+        status: 'active'
+      });
+
+      const orgAdminToken = tokenFor({
+        id: orgAdminUser.id,
+        email: orgAdminUser.email,
+        role: 'org_admin',
+        orgRole: 'admin',
+        shopId: shopA1.id,
+        organizationId: orgA.id
+      });
+
+      // Activity logs across Org A (shopA1, shopA2) and Org B (shopB1)
+      await ActivityLog.create({
+        action: actionOrgA1,
+        shopId: shopA1.id,
+        userId: userA1.id
+      });
+
+      await ActivityLog.create({
+        action: actionOrgA2,
+        shopId: shopA2.id,
+        userId: userA1.id
+      });
+
+      await ActivityLog.create({
+        action: actionOrgB,
+        shopId: shopB1.id,
+        userId: userB1.id
+      });
+
+      // 1. General list: OrgAdmin receives Org A logs, but ZERO rows from Org B
+      const listRes = await request(app)
+        .get('/api/activity')
+        .set('Authorization', orgAdminToken)
+        .expect(200);
+
+      const returnedActions = listRes.body.map(r => r.action);
+      expect(returnedActions).toContain(actionOrgA1);
+      expect(returnedActions).toContain(actionOrgA2);
+      expect(returnedActions).not.toContain(actionOrgB);
+      for (const row of listRes.body) {
+        expect([shopA1.id, shopA2.id]).toContain(row.shopId);
+        expect(row.shopId).not.toBe(shopB1.id);
+      }
+
+      // 2. Direct query targeted at Org B shop: returns 403 Forbidden
+      const crossTenantRes = await request(app)
+        .get(`/api/activity?shopId=${shopB1.id}`)
+        .set('Authorization', orgAdminToken)
+        .expect(403);
+
+      expect(crossTenantRes.body.error).toMatch(/Shop does not belong to your organization|Cross-tenant/i);
+    });
   });
 });
+
 

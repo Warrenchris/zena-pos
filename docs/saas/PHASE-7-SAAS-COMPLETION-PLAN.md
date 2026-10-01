@@ -18,6 +18,7 @@
 3. Every change ships with tests. No claim without evidence (command output, file:line, test count).
 4. Never run `npm audit fix --force`.
 5. Migrations must be reversible with pre-flight checks.
+6. Authorization/Tenant-Scoping Rule: Any change touching authorization or tenant-scoping, even one discovered as a side-finding, requires its own brief findings note and explicit user approval before being committed — never fold it into an active sub-phase unapproved.
 
 **Paste this to resume:**
 > Continue Zana POS from `docs/saas/PHASE-7-SAAS-COMPLETION-PLAN.md`. Baseline is commit `185eb6e`. Start at the first sub-phase not marked DONE in section 3. Do the read-only findings pass only, then stop for approval.
