@@ -90,6 +90,18 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
       }
     });
 
+    await User.findOrCreate({
+      where: { id: 999 },
+      defaults: {
+        name: 'No Shop Admin',
+        email: 'admin999@test.com',
+        password: 'Password123!',
+        role: 'admin',
+        shopId: 1,
+        active: true
+      }
+    });
+
     // Create test products
     [prodShop1] = await Product.findOrCreate({
       where: { sku: 'TEST-PROD-SHOP1' },

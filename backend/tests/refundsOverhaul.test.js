@@ -6,7 +6,6 @@ const {
   Shop, Category, Product, Inventory, Sale, SaleItem, SaleRefund, SalePayment,
   User, SystemSettings
 } = require('../src/models');
-const tokenRevocationService = require('../src/services/tokenRevocationService');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
@@ -111,12 +110,6 @@ describe('Sales Returns & Refunds Overhaul Tests (R.1 - R.6)', () => {
         password: 'password123'
       }
     });
-
-    for (const uid of [adminUser.id, managerUser.id, 888, 999]) {
-      await tokenRevocationService.clearUserStatus(uid, false);
-      await tokenRevocationService.setUserStatus(uid, false, 'active');
-      await tokenRevocationService.clearUserTokenCutoff(uid, false);
-    }
   });
 
   // TEST R.1: Discounted Unit Refund

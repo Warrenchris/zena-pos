@@ -2,7 +2,6 @@ const request = require('supertest');
 const app = require('../../src/app');
 const { Sale, Product, Inventory, Expense, SaleItem, SalePayment, SaleRefund, Invoice, Shop, User } = require('../../src/models');
 const sequelize = require('../../src/config/database');
-const tokenRevocationService = require('../../src/services/tokenRevocationService');
 
 describe('Insights Controller', () => {
   let token;
@@ -27,9 +26,6 @@ describe('Insights Controller', () => {
         emailVerifiedAt: new Date()
       }
     });
-    await tokenRevocationService.clearUserStatus(101, false);
-    await tokenRevocationService.setUserStatus(101, false, 'active');
-    await tokenRevocationService.clearUserTokenCutoff(101, false);
 
     const jwt = require('jsonwebtoken');
     const privateKey = (process.env.JWT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
