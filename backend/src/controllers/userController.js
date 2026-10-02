@@ -124,7 +124,7 @@ exports.updateRole = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { role, active } = req.body;
+    const { role, active, orgRole } = req.body;
     const requesterOrgRole = await getRequesterOrgRole(req, transaction);
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
 
@@ -148,15 +148,36 @@ exports.updateRole = async (req, res) => {
         return res.status(403).json({ error: "Cannot modify the organization owner's account." });
       }
 
+      const roleChanged = Boolean(role && role !== emp.position);
+      const activeChanged = Boolean(active !== undefined && (emp.status === 'active') !== Boolean(active));
+      const orgRoleChanged = Boolean(orgRole && membership && membership.orgRole !== orgRole);
+
       if (role) emp.position = role;
       if (active !== undefined) emp.status = active ? 'active' : 'inactive';
       await emp.save({ transaction });
 
       // Synchronize OrganizationMembership
-      if (active !== undefined && membership) {
-        const membershipStatus = active ? 'active' : 'suspended';
-        membership.status = membershipStatus;
-        await membership.save({ transaction });
+      let membershipUpdated = false;
+      if (membership) {
+        if (active !== undefined) {
+          membership.status = active ? 'active' : 'suspended';
+          membershipUpdated = true;
+        }
+        if (orgRole) {
+          membership.orgRole = orgRole;
+          membershipUpdated = true;
+        } else if (roleChanged) {
+          membership.orgRole = staffCreationService.positionToOrgRole(role);
+          membershipUpdated = true;
+        }
+        if (membershipUpdated) {
+          await membership.save({ transaction });
+        }
+      }
+
+      const authzChanged = roleChanged || activeChanged || orgRoleChanged;
+      if (authzChanged) {
+        await tokenRevocationService.incrementAuthzVersion(emp.id, true, transaction);
       }
 
       await transaction.commit();
@@ -194,15 +215,41 @@ exports.updateRole = async (req, res) => {
       return res.status(403).json({ error: "Cannot modify the organization owner's account." });
     }
 
+    const roleChanged = Boolean(role && role !== user.role);
+    const activeChanged = Boolean(active !== undefined && user.active !== Boolean(active));
+    const orgRoleChanged = Boolean(orgRole && membership && membership.orgRole !== orgRole);
+
     if (role) user.role = role;
     if (active !== undefined) user.active = active;
     await user.save({ transaction });
 
     // Synchronize OrganizationMembership
-    if (active !== undefined && membership) {
-      const membershipStatus = active ? 'active' : 'suspended';
-      membership.status = membershipStatus;
-      await membership.save({ transaction });
+    let membershipUpdated = false;
+    if (membership) {
+      if (active !== undefined) {
+        membership.status = active ? 'active' : 'suspended';
+        membershipUpdated = true;
+      }
+      if (orgRole) {
+        membership.orgRole = orgRole;
+        membershipUpdated = true;
+      } else if (roleChanged) {
+        if (role === 'admin' && membership.orgRole !== 'owner') {
+          membership.orgRole = 'admin';
+          membershipUpdated = true;
+        } else if (role !== 'admin' && membership.orgRole !== 'owner') {
+          membership.orgRole = 'member';
+          membershipUpdated = true;
+        }
+      }
+      if (membershipUpdated) {
+        await membership.save({ transaction });
+      }
+    }
+
+    const authzChanged = roleChanged || activeChanged || orgRoleChanged;
+    if (authzChanged) {
+      await tokenRevocationService.incrementAuthzVersion(user.id, false, transaction);
     }
 
     await transaction.commit();

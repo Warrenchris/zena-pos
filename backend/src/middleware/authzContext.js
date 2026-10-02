@@ -38,11 +38,11 @@ async function authzContext(req, res, next) {
     } = req.user;
 
     // 1. Authoritative Authorization Epoch Check
-    const currentVersion = await tokenRevocationService.getAuthzVersion(id, !!isEmployee);
+    let currentVersion = await tokenRevocationService.getAuthzVersion(id, !!isEmployee);
     const sessionVersion = Number(tokenAuthzVersion || 1);
 
     if (sessionVersion < currentVersion) {
-      logger.warn('[AUTHZ] Stale authzVersion detected', {
+      logger.warn('[AUTHZ] Stale authzVersion detected from cache', {
         id,
         isEmployee: !!isEmployee,
         sessionVersion,
@@ -66,6 +66,21 @@ async function authzContext(req, res, next) {
           code: 'ACCOUNT_INACTIVE'
         });
       }
+
+      const authoritativeDbVersion = Number(superAdminUser.authzVersion || 1);
+      if (sessionVersion < authoritativeDbVersion) {
+        logger.warn('[AUTHZ] Stale authzVersion detected against authoritative DB for super_admin', {
+          id,
+          sessionVersion,
+          authoritativeDbVersion
+        });
+        await tokenRevocationService.setAuthzVersion(id, false, authoritativeDbVersion);
+        return res.status(401).json({
+          error: 'Authorization epoch stale. Session has been invalidated.',
+          code: 'AUTHZ_VERSION_STALE'
+        });
+      }
+      currentVersion = Math.max(currentVersion, authoritativeDbVersion);
 
       const superAdminContext = {
         identity: Object.freeze({
@@ -132,6 +147,21 @@ async function authzContext(req, res, next) {
           code: 'ACCOUNT_INACTIVE'
         });
       }
+      const authoritativeDbVersion = Number(entityEmployee.authzVersion || 1);
+      if (sessionVersion < authoritativeDbVersion) {
+        logger.warn('[AUTHZ] Stale authzVersion detected against authoritative DB for employee', {
+          id,
+          sessionVersion,
+          authoritativeDbVersion
+        });
+        await tokenRevocationService.setAuthzVersion(id, true, authoritativeDbVersion);
+        return res.status(401).json({
+          error: 'Authorization epoch stale. Session has been invalidated.',
+          code: 'AUTHZ_VERSION_STALE'
+        });
+      }
+      currentVersion = Math.max(currentVersion, authoritativeDbVersion);
+
       rawRole = entityEmployee.position || 'cashier';
       homeShopId = entityEmployee.shopId;
       email = entityEmployee.email;
@@ -146,6 +176,21 @@ async function authzContext(req, res, next) {
           code: 'ACCOUNT_INACTIVE'
         });
       }
+      const authoritativeDbVersion = Number(entityUser.authzVersion || 1);
+      if (sessionVersion < authoritativeDbVersion) {
+        logger.warn('[AUTHZ] Stale authzVersion detected against authoritative DB for user', {
+          id,
+          sessionVersion,
+          authoritativeDbVersion
+        });
+        await tokenRevocationService.setAuthzVersion(id, false, authoritativeDbVersion);
+        return res.status(401).json({
+          error: 'Authorization epoch stale. Session has been invalidated.',
+          code: 'AUTHZ_VERSION_STALE'
+        });
+      }
+      currentVersion = Math.max(currentVersion, authoritativeDbVersion);
+
       rawRole = entityUser.role || 'cashier';
       homeShopId = entityUser.shopId;
       email = entityUser.email;

@@ -340,16 +340,24 @@ const tokenRevocationService = {
       updatedVersion = user ? Number(user.authzVersion) : 1;
     }
 
-    // Update in-memory fallback
-    inMemoryAuthzVersions.set(key, updatedVersion);
+    const applyCacheUpdate = async () => {
+      // Update in-memory fallback
+      inMemoryAuthzVersions.set(key, updatedVersion);
 
-    // Evict or update Redis cache
-    try {
-      if (redisClient && redisClient.status === 'ready') {
-        await redisClient.setex(key, STATUS_CACHE_TTL, String(updatedVersion));
+      // Evict or update Redis cache
+      try {
+        if (redisClient && redisClient.status === 'ready') {
+          await redisClient.setex(key, STATUS_CACHE_TTL, String(updatedVersion));
+        }
+      } catch (err) {
+        logger.warn(`[AUTHZ-EPOCH] Redis error updating authzVersion for ${id}:`, err.message);
       }
-    } catch (err) {
-      logger.warn(`[AUTHZ-EPOCH] Redis error updating authzVersion for ${id}:`, err.message);
+    };
+
+    if (transaction && typeof transaction.afterCommit === 'function') {
+      transaction.afterCommit(applyCacheUpdate);
+    } else {
+      await applyCacheUpdate();
     }
 
     logger.info(`[AUTHZ-EPOCH] Incremented authzVersion for ${isEmployee ? 'employee' : 'user'} ${id} to ${updatedVersion}.`);

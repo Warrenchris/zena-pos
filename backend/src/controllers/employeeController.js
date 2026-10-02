@@ -303,11 +303,18 @@ exports.updateEmployee = async (req, res) => {
     }
 
     const previousPosition = employee.position;
+    const previousStatus = employee.status;
+    const previousShopId = employee.shopId;
+
     const isPromotingToAdmin = req.body.position && req.body.position.toLowerCase() === 'admin' && previousPosition !== 'admin';
     if (isPromotingToAdmin && req.user.role !== 'admin') {
       await transaction.rollback();
       return res.status(403).json({ error: 'Access denied: only organization owners can grant the Administrator position.' });
     }
+
+    const positionChanged = Boolean(req.body.position && req.body.position !== previousPosition);
+    const statusChanged = Boolean(req.body.status && req.body.status !== previousStatus);
+    const shopIdChanged = Boolean(req.body.shopId && Number(req.body.shopId) !== Number(previousShopId));
 
     await employee.update(req.body, {
       transaction,
@@ -315,19 +322,24 @@ exports.updateEmployee = async (req, res) => {
     });
 
     // Sync OrganizationMembership orgRole if employee position updated
-    if (req.body.position && req.body.position !== previousPosition) {
+    let membershipOrgRoleChanged = false;
+    if (positionChanged || req.body.orgRole) {
       const membership = await OrganizationMembership.findOne({
         where: { employeeId: employee.id },
         transaction
       });
       if (membership) {
-        membership.orgRole = staffCreationService.positionToOrgRole(req.body.position, req.body.role);
-        await membership.save({ transaction });
+        const targetOrgRole = req.body.orgRole || staffCreationService.positionToOrgRole(req.body.position, req.body.role);
+        if (membership.orgRole !== targetOrgRole) {
+          membership.orgRole = targetOrgRole;
+          await membership.save({ transaction });
+          membershipOrgRoleChanged = true;
+        }
       }
     }
 
     // Sync OrganizationMembership status if employee status updated
-    if (req.body.status) {
+    if (statusChanged) {
       const membershipStatus = req.body.status === 'active' ? 'active' : 'suspended';
       const membership = await OrganizationMembership.findOne({
         where: { employeeId: employee.id },
@@ -339,9 +351,14 @@ exports.updateEmployee = async (req, res) => {
       }
     }
 
+    const authzChanged = positionChanged || statusChanged || shopIdChanged || membershipOrgRoleChanged;
+    if (authzChanged) {
+      await tokenRevocationService.incrementAuthzVersion(employee.id, true, transaction);
+    }
+
     await transaction.commit();
 
-    if (req.body.status) {
+    if (statusChanged) {
       await tokenRevocationService.setUserStatus(employee.id, true, req.body.status);
     }
 
