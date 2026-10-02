@@ -54,8 +54,8 @@ async function verifyDiscountApprovalIfNeeded({
 
   // If the authenticated user making the request is already an active manager or admin,
   // their own authenticated session authorizes the discount.
-  if (user && !user.isEmployee && ['manager', 'admin'].includes(user.role)) {
-    return user.name || user.email || 'Admin/Manager';
+  if (user && ['manager', 'admin', 'org_admin'].includes(user.role)) {
+    return user.name || user.email || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Admin/Manager';
   }
 
   if (!managerApprovalId) {
