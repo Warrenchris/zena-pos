@@ -2,14 +2,15 @@ const express = require('express');
 const { body, query } = require('express-validator');
 const router = express.Router();
 const saleController = require('../controllers/saleController');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth, authzContext, authorize, checkRole } = require('../middleware/auth');
 const { checkPermission } = require('../middleware/rolePermissions');
 const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const { Sale } = require('../models');
 const { validateRequest, validateDateRange } = require('../middleware/validators');
 
-// All routes require authentication and active subscription
+// All routes require authentication, canonical authorization context, and active subscription
 router.use(auth);
+router.use(authzContext);
 router.use(requireActiveSubscription());
 
 // Validation middleware
@@ -240,66 +241,96 @@ const validatePaymentStatus = [
     .withMessage('Invalid payment status')
 ];
 
-// Basic routes with role-based access
+// Basic routes with central authorization primitive
 router.get('/',
-  checkRole(['admin', 'manager', 'org_admin', 'cashier']),
+  authorize({ permission: 'manage_sales', shopScope: 'current' }),
   saleController.getAllSales
 );
 
 router.get('/statistics',
-  checkRole(['admin', 'manager', 'org_admin']),
+  authorize({ permission: 'manage_sales', shopScope: 'current' }),
   validateDateRange,
   saleController.getSalesStatistics
 );
 
 router.get('/cashier-stats',
-  auth,
-  checkRole(['admin', 'manager', 'org_admin', 'cashier', 'employee']),
+  authorize({
+    permissions: { any: ['view_own_sales', 'manage_sales'] },
+    shopScope: 'current'
+  }),
   validateDateRange,
   saleController.getCashierStats
 );
 
 // Admin route to get all sales with filtering
 router.get('/admin/all',
-  checkRole(['admin', 'manager', 'org_admin']),
+  authorize({ permission: 'manage_sales', shopScope: 'current' }),
   validateDateRange,
   saleController.getAllSalesForAdmin
 );
 
 // Cashier route to get only their own sales
 router.get('/my-sales',
-  checkPermission('view_own_sales', { useCache: true }),
+  authorize({ permission: 'view_own_sales', shopScope: 'current' }),
   validateDateRange,
   saleController.getMySales
 );
 
 // Get all sales returns for shop
 router.get('/returns/all',
-  checkRole(['admin', 'manager', 'org_admin', 'cashier', 'employee']),
+  authorize({
+    permissions: { any: ['process_refunds', 'manage_sales'] },
+    shopScope: 'current'
+  }),
   saleController.getAllReturns
 );
 
 // Get payments for a specific sale
 router.get('/:saleId/payments',
+  authorize({
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Sale.findByPk(req.params.saleId),
+      getOwnerId: (s) => s.userId || s.employeeId,
+      managerPermission: 'manage_sales',
+      antiOracle: true
+    }
+  }),
   saleController.getSalePayments
 );
 
 // Get specific sale - Scoped to shop for authorized roles
 router.get('/:id',
-  checkRole(['admin', 'manager', 'org_admin', 'cashier', 'employee']),
+  authorize({
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Sale.findByPk(req.params.id),
+      getOwnerId: (s) => s.userId || s.employeeId,
+      managerPermission: 'manage_sales',
+      antiOracle: true
+    }
+  }),
   saleController.getSaleById
 );
 
 // Create new sale - Cashiers can only create sales for their shop
 router.post('/',
-  checkPermission('create_sales', { useCache: true }),
+  authorize({ permission: 'create_sales', shopScope: 'current' }),
   validateSale,
   saleController.createSale
 );
 
 // Update sale - Only managers and admin can update sales
 router.put('/:id',
-  checkRole(['admin', 'manager', 'org_admin']),
+  authorize({
+    permission: 'manage_sales',
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Sale.findByPk(req.params.id),
+      managerPermission: 'manage_sales',
+      antiOracle: true
+    }
+  }),
   body('status').optional().isIn(['completed', 'cancelled', 'refunded']),
   body('notes').optional().isString(),
   validateRequest,
@@ -308,30 +339,71 @@ router.put('/:id',
 
 // Delete sale - Only admin can delete sales
 router.delete('/:id',
-  checkRole(['admin', 'org_admin']),
+  authorize({
+    roles: ['admin', 'org_admin'],
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Sale.findByPk(req.params.id),
+      managerPermission: 'manage_sales',
+      antiOracle: true
+    }
+  }),
   saleController.deleteSale
 );
 
 router.patch('/:id/payment-status',
-  auth,
-  checkRole(['admin', 'manager', 'org_admin']),
+  authorize({
+    permission: 'manage_sales',
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Sale.findByPk(req.params.id),
+      managerPermission: 'manage_sales',
+      antiOracle: true
+    }
+  }),
   validatePaymentStatus,
   saleController.updatePaymentStatus
 );
 
 // POST /api/sales/:saleId/refund - Process itemized refund
 router.post('/:saleId/refund',
-  checkPermission('process_refunds', { useCache: true }),
+  authorize({
+    permission: 'process_refunds',
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Sale.findByPk(req.params.saleId),
+      managerPermission: 'process_refunds',
+      antiOracle: true
+    }
+  }),
   saleController.processRefund
 );
 
 // GET /api/sales/:saleId/refunds - Get all refunds for a sale
 router.get('/:saleId/refunds',
+  authorize({
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Sale.findByPk(req.params.saleId),
+      getOwnerId: (s) => s.userId || s.employeeId,
+      managerPermission: 'manage_sales',
+      antiOracle: true
+    }
+  }),
   saleController.getSaleRefunds
 );
 
 // GET /api/sales/:saleId/credit-note - Get credit note document data
 router.get('/:saleId/credit-note',
+  authorize({
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Sale.findByPk(req.params.saleId),
+      getOwnerId: (s) => s.userId || s.employeeId,
+      managerPermission: 'manage_sales',
+      antiOracle: true
+    }
+  }),
   saleController.getCreditNote
 );
 

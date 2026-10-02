@@ -249,8 +249,18 @@ async function evaluateAuthorization(req, options = {}) {
     }
   }
 
+  if (!permissionPassed) {
+    return {
+      allowed: false,
+      status: 403,
+      code: 'PERMISSION_DENIED',
+      message: 'Permission denied',
+      details: `User with role ${authz.role.effectiveRole} lacks required permission: ${missingPermName}`
+    };
+  }
+
   // If permission passed and no ownership check is needed, authorization succeeds
-  if (permissionPassed && !options.ownership && !options.custom) {
+  if (!options.ownership && !options.custom) {
     return { allowed: true };
   }
 
@@ -294,8 +304,12 @@ async function evaluateAuthorization(req, options = {}) {
         isOwner,
         managerPermission = 'manage_sales',
         ownerPermission,
-        antiOracle = Boolean(options.antiOracle)
+        antiOracle: ownershipAntiOracle
       } = options.ownership;
+
+      const antiOracle = ownershipAntiOracle !== undefined
+        ? Boolean(ownershipAntiOracle)
+        : (options.antiOracle !== undefined ? Boolean(options.antiOracle) : true);
 
       let resource = null;
       if (typeof getResource === 'function') {
@@ -321,8 +335,12 @@ async function evaluateAuthorization(req, options = {}) {
         }
 
         // Multi-tenant isolation: resource cannot belong to another organization
-        if (resource.organizationId !== undefined && resource.organizationId !== null) {
-          if (Number(resource.organizationId) !== Number(authz.tenant.organizationId)) {
+        const resourceOrgId = (resource.organizationId !== undefined && resource.organizationId !== null)
+          ? resource.organizationId
+          : resource.Shop?.organizationId;
+
+        if (resourceOrgId !== undefined && resourceOrgId !== null) {
+          if (Number(resourceOrgId) !== Number(authz.tenant.organizationId)) {
             if (antiOracle) {
               return {
                 allowed: false,
@@ -366,11 +384,21 @@ async function evaluateAuthorization(req, options = {}) {
         if (typeof isOwner === 'function') {
           userIsOwner = Boolean(await isOwner(authz, resource, req));
         } else if (typeof getOwnerId === 'function') {
-          const ownerId = await getOwnerId(req, resource);
+          let ownerId;
+          try {
+            ownerId = await getOwnerId(resource, req);
+          } catch (_) {
+            ownerId = await getOwnerId(req, resource);
+          }
+          if (ownerId === undefined && resource) {
+            ownerId = await getOwnerId(req, resource);
+          }
           userIsOwner = authz.ownership.isOwnerOf(ownerId);
         } else if (resource) {
-          const ownerId = resource.userId || resource.cashierId || resource.employeeId || resource.createdBy;
-          userIsOwner = authz.ownership.isOwnerOf(ownerId);
+          userIsOwner = authz.ownership.isOwnerOf(resource.userId) ||
+                        authz.ownership.isOwnerOf(resource.employeeId) ||
+                        authz.ownership.isOwnerOf(resource.cashierId) ||
+                        authz.ownership.isOwnerOf(resource.createdBy);
         }
       } catch (ownerErr) {
         logger.error('[AUTHZ] Error evaluating isOwner:', ownerErr);
