@@ -11,6 +11,7 @@
  */
 
 process.env.NODE_ENV = 'test';
+process.env.REDIS_DB = process.env.TEST_REDIS_DB || '1';
 
 const crypto = require('crypto');
 
