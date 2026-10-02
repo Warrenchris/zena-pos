@@ -87,6 +87,33 @@ function validateStartup() {
   }
   diagnostics.checks.push({ name: 'modules', ok: true, count: CRITICAL_MODULES.length });
 
+  // B6: Non-fatal email configuration check (A2: inline check — no emailService import,
+  // which would run transporter.verify() and interfere with the test harness).
+  // Never throws; always pushes ok: true so existing health/pass-fail logic is unaffected.
+  const smtpBasicConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT);
+  if (process.env.NODE_ENV === 'production') {
+    if (!smtpBasicConfigured) {
+      logger.error(
+        '[startup] SMTP is not configured in production — verification, password-reset, and billing ' +
+        'emails will NOT be sent. Set SMTP_HOST and SMTP_PORT to enable email delivery.'
+      );
+      diagnostics.checks.push({ name: 'email', ok: true, configured: false, warn: 'SMTP_HOST and SMTP_PORT are missing' });
+    } else {
+      const missingSmtpCreds = ['SMTP_FROM', 'SMTP_USER', 'SMTP_PASS'].filter((k) => !process.env[k]);
+      if (missingSmtpCreds.length > 0) {
+        logger.warn(
+          '[startup] SMTP host/port set but credentials incomplete — email delivery may fail. Missing: ' +
+          missingSmtpCreds.join(', ')
+        );
+        diagnostics.checks.push({ name: 'email', ok: true, configured: true, warn: 'missing: ' + missingSmtpCreds.join(', ') });
+      } else {
+        diagnostics.checks.push({ name: 'email', ok: true, configured: true });
+      }
+    }
+  } else {
+    diagnostics.checks.push({ name: 'email', ok: true, configured: smtpBasicConfigured });
+  }
+
   logger.info('[startup] Pre-flight validation passed.', diagnostics);
   return diagnostics;
 }
