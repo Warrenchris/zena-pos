@@ -16,6 +16,7 @@ const { logActivity } = require('../middleware/logger');
 const { validationResult } = require('express-validator');
 const entitlementService = require('../services/entitlementService');
 const { sendUpgradePrompt } = require('../utils/upgradePrompt');
+const tokenRevocationService = require('../services/tokenRevocationService');
 
 exports.getMine = async (req, res) => {
   const shop = await Shop.findByPk(req.user.shopId);
@@ -185,6 +186,9 @@ exports.createShop = async (req, res) => {
           shopId: newShop.id,
           isDefault: false
         }, { transaction: t });
+
+        // Admin creator received explicit shop access to new branch, increment epoch
+        await tokenRevocationService.incrementAuthzVersion(req.user.id, !!req.user.isEmployee, t);
       }
 
       // Step F: Bootstrap SystemSettings
@@ -589,11 +593,19 @@ exports.grantShopAccess = async (req, res) => {
         );
       }
 
-      return await ShopAccess.create({
+      const createdAccess = await ShopAccess.create({
         membershipId: targetMembership.id,
         shopId: shop.id,
         isDefault: Boolean(isDefault)
       }, { transaction: t });
+
+      const actorId = targetMembership.employeeId || targetMembership.userId;
+      const isEmployee = Boolean(targetMembership.employeeId);
+      if (actorId) {
+        await tokenRevocationService.incrementAuthzVersion(actorId, isEmployee, t);
+      }
+
+      return createdAccess;
     });
 
     return res.status(201).json({
@@ -648,16 +660,30 @@ exports.revokeShopAccess = async (req, res) => {
       return res.status(400).json({ error: 'Cannot revoke owner access.' });
     }
 
-    const deleted = await ShopAccess.destroy({
-      where: { shopId: shop.id, membershipId: targetMembership.id }
-    });
+    await sequelize.transaction(async (t) => {
+      const deleted = await ShopAccess.destroy({
+        where: { shopId: shop.id, membershipId: targetMembership.id },
+        transaction: t
+      });
 
-    if (!deleted) {
-      return res.status(404).json({ error: 'Shop access not found.' });
-    }
+      if (!deleted) {
+        const notFoundErr = new Error('Shop access not found.');
+        notFoundErr.statusCode = 404;
+        throw notFoundErr;
+      }
+
+      const actorId = targetMembership.employeeId || targetMembership.userId;
+      const isEmployee = Boolean(targetMembership.employeeId);
+      if (actorId) {
+        await tokenRevocationService.incrementAuthzVersion(actorId, isEmployee, t);
+      }
+    });
 
     return res.json({ message: 'Shop access revoked successfully' });
   } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({ error: error.message });
+    }
     console.error('Error revoking shop access:', error);
     return res.status(500).json({ error: 'Failed to revoke shop access', details: error.message });
   }

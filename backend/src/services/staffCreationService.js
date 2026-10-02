@@ -261,7 +261,8 @@ async function createStaffMember({ actor, body = {}, reqOrgId = null }) {
       salary,
       hireDate,
       status,
-      shopId: targetShopId
+      shopId: targetShopId,
+      authzVersion: 1
     }, { transaction: t });
 
     // Step B: Insert OrganizationMembership record
