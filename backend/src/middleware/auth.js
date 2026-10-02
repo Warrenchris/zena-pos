@@ -159,4 +159,6 @@ const ensureShopIsolation = (req, res, next) => {
   next();
 };
 
-module.exports = { auth, checkRole, ensureShopIsolation, authzContext };
+const authorize = require('./authorize');
+
+module.exports = { auth, checkRole, ensureShopIsolation, authzContext, authorize };
