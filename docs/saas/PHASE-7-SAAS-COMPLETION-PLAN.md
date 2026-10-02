@@ -33,7 +33,7 @@
 | 7C | Tax integrity and eTIMS groundwork | PARTIAL (Step 1 DONE; Step 2 BLOCKED) | `4483bbc` | `docs/saas/PHASE-7C-STEP1-TAX-INTEGRITY-WALKTHROUGH.md` |
 | 7D | Account, data and entitlement gaps | DONE | `0d107cb` | `docs/saas/PHASE-7D-ACCOUNT-DATA-ENTITLEMENT-WALKTHROUGH.md` |
 | 7E | Operations: offsite backups and dependency plan | DONE | `e56efe2` | `docs/saas/PHASE-7E-OPERATIONS-WALKTHROUGH.md` |
-| 7F | Final production readiness audit | DONE | `358c914` | `docs/saas/FINAL-PRODUCTION-READINESS-AUDIT.md` |
+| 7F | Final production readiness audit | DONE | `bdd974d` | `docs/saas/FINAL-PRODUCTION-READINESS-AUDIT.md` |
 
 ---
 
