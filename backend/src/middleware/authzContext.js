@@ -39,7 +39,9 @@ async function authzContext(req, res, next) {
 
     // 1. Authoritative Authorization Epoch Check
     let currentVersion = await tokenRevocationService.getAuthzVersion(id, !!isEmployee);
-    const sessionVersion = Number(tokenAuthzVersion || 1);
+    const sessionVersion = tokenAuthzVersion !== undefined && tokenAuthzVersion !== null
+      ? Number(tokenAuthzVersion)
+      : 1;
 
     if (sessionVersion < currentVersion) {
       logger.warn('[AUTHZ] Stale authzVersion detected from cache', {
