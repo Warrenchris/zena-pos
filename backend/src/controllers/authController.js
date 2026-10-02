@@ -155,6 +155,7 @@ exports.register = async (req, res) => {
         organizationId: createdOrg?.id || createdShop?.organizationId || null,
         isEmployee: false,
         orgRole: createdOrg ? 'owner' : null,
+        authzVersion: user.authzVersion || 1,
         jti
       },
       getPrivateKey(),
@@ -296,6 +297,8 @@ exports.login = async (req, res) => {
             shopId: user.shopId,
             organizationId: orgId || null,
             isEmployee: !!user.isEmployee,
+            orgRole: orgRole,
+            authzVersion: user.authzVersion || 1,
             jti,
             iat
           },
@@ -703,6 +706,8 @@ exports.switchShop = async (req, res) => {
         shopId: targetShopId,
         organizationId: orgId,
         isEmployee: !!req.user.isEmployee,
+        orgRole: membership.orgRole,
+        authzVersion: employeeEntity?.authzVersion || userEntity?.authzVersion || req.user.authzVersion || 1,
         jti
       },
       getPrivateKey(),

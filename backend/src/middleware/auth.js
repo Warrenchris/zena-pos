@@ -1,7 +1,9 @@
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const logger = require('../utils/logger');
 const tokenRevocationService = require('../services/tokenRevocationService');
+const authzContext = require('./authzContext');
 
 const auth = async (req, res, next) => {
   try {
@@ -109,7 +111,7 @@ const auth = async (req, res, next) => {
       return res.status(403).json({ error: 'Shop context required for this operation.' });
     }
 
-    next();
+    return authzContext(req, res, next);
   } catch (error) {
     next(error);
   }
@@ -117,7 +119,21 @@ const auth = async (req, res, next) => {
 
 const checkRole = (roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    // FAIL-CLOSED INVARIANT (Section 6.2):
+    if (!req.authz) {
+      logger.error('[SECURITY INVARIANT VIOLATION] req.authz is missing in checkRole', {
+        url: req.originalUrl,
+        method: req.method,
+        requestId: req.requestId || req.id
+      });
+      return res.status(500).json({
+        error: 'Internal authorization error: authorization context uninitialized.',
+        code: 'AUTHORIZATION_CONTEXT_MISSING'
+      });
+    }
+
+    const currentRole = req.authz.role.effectiveRole;
+    if (!roles.includes(currentRole)) {
       return res.status(403).json({ error: 'Access denied.' });
     }
     next();
@@ -143,4 +159,4 @@ const ensureShopIsolation = (req, res, next) => {
   next();
 };
 
-module.exports = { auth, checkRole, ensureShopIsolation };
+module.exports = { auth, checkRole, ensureShopIsolation, authzContext };

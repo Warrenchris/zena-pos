@@ -1,4 +1,5 @@
 const permissionCache = require('../services/permissionCache');
+const logger = require('../utils/logger');
 
 // Hardcoded role permissions (fallback for performance)
 // These are used as a fast lookup when database queries are not needed
@@ -84,32 +85,34 @@ const checkUserPermissionAsync = async (userId, userRole, permission, organizati
  * @param {boolean} options.useCache - If true, uses cached database permissions instead of hardcoded
  * @returns {Function} - Express middleware function
  */
+exports.ROLE_PERMISSIONS = ROLE_PERMISSIONS;
+
+/**
+ * Middleware to check if user has a specific permission
+ * Evaluates against authoritative req.authz.permissions.
+ * Fails closed if req.authz is missing.
+ * 
+ * @param {string} permission - Permission name to check
+ * @param {Object} options - Options object
+ * @returns {Function} - Express middleware function
+ */
 exports.checkPermission = (permission, options = {}) => {
-  const { useCache = false } = options;
-  
   return async (req, res, next) => {
     try {
-      if (!req.user || !req.user.role) {
-        console.error('No user or role found in request');
-        return res.status(401).json({ error: 'Authentication required' });
+      // FAIL-CLOSED INVARIANT (Section 6.2):
+      if (!req.authz) {
+        logger.error('[SECURITY INVARIANT VIOLATION] req.authz is missing in checkPermission', {
+          url: req.originalUrl,
+          method: req.method,
+          requestId: req.requestId || req.id
+        });
+        return res.status(500).json({
+          error: 'Internal authorization error: authorization context uninitialized.',
+          code: 'AUTHORIZATION_CONTEXT_MISSING'
+        });
       }
 
-      let hasPermission;
-      
-      if (useCache) {
-        const organizationId = req.organizationId || req.user?.organizationId;
-        if (!organizationId) {
-          return res.status(403).json({
-            error: 'Permission denied',
-            details: 'Organization context is required for permission check'
-          });
-        }
-        // Use cached database permissions scoped by organizationId
-        hasPermission = await checkUserPermissionAsync(req.user.id, req.user.role, permission, organizationId);
-      } else {
-        // Use hardcoded permissions (faster, synchronous)
-        hasPermission = checkUserPermissionSync(req.user.role, permission);
-      }
+      const hasPermission = req.authz.permissions.has(permission);
       
       if (hasPermission) {
         return next();
@@ -117,10 +120,10 @@ exports.checkPermission = (permission, options = {}) => {
 
       return res.status(403).json({ 
         error: 'Permission denied',
-        details: `User with role ${req.user.role} does not have permission: ${permission}`
+        details: `User with role ${req.authz.role.effectiveRole} does not have permission: ${permission}`
       });
     } catch (error) {
-      console.error('Permission check error:', error);
+      logger.error('Permission check error:', error);
       return res.status(500).json({ 
         error: 'Error checking permissions',
         details: error.message 

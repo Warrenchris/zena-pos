@@ -58,6 +58,11 @@ const Employee = sequelize.define('Employee', {
       model: 'Shops',
       key: 'id'
     }
+  },
+  authzVersion: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: false,
+    defaultValue: 1
   }
 }, {
   timestamps: true,

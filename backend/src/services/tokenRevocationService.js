@@ -9,6 +9,7 @@ const Organization = require('../models/Organization');
 const STATUS_CACHE_TTL = 300; // 5 minutes for active status
 const TOMBSTONE_CACHE_TTL = 86400; // 24 hours for inactive/suspended status
 const inMemoryCutoffs = new Map();
+const inMemoryAuthzVersions = new Map();
 
 const tokenRevocationService = {
   /**
@@ -262,6 +263,145 @@ const tokenRevocationService = {
     } catch (err) {
       logger.warn(`[AUTH-01] Error getting organization status for ${orgId}:`, err.message);
       return 'active';
+    }
+  },
+
+  /**
+   * Get authoritative authorization version (epoch) for user or employee.
+   * Checks Redis cache first, then DB fallback.
+   */
+  async getAuthzVersion(id, isEmployee) {
+    if (!id) return 1;
+    const key = `authz_version:${isEmployee ? 'employee' : 'user'}:${id}`;
+
+    // 1. Check Redis cache
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        const cached = await redisClient.get(key);
+        if (cached !== null && cached !== undefined) {
+          return Number(cached);
+        }
+      }
+    } catch (err) {
+      logger.warn(`[AUTHZ-EPOCH] Redis error getting authzVersion for ${id}:`, err.message);
+    }
+
+    // Check in-memory fallback cache (used when Redis is absent/down or in unit tests)
+    if (inMemoryAuthzVersions.has(key)) {
+      return inMemoryAuthzVersions.get(key);
+    }
+
+    // 2. Authoritative Database lookup
+    try {
+      let version = 1;
+      if (isEmployee) {
+        const emp = await Employee.findByPk(id, { attributes: ['id', 'authzVersion'] });
+        if (emp && emp.authzVersion !== undefined && emp.authzVersion !== null) {
+          version = Number(emp.authzVersion);
+        }
+      } else {
+        const user = await User.findByPk(id, { attributes: ['id', 'authzVersion'] });
+        if (user && user.authzVersion !== undefined && user.authzVersion !== null) {
+          version = Number(user.authzVersion);
+        }
+      }
+
+      // Store in memory
+      inMemoryAuthzVersions.set(key, version);
+
+      // Cache authoritative DB result in Redis
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.setex(key, STATUS_CACHE_TTL, String(version));
+      }
+
+      return version;
+    } catch (dbErr) {
+      logger.error(`[AUTHZ-EPOCH] DB error checking authzVersion for ${id}:`, dbErr.message);
+      throw dbErr;
+    }
+  },
+
+  /**
+   * Increment authoritative authzVersion in DB and invalidate/update cache.
+   * Supports execution within an optional Sequelize transaction.
+   */
+  async incrementAuthzVersion(id, isEmployee, transaction = null) {
+    if (!id) return 1;
+    const key = `authz_version:${isEmployee ? 'employee' : 'user'}:${id}`;
+
+    let updatedVersion = 1;
+    if (isEmployee) {
+      await Employee.increment('authzVersion', { by: 1, where: { id }, transaction });
+      const emp = await Employee.findByPk(id, { attributes: ['authzVersion'], transaction });
+      updatedVersion = emp ? Number(emp.authzVersion) : 1;
+    } else {
+      await User.increment('authzVersion', { by: 1, where: { id }, transaction });
+      const user = await User.findByPk(id, { attributes: ['authzVersion'], transaction });
+      updatedVersion = user ? Number(user.authzVersion) : 1;
+    }
+
+    // Update in-memory fallback
+    inMemoryAuthzVersions.set(key, updatedVersion);
+
+    // Evict or update Redis cache
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.setex(key, STATUS_CACHE_TTL, String(updatedVersion));
+      }
+    } catch (err) {
+      logger.warn(`[AUTHZ-EPOCH] Redis error updating authzVersion for ${id}:`, err.message);
+    }
+
+    logger.info(`[AUTHZ-EPOCH] Incremented authzVersion for ${isEmployee ? 'employee' : 'user'} ${id} to ${updatedVersion}.`);
+    return updatedVersion;
+  },
+
+  /**
+   * Invalidate authzVersion in Redis and in-memory cache.
+   */
+  async invalidateAuthzVersionCache(id, isEmployee) {
+    if (!id) return;
+    const key = `authz_version:${isEmployee ? 'employee' : 'user'}:${id}`;
+    inMemoryAuthzVersions.delete(key);
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.del(key);
+      }
+    } catch (err) {
+      logger.warn(`[AUTHZ-EPOCH] Redis error deleting authzVersion for ${id}:`, err.message);
+    }
+  },
+
+  /**
+   * Set authzVersion directly (primarily for testing and cache priming).
+   */
+  async setAuthzVersion(id, isEmployee, version) {
+    if (!id) return;
+    const key = `authz_version:${isEmployee ? 'employee' : 'user'}:${id}`;
+    const verNum = Number(version);
+    inMemoryAuthzVersions.set(key, verNum);
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.setex(key, STATUS_CACHE_TTL, String(verNum));
+      }
+    } catch (err) {
+      // ignore
+    }
+  },
+
+  /**
+   * Clear authzVersion from in-memory and Redis caches (primarily for testing cleanup).
+   */
+  async clearAuthzVersion(id, isEmployee) {
+    if (!id) return;
+    const key = `authz_version:${isEmployee ? 'employee' : 'user'}:${id}`;
+    inMemoryAuthzVersions.delete(key);
+    try {
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.del(key);
+      }
+    } catch (err) {
+      // ignore
     }
   }
 };
