@@ -356,17 +356,36 @@ exports.login = async (req, res) => {
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ where: { email } });
-    if (!user) {
-      // Hide user existence
+
+    // B1: Look up User first (unchanged path).
+    let account = await User.findOne({ where: { email } });
+    let isEmployee = false;
+
+    if (!account) {
+      // B1: Fall back to Employee lookup.
+      const employee = await Employee.findOne({ where: { email } });
+      if (employee && employee.status === 'active') {
+        account = employee;
+        isEmployee = true;
+      }
+      // Inactive employee or unknown email → fall through to generic 200, no email.
+    }
+
+    if (!account) {
+      // Hide account existence (covers not-found and inactive-employee cases).
       return res.json({ message: 'If the email exists, a reset link has been sent.' });
     }
-    // Create a short-lived token
+
+    // Create a short-lived token. Carry isEmployee so resetPassword routes to the
+    // correct model — it already reads this claim (see resetPassword implementation).
     const jti = crypto.randomUUID();
+    const tokenPayload = { id: account.id, purpose: 'password_reset', jti };
+    if (isEmployee) tokenPayload.isEmployee = true;
+
     const token = jwt.sign(
-      { id: user.id, purpose: 'password_reset', jti },
+      tokenPayload,
       getPrivateKey(),
-      { 
+      {
         algorithm: 'RS256',
         expiresIn: '15m'
       }
@@ -376,7 +395,7 @@ exports.forgotPassword = async (req, res) => {
     const resetUrl = `${resetBaseUrl}/reset-password?token=${token}`;
 
     // Dispatch email asynchronously without awaiting to prevent response timing enumeration (SEC-04)
-    emailService.sendPasswordReset({ to: user.email, resetUrl })
+    emailService.sendPasswordReset({ to: account.email, resetUrl })
       .catch((emailError) => {
         // Never leak whether the email actually sent; log server-side only, and never log the token itself.
         logger.error('Failed to send password reset email:', emailError.message);
