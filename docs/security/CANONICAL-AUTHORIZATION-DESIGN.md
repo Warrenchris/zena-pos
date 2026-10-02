@@ -1,31 +1,29 @@
-# Zana POS — Canonical Authorization Context Design
+# Zana POS — Canonical Authorization Context Design & Security Hardening
 
 ## 1. Executive Summary & Gate 1 Mandate
 
-- **Document**: `docs/security/CANONICAL-AUTHORIZATION-DESIGN.md`
-- **Phase**: **Gate 1 — Canonical Authorization Context Design**
-- **Baseline Commit**: `d81f08b` (October 2, 2026)
-- **Status**: **Draft Design / Awaiting Gate 1 Review & Approval**
+- **Document Path**: `docs/security/CANONICAL-AUTHORIZATION-DESIGN.md`
+- **Phase**: **Gate 1 — Canonical Authorization Context Design (Revised & Hardened)**
+- **Baseline Commit**: `9e16be2` (October 2, 2026)
+- **Status**: **Revised Architecture Design / Awaiting Gate 1 Formal Sign-Off**
 
-### 1.1 Objective
-Following the approval of Gate 0 (`docs/security/AUTHORIZATION-MATRIX.md`), this document establishes the centralized, canonical authorization architecture for Zana POS. 
+### 1.1 Objective & Scope
+Following conditional approval of Gate 1, this document provides the revised, hardened architectural specification for the centralized authorization system in Zana POS.
 
-The primary architectural shift is:
-> **Decouple authorization from static, unverified JWT claims (`req.user.role`) and converge all authorization decisions onto a centralized, authoritative Authorization Context (`req.authz`).**
+The foundational principle of this design is:
+> **Decouple authorization from static, unverified JWT claims (`req.user.role`) and converge all authorization evaluations onto an authoritative, tamper-proof Authorization Context (`req.authz`), backed strictly by the database as the authoritative source of truth.**
 
-This design guarantees that:
-1. Role demotions, employee terminations, and branch reassignment take effect immediately (zero stale privilege retention).
-2. The authorization pipeline evaluates session liveness, organization membership, branch delegation, granular permissions, and resource ownership in a single coherent flow.
-3. 100% backward compatibility is maintained for existing POS terminals, mobile clients, and existing tests.
-4. Zero application code is modified prior to formal Gate 1 approval.
+This hardening addresses four critical architectural requirements:
+1. **Separation of Concerns**: Unambiguous division of labor between `authzVersion` (epoch tracking for authorization state mutations) and token revocation/cutoff (session and credential security invalidation).
+2. **Authoritative Transaction Semantics**: Strict `DB-first -> commit -> cache-invalidate` ordering where Redis is strictly an ephemeral cache, never the authority.
+3. **Strict Role Disambiguation**: Formal separation of governance authority (`OrganizationMembership.orgRole`), operational profile (`effectiveRole`), and granular capabilities (`permissions`), eradicating the false equivalence of `org_admin === manager`.
+4. **Fail-Closed Context Invariants**: Elimination of all fallback paths to raw JWT claims. If `req.authz` is missing or unconstructed, security-sensitive authorization fails closed immediately.
 
 ---
 
-## 2. Canonical Authorization Architecture
+## 2. Canonical Authorization Pipeline
 
-### 2.1 The End-to-End Authorization Pipeline
-
-Every incoming request to a protected API endpoint traverses the following deterministic 8-step pipeline:
+Every request targeting a protected API endpoint traverses the following deterministic 8-step pipeline:
 
 ```text
 [1] Authentication (Bearer JWT)
@@ -35,341 +33,431 @@ Every incoming request to a protected API endpoint traverses the following deter
 [2] Session Liveness & Revocation Cutoff
      │ • Token JTI blacklist check (logout)
      │ • User revocation cutoff check (password reset, account close)
-     │ • Authorization version verification (authzVersion against DB/cache)
+     │ • Authorization epoch check (JWT authzVersion vs authoritative version)
      ▼
 [3] Tenant Context & Organization Membership
      │ • Organization existence & subscription status (active, past_due, suspended, deleted)
      │ • OrganizationMembership lookup for caller (userId or employeeId)
      │ • Membership status check (active vs suspended)
      ▼
-[4] Organization Role (orgRole) & Operational Role Resolution
+[4] Governance Role (orgRole) & Operational Role Resolution
      │ • Resolution of orgRole: 'owner' | 'admin' | 'member' | 'billing_admin'
      │ • Resolution of effectiveRole: 'admin' | 'manager' | 'cashier' | 'org_admin'
      │ • Admin equivalence to owner preserved (admin -> 'all' permissions)
      ▼
 [5] Branch / Shop Scope Delegation
-     │ • activeShopId resolution from JWT claim or header
+     │ • activeShopId resolution from request / JWT claim
      │ • ShopAccess verification:
      │   - Owner: universal implicit bypass across all organization branches
-     │   - Admin/Member: verified against explicit ShopAccess table records
+     │   - Admin/Manager/Cashier: verified against explicit ShopAccess table records
+     │   - billing_admin: zero operational branch access
      │ • Anti-Oracle enforcement: unauthorized branch queries return 404 Not Found
      ▼
 [6] Granular Permission Resolution
      │ • Dynamic lookup against RolePermission matrix via Redis cache:
      │   Key: permissions:org:{organizationId}:role:{effectiveRole}
      │ • Admin role evaluates to true immediately ('all')
-     │ • Missing canonical permissions (coupons, discounts, shop access, held carts)
+     │ • DB fallback if cache miss or Redis unavailable (Fail-Closed)
      ▼
 [7] Resource Scope & Ownership Evaluation
-     │ • Tenant isolation (WHERE organizationId = req.authz.organizationId)
-     │ • Branch isolation (WHERE shopId = req.authz.activeShopId)
-     │ • Fine-grained ownership (e.g., Cashier owns HeldCart vs Manager override)
+     │ • Tenant isolation (WHERE organizationId = req.authz.tenant.organizationId)
+     │ • Branch isolation (WHERE shopId = req.authz.scope.activeShopId)
+     │ • Fine-grained ownership (Cashier owns HeldCart vs Manager override)
      ▼
 [8] FINAL ACCESS DECISION: ALLOW or DENY (401 / 403 / 404)
 ```
 
 ---
 
-## 3. Authorization-Context Design (`req.authz`)
+## 3. FIX #1 — Separation of Responsibilities: `authzVersion` vs. Token Revocation
 
-To prevent fragmented database queries across middleware and controllers, a centralized object—`req.authz`—is constructed early in the request lifecycle and attached to the Express request.
+To prevent competing or ambiguous invalidation systems, the responsibilities of `authzVersion` and token revocation/cutoff are strictly partitioned:
 
-### 3.1 Interface Specification
+```text
+                             AUTHORIZATION CHANGE
+                                      │
+                     ┌────────────────┴────────────────┐
+                     ↓                                 ↓
+               authzVersion                       Token Cutoff
+            (Authorization Epoch)             (Session Invalidation)
+                     │                                 │
+                     │ • Role/Position change          │ • Password change / reset
+                     │ • orgRole change                │ • Logout / Logout-all
+                     │ • ShopAccess grant/revoke       │ • Account termination
+                     │ • Membership suspended          │ • Organization closure
+                     │ • RolePermission matrix change  │ • Emergency security event
+                     │                                 │
+                     └────────────────┬────────────────┘
+                                      ↓
+                           Existing token rejected
+```
 
-```typescript
-interface AuthorizationContext {
-  // 1. Identity
-  identity: {
-    id: number | string;            // User.id (integer) or Employee.id (UUID)
-    userId: number | null;          // Populated if User entity
-    employeeId: string | null;      // Populated if Employee entity
-    isEmployee: boolean;            // Discriminator
-    email: string;
-    name: string;
-  };
+### 3.1 `authzVersion` (Canonical Authorization Epoch)
+`authzVersion` is an unsigned integer stored in the database on `Users` and `Employees` records (starting at `1`) and stamped into the JWT payload upon minting.
+* **Scope of Responsibility**:
+  * Alterations to `User.role` or `Employee.position`.
+  * Alterations to `OrganizationMembership.orgRole` or `OrganizationMembership.status`.
+  * Granting, revoking, or updating `ShopAccess` branch assignments.
+  * Tenant-level permission matrix updates that alter the user's role bundle.
+* **Mechanism**:
+  * An authorization-changing event increments the entity's `authzVersion` in the database.
+  * Middleware compares the JWT's `decoded.authzVersion` against the authoritative `authzVersion`.
+  * If `decoded.authzVersion < currentAuthzVersion`, the session's authorization claims are stale: the request is rejected with `401 Unauthorized` (`code: 'AUTHZ_VERSION_STALE'`), requiring the client to refresh its session.
 
-  // 2. Session & Revocation State
-  session: {
-    authzVersion: number;           // Current authorization epoch
-    iat: number;                    // Token issued-at timestamp (seconds)
-    exp: number;                    // Token expiration timestamp (seconds)
-    jti: string;                    // Unique token identifier
-  };
+### 3.2 Token Revocation & Cutoff (Security & Session Invalidation)
+Managed by `tokenRevocationService` via Redis and in-memory tombstones.
+* **Scope of Responsibility**:
+  * User logout (single token JTI blacklist via `revokeToken(jti, exp)`).
+  * Password change or password reset (user-level cutoff timestamp via `revokeAllUserTokens(id, isEmployee)`).
+  * Organization closure or account termination (all memberships revoked).
+  * Emergency incident response (immediate invalidation of all active credentials).
+* **Mechanism**:
+  * Sets a Unix cutoff timestamp `revoked_tokens_cutoff:{type}:{id}`.
+  * Any token issued with `iat <= cutoff` is immediately rejected with `401 Unauthorized` (`code: 'TOKEN_REVOKED_BY_CUTOFF'`).
 
-  // 3. Organization & Governance Context
-  tenant: {
-    organizationId: number;
-    organizationName: string;
-    organizationStatus: 'active' | 'trialing' | 'past_due' | 'suspended' | 'canceled' | 'deleted';
-    membershipId: string;           // UUID of OrganizationMembership record
-    orgRole: 'owner' | 'admin' | 'member' | 'billing_admin';
-    membershipStatus: 'active' | 'suspended';
-    isOwner: boolean;               // orgRole === 'owner'
-    isOrgAdmin: boolean;            // orgRole === 'owner' || orgRole === 'admin'
-  };
+### 3.3 Authority Relationship
+* **`authzVersion` is the canonical mechanism for authorization state changes.**
+* **Token revocation is the security mechanism for session destruction and credential resets.**
+* Neither mechanism allows Redis to become the authority: **The database is the ultimate authority for `authzVersion`, and Redis serves exclusively as a caching layer.**
 
-  // 4. Effective Operational Role
-  role: {
-    rawRole: string;                // Legacy User.role or Employee.position
-    effectiveRole: 'admin' | 'manager' | 'cashier' | 'org_admin';
-  };
+---
 
-  // 5. Branch & Shop Scoping
-  scope: {
-    activeShopId: number | null;    // Branch context for current request
-    homeShopId: number;             // Default/home shop from user record
-    accessibleShopIds: number[];    // All branch IDs user has rights to access
-    hasShopAccess(targetShopId: number): boolean;
-  };
+## 4. FIX #2 — Database Authority, Transaction Semantics & Failure Modes
 
-  // 6. Granular Permission Evaluation
-  permissions: {
-    granted: Set<string>;           // Cached permission bundle for effectiveRole
-    has(permissionName: string): boolean;
-    hasAny(...permissionNames: string[]): boolean;
-    hasAll(...permissionNames: string[]): boolean;
-  };
+### 4.1 Transaction Execution Pattern
+Authorization mutations must guarantee consistency across the database and cache. All state mutations MUST follow this strict sequence:
 
-  // 7. Resource Ownership & Manager Override Helper
-  ownership: {
-    isOwnerOf(resourceOwnerId: string | number): boolean;
-    canManage(resourceOwnerId: string | number, managerPermission?: string): boolean;
-  };
+```text
+1. BEGIN DB TRANSACTION
+      ↓
+2. Apply authorization mutation (e.g. update Employee.position, update ShopAccess)
+      ↓
+3. Increment authzVersion on target User / Employee (within the same transaction)
+      ↓
+4. COMMIT DB TRANSACTION
+      ↓
+5. Invalidate / update Redis cache (authz_version and permission keys)
+```
+
+> **Core Principle**: Database state is authoritative. Redis is an ephemeral cache only.
+
+### 4.2 Failure Modes and Fail-Safe Behavior
+
+| Failure Scenario | System Behavior | Security Outcome |
+|---|---|---|
+| **DB Transaction Rollback** | Transaction aborts before commit. `authzVersion` is not incremented in the database. Redis is **NOT** touched. Caller receives error. | **Safe**: No partial authorization state exists. |
+| **Redis Unavailable** | System logs a warning and falls back to direct database reads for `authzVersion` and `RolePermission`. | **Safe**: Authorization checks continue using DB truth. Under no circumstances does Redis unavailability grant unauthorized access. |
+| **Redis Contains Stale Data** | If Redis caches an old `authzVersion` or old role permissions, the cache key TTL (max 300s) limits exposure. For security-sensitive actions, database validation is authoritative. | **Safe**: `Redis says authorized` can NEVER override `Database says unauthorized`. |
+| **Process Crash After Commit but Before Redis Invalidation** | DB holds the new `authzVersion`. Old Redis cache expires via TTL (300s). In addition, any new token issued reads the DB version. | **Safe**: Eventual consistency within TTL window; DB state is authoritative on cache miss. |
+| **Database Query Error during Authz** | If the database fails during context hydration or fallback, the request immediately terminates. | **Fail-Closed**: Returns `500 Internal Server Error` or `503 Service Unavailable`. Zero requests are allowed through unverified. |
+
+---
+
+## 5. FIX #3 — Strict Role Semantics & Governance vs. Operational Separation
+
+To eliminate ambiguity across the codebase, three distinct authorization dimensions are formally defined:
+
+### 5.1 Governance Role (`OrganizationMembership.orgRole`)
+* **Core Question**: *What administrative authority does this actor possess over the organization entity?*
+* **Storage**: `OrganizationMemberships.orgRole` (ENUM: `'owner'`, `'admin'`, `'member'`, `'billing_admin'`).
+* **Definitions**:
+  * **`owner`**: The creator / primary legal owner of the organization. Holds absolute administrative authority, universal branch access bypass, and exclusive rights to data export, account closure, and subscription management.
+  * **`admin`**: A delegated organizational administrator. Can manage staff, assign branch access, and view organizational insights within authorized branches. Cannot modify the owner account or close the organization.
+  * **`member`**: Standard operational staff member (cashier, manager). Holds zero organizational governance rights.
+  * **`billing_admin`**: Specialized administrative actor with authority over invoices, payment methods, and subscription renewal. Holds **zero operational POS access**.
+
+### 5.2 Operational Role (`effectiveRole`)
+* **Core Question**: *What operational profile does this actor use when interacting with the POS and store operations?*
+* **Values**: `'admin'`, `'org_admin'`, `'manager'`, `'cashier'`.
+* **Resolution**:
+  * Account Owner (`orgRole === 'owner'`) -> `effectiveRole = 'admin'`
+  * Delegated Admin (`orgRole === 'admin'`) -> `effectiveRole = 'org_admin'`
+  * Store Manager (`orgRole === 'member'` AND position/role `'manager'`) -> `effectiveRole = 'manager'`
+  * Cashier / Staff (`orgRole === 'member'` AND position/role `'cashier'`) -> `effectiveRole = 'cashier'`
+
+### 5.3 Granular Permissions
+* **Core Question**: *What specific business operation is this actor permitted to execute?*
+* **Examples**: `manage_coupons`, `manage_discounts`, `manage_shop_access`, `manage_held_carts`, `create_sales`, `view_sales`, `manage_sales`, `process_refunds`, `manage_settings`, `view_dashboard`, `view_reports`.
+
+### 5.4 Disambiguation: `org_admin` vs. `manager`
+> **CRITICAL ARCHITECTURAL DIRECTIVE**:  
+> `org_admin` and `manager` are **NOT** semantically equivalent.  
+> 
+> * `org_admin` is a **governance role** representing a delegated organization administrator who can manage staff, assign shop access, and view cross-branch reporting for authorized shops.
+> * `manager` is a **branch-level operational supervisor** who runs day-to-day store operations, overrides cashier carts, and processes refunds.
+> 
+> The mapping of `org_admin -> manager` in `permissionCache.js` (`ROLE_NORMALIZATION_MAP`) is strictly a **backward-compatible permission bundle mapping** to grant operational store abilities without creating redundant duplicate permission sets. It does **NOT** downgrade an `org_admin` to a manager, nor does it elevate a `manager` to an organizational administrator.
+
+---
+
+## 6. FIX #4 — Fail-Closed Context Invariant on Missing `req.authz`
+
+### 6.1 Elimination of JWT Fallback Bypass
+The previous draft contained a dangerous fallback pattern:
+```javascript
+// DANGEROUS PATTERN — ELIMINATED:
+const currentRole = req.authz ? req.authz.role.effectiveRole : req.user?.role;
+```
+
+**This pattern is completely eradicated.** Allowing authorization middleware to fall back to `req.user.role` (decoded JWT claims) preserves the exact stale-token vulnerability Gate 1 was mandated to solve.
+
+### 6.2 Fail-Closed Invariant Specification
+Every authorization middleware (`checkPermission`, `checkRole`, `requireOrgAdmin`, `requireOrgOwner`, or resource guard) MUST enforce this invariant:
+
+```javascript
+// CANONICAL FAIL-CLOSED PATTERN:
+if (!req.authz) {
+  logger.error('[SECURITY INVARIANT VIOLATION] req.authz is missing in authorization middleware', {
+    url: req.originalUrl,
+    method: req.method,
+    requestId: req.requestId || req.id
+  });
+  return res.status(500).json({
+    error: 'Internal authorization error: authorization context uninitialized.',
+    code: 'AUTHORIZATION_CONTEXT_MISSING'
+  });
 }
 ```
 
-### 3.2 Backward Compatibility Guarantees
-To prevent breaking existing controllers and external integrations, the context builder maintains legacy request properties:
-* `req.user`: Preserved with identical shape (`id`, `name`, `email`, `role`, `orgRole`, `shopId`, `organizationId`, `isEmployee`).
-* `req.shopId`: Synchronized with `req.authz.scope.activeShopId`.
-* `req.organizationId`: Synchronized with `req.authz.tenant.organizationId`.
-* `req.membership`: Synchronized with `req.authz.tenant`.
+### 6.3 Security Defenses Achieved
+This invariant rigorously protects the application against:
+1. **Middleware Ordering Errors**: Mounting `checkRole()` or `checkPermission()` before `authzContext` immediately fails closed with an HTTP 500 error, alerting engineers during testing rather than silently granting access via stale JWT claims.
+2. **Accidentally Mounted Routes**: Routes mounted without the full authentication and context pipeline cannot be accessed.
+3. **Future Developer Mistakes**: Future contributors cannot accidentally bypass context checks by relying on `req.user.role`.
+
+> [!IMPORTANT]
+> `req.user` is preserved solely for backward-compatible *data consumption* (e.g., retrieving `req.user.email` or `req.user.name` in legacy controllers). It is **NEVER** used as an authorization fallback.
 
 ---
 
-## 4. Role → Permission Resolution Strategy
+## 7. Middleware Contract & Request Lifecycle
 
-### 4.1 Resolution Matrix
-The system explicitly reconciles the 5 role dimensions without destructive schema alterations:
+The request lifecycle is partitioned into distinct, single-responsibility middleware tiers:
 
-| Actor Identity | `User.role` | `Employee.position` | `OrganizationMembership.orgRole` | Resolved `effectiveRole` | `RolePermission` Source | Shop Delegation Boundary |
-|---|---|---|---|---|---|---|
-| **Platform Operator** | `super_admin` | *N/A* | *None* | `super_admin` | Platform isolated | Out of tenant scope |
-| **Organization Owner** | `admin` | *N/A* | `owner` | `admin` | Automatic `['all']` | Universal bypass across all branches |
-| **Delegated Admin** | *N/A* or `manager` | `admin` | `admin` | `org_admin` | Mapped to `manager` | Restricted to `ShopAccess` branches |
-| **Branch Manager** | `manager` | `manager` | `member` | `manager` | `manager` table rows | Restricted to `ShopAccess` branches |
-| **Cashier / Staff** | `cashier` | `cashier` | `member` | `cashier` | `cashier` table rows | Restricted to home `ShopAccess` branch |
+```text
+Request
+  │
+  ▼ [Tier 1] requestContext
+  │   • Correlation ID (X-Request-Id), request start time
+  ▼ [Tier 2] auth (Authentication)
+  │   • Verify JWT RS256 signature, expiry, purpose
+  │   • Verify token JTI blacklist and password cutoff timestamp
+  │   • Hydrate base identity (id, email, isEmployee)
+  ▼ [Tier 3] authzContext (Canonical Context Builder)
+  │   • Verify authzVersion against DB/cache (reject if stale)
+  │   • Hydrate Organization & verify subscription status
+  │   • Hydrate OrganizationMembership & verify active status
+  │   • Resolve governance orgRole and operational effectiveRole
+  │   • Resolve ShopAccess & build accessibleShopIds
+  │   • Load RolePermission bundle from DB/Redis
+  │   • Construct and attach immutable req.authz
+  ▼ [Tier 4] checkPermission / checkRole (Action Authorization)
+  │   • Fail-closed if req.authz is undefined
+  │   • Verify actor possesses required permission for action
+  ▼ [Tier 5] Resource Authorization (Scope & Ownership)
+  │   • Verify target shopId is in req.authz.scope.accessibleShopIds (or owner bypass)
+  │   • Verify target entity ownership (e.g. cashierId on HeldCart)
+  ▼ [Tier 6] Controller
+      • Execute business logic against pre-authorized, pre-scoped request
+```
 
-### 4.2 Key Architectural Decisions
-1. **Admin -> 'all' is Preserved by Design**:
-   The owner of an organization holds `User.role === 'admin'` and `orgRole === 'owner'`. They receive universal permission bypass (`['all']`). This is an intentional multi-tenant owner capability, not a vulnerability.
-2. **`org_admin` Compatibility**:
-   Employees assigned `position: 'admin'` are granted `orgRole: 'admin'`. In `permissionCache.js`, `org_admin` maps to `manager` permissions, ensuring they receive branch-level management authority without obtaining owner-level unscoped powers.
-3. **No Role Renaming**:
-   Existing role enum values in `User.role` (`admin`, `manager`, `cashier`, `super_admin`) and `OrganizationMembership.orgRole` (`owner`, `admin`, `member`, `billing_admin`) remain strictly unmodified.
-
----
-
-## 5. Organization & Branch Scope Strategy
-
-### 5.1 Branch Access Invariants
-1. **Implicit Owner Bypass**: Organization owners (`orgRole === 'owner'`) inherently possess access to every branch registered under their `organizationId`. They do not require rows in `ShopAccess`.
-2. **Explicit Delegation**: For all other staff (`org_admin`, `manager`, `cashier`), branch access is granted strictly through `ShopAccess` records linked to their `OrganizationMembership.id`.
-3. **Default Branch Initialization**: Upon staff creation via `staffCreationService`, a `ShopAccess` record is atomically created for their assigned `shopId` (`isDefault: true`).
-
-### 5.2 Anti-Oracle Enumeration Policy
-* When a user attempts to access or mutate a branch (`shopId`) outside their `accessibleShopIds`, or a resource belonging to another branch/organization:
-  * The response **MUST BE `404 Not Found`**, never `403 Forbidden`.
-  * Rationale: Returning `403` informs an attacker that the targeted resource ID exists in another tenant or branch. Returning `404` prevents tenant resource enumeration (verified in `phase6bTenantOracleSecurity.test.js`).
-
----
-
-## 6. Resource Ownership Strategy
-
-Fine-grained ownership rules govern records that belong to individual cashiers within a branch:
-
-### 6.1 Held Carts Ownership Model (Finding I Remediation)
-A held cart represents temporary POS checkout state containing `shopId` and `cashierId`.
-* **Cashier Rule**:
-  * `GET /api/held-carts`: Automatically appends SQL filter `WHERE cashierId = req.authz.identity.id`. Cashiers only see their own carts.
-  * `POST /api/held-carts/:id/recall` & `DELETE /api/held-carts/:id`: Verifies `cart.cashierId === req.authz.identity.id`. If non-matching, returns `404 Not Found`.
-* **Manager / Owner Override Rule**:
-  * Users possessing `manage_held_carts` (or `admin`/`manager`) can view all held carts across their authorized branch and recall/delete any held cart.
-
-### 6.2 Sales History Ownership Model
-* Cashiers querying `GET /api/sales/my-sales` (`view_own_sales`) are strictly constrained to sales where `userId = req.authz.identity.id` or `employeeId = req.authz.identity.id`.
-* Store-wide sales history (`GET /api/sales`) requires `view_sales` or `manage_sales`.
-
-### 6.3 Employee Profile Ownership Model
-* `GET /api/employees/:id`: Accessible if `targetId === req.authz.identity.id` (self-service profile view) OR if caller possesses `view_employees` / `manage_employees`.
+### Layer Responsibilities:
+* **`auth`**: Answers *"Who is making this request, is their cryptographic session valid, and has their token been revoked?"*
+* **`authzContext`**: Answers *"What is this actor's authoritative organizational state, what branch rights do they possess, and what permissions are in their bundle right now?"*
+* **`checkPermission`**: Answers *"Does this actor have permission to execute action X?"*
+* **`resource authorization`**: Answers *"Does this actor have authority over THIS specific resource instance?"*
 
 ---
 
-## 7. Stale-Session Strategy & `authzVersion`
+## 8. Verification Requirements for Financial Endpoints (Gate 2/3 Mandate)
 
-### 7.1 The Delayed Demotion Vulnerability
-Currently, `userController.updateRole` and `employeeController.updateEmployee` update database records but do not revoke active JWTs. Because `checkRole()` synchronously reads `req.user.role` from the JWT, a demoted administrator retains administrative power for up to 2 hours.
+Before applying authorization middleware to financial endpoints (`/api/dashboard/*`, `/api/analytics/*`, `/api/insights/*`), the implementation team must verify each route through an end-to-end data tracing audit.
 
-### 7.2 Two-Pronged Remediation Strategy
+### 8.1 Required Query-Level Trace
+Every financial route must be audited through:
+```text
+Route → Controller → Service → SQL Query → Org Scope → Shop Scope → Returned Financial Fields
+```
 
-#### Prong A: Immediate Cutoff Revocation (Zero-Schema Quick Enforcement)
-* Zana POS already features `tokenRevocationService.revokeAllUserTokens(id, isEmployee)`.
-* Every mutation that alters authorization:
-  * `userController.updateRole`
-  * `employeeController.updateEmployee`
-  * `shopController.revokeShopAccess`
-  * `organizationController.closeOrganizationAccount`
-  must immediately invoke `await tokenRevocationService.revokeAllUserTokens(targetId, isEmployee)`.
-* In `auth.js`, the existing cutoff verification:
-  ```javascript
-  const isRevokedByCutoff = await tokenRevocationService.isUserTokenRevoked(decoded.id, !!decoded.isEmployee, decoded.iat);
-  if (isRevokedByCutoff) {
-    return res.status(401).json({ error: 'Token has been revoked due to authorization changes. Please log in again.' });
-  }
-  ```
-  instantly blocks requests made with pre-demotion JWTs.
+### 8.2 Mandatory 9-Point Audit Checklist
+For each endpoint under review, the audit must document:
+1. **Returned Payload**: What exact JSON data structure is returned?
+2. **Organization Scope**: Is the query scoped strictly to `req.authz.tenant.organizationId`?
+3. **Branch Scope**: Is the query scoped to `req.authz.scope.activeShopId` or across multiple branches?
+4. **Revenue Exposure**: Does the payload expose gross or net revenue figures?
+5. **Profit Exposure**: Does the payload expose gross profit, net profit, or margin percentages?
+6. **Cost / Expense Exposure**: Does the payload expose product wholesale costs, expenses, or supplier pricing?
+7. **Customer PII**: Does the payload expose customer names, phone numbers, or loyalty balances?
+8. **Legitimate Consumer Roles**: Does a cashier terminal legitimately need this data (e.g., cashier shift sales), or is it strictly management intelligence?
+9. **Target Permission**: What is the canonical permission that must protect this endpoint?
 
-#### Prong B: Schema-Backed `authzVersion` (Formal Epoch Tracking)
-* Add `authzVersion INT UNSIGNED NOT NULL DEFAULT 1` to `Users` and `Employees` tables.
-* Embed `authzVersion` in newly minted JWTs.
-* When roles or permissions change:
-  ```javascript
-  await user.increment('authzVersion', { transaction });
-  await redisClient.setex(`authz_version:${isEmployee ? 'employee' : 'user'}:${id}`, 3600, String(newVersion));
-  ```
-* Middleware compares token `authzVersion` against Redis/DB. If mismatched: `401 Unauthorized`.
+> **Rule**: Do not apply blanket `view_reports` across all analytics routes without proving whether the underlying data represents operational register data or executive financial intelligence.
 
 ---
 
-## 8. Permission-Cache Invalidation Strategy
+## 9. Strengthened Shop Access Semantics
 
-### 8.1 Organization-Scoped Key Pattern
-Permissions are stored in Redis under tenant-isolated keys:
+Branch delegation rules are formally defined across all governance and operational roles:
+
+| Role | Governance Tier | Operational Role | Branch Access Rule | ShopAccess Table Required? |
+|---|---|---|---|:---:|
+| **Organization Owner** | `owner` | `admin` | **Universal Implicit Bypass**: Can access every active shop in the organization. | ❌ No |
+| **Delegated Admin** | `admin` | `org_admin` | **Explicit Delegation**: Strictly constrained to shops granted in `ShopAccess` (plus shops created by this admin). | ✅ Yes |
+| **Branch Manager** | `member` | `manager` | **Explicit Delegation**: Strictly constrained to shops granted in `ShopAccess`. | ✅ Yes |
+| **Cashier / Staff** | `member` | `cashier` | **Explicit Delegation**: Strictly constrained to their assigned home shop in `ShopAccess`. | ✅ Yes |
+| **Billing Admin** | `billing_admin` | *None* | **Zero Operational POS Access**: Authorized for subscription management and invoice viewing. Holds zero rights to access POS register data, sales, or inventory. | ❌ N/A |
+
+---
+
+## 10. Anti-Oracle Semantics & Status Code Taxonomy
+
+To prevent attackers from probing resource existence or organization boundaries, status codes are strictly standardized:
+
+| Status Code | Standard Meaning | Exact Zana POS Authorization Usage |
+|---|---|---|
+| **`401 Unauthorized`** | Authentication Failure | Missing token, invalid signature, expired token, revoked JTI, token revoked by password cutoff, or stale `authzVersion`. |
+| **`403 Forbidden`** | Permission Failure | Caller is authenticated and operates within their valid organization/branch, but lacks the specific permission or governance tier to perform the requested action (e.g., Cashier attempting `POST /api/coupons`). |
+| **`404 Not Found`** | Resource Invisibility (Anti-Oracle) | Caller attempts to query or mutate a branch (`shopId`) outside their `accessibleShopIds`, a record belonging to another organization, or another cashier's private resource (e.g. HeldCart) without manager override permissions. Prevents cross-tenant existence enumeration. |
+
+---
+
+## 11. Strengthened Permission Cache Design
+
+### 11.1 Key Architecture
 ```text
 permissions:org:{organizationId}:role:{effectiveRole}
 ```
-TTL: 3,600 seconds (1 hour).
+* **Source of Truth**: Database `RolePermissions` joined with `Permissions`.
+* **Cache Medium**: Redis (`TTL = 3600s`).
+* **Cache Population**: On cache miss, load from DB, seed default permissions if missing, and populate Redis.
+* **Cache Invalidation**: Triggers immediately on:
+  * Updates to `RolePermission` via Sequelize model hooks.
+  * Direct updates via `PUT /api/permissions/matrix`.
+  * Seeding/provisioning of new organizations.
+  * When invalidating `manager`, the alias `org_admin` is atomically invalidated as well.
 
-### 8.2 Invalidation Hooks
-* **RolePermission Mutation**:
-  Hooks in `backend/src/models/RolePermission.js` trigger:
-  ```javascript
-  await permissionCache.invalidateRoleCache(role, organizationId);
-  ```
-* **Alias Invalidation**:
-  When permissions for role `'manager'` are updated, `permissionCache.invalidateRoleCache` automatically invalidates both `'manager'` and its operational alias `'org_admin'`.
-* **New Organization Seeding**:
-  When a new organization registers, default permissions are seeded and cache entries populated atomically via `ensureOrgRolePermissionsSeeded`.
-
----
-
-## 9. Legacy-Role Compatibility Strategy
-
-To ensure zero downtime and prevent breaking existing frontend apps or POS registers:
-
-1. **Drop-in `checkRole()` Refactoring**:
-   `checkRole(allowedRoles)` in `backend/src/middleware/auth.js` is refactored internally:
-   ```javascript
-   const checkRole = (allowedRoles) => {
-     return (req, res, next) => {
-       // Evaluate authoritative effectiveRole from req.authz rather than trusting JWT
-       const currentRole = req.authz ? req.authz.role.effectiveRole : req.user?.role;
-       if (!allowedRoles.includes(currentRole)) {
-         return res.status(403).json({ error: 'Access denied.' });
-       }
-       next();
-     };
-   };
-   ```
-   This immediately secures all 71 legacy `checkRole()` call sites against JWT spoofing and stale tokens without requiring simultaneous route edits.
-
-2. **Unified `checkPermission()`**:
-   Routes gradually adopt `checkPermission(permissionName)`, which queries `req.authz.permissions.has(permissionName)`.
+### 11.2 Fail-Closed Redis Policy
+If Redis crashes, times out, or disconnects:
+1. The system logs a critical warning.
+2. The system executes a direct database query to load authoritative permissions.
+3. If the database query also fails, the request fails closed (`500 Internal Server Error`).
+4. **Under no circumstances does a cache failure grant permissions or allow access.**
 
 ---
 
-## 10. Route Migration Strategy & Invoice Mutation Gap
+## 12. Legacy `checkRole()` as a Temporary Adapter
 
-### 10.1 Closing the Invoice Mutation Gap (Gap J)
-Phase 0 uncovered that `POST /api/invoices` and `PUT /api/invoices/:id` in `backend/src/routes/invoiceRoutes.js` enforce input validation but lack RBAC checks.
-* Target enforcement:
-  * `POST /api/invoices`: Enforce `checkPermission('create_sales')` (allows authorized cashiers and managers to issue invoices).
-  * `PUT /api/invoices/:id`: Enforce `checkPermission('manage_sales')` (restricts modifying existing invoices to managers and admins).
-  * `DELETE /api/invoices/:id`: Enforce `checkPermission('manage_sales')`.
+`checkRole()` is explicitly classified as a **legacy compatibility adapter**, NOT the future authorization architecture.
 
-### 10.2 Phased Route Migration Roadmap
-* **Phase 1 (Quick-Wins with Authoritative Context)**:
-  * Coupons: `POST /`, `PUT /:id`, `DELETE /:id` -> `checkPermission('manage_coupons')`
-  * Discounts: `POST /`, `PUT /:id`, `DELETE /:id` -> `checkPermission('manage_discounts')`
-  * Shop Access: `GET /:id/access` -> `checkPermission('manage_shop_access')`
-  * Dashboard & Analytics: `GET /api/dashboard/*`, `GET /api/analytics/*`, `GET /api/insights/*` -> `checkPermission('view_dashboard')` / `checkPermission('view_reports')`
-  * Invoices: `POST /`, `PUT /:id` -> `checkPermission('create_sales')` / `checkPermission('manage_sales')`
-* **Phase 2 (Held Carts & Fine-Grained Ownership)**:
-  * Scope `heldCartRoutes.js` with cashier ownership filter and manager override.
-* **Phase 3 (Full Seeder & RolePermission Convergence)**:
-  * Migrate remaining `checkRole` usages across catalog, customers, and expenses.
+### 12.1 Target Paradigm
+* **New Code**: MUST use `checkPermission(canonicalPermission)` evaluating against `req.authz.permissions`.
+* **Legacy Code**: Routes currently using `checkRole(allowedRoles)` route through an adapter that checks `req.authz.role.effectiveRole` (with mandatory fail-closed verification).
+* **Deprecation Notice**: No new endpoint may be introduced using `checkRole()`. Existing call sites will be systematically migrated to canonical permissions in subsequent phases.
 
 ---
 
-## 11. Exact Files Expected to Change
+## 13. Invoice Authorization Specification (Closing Gap J)
 
-| File Path | Scope of Change | Rationale |
-|---|---|---|
-| `backend/src/middleware/auth.js` | Update | Build `req.authz`, enforce `authzVersion`/cutoff, modernize `checkRole`. |
-| `backend/src/middleware/authzContext.js` | **NEW** | Centralized context builder resolving membership, roles, and shop access. |
-| `backend/src/middleware/rolePermissions.js` | Update | Wire `checkPermission` directly into `req.authz.permissions`. |
-| `backend/src/models/User.js` | Update | Add `authzVersion` column (when migration approved). |
-| `backend/src/models/Employee.js` | Update | Add `authzVersion` column (when migration approved). |
-| `backend/migrations/*-add-authz-version.js` | **NEW** | Database migration for `authzVersion`. |
-| `backend/src/services/tokenRevocationService.js` | Update | Add `authzVersion` cache invalidation and increment helpers. |
-| `backend/src/services/rolePermissionSeeder.js` | Update | Add 4 canonical permissions (`manage_coupons`, `manage_discounts`, `manage_shop_access`, `manage_held_carts`) and backfill logic. |
-| `backend/src/controllers/userController.js` | Update | Invalidate tokens and bump `authzVersion` on role/status changes. |
-| `backend/src/controllers/employeeController.js` | Update | Invalidate tokens and bump `authzVersion` on position/status changes. |
-| `backend/src/routes/coupons.js` | Update | Protect coupon management endpoints. |
-| `backend/src/routes/discounts.js` | Update | Protect discount management endpoints. |
-| `backend/src/routes/shop.js` | Update | Protect `GET /:id/access` staff disclosure. |
-| `backend/src/routes/dashboard.js` | Update | Protect financial revenue/stats endpoints. |
-| `backend/src/routes/analytics.js` | Update | Protect financial analytics endpoints. |
-| `backend/src/routes/insights.js` | Update | Protect shop-level insights endpoints. |
-| `backend/src/routes/invoiceRoutes.js` | Update | Protect invoice creation and update endpoints. |
-| `backend/src/routes/heldCartRoutes.js` | Update | Enforce cashier ownership and manager override. |
+The invoice mutation gap discovered during Phase 0 is formally resolved without inventing redundant permissions:
+
+| Endpoint | Method | Pipeline Guard | Target Permission | Rationale |
+|---|---|---|---|---|
+| `/api/invoices` | `POST` | `auth`, `authzContext`, `checkPermission('create_sales')` | `create_sales` | Authorized cashiers and managers can generate invoices for store sales. |
+| `/api/invoices/:id` | `PUT` | `auth`, `authzContext`, `checkPermission('manage_sales')` | `manage_sales` | Modifying existing issued invoices requires management authority. |
+| `/api/invoices/:id` | `DELETE` | `auth`, `authzContext`, `checkPermission('manage_sales')` | `manage_sales` | Voiding/deleting issued invoices requires management authority. |
+| `/api/invoices/:id/pdf` | `GET` | `auth`, `authzContext`, `checkPermission('view_sales')` | `view_sales` | Viewing/downloading invoice documents requires sales view access. |
 
 ---
 
-## 12. Proposed Adversarial Security Test Suite
+## 14. M-Pesa & Financial Payment Authorization Boundary
 
-To prove verification conclusively in Gate 5, the following adversarial test suites will be constructed:
+### 14.1 Credential Secrecy Invariant
+* M-Pesa Daraja credentials (`consumerKey`, `consumerSecret`, `passkey`, `tillNumber`) are sensitive secrets stored in tenant settings.
+* **Under NO circumstances are raw payment credentials exposed in `req.authz`, `req.user`, JWT claims, or client-facing responses.**
+* Payment credentials are loaded strictly within isolated backend payment services (`mpesaService.js`).
 
-1. `backend/tests/staleAuthorizationRevocation.test.js`
-   * Tests demoting a user from `admin` to `cashier` via `PUT /api/users/:id/role`.
-   * Proves that requests made with the original JWT to admin routes immediately return `401 Unauthorized`.
-   * Tests demoting an employee from `manager` to `cashier` via `PUT /api/employees/:id`.
-   * Proves that requests made with the original JWT to manager routes immediately return `401 Unauthorized`.
-2. `backend/tests/couponsAuthorization.test.js`
-   * Tests that authenticated cashiers receive `403 Forbidden` attempting `POST /api/coupons`.
-   * Tests that managers and admins can successfully create, update, and delete coupons.
-   * Tests that cashiers can still successfully invoke `POST /api/coupons/validate` during checkout.
-3. `backend/tests/discountsAuthorization.test.js`
-   * Tests that cashiers receive `403 Forbidden` attempting `POST /api/discounts`.
-   * Tests that managers and admins can manage discount rules.
-4. `backend/tests/shopAccessDisclosure.test.js`
-   * Tests that cashiers calling `GET /api/shops/:id/access` receive `403 Forbidden` (PII protected).
-   * Tests that organization owners and admins can retrieve access rosters.
-5. `backend/tests/heldCartOwnership.test.js`
-   * Tests that Cashier 1 cannot recall or delete Cashier 2's held cart (returns `404 Not Found`).
-   * Tests that Cashier 1 can recall their own held cart.
-   * Tests that a Manager can recall and delete any cashier's held cart in the branch.
-6. `backend/tests/dashboardAnalyticsAuthorization.test.js`
-   * Tests that cashiers receive `403 Forbidden` querying `/api/dashboard/stats`, `/api/dashboard/revenue`, `/api/analytics/orders`.
-7. `backend/tests/invoiceMutationAuthorization.test.js`
-   * Tests that arbitrary unprivileged users cannot issue or update invoices.
-8. `backend/tests/tenantAntiOracleSecurity.test.js`
-   * Tests that querying resources across organizations or across unauthorized branches returns `404 Not Found` (anti-oracle).
+### 14.2 Webhook Security
+* M-Pesa callbacks (`/api/mpesa/callback`) operate outside user session authentication.
+* They are secured via single-use cryptographic tokens passed in query parameters, validated with `crypto.timingSafeEqual`, and processed under pessimistic database row locks (`t.LOCK.UPDATE`).
+
+### 14.3 Future Payment Configuration Endpoints
+Any endpoint permitting modification of M-Pesa till numbers or credentials must strictly require:
+* `requireOrgOwner` (Owner governance authority).
+* Verified email.
+* Audit logging.
 
 ---
 
-## 13. Gate 1 Stop Condition & Approval Request
+## 15. Comprehensive Authorization Invariants
 
-- **No application code has been modified in Gate 1.**
-- The canonical architecture, context interface, role reconciliation model, and migration strategy are documented above.
-- **Execution is halted. Awaiting user review and formal approval of the Gate 1 Canonical Authorization Context Design.**
+The following invariants must be preserved across all implementations:
+
+1. **Tenant Invariant**: A request may never access, query, or mutate another organization's resources.
+2. **Branch Invariant**: A non-owner may only access branches explicitly granted through `ShopAccess`.
+3. **Permission Invariant**: Possessing an administrative role does not bypass tenant or branch scope boundaries.
+4. **Session Invariant**: Authorization mutations increment `authzVersion`, immediately invalidating pre-existing sessions.
+5. **Context Invariant**: Security-sensitive authorization may never evaluate raw JWT claims after `req.authz` initialization; missing `req.authz` fails closed.
+6. **Cache Invariant**: Database state is authoritative; Redis is strictly an ephemeral cache; Redis may never override database truth.
+7. **Platform Invariant**: Platform `super_admin` operates exclusively within platform administration and must never be inferred from tenant permissions.
+8. **Payment Invariant**: Payment provider credentials are never part of the authorization context or client session state.
+
+---
+
+## 16. Phased Gate 2 Implementation Sequence
+
+To ensure zero downtime, backward compatibility, and rigorous verification, Gate 2 must be executed in the following sequential order:
+
+```text
+[Gate 2A] Canonical authzContext Implementation
+          • Create backend/src/middleware/authzContext.js
+          • Implement req.authz builder & fail-closed guards
+          ↓
+[Gate 2B] authzVersion & Session Invalidation
+          • Create migration for authzVersion on Users & Employees
+          • Update tokenRevocationService and controllers (updateRole, updateEmployee)
+          ↓
+[Gate 2C] checkRole / checkPermission Integration
+          • Refactor checkRole to evaluate req.authz.role.effectiveRole
+          • Wire checkPermission directly to req.authz.permissions.has()
+          ↓
+[Gate 2D] Permission Cache Hardening & Seeder Backfill
+          • Backfill 4 canonical permissions (manage_coupons, manage_discounts, manage_shop_access, manage_held_carts)
+          • Implement fail-closed Redis DB fallback
+          ↓
+[Gate 2E] Financial Endpoints Verification & High-Risk Migration
+          • Execute query-level audit of dashboard/analytics/insights
+          • Migrate coupons, discounts, shop access, dashboard, and invoices
+          ↓
+[Gate 2F] Resource Ownership & Fine-Grained Scoping
+          • Implement cashier ownership on heldCartRoutes.js with manager override
+          ↓
+[Gate 2G] Adversarial Security Test Suite
+          • Build and execute all 8 adversarial test files to prove verification
+```
+
+---
+
+## 17. Explicit Gate 2 Entry Criteria
+
+Gate 2 implementation must **NOT** begin until all of the following criteria are satisfied:
+- [x] Canonical `req.authz` contract finalized and reviewed.
+- [x] Clear division between `authzVersion` and token revocation established.
+- [x] Database authority and Redis cache failure modes specified.
+- [x] Role semantics (governance vs operational vs permissions) formally disambiguated.
+- [x] Fail-closed behavior on missing `req.authz` established.
+- [x] Financial endpoint 9-point verification checklist documented.
+- [x] Shop access delegation and billing_admin boundaries established.
+- [x] M-Pesa credential isolation and webhook boundaries established.
+- [x] Gate 2 sequential roadmap and adversarial test plans agreed upon.
+- [ ] **Formal User Approval of Gate 1 Revised Design.**
+
+---
+
+## 18. Gate 1 Stop Notice
+
+> [!IMPORTANT]
+> **GATE 1 REVISED DESIGN COMPLETED — AWAITING FORMAL APPROVAL**  
+> Complete design documentation is saved in [`docs/security/CANONICAL-AUTHORIZATION-DESIGN.md`](file:///C:/Users/WARREN%20CHRIS/.gemini/antigravity/scratch/zena-pos/docs/security/CANONICAL-AUTHORIZATION-DESIGN.md).  
+> 
+> **Zero application code has been modified.**  
+> Execution is halted. Awaiting formal user approval before starting Gate 2A.
