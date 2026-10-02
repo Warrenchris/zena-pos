@@ -29,6 +29,8 @@ module.exports = async () => {
     }
     console.log('[Test Setup] Database schema migrations completed successfully.');
 
+process.env.REDIS_DB = process.env.TEST_REDIS_DB || '1';
+
     // Seed baseline organizations matching Phase 1 migration backfill (Shop 1 -> Org 1, Shop 2 -> Org 2)
     const { Sequelize } = require('sequelize');
     const sequelize = new Sequelize(
@@ -42,11 +44,30 @@ module.exports = async () => {
         logging: false
       }
     );
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;');
     await sequelize.query(
       "INSERT INTO `Organizations` (`id`, `name`, `slug`, `status`, `currency`, `createdAt`, `updatedAt`) VALUES " +
       "(1, 'Shop 1 Org', 'shop-1-org', 'active', 'KES', NOW(), NOW()), " +
       "(2, 'Shop 2 Org', 'shop-2-org', 'active', 'KES', NOW(), NOW()) " +
       "ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);"
+    );
+    await sequelize.query(
+      "INSERT INTO `Shops` (`id`, `name`, `organizationId`, `active`, `createdAt`, `updatedAt`) VALUES " +
+      "(1, 'Shop 1', 1, 1, NOW(), NOW()), " +
+      "(2, 'Shop 2', 2, 1, NOW(), NOW()) " +
+      "ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);"
+    );
+    await sequelize.query(
+      "INSERT INTO `Users` (`id`, `name`, `email`, `password`, `role`, `shopId`, `active`, `createdAt`, `updatedAt`) VALUES " +
+      "(1, 'Shop 1 Admin', 'shop1-admin@test.local', '$2a$10$dummyHashForTestingPassw12345678901234567890', 'admin', 1, 1, NOW(), NOW()), " +
+      "(2, 'Shop 2 Admin', 'shop2-admin@test.local', '$2a$10$dummyHashForTestingPassw12345678901234567890', 'admin', 2, 1, NOW(), NOW()) " +
+      "ON DUPLICATE KEY UPDATE `email`=VALUES(`email`);"
+    );
+    await sequelize.query(
+      "INSERT INTO `OrganizationMemberships` (`id`, `organizationId`, `userId`, `orgRole`, `status`, `createdAt`, `updatedAt`) VALUES " +
+      "(1, 1, 1, 'owner', 'active', NOW(), NOW()), " +
+      "(2, 2, 2, 'owner', 'active', NOW(), NOW()) " +
+      "ON DUPLICATE KEY UPDATE `orgRole`=VALUES(`orgRole`);"
     );
 
     const [gfPlans] = await sequelize.query("SELECT id FROM `Plans` WHERE `code` = 'grandfathered' LIMIT 1;");
@@ -59,6 +80,7 @@ module.exports = async () => {
         "ON DUPLICATE KEY UPDATE `status`='active';"
       );
     }
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;');
     await sequelize.close();
 
     // Clean Redis test database to prevent cross-run state pollution
@@ -68,6 +90,7 @@ module.exports = async () => {
         host: process.env.REDIS_HOST || '127.0.0.1',
         port: process.env.REDIS_PORT ? Number(process.env.REDIS_PORT) : 6379,
         password: process.env.REDIS_PASSWORD || undefined,
+        db: Number(process.env.REDIS_DB || 1),
         enableOfflineQueue: false,
         connectTimeout: 2000
       });

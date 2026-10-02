@@ -5,10 +5,14 @@ let redisClient;
 let lastErrorMessage = '';
 let lastErrorTime = 0;
 
+const defaultDb = process.env.NODE_ENV === 'test' ? 1 : 0;
+const redisDb = process.env.REDIS_DB !== undefined ? Number(process.env.REDIS_DB) : defaultDb;
+
 if (process.env.REDIS_URL) {
   const redisOptions = {
     family: Number(process.env.REDIS_FAMILY || 4),
     enableOfflineQueue: false,
+    db: redisDb,
     tls: process.env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
     retryStrategy: (times) => {
       if (process.env.NODE_ENV === 'test' && times > 5) return null;
@@ -29,6 +33,7 @@ if (process.env.REDIS_URL) {
   redisClient = new Redis({
     host: redisHost,
     port: redisPort,
+    db: redisDb,
     family: Number(process.env.REDIS_FAMILY || 4),
     enableOfflineQueue: false,
     password: process.env.REDIS_PASSWORD || undefined,
