@@ -60,6 +60,11 @@ const User = sequelize.define('User', {
   emailVerificationSentAt: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  authzVersion: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: false,
+    defaultValue: 1
   }
 }, {
   hooks: {
