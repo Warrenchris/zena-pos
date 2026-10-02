@@ -114,7 +114,6 @@ describe('Phase 4 UX Remediation Tests', () => {
 
   afterAll(async () => {
     await cleanDb();
-    await sequelize.close();
   });
 
   // TEST 4.1 — Scanner hook detects rapid keypress as barcode

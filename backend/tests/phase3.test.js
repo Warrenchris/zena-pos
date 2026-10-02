@@ -150,7 +150,6 @@ describe('Phase 3 Remediation Tests', () => {
 
   afterAll(async () => {
     await cleanDb();
-    await sequelize.close();
   });
 
   beforeEach(() => {
