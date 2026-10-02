@@ -12,7 +12,10 @@ const {
   Product,
   Inventory,
   StockMovement,
-  StockTransfer
+  StockTransfer,
+  Plan,
+  Subscription,
+  OrganizationMembership
 } = require('../src/models');
 
 function tokenFor(payload) {
@@ -136,6 +139,43 @@ describe('Phase 4: Stock Transfer Idempotency & Tenant Enforcement Suite', () =>
       name: `Cat B ${ts}`,
       organizationId: orgB.id,
       shopId: shopB1.id
+    });
+
+    const [gfPlan] = await Plan.findOrCreate({
+      where: { code: 'grandfathered' },
+      defaults: { name: 'Grandfathered Plan', priceMonthly: 0, priceYearly: 0 }
+    });
+
+    await Subscription.create({
+      organizationId: orgA.id,
+      planId: gfPlan.id,
+      status: 'active',
+      billingCycle: 'yearly',
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date('2099-12-31')
+    });
+
+    await OrganizationMembership.create({
+      organizationId: orgA.id,
+      userId: userA.id,
+      orgRole: 'owner',
+      status: 'active'
+    });
+
+    await Subscription.create({
+      organizationId: orgB.id,
+      planId: gfPlan.id,
+      status: 'active',
+      billingCycle: 'yearly',
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date('2099-12-31')
+    });
+
+    await OrganizationMembership.create({
+      organizationId: orgB.id,
+      userId: userB.id,
+      orgRole: 'owner',
+      status: 'active'
     });
   });
 
