@@ -30,6 +30,9 @@ async function resolveSupplier({ shopId, organizationId: explicitOrgId, supplier
       transaction
     });
     if (existing) return existing;
+    const err = new Error(`Supplier ID ${supplierId} not found in this organization`);
+    err.statusCode = 404;
+    throw err;
   }
 
   if (!supplierName || !supplierName.trim()) return null;
@@ -80,8 +83,12 @@ async function applyStockReceipt({ shopId, items, reference, userId, employeeId,
 
     if (qty > 0 && item.productId) {
       // Row-level lock on the product to prevent concurrent update races
+      const productWhere = { id: item.productId };
+      if (organizationId) {
+        productWhere.organizationId = organizationId;
+      }
       const product = await Product.findOne({
-        where: { id: item.productId },
+        where: productWhere,
         lock: transaction.LOCK.UPDATE,
         transaction
       });
@@ -181,8 +188,12 @@ async function reverseStockReceipt({ shopId, items, reference, userId, employeeI
     const qty = parseFloat(item.quantity || 0);
 
     if (qty > 0 && item.productId) {
+      const productWhere = { id: item.productId };
+      if (organizationId) {
+        productWhere.organizationId = organizationId;
+      }
       const product = await Product.findOne({
-        where: { id: item.productId },
+        where: productWhere,
         lock: transaction.LOCK.UPDATE,
         transaction
       });

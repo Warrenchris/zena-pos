@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { Purchase, PurchaseItem, Product, Supplier, sequelize } = require('../models');
+const { Purchase, PurchaseItem, Product, Supplier, Shop, sequelize } = require('../models');
 const { Op } = require('sequelize');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
 const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const { logActivity } = require('../middleware/logger');
 const {
@@ -13,8 +13,9 @@ const {
   invalidateShopProductCache
 } = require('../services/purchaseService');
 
-// All routes require authentication and active subscription
+// All routes require authentication, canonical authorization context, and active subscription
 router.use(auth);
+router.use(authzContext);
 router.use(requireActiveSubscription());
 
 // Helper to generate reference numbers
@@ -25,9 +26,15 @@ const generateRefNo = async () => {
 };
 
 // GET /api/purchases — List paginated purchases with server-side KPIs
-router.get('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
+router.get('/',
+  authorize({
+    roles: ['admin', 'manager', 'org_admin'],
+    permission: 'manage_products',
+    shopScope: 'current'
+  }),
+  async (req, res) => {
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     if (!shopId) {
       return res.status(403).json({ error: 'Shop context required' });
     }
@@ -123,9 +130,20 @@ router.get('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) =
 });
 
 // GET /api/purchases/:id — Fetch single purchase
-router.get('/:id', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
+router.get('/:id',
+  authorize({
+    roles: ['admin', 'manager', 'org_admin'],
+    permission: 'manage_products',
+    ownership: {
+      getResource: (req) => Purchase.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      antiOracle: true
+    }
+  }),
+  async (req, res) => {
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     if (!shopId) {
       return res.status(403).json({ error: 'Shop context required' });
     }
@@ -150,14 +168,21 @@ router.get('/:id', checkRole(['admin', 'manager', 'org_admin']), async (req, res
 });
 
 // POST /api/purchases — Create a purchase and update stock with atomic transaction & strict input validation
-router.post('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
+router.post('/',
+  authorize({
+    roles: ['admin', 'manager', 'org_admin'],
+    permission: 'manage_products',
+    shopScope: (req) => req.body?.shopId || req.authz?.scope?.activeShopId || req.shopId
+  }),
+  async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const shopId = req.body?.shopId || req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     if (!shopId) {
       await transaction.rollback();
       return res.status(403).json({ error: 'Shop context required' });
     }
+    const organizationId = req.authz?.tenant?.organizationId;
 
     const {
       referenceNo: customRef,
@@ -204,7 +229,10 @@ router.post('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) 
 
       let matchedProduct = null;
       if (item.productId) {
-        matchedProduct = await Product.findOne({ where: { id: item.productId, shopId }, transaction });
+        matchedProduct = await Product.findOne({
+          where: organizationId ? { id: item.productId, organizationId } : { id: item.productId, shopId },
+          transaction
+        });
         if (!matchedProduct) {
           await transaction.rollback();
           return res.status(404).json({ error: `Product ID ${item.productId} not found in shop inventory` });
@@ -242,9 +270,22 @@ router.post('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) 
       parsedPaidAmount = (!isNaN(p) && p > 0 && p < totalAmount) ? Math.round(p * 100) / 100 : 0.00;
     }
 
+    // Explicit supplier validation if supplierId provided
+    if (supplierId) {
+      const existingSupplier = await Supplier.findOne({
+        where: organizationId ? { id: supplierId, organizationId } : { id: supplierId, shopId },
+        transaction
+      });
+      if (!existingSupplier) {
+        await transaction.rollback();
+        return res.status(404).json({ error: `Supplier ID ${supplierId} not found in this organization` });
+      }
+    }
+
     // Resolve or create Supplier
     const supplierRecord = await resolveSupplier({
       shopId,
+      organizationId,
       supplierId,
       supplierName,
       supplierContact
@@ -286,7 +327,8 @@ router.post('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) 
         shopId,
         items: validatedItems,
         reference: purchase.referenceNo,
-        userId: req.user?.id
+        userId: req.user?.id,
+        organizationId
       }, transaction);
       await invalidateShopProductCache(shopId);
     }
@@ -336,9 +378,20 @@ router.post('/', checkRole(['admin', 'manager', 'org_admin']), async (req, res) 
 });
 
 // PUT /api/purchases/:id — Update purchase notes / metadata
-router.put('/:id', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
+router.put('/:id',
+  authorize({
+    roles: ['admin', 'manager', 'org_admin'],
+    permission: 'manage_products',
+    ownership: {
+      getResource: (req) => Purchase.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      antiOracle: true
+    }
+  }),
+  async (req, res) => {
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     if (!shopId) return res.status(403).json({ error: 'Shop context required' });
 
     const purchase = await Purchase.findOne({ where: { id: req.params.id, shopId } });
@@ -372,14 +425,26 @@ router.put('/:id', checkRole(['admin', 'manager', 'org_admin']), async (req, res
 });
 
 // PATCH /api/purchases/:id/receive — Mark pending purchase as received and increment inventory atomically
-router.patch('/:id/receive', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
+router.patch('/:id/receive',
+  authorize({
+    roles: ['admin', 'manager', 'org_admin'],
+    permission: 'manage_products',
+    ownership: {
+      getResource: (req) => Purchase.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      antiOracle: true
+    }
+  }),
+  async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     if (!shopId) {
       await transaction.rollback();
       return res.status(403).json({ error: 'Shop context required' });
     }
+    const organizationId = req.authz?.tenant?.organizationId;
 
     const purchase = await Purchase.findOne({
       where: { id: req.params.id, shopId },
@@ -412,7 +477,8 @@ router.patch('/:id/receive', checkRole(['admin', 'manager', 'org_admin']), async
       shopId,
       items: itemsToReceive,
       reference: purchase.referenceNo,
-      userId: req.user?.id
+      userId: req.user?.id,
+      organizationId
     }, transaction);
 
     purchase.status = 'RECEIVED';
@@ -442,10 +508,21 @@ router.patch('/:id/receive', checkRole(['admin', 'manager', 'org_admin']), async
 });
 
 // POST /api/purchases/:id/payments — Record installment or complete payment on a purchase
-router.post('/:id/payments', checkRole(['admin', 'manager', 'org_admin']), async (req, res) => {
+router.post('/:id/payments',
+  authorize({
+    roles: ['admin', 'manager', 'org_admin'],
+    permission: 'manage_products',
+    ownership: {
+      getResource: (req) => Purchase.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      antiOracle: true
+    }
+  }),
+  async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     if (!shopId) {
       await transaction.rollback();
       return res.status(403).json({ error: 'Shop context required' });
@@ -526,14 +603,26 @@ router.post('/:id/payments', checkRole(['admin', 'manager', 'org_admin']), async
 });
 
 // PATCH /api/purchases/:id/cancel — Safely cancel a purchase and reverse inventory if previously received
-router.patch('/:id/cancel', checkRole(['admin', 'org_admin']), async (req, res) => {
+router.patch('/:id/cancel',
+  authorize({
+    roles: ['admin', 'org_admin'],
+    permission: 'manage_products',
+    ownership: {
+      getResource: (req) => Purchase.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      antiOracle: true
+    }
+  }),
+  async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     if (!shopId) {
       await transaction.rollback();
       return res.status(403).json({ error: 'Shop context required' });
     }
+    const organizationId = req.authz?.tenant?.organizationId;
 
     const purchase = await Purchase.findOne({
       where: { id: req.params.id, shopId },
@@ -562,7 +651,8 @@ router.patch('/:id/cancel', checkRole(['admin', 'org_admin']), async (req, res) 
         shopId,
         items: itemsToReverse,
         reference: purchase.referenceNo,
-        userId: req.user?.id
+        userId: req.user?.id,
+        organizationId
       }, transaction);
 
       await invalidateShopProductCache(shopId);
@@ -593,14 +683,26 @@ router.patch('/:id/cancel', checkRole(['admin', 'org_admin']), async (req, res) 
 });
 
 // DELETE /api/purchases/:id — Soft-cancel and audit (enforces inventory integrity)
-router.delete('/:id', checkRole(['admin', 'org_admin']), async (req, res) => {
+router.delete('/:id',
+  authorize({
+    roles: ['admin', 'org_admin'],
+    permission: 'manage_products',
+    ownership: {
+      getResource: (req) => Purchase.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      antiOracle: true
+    }
+  }),
+  async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const shopId = req.shopId || req.user?.shopId;
+    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     if (!shopId) {
       await transaction.rollback();
       return res.status(403).json({ error: 'Shop context required' });
     }
+    const organizationId = req.authz?.tenant?.organizationId;
 
     const purchase = await Purchase.findOne({
       where: { id: req.params.id, shopId },
@@ -624,7 +726,8 @@ router.delete('/:id', checkRole(['admin', 'org_admin']), async (req, res) => {
         shopId,
         items: itemsToReverse,
         reference: purchase.referenceNo,
-        userId: req.user?.id
+        userId: req.user?.id,
+        organizationId
       }, transaction);
 
       await invalidateShopProductCache(shopId);
