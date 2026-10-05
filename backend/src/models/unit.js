@@ -8,10 +8,12 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'shopId',
         as: 'shop'
       });
-      Unit.hasMany(models.Product, {
-        foreignKey: 'unitId',
-        as: 'products'
-      });
+      if (models.Product && models.Product.rawAttributes && models.Product.rawAttributes.unitId) {
+        Unit.hasMany(models.Product, {
+          foreignKey: 'unitId',
+          as: 'products'
+        });
+      }
     }
   }
 

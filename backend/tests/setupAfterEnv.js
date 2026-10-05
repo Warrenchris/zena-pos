@@ -57,7 +57,9 @@ const DELETED_EPHEMERAL_MODELS = new Set([
   'Inventory',
   'SubscriptionInvoice',
   'StockTransfer',
-  'BillingNotificationLog'
+  'BillingNotificationLog',
+  'Brand',
+  'Unit'
 ]);
 
 // --- Coverage Check Assertion (fails loudly on schema drift) ---

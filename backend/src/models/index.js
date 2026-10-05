@@ -38,6 +38,17 @@ const Subscription = require('./Subscription');
 const SubscriptionInvoice = require('./SubscriptionInvoice');
 const StockTransfer = require('./StockTransfer');
 const BillingNotificationLog = require('./BillingNotificationLog');
+const { DataTypes } = require('sequelize');
+const Brand = require('./brand')(sequelize, DataTypes);
+const Unit = require('./unit')(sequelize, DataTypes);
+
+// Initialize Brand and Unit associations
+if (typeof Brand.associate === 'function') {
+  Brand.associate({ Shop, Product });
+}
+if (typeof Unit.associate === 'function') {
+  Unit.associate({ Shop, Product });
+}
 
 // Define model associations
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -267,7 +278,9 @@ module.exports = {
   Subscription,
   SubscriptionInvoice,
   StockTransfer,
-  BillingNotificationLog
+  BillingNotificationLog,
+  Brand,
+  Unit
 };
 
 

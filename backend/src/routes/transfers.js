@@ -1,12 +1,13 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
 const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const transferController = require('../controllers/transferController');
 
 const router = express.Router();
 
 router.use(auth);
+router.use(authzContext);
 router.use(requireActiveSubscription());
 
 const validateTransfer = [
@@ -37,7 +38,41 @@ const validateTransfer = [
     .withMessage('Notes must be less than 500 characters')
 ];
 
-router.post('/', checkRole(['admin', 'manager', 'org_admin']), validateTransfer, transferController.createTransfer);
-router.get('/', checkRole(['admin', 'manager', 'org_admin', 'cashier']), transferController.getTransfers);
+router.post('/',
+  authorize({
+    permission: 'manage_products',
+    custom: async (req, authz) => {
+      const srcId = parseInt(req.body?.sourceShopId, 10);
+      const dstId = parseInt(req.body?.destinationShopId, 10);
+      if (srcId && !authz.scope.hasShopAccess(srcId)) {
+        return {
+          allowed: false,
+          status: 403,
+          code: 'SOURCE_SHOP_ACCESS_DENIED',
+          message: 'Source shop not found or does not belong to your organization.'
+        };
+      }
+      if (dstId && !authz.scope.hasShopAccess(dstId)) {
+        return {
+          allowed: false,
+          status: 403,
+          code: 'DESTINATION_SHOP_ACCESS_DENIED',
+          message: 'Destination shop not found or does not belong to your organization.'
+        };
+      }
+      return { allowed: true };
+    }
+  }),
+  validateTransfer,
+  transferController.createTransfer
+);
+
+router.get('/',
+  authorize({
+    permissions: { any: ['view_products', 'manage_products'] },
+    shopScope: 'current'
+  }),
+  transferController.getTransfers
+);
 
 module.exports = router;
