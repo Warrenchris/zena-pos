@@ -5,6 +5,18 @@ const User = require('../models/User');
 const Employee = require('../models/Employee');
 const sequelize = require('../config/database');
 const { parseDate } = require('../utils/dateUtils');
+const { logActivity } = require('../middleware/logger');
+
+// Canonical authz context resolution helper
+const getAuthContext = (req) => {
+  const organizationId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId || null;
+  const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId || null;
+  const isEmployee = req.authz ? Boolean(req.authz.identity?.isEmployee) : (req.user ? Boolean(req.user.isEmployee) : false);
+  const actorId = req.authz ? req.authz.identity?.id : req.user?.id;
+  const resolvedUserId = req.authz ? req.authz.identity?.userId : (!isEmployee ? actorId : null);
+  const resolvedEmployeeId = req.authz ? req.authz.identity?.employeeId : (isEmployee ? actorId : null);
+  return { organizationId, shopId, isEmployee, actorId, resolvedUserId, resolvedEmployeeId };
+};
 
 // Get all expenses with pagination and filtering
 exports.getAllExpenses = async (req, res) => {
@@ -14,9 +26,13 @@ exports.getAllExpenses = async (req, res) => {
     const offset = (page - 1) * limit;
     
     const { startDate, endDate, category } = req.query;
+    const { organizationId, shopId } = getAuthContext(req);
     
-    // Build where clause based on filters
-    const whereClause = { shopId: req.user.shopId };
+    // Build where clause based on filters with strict multi-tenant & branch scoping
+    const whereClause = {};
+    if (shopId) whereClause.shopId = shopId;
+    if (organizationId) whereClause.organizationId = organizationId;
+
     if (startDate && endDate) {
       whereClause.date = {
         [Op.between]: [parseDate(startDate), parseDate(endDate)]
@@ -61,8 +77,13 @@ exports.getAllExpenses = async (req, res) => {
 // Get expense by ID
 exports.getExpenseById = async (req, res) => {
   try {
+    const { organizationId, shopId } = getAuthContext(req);
+    const whereClause = { id: req.params.id };
+    if (organizationId) whereClause.organizationId = organizationId;
+    if (shopId) whereClause.shopId = shopId;
+
     const expense = await Expense.findOne({
-      where: { id: req.params.id, shopId: req.user.shopId },
+      where: whereClause,
       include: [
         {
           model: User,
@@ -107,9 +128,10 @@ exports.createExpense = async (req, res) => {
       notes
     } = req.body;
 
-    const resolvedUserId = !req.user.isEmployee ? req.user.id : null;
-    const resolvedEmployeeId = req.user.isEmployee ? req.user.id : null;
-    const resolvedOrgId = req.organizationId || req.user?.organizationId || null;
+    const { organizationId, shopId, isEmployee, actorId } = getAuthContext(req);
+
+    const resolvedUserId = !isEmployee ? actorId : null;
+    const resolvedEmployeeId = isEmployee ? actorId : null;
 
     const expense = await Expense.create({
       description,
@@ -121,8 +143,18 @@ exports.createExpense = async (req, res) => {
       notes,
       userId: resolvedUserId,
       employeeId: resolvedEmployeeId,
-      organizationId: resolvedOrgId,
-      shopId: req.user.shopId
+      organizationId,
+      shopId
+    });
+
+    await logActivity({
+      shopId,
+      performedBy: actorId,
+      performedByType: isEmployee ? 'employee' : 'user',
+      action: 'EXPENSE_CREATED',
+      entity: 'Expense',
+      entityId: expense.id,
+      details: `Created expense: ${expense.description} (${expense.amount} KES)`
     });
 
     const expenseWithUser = await Expense.findByPk(expense.id, {
@@ -156,9 +188,12 @@ exports.updateExpense = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const expense = await Expense.findOne({
-      where: { id: req.params.id, shopId: req.user.shopId }
-    });
+    const { organizationId, shopId, isEmployee, actorId } = getAuthContext(req);
+    const whereClause = { id: req.params.id };
+    if (organizationId) whereClause.organizationId = organizationId;
+    if (shopId) whereClause.shopId = shopId;
+
+    const expense = await Expense.findOne({ where: whereClause });
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
     }
@@ -183,12 +218,31 @@ exports.updateExpense = async (req, res) => {
       notes
     });
 
+    await logActivity({
+      shopId: expense.shopId || shopId,
+      performedBy: actorId,
+      performedByType: isEmployee ? 'employee' : 'user',
+      action: 'EXPENSE_UPDATED',
+      entity: 'Expense',
+      entityId: expense.id,
+      details: `Updated expense: ${expense.description} (${expense.amount} KES)`
+    });
+
     const updatedExpense = await Expense.findByPk(expense.id, {
-      include: [{
-        model: User,
-        as: 'recordedBy',
-        attributes: ['id', 'name', 'email']
-      }]
+      include: [
+        {
+          model: User,
+          as: 'recordedBy',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        },
+        {
+          model: Employee,
+          as: 'employee',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: false
+        }
+      ]
     });
 
     res.json(updatedExpense);
@@ -200,12 +254,25 @@ exports.updateExpense = async (req, res) => {
 // Delete expense
 exports.deleteExpense = async (req, res) => {
   try {
-    const expense = await Expense.findOne({
-      where: { id: req.params.id, shopId: req.user.shopId }
-    });
+    const { organizationId, shopId, isEmployee, actorId } = getAuthContext(req);
+    const whereClause = { id: req.params.id };
+    if (organizationId) whereClause.organizationId = organizationId;
+    if (shopId) whereClause.shopId = shopId;
+
+    const expense = await Expense.findOne({ where: whereClause });
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
     }
+
+    await logActivity({
+      shopId: expense.shopId || shopId,
+      performedBy: actorId,
+      performedByType: isEmployee ? 'employee' : 'user',
+      action: 'EXPENSE_DELETED',
+      entity: 'Expense',
+      entityId: expense.id,
+      details: `Deleted expense: ${expense.description} (${expense.amount} KES)`
+    });
 
     await expense.destroy();
     res.json({ message: 'Expense deleted successfully' });
@@ -218,8 +285,11 @@ exports.deleteExpense = async (req, res) => {
 exports.getExpenseStatistics = async (req, res) => {
   try {
     const { startDate, endDate, category } = req.query;
+    const { organizationId, shopId } = getAuthContext(req);
+
     const whereClause = {
-      shopId: req.user.shopId,
+      ...(shopId ? { shopId } : {}),
+      ...(organizationId ? { organizationId } : {}),
       ...(startDate && endDate ? {
         date: {
           [Op.between]: [parseDate(startDate), parseDate(endDate)]
@@ -228,7 +298,7 @@ exports.getExpenseStatistics = async (req, res) => {
       ...(category ? { category } : {})
     };
 
-    // Get total expenses and category breakdown
+    // Get total expenses and category breakdown with strict multi-tenant & shop scoping
     const [totalExpenses, categoryBreakdown, monthlyTrend] = await Promise.all([
       Expense.sum('amount', { where: whereClause }),
       Expense.findAll({
@@ -285,3 +355,4 @@ exports.getExpenseStatistics = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch expense statistics' });
   }
 };
+

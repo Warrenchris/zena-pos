@@ -2,7 +2,8 @@ const express = require('express');
 const { body, query } = require('express-validator');
 const router = express.Router();
 const expenseController = require('../controllers/expenseController');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
+const { Expense, Shop } = require('../models');
 
 // Validation middleware
 const validateExpense = [
@@ -48,46 +49,84 @@ const validateCategoryQuery = [
     .withMessage('Invalid expense category')
 ];
 
+// Mount canonical authentication and authorization context pipeline
+router.use(auth);
+router.use(authzContext);
+
 // Routes
 router.get('/', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({
+    permission: 'manage_expenses',
+    shopScope: 'current'
+  }),
   validateDateRange,
   validateCategoryQuery,
   expenseController.getAllExpenses
 );
 
 router.get('/statistics', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({
+    permissions: { any: ['manage_expenses', 'view_reports'] },
+    shopScope: 'current'
+  }),
   validateDateRange,
   expenseController.getExpenseStatistics
 );
 
 router.get('/:id', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({
+    permission: 'manage_expenses',
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Expense.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      managerPermission: 'manage_expenses',
+      antiOracle: true
+    }
+  }),
   expenseController.getExpenseById
 );
 
 router.post('/', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({
+    permission: 'manage_expenses',
+    shopScope: 'current'
+  }),
   validateExpense,
   expenseController.createExpense
 );
 
 router.put('/:id', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({
+    permission: 'manage_expenses',
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Expense.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      managerPermission: 'manage_expenses',
+      antiOracle: true
+    }
+  }),
   validateExpense,
   expenseController.updateExpense
 );
 
 router.delete('/:id', 
-  auth, 
-  checkRole(['admin', 'org_admin']), 
+  authorize({
+    roles: ['admin', 'org_admin'],
+    shopScope: 'current',
+    ownership: {
+      getResource: (req) => Expense.findByPk(req.params.id, {
+        include: [{ model: Shop, attributes: ['organizationId'] }]
+      }),
+      managerPermission: 'manage_expenses',
+      antiOracle: true
+    }
+  }),
   expenseController.deleteExpense
 );
 
 module.exports = router;
+
