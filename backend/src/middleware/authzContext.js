@@ -302,7 +302,7 @@ async function authzContext(req, res, next) {
     }
 
     // 7. Resolve Shop Access & Scope
-    const activeShopId = req.shopId || tokenShopId || homeShopId || null;
+    const activeShopId = req.shopId || tokenShopId || null;
     let accessibleShopIds = [];
 
     if (orgRole === 'owner') {

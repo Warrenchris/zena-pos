@@ -2,7 +2,7 @@
 
 > **Phase**: Authorization Consolidation & Enforcement
 > **Source-of-Truth Baseline**: Commit `fae41af` (Gate 2C Approved)
-> **Last Updated**: October 5, 2026 (Gate 3C Completion)
+> **Last Updated**: October 5, 2026 (Gate 3D Completion)
 
 ---
 
@@ -18,11 +18,13 @@
 | **Migrated in Gate 3B** | 26 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
 | **Audited in Gate 3C (Employees & Staff Admin)** | 12 | Employees (5), Users (3), Shop Access Delegation (4) |
 | **Migrated in Gate 3C** | 12 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Cumulative Endpoints Migrated** | 62 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) |
-| **Adopted `authorize()` Primitives** | 62 | Complete policy coverage for Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access |
-| **Legacy `checkRole()` Remaining in App** | 27 | Deferred domains (Purchases, Suppliers, Expenses, Reports, Analytics, etc.) |
+| **Audited in Gate 3D (Purchases & Suppliers)** | 21 | Purchases (8), Purchase Orders (8), Suppliers (5) |
+| **Migrated in Gate 3D** | 21 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
+| **Cumulative Endpoints Migrated** | 83 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) |
+| **Adopted `authorize()` Primitives** | 83 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers |
+| **Legacy `checkRole()` Remaining in App** | 19 | Deferred domains (Expenses, Customers, Activity, Reports, etc.) |
 | **Legacy `checkPermission()` Remaining in App** | 1 in `settings.js` | Deferred domain |
-| **Remaining Endpoints to Migrate** | 111 | Deferred to Gates 3D - 3E |
+| **Remaining Endpoints to Migrate** | 90 | Deferred to Gate 3E onwards |
 
 ---
 
@@ -150,23 +152,65 @@
 
 ---
 
-## 5. Security Properties Enforced
+## 5. Gate 3D Migration Accounting (Purchases & Suppliers Domain)
 
-1. **Identity & Session Validity**: All 62 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
-2. **Database-Backed RBAC**: Forged `role` claims in client JWT tokens are neutralized; authorization context resolves operational and governance roles authoritative from DB memberships.
-3. **Branch Scope Isolation**: Every operation is scoped to caller's authoritative branch via `shopScope: 'current'` or branch parameter scope `{ param: 'id' }`. Parameter tampering attempting to act in other branches is rejected with HTTP 403 `SHOP_ACCESS_DENIED`.
-4. **Self-Modification Block**: Staff and employees cannot modify their own privileges, roles, or active status via `PUT /api/employees/:id` or `PUT /api/users/:id/role`.
-5. **Owner Protection**: Organization owner accounts cannot be modified or deleted via staff administration endpoints. Only owners can grant administrator privileges (`orgRole: 'owner'` or `orgRole: 'admin'`).
-6. **Anti-Oracle Masking**: Unauthorized requests against cross-tenant or cross-branch resources return uniform HTTP 404 responses identical to non-existent resources, preventing existence probing.
-7. **Atomic Authorization Epoch Synchronization**: Any mutation modifying roles, positions, active status, branch assignments, or branch access grants/revocations automatically increments `authzVersion` on the target actor within the database transaction, immediately invalidating cached tokens.
-8. **Canonical Staff Creation**: All employee and user creation routes pipe through `staffCreationService.createStaffMember`, enforcing subscription quotas (`maxUsers`), creating corresponding `OrganizationMembership` records, and establishing default `ShopAccess`.
+### 5.1 Route Inventory & Transformation
+
+#### `backend/src/routes/purchases.js` (8 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3D Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'view_purchases', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/:id` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'view_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `POST` | `/` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'create_purchases', shopScope: 'current'` | **MIGRATED** |
+| `PUT` | `/:id` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `PATCH` | `/:id/receive` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'receive_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `POST` | `/:id/payments` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `PATCH` | `/:id/cancel` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `roles: ['admin', 'org_admin'], shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `DELETE` | `/:id` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `roles: ['admin', 'org_admin'], shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+
+#### `backend/src/routes/purchaseOrders.js` (8 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3D Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'view_purchases', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/:id` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'view_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `POST` | `/` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'create_purchases', shopScope: 'current'` | **MIGRATED** |
+| `PUT` | `/:id` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `PATCH` | `/:id/receive` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'receive_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `PATCH` | `/:id/status` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `PATCH` | `/:id/cancel` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_purchases', shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+| `DELETE` | `/:id` | `auth, ensureShopIsolation, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `roles: ['admin', 'org_admin'], shopScope: 'current', ownership: { getResource, antiOracle: true }` | **MIGRATED** |
+
+#### `backend/src/routes/suppliers.js` (5 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3D Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `roles: ['admin', 'manager', 'org_admin'], permission: 'manage_products'` | **MIGRATED** |
+| `GET` | `/:id` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `roles: ['admin', 'manager', 'org_admin'], permission: 'manage_products'` (anti-oracle 404) | **MIGRATED** |
+| `POST` | `/` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `roles: ['admin', 'manager', 'org_admin'], permission: 'manage_products'` | **MIGRATED** |
+| `PUT` | `/:id` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `roles: ['admin', 'manager', 'org_admin'], permission: 'manage_products'` (anti-oracle 404) | **MIGRATED** |
+| `DELETE` | `/:id` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `roles: ['admin', 'org_admin']` (anti-oracle 404 + dependency check) | **MIGRATED** |
 
 ---
 
-## 6. Verification Suite Results
+## 6. Security Properties Enforced
+
+1. **Identity & Session Validity**: All 83 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
+2. **Database-Backed RBAC**: Forged `role` claims in client JWT tokens are neutralized; authorization context resolves operational and governance roles authoritative from DB memberships.
+3. **Branch Scope Isolation**: Every operation is scoped to caller's authoritative branch via `shopScope: 'current'` or branch parameter scope `{ param: 'id' }`. Parameter tampering attempting to act in other branches is rejected with HTTP 403 `SHOP_ACCESS_DENIED` or `Shop context required`.
+4. **Self-Modification & Escalation Block**: Staff cannot modify their own privileges, roles, or active status. Cashiers cannot access purchases or supplier endpoints.
+5. **Governance Actions Restriction**: Critical financial and operational actions (purchase cancellation, purchase deletion, PO deletion, supplier deletion) are strictly restricted to governance administrators (`roles: ['admin', 'org_admin']`).
+6. **Anti-Oracle Masking**: Unauthorized requests against cross-tenant or cross-branch resources (purchases, purchase orders, suppliers, employees, products) return uniform HTTP 404 responses identical to non-existent resources, preventing existence probing.
+7. **Atomic Authorization Epoch Synchronization**: Any mutation modifying roles, positions, active status, branch assignments, or branch access grants/revocations automatically increments `authzVersion` on the target actor within the database transaction, immediately invalidating cached tokens.
+8. **Cross-Tenant Entity Association Defense**: Purchase and PO creation endpoints strictly validate that referenced `supplierId` and `productId` belong to the caller's organization, rejecting foreign entity IDs with 404.
+9. **Financial & Inventory Integrity**: Cancelling received purchases atomically reverses inventory stock and stock movements. Deleting suppliers with existing purchase history is blocked with HTTP 400.
+
+---
+
+## 7. Verification Suite Results
 
 | Test Suite | Scope | Result | Passing Rate |
 |---|---|---|---|
+| `tests/gate3dPurchasesSupplierAuthorization.test.js` | 38 adversarial and functional scenarios covering Purchases & Suppliers domain | **PASS** | 38 / 38 (100%) |
+| `tests/purchases-and-orders.test.js` | Purchases & Purchase Orders production remediation test suite | **PASS** | 9 / 9 (100%) |
 | `tests/gate3cEmployeeStaffAuthorization.test.js` | 42 adversarial and functional scenarios covering Employees, Staff Admin & Branch Delegation | **PASS** | 42 / 42 (100%) |
 | `tests/gate3bInventoryProductAuthorization.test.js` | 44 adversarial and functional test scenarios covering Inventory & Products domain | **PASS** | 44 / 44 (100%) |
 | `tests/gate3aSalesAuthorization.test.js` | 34 adversarial and functional test scenarios covering Sales domain regression | **PASS** | 34 / 34 (100%) |
@@ -176,16 +220,18 @@
 | `tests/phase6bAuthSecurity.test.js` | Phase 6B authentication and password cutoff regression | **PASS** | 10 / 10 (100%) |
 | `tests/phase6bAuthSessionSecurity.test.js` | Phase 6B session management regression | **PASS** | 8 / 8 (100%) |
 | `tests/phase6bTenantOracleSecurity.test.js` | Phase 6B tenant & oracle elimination regression | **PASS** | 14 / 14 (100%) |
-| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **215 / 215 (100%)** |
-| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (1m 46s) |
+| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **262 / 262 (100%)** |
+| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (44.57s) |
 
 ---
 
-## 7. Deferred Domains (Future Gates)
+## 8. Deferred Domains (Future Gates)
 
 The following domains remain under legacy authorization pipelines pending subsequent migration gates:
 
-1. **Purchases & Suppliers**: `purchases.js`, `purchaseOrders.js`, `suppliers.js` (Gate 3D)
-2. **Coupons, Discounts & Held Carts**: `coupons.js`, `discounts.js`, `heldCartRoutes.js` (Gate 3D)
-3. **Reports, Dashboard & Analytics**: `reports.js`, `dashboard.js`, `analyticsRoutes.js` (Gate 3D)
-4. **Billing, Subscriptions & M-Pesa**: `billing.js`, `mpesa.js` (Gate 3E)
+1. **Expenses**: `expenses.js` (Gate 3E)
+2. **Customers & Activity**: `customers.js`, `activity.js`
+3. **Coupons, Discounts & Held Carts**: `coupons.js`, `discounts.js`, `heldCartRoutes.js`
+4. **Reports, Dashboard & Analytics**: `reports.js`, `dashboard.js`, `analyticsRoutes.js`
+5. **Billing, Subscriptions & M-Pesa**: `billing.js`, `mpesa.js`
+
