@@ -2,7 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const router = express.Router();
 const productController = require('../controllers/productController');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -32,9 +32,9 @@ const fileFilter = (req, file, cb) => {
     'application/vnd.ms-excel', // legacy mime sometimes sent by browsers for csv/tsv
   ];
   const allowedExtensions = ['.csv', '.xlsx'];
-  
+
   const ext = path.extname(file.originalname).toLowerCase();
-  
+
   if (allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
@@ -144,47 +144,62 @@ const validateStockUpdate = [
 
 const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 
+// All routes require authentication and canonical authorization context
+router.use(auth);
+router.use(authzContext);
+
 // Routes
-router.get('/batch', auth, productController.getProductsBatch);
-router.get('/', auth, productController.getAllProducts);
-router.get('/:id', auth, productController.getProductById);
-router.post('/import', 
-  auth, 
+router.get('/batch',
+  authorize({ permissions: { any: ['view_products', 'manage_products'] }, shopScope: 'current' }),
+  productController.getProductsBatch
+);
+
+router.get('/',
+  authorize({ permissions: { any: ['view_products', 'manage_products'] }, shopScope: 'current' }),
+  productController.getAllProducts
+);
+
+router.get('/:id',
+  authorize({ permissions: { any: ['view_products', 'manage_products'] }, shopScope: 'current' }),
+  productController.getProductById
+);
+
+router.post('/import',
   requireActiveSubscription(),
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({ permission: 'manage_products', shopScope: 'current' }),
   handleImportMiddleware,
   productController.importProducts
 );
-router.post('/', 
-  auth, 
+
+router.post('/',
   requireActiveSubscription(),
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({ permission: 'manage_products', shopScope: 'current' }),
   validateProduct,
   productController.createProduct
 );
-router.put('/:id', 
-  auth, 
+
+router.put('/:id',
   requireActiveSubscription(),
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({ permission: 'manage_products', shopScope: 'current' }),
   validateProduct,
   productController.updateProduct
 );
-router.delete('/:id', 
-  auth, 
+
+router.delete('/:id',
   requireActiveSubscription(),
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({ permission: 'manage_products', shopScope: 'current' }),
   productController.deleteProduct
 );
-router.post('/:id/deactivate', 
-  auth, 
+
+router.post('/:id/deactivate',
   requireActiveSubscription(),
-  checkRole(['admin', 'org_admin']), 
+  authorize({ roles: ['admin', 'org_admin'] }),
   productController.deactivateProductOrgWide
 );
-router.patch('/:id/stock', 
-  auth, 
+
+router.patch('/:id/stock',
   requireActiveSubscription(),
-  checkRole(['admin', 'manager', 'org_admin', 'cashier']), 
+  authorize({ permissions: { any: ['manage_products', 'access_pos'] }, shopScope: 'current' }),
   validateStockUpdate,
   productController.updateStock
 );

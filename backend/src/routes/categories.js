@@ -2,7 +2,10 @@ const express = require('express');
 const { body } = require('express-validator');
 const router = express.Router();
 const categoryController = require('../controllers/categoryController');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
+
+router.use(auth);
+router.use(authzContext);
 
 // Validation middleware
 const validateCategory = [
@@ -24,23 +27,30 @@ const validateCategory = [
 ];
 
 // Routes
-router.get('/', auth, categoryController.getAllCategories);
-router.get('/:id', auth, categoryController.getCategoryById);
-router.post('/', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+router.get('/',
+  authorize({ permissions: { any: ['view_products', 'manage_categories', 'manage_products'] }, shopScope: 'current' }),
+  categoryController.getAllCategories
+);
+
+router.get('/:id',
+  authorize({ permissions: { any: ['view_products', 'manage_categories', 'manage_products'] }, shopScope: 'current' }),
+  categoryController.getCategoryById
+);
+
+router.post('/',
+  authorize({ permission: 'manage_categories', shopScope: 'current' }),
   validateCategory,
   categoryController.createCategory
 );
-router.put('/:id', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+
+router.put('/:id',
+  authorize({ permission: 'manage_categories', shopScope: 'current' }),
   validateCategory,
   categoryController.updateCategory
 );
-router.delete('/:id', 
-  auth, 
-  checkRole(['admin', 'org_admin']), 
+
+router.delete('/:id',
+  authorize({ roles: ['admin', 'org_admin'], shopScope: 'current' }),
   categoryController.deleteCategory
 );
 
