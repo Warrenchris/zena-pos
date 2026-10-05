@@ -2,7 +2,7 @@
 
 > **Phase**: Authorization Consolidation & Enforcement
 > **Source-of-Truth Baseline**: Commit `fae41af` (Gate 2C Approved)
-> **Last Updated**: October 5, 2026 (Gate 3D Completion)
+> **Last Updated**: October 5, 2026 (Gate 3E Completion)
 
 ---
 
@@ -20,11 +20,13 @@
 | **Migrated in Gate 3C** | 12 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
 | **Audited in Gate 3D (Purchases & Suppliers)** | 21 | Purchases (8), Purchase Orders (8), Suppliers (5) |
 | **Migrated in Gate 3D** | 21 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Cumulative Endpoints Migrated** | 83 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) |
-| **Adopted `authorize()` Primitives** | 83 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers |
-| **Legacy `checkRole()` Remaining in App** | 19 | Deferred domains (Expenses, Customers, Activity, Reports, etc.) |
+| **Audited in Gate 3E (Expenses & Financial Operations)** | 6 | Expenses (6) |
+| **Migrated in Gate 3E** | 6 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
+| **Cumulative Endpoints Migrated** | 89 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) + Gate 3E (6) |
+| **Adopted `authorize()` Primitives** | 89 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses |
+| **Legacy `checkRole()` Remaining in App** | 14 | Deferred domains (Customers, Activity, Reports, System Health, AI Proxy) |
 | **Legacy `checkPermission()` Remaining in App** | 1 in `settings.js` | Deferred domain |
-| **Remaining Endpoints to Migrate** | 90 | Deferred to Gate 3E onwards |
+| **Remaining Endpoints to Migrate** | 84 | Deferred to Gate 3F onwards |
 
 ---
 
@@ -191,24 +193,41 @@
 
 ---
 
-## 6. Security Properties Enforced
+## 6. Gate 3E Migration Accounting (Expenses & Financial Operations)
 
-1. **Identity & Session Validity**: All 83 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
-2. **Database-Backed RBAC**: Forged `role` claims in client JWT tokens are neutralized; authorization context resolves operational and governance roles authoritative from DB memberships.
-3. **Branch Scope Isolation**: Every operation is scoped to caller's authoritative branch via `shopScope: 'current'` or branch parameter scope `{ param: 'id' }`. Parameter tampering attempting to act in other branches is rejected with HTTP 403 `SHOP_ACCESS_DENIED` or `Shop context required`.
-4. **Self-Modification & Escalation Block**: Staff cannot modify their own privileges, roles, or active status. Cashiers cannot access purchases or supplier endpoints.
-5. **Governance Actions Restriction**: Critical financial and operational actions (purchase cancellation, purchase deletion, PO deletion, supplier deletion) are strictly restricted to governance administrators (`roles: ['admin', 'org_admin']`).
-6. **Anti-Oracle Masking**: Unauthorized requests against cross-tenant or cross-branch resources (purchases, purchase orders, suppliers, employees, products) return uniform HTTP 404 responses identical to non-existent resources, preventing existence probing.
-7. **Atomic Authorization Epoch Synchronization**: Any mutation modifying roles, positions, active status, branch assignments, or branch access grants/revocations automatically increments `authzVersion` on the target actor within the database transaction, immediately invalidating cached tokens.
-8. **Cross-Tenant Entity Association Defense**: Purchase and PO creation endpoints strictly validate that referenced `supplierId` and `productId` belong to the caller's organization, rejecting foreign entity IDs with 404.
-9. **Financial & Inventory Integrity**: Cancelling received purchases atomically reverses inventory stock and stock movements. Deleting suppliers with existing purchase history is blocked with HTTP 400.
+### 6.1 Route Inventory & Transformation
+
+#### `backend/src/routes/expenses.js` (6 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3E Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, authorize` | `permission: 'manage_expenses', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/statistics` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, authorize` | `permissions.any: ['manage_expenses', 'view_reports'], shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/:id` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, authorize` | `permission: 'manage_expenses', shopScope: 'current', ownership: { getResource, managerPermission: 'manage_expenses', antiOracle: true }` | **MIGRATED** |
+| `POST` | `/` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, authorize` | `permission: 'manage_expenses', shopScope: 'current'` | **MIGRATED** |
+| `PUT` | `/:id` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, authorize` | `permission: 'manage_expenses', shopScope: 'current', ownership: { getResource, managerPermission: 'manage_expenses', antiOracle: true }` | **MIGRATED** |
+| `DELETE` | `/:id` | `auth, checkRole(['admin', 'org_admin'])` | `auth, authzContext, authorize` | `roles: ['admin', 'org_admin'], shopScope: 'current', ownership: { getResource, managerPermission: 'manage_expenses', antiOracle: true }` | **MIGRATED** |
 
 ---
 
-## 7. Verification Suite Results
+## 7. Security Properties Enforced
+
+1. **Identity & Session Validity**: All 89 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
+2. **Database-Backed RBAC**: Forged `role` claims in client JWT tokens are neutralized; authorization context resolves operational and governance roles authoritative from DB memberships.
+3. **Branch Scope Isolation**: Every operation is scoped to caller's authoritative branch via `shopScope: 'current'` or branch parameter scope `{ param: 'id' }`. Parameter tampering attempting to act in other branches is rejected with HTTP 403 `SHOP_ACCESS_DENIED` or `Shop context required`.
+4. **Self-Modification & Escalation Block**: Staff cannot modify their own privileges, roles, or active status. Cashiers cannot access purchases, suppliers, or expense management endpoints.
+5. **Governance Actions Restriction**: Critical financial and operational actions (purchase cancellation, purchase deletion, PO deletion, supplier deletion, expense deletion) are strictly restricted to governance administrators (`roles: ['admin', 'org_admin']`).
+6. **Anti-Oracle Masking**: Unauthorized requests against cross-tenant or cross-branch resources (purchases, purchase orders, suppliers, employees, products, expenses) return uniform HTTP 404 responses identical to non-existent resources, preventing existence probing.
+7. **Atomic Authorization Epoch Synchronization**: Any mutation modifying roles, positions, active status, branch assignments, or branch access grants/revocations automatically increments `authzVersion` on the target actor within the database transaction, immediately invalidating cached tokens.
+8. **Cross-Tenant Entity Association Defense**: Purchase, PO, and expense creation endpoints strictly validate that entities and shops belong to the caller's organization, rejecting foreign entity IDs with 403/404.
+9. **Financial & Dual Identity Attribution**: Expenses record authoritative `recordedBy` (`userId` for platform users, `employeeId` for employees) derived strictly from `req.authz.identity`. Financial statistics aggregate solely within authorized shop and organization scopes.
+
+---
+
+## 8. Verification Suite Results
 
 | Test Suite | Scope | Result | Passing Rate |
 |---|---|---|---|
+| `tests/gate3eExpensesFinancialAuthorization.test.js` | 38 adversarial and functional scenarios covering Expenses & Financial Operations | **PASS** | 38 / 38 (100%) |
 | `tests/gate3dPurchasesSupplierAuthorization.test.js` | 38 adversarial and functional scenarios covering Purchases & Suppliers domain | **PASS** | 38 / 38 (100%) |
 | `tests/purchases-and-orders.test.js` | Purchases & Purchase Orders production remediation test suite | **PASS** | 9 / 9 (100%) |
 | `tests/gate3cEmployeeStaffAuthorization.test.js` | 42 adversarial and functional scenarios covering Employees, Staff Admin & Branch Delegation | **PASS** | 42 / 42 (100%) |
@@ -220,18 +239,18 @@
 | `tests/phase6bAuthSecurity.test.js` | Phase 6B authentication and password cutoff regression | **PASS** | 10 / 10 (100%) |
 | `tests/phase6bAuthSessionSecurity.test.js` | Phase 6B session management regression | **PASS** | 8 / 8 (100%) |
 | `tests/phase6bTenantOracleSecurity.test.js` | Phase 6B tenant & oracle elimination regression | **PASS** | 14 / 14 (100%) |
-| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **262 / 262 (100%)** |
-| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (44.57s) |
+| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **300 / 300 (100%)** |
+| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (6m 20s) |
 
 ---
 
-## 8. Deferred Domains (Future Gates)
+## 9. Deferred Domains (Future Gates)
 
 The following domains remain under legacy authorization pipelines pending subsequent migration gates:
 
-1. **Expenses**: `expenses.js` (Gate 3E)
-2. **Customers & Activity**: `customers.js`, `activity.js`
-3. **Coupons, Discounts & Held Carts**: `coupons.js`, `discounts.js`, `heldCartRoutes.js`
-4. **Reports, Dashboard & Analytics**: `reports.js`, `dashboard.js`, `analyticsRoutes.js`
-5. **Billing, Subscriptions & M-Pesa**: `billing.js`, `mpesa.js`
+1. **Customers & Activity**: `customers.js`, `activity.js`
+2. **Coupons, Discounts & Held Carts**: `coupons.js`, `discounts.js`, `heldCartRoutes.js`
+3. **Reports, Dashboard & Analytics**: `reports.js`, `dashboard.js`, `analyticsRoutes.js`
+4. **Billing, Subscriptions & M-Pesa**: `billing.js`, `mpesa.js`
+
 
