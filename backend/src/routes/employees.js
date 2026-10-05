@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { auth, checkRole, ensureShopIsolation } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
 const { requireVerifiedEmail } = require('../middleware/requireVerifiedEmail');
+const { Employee, User, Shop } = require('../models');
 const {
   getAllEmployees,
   getEmployeeById,
@@ -10,30 +11,95 @@ const {
   deleteEmployee
 } = require('../controllers/employeeController');
 
-const checkAdminOrSelf = (req, res, next) => {
-  if (req.user && (req.user.role === 'admin' || req.user.role === 'org_admin')) return next();
-  const userId = req.user ? String(req.user.id) : null;
-  const employeeId = req.user && req.user.employeeId ? String(req.user.employeeId) : null;
-  const targetId = String(req.params.id);
-  if ((userId && userId === targetId) || (employeeId && employeeId === targetId)) {
-    return next();
-  }
-  return res.status(403).json({ error: 'Access denied: Admin role required to view other employees' });
-};
+// All employee routes require authentication and canonical authorization context
+router.use(auth);
+router.use(authzContext);
 
-// Get all employees (admin, manager, cashier) – tenant scoped
-router.get('/', auth, checkRole(['admin', 'manager', 'org_admin', 'cashier']), getAllEmployees);
+// Get all employees – branch scoped, requires manage_employees capability
+router.get('/',
+  authorize({
+    permissions: { any: ['manage_employees'] },
+    shopScope: 'current'
+  }),
+  getAllEmployees
+);
 
-// Get employee by ID (admin or self)
-router.get('/:id', auth, checkAdminOrSelf, getEmployeeById);
+// Get employee by ID – admin/manager or self-lookup, with anti-oracle masking
+router.get('/:id',
+  authorize({
+    ownership: {
+      getResource: async (req) => {
+        const targetId = req.params.id;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+        if (isUuid) {
+          const emp = await Employee.findByPk(targetId, {
+            include: [{ model: Shop, attributes: ['id', 'organizationId'] }]
+          });
+          if (!emp) return null;
+          return {
+            id: emp.id,
+            shopId: emp.shopId,
+            organizationId: emp.Shop?.organizationId,
+            isEmployee: true
+          };
+        } else if (/^\d+$/.test(targetId)) {
+          const u = await User.findByPk(targetId, {
+            include: [{ model: Shop, attributes: ['id', 'organizationId'] }]
+          });
+          if (!u) return null;
+          return {
+            id: u.id,
+            shopId: u.shopId,
+            organizationId: u.Shop?.organizationId,
+            isEmployee: false
+          };
+        }
+        return null;
+      },
+      isOwner: (authz, resource) => {
+        if (!resource) return false;
+        if (resource.isEmployee) {
+          return authz.identity.isEmployee && String(authz.identity.id) === String(resource.id);
+        } else {
+          return !authz.identity.isEmployee && String(authz.identity.id) === String(resource.id);
+        }
+      },
+      managerPermission: 'manage_employees',
+      antiOracle: true
+    }
+  }),
+  getEmployeeById
+);
 
-// Create new employee (admin or org_admin) – tenant validated and branch authorized
-router.post('/', auth, checkRole(['admin', 'org_admin']), requireVerifiedEmail, createEmployee);
+// Create new employee – requires governance admin role and manage_employees
+router.post('/',
+  requireVerifiedEmail,
+  authorize({
+    roles: ['admin', 'org_admin'],
+    permission: 'manage_employees',
+    shopScope: 'current'
+  }),
+  createEmployee
+);
 
-// Update employee (admin or org_admin) – tenant scoped and shopId forced
-router.put('/:id', auth, checkRole(['admin', 'org_admin']), ensureShopIsolation, updateEmployee);
+// Update employee – requires governance admin role and manage_employees
+router.put('/:id',
+  authorize({
+    roles: ['admin', 'org_admin'],
+    permission: 'manage_employees',
+    shopScope: 'current'
+  }),
+  updateEmployee
+);
 
-// Delete employee (admin or org_admin)
-router.delete('/:id', auth, checkRole(['admin', 'org_admin']), deleteEmployee);
+// Delete employee – requires governance admin role and manage_employees
+router.delete('/:id',
+  authorize({
+    roles: ['admin', 'org_admin'],
+    permission: 'manage_employees',
+    shopScope: 'current'
+  }),
+  deleteEmployee
+);
 
 module.exports = router;

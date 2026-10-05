@@ -1,8 +1,11 @@
+'use strict';
+
 const { Op } = require('sequelize');
 const Employee = require('../models/Employee');
 const User = require('../models/User');
 const Shop = require('../models/Shop');
 const OrganizationMembership = require('../models/OrganizationMembership');
+const ShopAccess = require('../models/ShopAccess');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
@@ -17,16 +20,44 @@ const tokenRevocationService = require('../services/tokenRevocationService');
 // Get all employees and shop staff
 exports.getAllEmployees = async (req, res) => {
   try {
-    // Enforce tenant scope based on authenticated user's shop
-    const where = { shopId: req.user.shopId };
-    
-    const employees = await Employee.findAll({ 
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
+
+    const targetShopId = req.query.shopId
+      ? parseInt(req.query.shopId, 10)
+      : (req.shopId || req.authz?.scope?.activeShopId || req.user?.shopId);
+
+    if (!targetShopId) {
+      return res.status(400).json({ error: 'Shop context required.' });
+    }
+
+    // Verify target shop exists in this organization
+    const targetShop = await Shop.findOne({
+      where: { id: targetShopId, organizationId: orgId }
+    });
+    if (!targetShop) {
+      return res.status(404).json({ error: 'Shop not found in this organization.' });
+    }
+
+    // Verify caller has access to this branch
+    if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(targetShopId)) {
+      return res.status(403).json({ error: 'Access denied to this branch.' });
+    }
+
+    const where = { shopId: targetShopId };
+
+    const employees = await Employee.findAll({
       where,
-      order: [['createdAt', 'DESC']] 
+      order: [['createdAt', 'DESC']]
     });
 
     const users = await User.findAll({
-      where,
+      where: {
+        ...where,
+        role: { [Op.ne]: 'super_admin' }
+      },
       attributes: ['id', 'name', 'email', 'role', 'active', 'shopId'],
       order: [['createdAt', 'DESC']]
     });
@@ -60,23 +91,37 @@ exports.getAllEmployees = async (req, res) => {
 // Get employee by ID (with stats, sales history, and top products)
 exports.getEmployeeById = async (req, res) => {
   try {
-    const shopId = req.shopId || req.user.shopId;
-    const targetId = req.params.id;
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
 
-    // Check Employee table first, then User table if not found or if ID is numeric
+    const targetId = req.params.id;
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
-    
+
     let employeeData = null;
     let isUser = false;
+    let shopId = null;
 
     if (isUuid) {
-      const emp = await Employee.findOne({ where: { id: targetId, shopId } });
-      if (emp) {
+      const emp = await Employee.findByPk(targetId, {
+        include: [{ model: Shop, attributes: ['id', 'organizationId'] }]
+      });
+      if (emp && emp.Shop?.organizationId === orgId) {
+        if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(emp.shopId)) {
+          return res.status(404).json({ error: 'Employee not found' });
+        }
         employeeData = emp.toJSON ? emp.toJSON() : emp;
+        shopId = emp.shopId;
       }
     } else if (/^\d+$/.test(targetId)) {
-      const u = await User.findOne({ where: { id: parseInt(targetId, 10), shopId } });
-      if (u) {
+      const u = await User.findByPk(parseInt(targetId, 10), {
+        include: [{ model: Shop, attributes: ['id', 'organizationId'] }]
+      });
+      if (u && u.Shop?.organizationId === orgId) {
+        if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(u.shopId)) {
+          return res.status(404).json({ error: 'Employee not found' });
+        }
         const uJson = u.toJSON ? u.toJSON() : u;
         employeeData = {
           id: uJson.id,
@@ -91,12 +136,18 @@ exports.getEmployeeById = async (req, res) => {
           shopId: uJson.shopId
         };
         isUser = true;
+        shopId = u.shopId;
       }
     } else {
-      // Direct lookup as Employee ID even if format non-standard
-      const emp = await Employee.findOne({ where: { id: targetId, shopId } });
-      if (emp) {
+      const emp = await Employee.findByPk(targetId, {
+        include: [{ model: Shop, attributes: ['id', 'organizationId'] }]
+      });
+      if (emp && emp.Shop?.organizationId === orgId) {
+        if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(emp.shopId)) {
+          return res.status(404).json({ error: 'Employee not found' });
+        }
         employeeData = emp.toJSON ? emp.toJSON() : emp;
+        shopId = emp.shopId;
       }
     }
 
@@ -104,8 +155,8 @@ exports.getEmployeeById = async (req, res) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
     const offset = (page - 1) * limit;
 
     const saleWhere = {
@@ -234,15 +285,24 @@ exports.getEmployeeById = async (req, res) => {
 // Create new employee
 exports.createEmployee = async (req, res) => {
   try {
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
+
     const validationError = validateEmployee(req.body);
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }
 
     const { employee } = await staffCreationService.createStaffMember({
-      actor: req.user,
+      actor: {
+        ...req.user,
+        organizationId: orgId,
+        shopId: req.authz?.scope?.activeShopId || req.user.shopId
+      },
       body: req.body,
-      reqOrgId: req.organizationId
+      reqOrgId: orgId
     });
 
     return res.status(201).json(employee);
@@ -268,14 +328,80 @@ exports.createEmployee = async (req, res) => {
 exports.updateEmployee = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const employee = await Employee.findOne({
-      where: { id: req.params.id, shopId: req.user.shopId },
-      transaction
-    });
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
+    if (!orgId) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
 
+    const employee = await Employee.findByPk(req.params.id, { transaction });
     if (!employee) {
       await transaction.rollback();
       return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Verify employee belongs to caller's organization
+    const currentShop = await Shop.findOne({
+      where: { id: employee.shopId, organizationId: orgId },
+      transaction
+    });
+    if (!currentShop) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Verify caller has branch access to current shop
+    if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(employee.shopId)) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Access denied: you do not have access to this branch.' });
+    }
+
+    // Self-modification guard: actor cannot modify their own privileges or status
+    const isSelf = (req.authz?.identity?.isEmployee && String(req.authz.identity.id) === String(employee.id)) ||
+                   (req.user?.isEmployee && String(req.user.id) === String(employee.id));
+    if (isSelf && (req.body.position || req.body.role || req.body.orgRole || req.body.status)) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Access denied: employees cannot modify their own privileges or status.' });
+    }
+
+    // Owner protection: cannot modify owner's account unless caller is owner
+    const membership = await OrganizationMembership.findOne({
+      where: { employeeId: employee.id },
+      transaction
+    });
+    const isOwnerCaller = Boolean(req.authz?.tenant?.isOwner || (req.user && req.user.role === 'admin' && !req.user.isEmployee));
+    if (membership?.orgRole === 'owner' && !isOwnerCaller) {
+      await transaction.rollback();
+      return res.status(403).json({ error: "Cannot modify the organization owner's account." });
+    }
+
+    // Owner elevation guard: only organization owner can grant administrator privileges
+    const isGrantingAdmin = (req.body.position && req.body.position.toLowerCase() === 'admin') ||
+                            (req.body.role && req.body.role.toLowerCase() === 'admin') ||
+                            (req.body.orgRole === 'admin') ||
+                            (req.body.orgRole === 'owner');
+    if (isGrantingAdmin && !isOwnerCaller) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Access denied: only organization owners can grant administrator privileges.' });
+    }
+
+    // Branch reassignment validation
+    let targetShopId = employee.shopId;
+    const requestedShopId = req.body.shopId ? parseInt(req.body.shopId, 10) : null;
+    if (requestedShopId && requestedShopId !== employee.shopId) {
+      const targetShop = await Shop.findOne({
+        where: { id: requestedShopId, organizationId: orgId, active: true },
+        transaction
+      });
+      if (!targetShop) {
+        await transaction.rollback();
+        return res.status(404).json({ error: 'Target shop not found in this organization.' });
+      }
+      if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(targetShop.id)) {
+        await transaction.rollback();
+        return res.status(403).json({ error: 'Access denied: you do not have access to the target branch.' });
+      }
+      targetShopId = targetShop.id;
     }
 
     // Merge existing employee with request body for validation of partial updates
@@ -288,6 +414,7 @@ exports.updateEmployee = async (req, res) => {
       salary: employee.salary,
       hireDate: employee.hireDate,
       ...req.body,
+      shopId: targetShopId,
       id: req.params.id
     };
 
@@ -306,48 +433,40 @@ exports.updateEmployee = async (req, res) => {
     const previousStatus = employee.status;
     const previousShopId = employee.shopId;
 
-    const isPromotingToAdmin = req.body.position && req.body.position.toLowerCase() === 'admin' && previousPosition !== 'admin';
-    if (isPromotingToAdmin && req.user.role !== 'admin') {
-      await transaction.rollback();
-      return res.status(403).json({ error: 'Access denied: only organization owners can grant the Administrator position.' });
-    }
-
     const positionChanged = Boolean(req.body.position && req.body.position !== previousPosition);
     const statusChanged = Boolean(req.body.status && req.body.status !== previousStatus);
-    const shopIdChanged = Boolean(req.body.shopId && Number(req.body.shopId) !== Number(previousShopId));
+    const shopIdChanged = targetShopId !== previousShopId;
 
-    await employee.update(req.body, {
+    await employee.update({
+      ...req.body,
+      shopId: targetShopId
+    }, {
       transaction,
       individualHooks: true // Ensures password hashing hooks are run
     });
 
-    // Sync OrganizationMembership orgRole if employee position updated
+    // Synchronize OrganizationMembership
     let membershipOrgRoleChanged = false;
-    if (positionChanged || req.body.orgRole) {
-      const membership = await OrganizationMembership.findOne({
-        where: { employeeId: employee.id },
-        transaction
-      });
-      if (membership) {
+    if (membership) {
+      if (positionChanged || req.body.orgRole) {
         const targetOrgRole = req.body.orgRole || staffCreationService.positionToOrgRole(req.body.position, req.body.role);
         if (membership.orgRole !== targetOrgRole) {
           membership.orgRole = targetOrgRole;
-          await membership.save({ transaction });
           membershipOrgRoleChanged = true;
         }
       }
-    }
+      if (statusChanged) {
+        membership.status = req.body.status === 'active' ? 'active' : 'suspended';
+      }
+      await membership.save({ transaction });
 
-    // Sync OrganizationMembership status if employee status updated
-    if (statusChanged) {
-      const membershipStatus = req.body.status === 'active' ? 'active' : 'suspended';
-      const membership = await OrganizationMembership.findOne({
-        where: { employeeId: employee.id },
-        transaction
-      });
-      if (membership) {
-        membership.status = membershipStatus;
-        await membership.save({ transaction });
+      // If branch changed, synchronize ShopAccess
+      if (shopIdChanged) {
+        await ShopAccess.findOrCreate({
+          where: { membershipId: membership.id, shopId: targetShopId },
+          defaults: { isDefault: true },
+          transaction
+        });
       }
     }
 
@@ -377,23 +496,63 @@ exports.updateEmployee = async (req, res) => {
 exports.deleteEmployee = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const employee = await Employee.findOne({
-      where: { id: req.params.id, shopId: req.user.shopId },
-      transaction
-    });
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
+    if (!orgId) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
 
+    const employee = await Employee.findByPk(req.params.id, { transaction });
     if (!employee) {
       await transaction.rollback();
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    // Clean up associated OrganizationMembership and ShopAccess
-    await OrganizationMembership.destroy({
+    // Verify employee belongs to caller's organization
+    const currentShop = await Shop.findOne({
+      where: { id: employee.shopId, organizationId: orgId },
+      transaction
+    });
+    if (!currentShop) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Verify caller has branch access to employee's shop
+    if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(employee.shopId)) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Access denied: you do not have access to this branch.' });
+    }
+
+    // Self-deletion check
+    const isSelf = (req.authz?.identity?.isEmployee && String(req.authz.identity.id) === String(employee.id)) ||
+                   (req.user?.isEmployee && String(req.user.id) === String(employee.id));
+    if (isSelf) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Access denied: cannot delete your own account.' });
+    }
+
+    // Owner protection check
+    const membership = await OrganizationMembership.findOne({
       where: { employeeId: employee.id },
       transaction
     });
+    if (membership?.orgRole === 'owner') {
+      await transaction.rollback();
+      return res.status(403).json({ error: "Cannot delete the organization owner's account." });
+    }
+
+    // Clean up associated OrganizationMembership and ShopAccess
+    if (membership) {
+      await ShopAccess.destroy({
+        where: { membershipId: membership.id },
+        transaction
+      });
+      await membership.destroy({ transaction });
+    }
 
     await employee.destroy({ transaction });
+    await tokenRevocationService.incrementAuthzVersion(employee.id, true, transaction);
     await transaction.commit();
 
     await tokenRevocationService.setUserStatus(employee.id, true, 'inactive');
