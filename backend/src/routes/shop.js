@@ -2,13 +2,14 @@
 
 const express = require('express');
 const { body } = require('express-validator');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
 const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const controller = require('../controllers/shopController');
 
 const router = express.Router();
 
 router.use(auth);
+router.use(authzContext);
 
 const validateCreateShop = [
   body('name')
@@ -34,15 +35,41 @@ const validateCreateShop = [
 router.get('/accessible', controller.getAccessibleShops);
 router.post('/', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), validateCreateShop, controller.createShop);
 router.get('/me', controller.getMine);
-router.put('/me', checkRole(['admin', 'manager', 'org_admin']), controller.updateMine);
+router.put('/me', authorize({ roles: ['admin', 'manager', 'org_admin'], shopScope: 'current' }), controller.updateMine);
 
 // Reversible branch lifecycle (P2-04)
 router.patch('/:id/deactivate', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.deactivateShop);
 router.patch('/:id/activate', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.activateShop);
 
-// Owner-controlled branch delegation (P1-03)
-router.get('/:id/access', controller.getShopAccess);
-router.post('/:id/access', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.grantShopAccess);
-router.delete('/:id/access/:membershipId', requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }), controller.revokeShopAccess);
+// Branch access delegation (Gate 3C)
+router.get('/:id/access',
+  authorize({
+    roles: ['admin', 'org_admin', 'manager'],
+    permission: 'manage_employees',
+    shopScope: { param: 'id' },
+    antiOracle: true
+  }),
+  controller.getShopAccess
+);
+
+router.post('/:id/access',
+  requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }),
+  authorize({
+    roles: ['admin', 'org_admin'],
+    shopScope: { param: 'id' },
+    antiOracle: true
+  }),
+  controller.grantShopAccess
+);
+
+router.delete('/:id/access/:membershipId',
+  requireActiveSubscription({ suspendedCode: 'SUBSCRIPTION_SUSPENDED' }),
+  authorize({
+    roles: ['admin', 'org_admin'],
+    shopScope: { param: 'id' },
+    antiOracle: true
+  }),
+  controller.revokeShopAccess
+);
 
 module.exports = router;

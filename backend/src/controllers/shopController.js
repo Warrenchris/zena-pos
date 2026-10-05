@@ -484,12 +484,12 @@ exports.activateShop = async (req, res) => {
 };
 
 /**
- * Shop Access Administration (P1-03)
+ * Shop Access Administration (P1-03 / Gate 3C)
  * GET /api/shops/:id/access
  */
 exports.getShopAccess = async (req, res) => {
   try {
-    const orgId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
     if (!orgId) {
       return res.status(403).json({ error: 'Organization context required.' });
     }
@@ -497,6 +497,10 @@ exports.getShopAccess = async (req, res) => {
     const shopId = parseInt(req.params.id, 10);
     const shop = await Shop.findOne({ where: { id: shopId, organizationId: orgId } });
     if (!shop) {
+      return res.status(404).json({ error: 'Shop not found in this organization.' });
+    }
+
+    if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(shopId)) {
       return res.status(404).json({ error: 'Shop not found in this organization.' });
     }
 
@@ -532,32 +536,29 @@ exports.getShopAccess = async (req, res) => {
 };
 
 /**
- * Grant Shop Access (P1-03)
+ * Grant Shop Access (P1-03 / Gate 3C)
  * POST /api/shops/:id/access
  */
 exports.grantShopAccess = async (req, res) => {
   try {
-    const orgId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
     if (!orgId) {
       return res.status(403).json({ error: 'Organization context required.' });
     }
 
-    // Owner authorization
-    const callerMembership = await OrganizationMembership.findOne({
-      where: {
-        organizationId: orgId,
-        status: 'active',
-        ...(req.user.isEmployee ? { employeeId: req.user.id } : { userId: req.user.id })
-      }
-    });
-    if (!callerMembership || callerMembership.orgRole !== 'owner') {
-      return res.status(403).json({ error: 'Only organization owners can manage branch access.' });
+    const callerIsAdmin = Boolean(req.authz?.tenant?.isOrgAdmin || req.authz?.tenant?.isOwner);
+    if (!callerIsAdmin) {
+      return res.status(403).json({ error: 'Only organization administrators can manage branch access.' });
     }
 
     const shopId = parseInt(req.params.id, 10);
     const shop = await Shop.findOne({ where: { id: shopId, organizationId: orgId } });
     if (!shop) {
       return res.status(404).json({ error: 'Shop not found in this organization.' });
+    }
+
+    if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(shopId)) {
+      return res.status(403).json({ error: 'Access denied: you do not have authority over this branch.' });
     }
 
     const { membershipId, isDefault = false } = req.body;
@@ -619,26 +620,19 @@ exports.grantShopAccess = async (req, res) => {
 };
 
 /**
- * Revoke Shop Access (P1-03)
+ * Revoke Shop Access (P1-03 / Gate 3C)
  * DELETE /api/shops/:id/access/:membershipId
  */
 exports.revokeShopAccess = async (req, res) => {
   try {
-    const orgId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
     if (!orgId) {
       return res.status(403).json({ error: 'Organization context required.' });
     }
 
-    // Owner authorization
-    const callerMembership = await OrganizationMembership.findOne({
-      where: {
-        organizationId: orgId,
-        status: 'active',
-        ...(req.user.isEmployee ? { employeeId: req.user.id } : { userId: req.user.id })
-      }
-    });
-    if (!callerMembership || callerMembership.orgRole !== 'owner') {
-      return res.status(403).json({ error: 'Only organization owners can revoke branch access.' });
+    const callerIsAdmin = Boolean(req.authz?.tenant?.isOrgAdmin || req.authz?.tenant?.isOwner);
+    if (!callerIsAdmin) {
+      return res.status(403).json({ error: 'Only organization administrators can revoke branch access.' });
     }
 
     const shopId = parseInt(req.params.id, 10);
@@ -647,6 +641,10 @@ exports.revokeShopAccess = async (req, res) => {
     const shop = await Shop.findOne({ where: { id: shopId, organizationId: orgId } });
     if (!shop) {
       return res.status(404).json({ error: 'Shop not found in this organization.' });
+    }
+
+    if (req.authz?.scope?.hasShopAccess && !req.authz.scope.hasShopAccess(shopId)) {
+      return res.status(403).json({ error: 'Access denied: you do not have authority over this branch.' });
     }
 
     const targetMembership = await OrganizationMembership.findOne({
