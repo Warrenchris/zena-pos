@@ -45,6 +45,7 @@ import KeyboardShortcutsPopover from '../components/pos/KeyboardShortcutsPopover
 import DiscountModal from '../components/pos/DiscountModal';
 import { useToast } from '../components/Toast';
 import { notifySaleComplete, notifyError as notifyErrorUtil } from '../utils/notifications';
+import { isProductNotFoundError, mapCartItemToSalePayload, normalizeCartItem } from '../utils/cartItems';
 import MetricCard from '../components/pos/MetricCard';
 import { usePersistedCart } from '../hooks/usePersistedCart';
 import { usePendingSales } from '../hooks/usePendingSales';
@@ -191,6 +192,7 @@ export default function CashierDashboard() {
       const updatedItems = items.map(item => {
         const itemId = item.id || item.productId;
         const freshProduct = productMap.get(itemId);
+        const normalizedItem = normalizeCartItem(item, freshProduct);
 
         if (freshProduct) {
           const freshPrice = typeof freshProduct.price === 'number' ? freshProduct.price : parseFloat(freshProduct.price || 0);
@@ -199,43 +201,52 @@ export default function CashierDashboard() {
             priceChanged = true;
           }
           return {
-            ...item,
+            ...normalizedItem,
             price: freshPrice,
             subtotal: item.quantity * freshPrice,
             stockQuantity: freshProduct.stockQuantity
           };
         }
-        return item;
+        return normalizedItem;
       });
 
-      return { updatedItems, priceChanged };
+      const unavailableCount = updatedItems.filter(item => !productMap.has(item.id)).length;
+      return { updatedItems, priceChanged, unavailableCount };
     } catch (error) {
       console.warn('Batch price revalidation failed, falling back to parallel fetch:', error);
       // Parallel fallback with Promise.all
       let priceChanged = false;
+      let unavailableCount = 0;
       const updatedItems = await Promise.all(
         items.map(async (item) => {
           try {
             const itemId = item.id || item.productId;
             const res = await api.get(`/api/products/${itemId}`);
             const freshProduct = res.data;
+            if (!freshProduct) {
+              unavailableCount += 1;
+              return normalizeCartItem(item, null);
+            }
             const freshPrice = typeof freshProduct.price === 'number' ? freshProduct.price : parseFloat(freshProduct.price || 0);
             const oldPrice = typeof item.price === 'number' ? item.price : parseFloat(item.price || 0);
             if (Math.abs(freshPrice - oldPrice) > 0.001) {
               priceChanged = true;
             }
             return {
-              ...item,
+              ...normalizeCartItem(item, freshProduct),
               price: freshPrice,
               subtotal: item.quantity * freshPrice,
               stockQuantity: freshProduct.stockQuantity
             };
-          } catch {
-            return item;
+          } catch (error) {
+            if (isProductNotFoundError(error)) {
+              unavailableCount += 1;
+            }
+            return normalizeCartItem(item, null);
           }
         })
       );
-      return { updatedItems, priceChanged };
+      return { updatedItems, priceChanged, unavailableCount };
     }
   }, []);
 
@@ -302,9 +313,10 @@ export default function CashierDashboard() {
       await api.post('/api/held-carts', {
         label: finalLabel,
         items: currentSale.items.map(item => ({
-          productId: item.id,
+          productId: item.id ?? item.productId,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          name: item.name
         })),
         customer: currentSale.customer,
         discounts: []
@@ -344,7 +356,7 @@ export default function CashierDashboard() {
       const { items, customer, discounts, notes } = response.data;
       
       // Re-fetch current prices
-      const { updatedItems, priceChanged } = await revalidateCartPrices(items);
+      const { updatedItems, priceChanged, unavailableCount } = await revalidateCartPrices(items);
       const newTotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
 
       setCurrentSale({
@@ -358,7 +370,9 @@ export default function CashierDashboard() {
       });
       setSalesMode('product-selection');
 
-      if (priceChanged) {
+      if (unavailableCount > 0) {
+        showToast('Some items are no longer available and were kept in the cart.', 'warning');
+      } else if (priceChanged) {
         showToast('Some item prices have changed since this cart was held.', 'warning');
       } else {
         showToast(`Recalled held cart '${heldCart.label}'`, 'success');
@@ -1051,15 +1065,7 @@ export default function CashierDashboard() {
       idempotencyKey,
       managerApprovalId,
       managerPassword,
-      items: currentSale.items.map(item => ({
-        productId: item.id,
-        quantity: item.quantity,
-        price: item.price,
-        discount: item.discount || 0,
-        discountType: item.discountType || null,
-        discountValue: item.discountValue || null,
-        discountReason: item.discountReason || null
-      })),
+      items: currentSale.items.map(mapCartItemToSalePayload),
       totalAmount: currentSale.total,
       total: currentSale.total,
       discount: (cartManualDiscount ? cartManualDiscount.discountAmount : (appliedCoupon ? appliedCoupon.discountAmount : 0)),
