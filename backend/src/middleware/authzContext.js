@@ -135,6 +135,7 @@ async function authzContext(req, res, next) {
     let entityUser = null;
     let entityEmployee = null;
     let rawRole = 'cashier';
+    let effectiveRole = null;
     let homeShopId = null;
     let email = '';
     let name = '';
@@ -442,7 +443,8 @@ async function authzContext(req, res, next) {
 
     next();
   } catch (error) {
-    logger.error('[AUTHZ] Error initializing canonical authorization context:', error);
+    logger.error('[AUTHZ] Error initializing canonical authorization context:',
+      { message: error.message, stack: error.stack });
     return res.status(500).json({
       error: 'Internal authorization error.',
       code: 'AUTHORIZATION_CONTEXT_ERROR'
