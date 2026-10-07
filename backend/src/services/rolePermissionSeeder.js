@@ -33,6 +33,7 @@ const managerPermNames = [
   'manage_sales',
   'manage_expenses',
   'view_customers',
+  'manage_customers',
   'manage_settings',
   'process_refunds',
   'manage_coupons',
