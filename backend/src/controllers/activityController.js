@@ -8,15 +8,15 @@ exports.list = async (req, res) => {
   try {
     const { limit = 50, userId, shopId: queryShopId } = req.query;
     const where = {};
-    const callerShopId = req.shopId || req.user?.shopId;
-    let organizationId = req.organizationId || req.user?.organizationId;
+    const callerShopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
+    let organizationId = req.authz?.scope?.organizationId || req.organizationId || req.user?.organizationId;
 
     if (!organizationId && callerShopId) {
       const shop = await Shop.findByPk(callerShopId, { attributes: ['organizationId'] });
       organizationId = shop?.organizationId;
     }
 
-    const isOrgAdmin = req.user?.role === 'org_admin' || req.user?.orgRole === 'admin' || (req.user?.role === 'admin' && !callerShopId);
+    const isOrgAdmin = req.authz?.role?.isOrgAdmin || req.user?.role === 'org_admin' || req.user?.orgRole === 'admin' || (req.user?.role === 'admin' && !callerShopId);
 
     if (queryShopId) {
       const targetShopId = parseInt(queryShopId, 10);

@@ -2,7 +2,10 @@ const express = require('express');
 const { body, query } = require('express-validator');
 const router = express.Router();
 const customerController = require('../controllers/customerController');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
+const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
+const { validateDateRange } = require('../middleware/validators');
+const { Customer } = require('../models');
 
 // Validation middleware
 const validateCustomer = [
@@ -47,53 +50,95 @@ const validateLoyaltyPoints = [
     .withMessage('Reason must be less than 200 characters')
 ];
 
-const { validateDateRange } = require('../middleware/validators');
+// All routes require authentication, canonical authorization context, and active subscription
+router.use(auth);
+router.use(authzContext);
+router.use(requireActiveSubscription());
+
+// Ownership policies for customer lookups and mutations
+const customerViewOwnershipPolicy = {
+  getResource: (req) => Customer.findOne({
+    where: { id: req.params.id, active: true },
+    attributes: ['id', 'organizationId']
+  }),
+  isOwner: () => true, // Allowed for all authorized tenant staff (cashiers, managers, admins)
+  antiOracle: true
+};
+
+const customerMutationOwnershipPolicy = {
+  getResource: (req) => Customer.findOne({
+    where: { id: req.params.id, active: true },
+    attributes: ['id', 'organizationId']
+  }),
+  managerPermission: 'manage_customers',
+  antiOracle: true
+};
 
 // Routes
 router.get('/', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin', 'cashier']), 
+  authorize({
+    permissions: { any: ['view_customers', 'manage_customers', 'access_pos'] },
+    shopScope: 'current'
+  }),
   customerController.getAllCustomers
 );
 
 router.get('/statistics', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({
+    permissions: { any: ['view_reports', 'manage_customers'] },
+    roles: ['admin', 'manager', 'org_admin'],
+    shopScope: 'current'
+  }),
   validateDateRange,
   customerController.getCustomerStatistics
 );
 
 router.get('/:id', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin', 'cashier']), 
+  authorize({
+    permissions: { any: ['view_customers', 'manage_customers', 'access_pos'] },
+    shopScope: 'current',
+    ownership: customerViewOwnershipPolicy
+  }),
   customerController.getCustomerById
 );
 
 router.post('/', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin', 'cashier']), 
+  authorize({
+    permissions: { any: ['manage_customers', 'access_pos'] },
+    shopScope: 'current'
+  }),
   validateCustomer,
   customerController.createCustomer
 );
 
 router.put('/:id', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({
+    permission: 'manage_customers',
+    shopScope: 'current',
+    ownership: customerMutationOwnershipPolicy
+  }),
   validateCustomer,
   customerController.updateCustomer
 );
 
 router.delete('/:id', 
-  auth, 
-  checkRole(['admin', 'org_admin']), 
+  authorize({
+    roles: ['admin', 'org_admin'],
+    shopScope: 'current',
+    ownership: customerMutationOwnershipPolicy
+  }),
   customerController.deleteCustomer
 );
 
 router.patch('/:id/loyalty-points', 
-  auth, 
-  checkRole(['admin', 'manager', 'org_admin']), 
+  authorize({
+    permission: 'manage_customers',
+    shopScope: 'current',
+    ownership: customerMutationOwnershipPolicy
+  }),
   validateLoyaltyPoints,
   customerController.adjustLoyaltyPoints
 );
 
 module.exports = router;
+
