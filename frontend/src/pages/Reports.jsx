@@ -363,7 +363,10 @@ export default function Reports() {
     if (tab === 'sales') {
       rows = [['Period', 'Sales', 'Revenue', 'Tax', 'Discount'], ...(Array.isArray(data) ? data : []).map(r => [r.period, r.saleCount, r.revenue, r.tax, r.discount])]
     } else if (tab === 'pl' && data) {
-      rows = [['Gross Revenue','Tax','Discount','Net Revenue','Expenses','Profit'], [data.grossRevenue, data.totalTax, data.totalDiscount, data.netRevenue, data.totalExpenses, data.profit]]
+      rows = [
+        ['Gross Revenue', 'Tax', 'Discount', 'Refunds', 'Net Revenue', 'COGS', 'Gross Profit', 'Operating Expenses', 'Net Profit'],
+        [data.grossRevenue || 0, data.totalTax || 0, data.totalDiscount || 0, data.totalRefunds || 0, data.revenue ?? data.netRevenue ?? 0, data.cogs || 0, data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0)), data.operatingExpenses ?? data.totalExpenses ?? 0, data.profit || 0]
+      ]
     } else if (tab === 'tax' && data) {
       rows = [['Taxable Revenue','Rate','Estimated Tax'], [data.taxableRevenue, data.taxRate, data.estimatedTax]]
     }
@@ -389,6 +392,21 @@ export default function Reports() {
         const aoa = [['Period','Sales','Revenue']].concat((charts.salesTrend||[]).map(r=>[r.period,r.sales||0,r.revenue||0]))
         const ws = xlsx.utils.aoa_to_sheet(aoa)
         xlsx.utils.book_append_sheet(wb, ws, 'SalesTrend')
+      } else if (tab === 'pl' && data) {
+        const aoa = [
+          ['Metric', 'Amount'],
+          ['Gross Revenue (Pre-Discount)', data.grossRevenue || 0],
+          ['Total Tax', data.totalTax || 0],
+          ['Discounts', data.totalDiscount || 0],
+          ['Refunds', data.totalRefunds || 0],
+          ['Net Revenue (after discounts & refunds)', data.revenue ?? data.netRevenue ?? 0],
+          ['Cost of Goods Sold (COGS)', data.cogs || 0],
+          ['Gross Profit', data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0))],
+          ['Operating Expenses', data.operatingExpenses ?? data.totalExpenses ?? 0],
+          ['Net Profit', data.profit || 0]
+        ]
+        const ws = xlsx.utils.aoa_to_sheet(aoa)
+        xlsx.utils.book_append_sheet(wb, ws, 'ProfitAndLoss')
       }
       const wbout = xlsx.write(wb, { bookType: 'xlsx', type: 'array' })
       const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
@@ -432,6 +450,25 @@ export default function Reports() {
         rows.forEach(r => {
           doc.text(`${r.period || ''}: ${r.revenue || 0}`, 40, y)
           y += 14
+        })
+      } else if (tab === 'pl' && data) {
+        doc.setFontSize(10)
+        doc.text('Profit & Loss Summary', 40, y)
+        y += 18
+        const items = [
+          ['Gross Revenue (Pre-Discount)', formatCurrency(data.grossRevenue || 0)],
+          ['Total Tax', formatCurrency(data.totalTax || 0)],
+          ['Discounts', formatCurrency(data.totalDiscount || 0)],
+          ['Refunds', formatCurrency(data.totalRefunds || 0)],
+          ['Net Revenue (after discounts & refunds)', formatCurrency(data.revenue ?? data.netRevenue ?? 0)],
+          ['Cost of Goods Sold (COGS)', formatCurrency(data.cogs || 0)],
+          ['Gross Profit', formatCurrency(data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0)))],
+          ['Operating Expenses', formatCurrency(data.operatingExpenses ?? data.totalExpenses ?? 0)],
+          ['Net Profit', formatCurrency(data.profit || 0)]
+        ]
+        items.forEach(([label, val]) => {
+          doc.text(`${label}: ${val}`, 40, y)
+          y += 16
         })
       }
       doc.save(`${tab}-report.pdf`)
@@ -713,17 +750,18 @@ export default function Reports() {
 
             {tab==='pl' && data && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                   <Stat label="Gross Revenue (Pre-discount)" value={data.grossRevenue} formatCurrency={formatCurrency} />
                   <Stat label="Total Tax (Sales Tax)" value={data.totalTax} formatCurrency={formatCurrency} />
                   <Stat label="Discounts" value={data.totalDiscount} formatCurrency={formatCurrency} />
+                  <Stat label="Refunds" value={data.totalRefunds} formatCurrency={formatCurrency} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  <Stat label="Revenue (After Discounts)" value={data.revenue ?? data.netRevenue} formatCurrency={formatCurrency} />
+                  <Stat label="Net Revenue (after discounts & refunds)" value={data.revenue ?? data.netRevenue} formatCurrency={formatCurrency} />
                   <Stat label="COGS" value={data.cogs} formatCurrency={formatCurrency} />
                   <Stat label="Gross Profit" value={data.grossProfit ?? ((data.revenue ?? data.netRevenue) - (data.cogs || 0))} highlight formatCurrency={formatCurrency} />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Stat label="Operating Expenses" value={data.operatingExpenses ?? data.totalExpenses} formatCurrency={formatCurrency} />
                   <Stat label="Net Profit" value={data.profit} highlight formatCurrency={formatCurrency} />
                 </div>
