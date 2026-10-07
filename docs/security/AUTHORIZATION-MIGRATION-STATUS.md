@@ -2,7 +2,7 @@
 
 > **Phase**: Authorization Consolidation & Enforcement
 > **Source-of-Truth Baseline**: Commit `fae41af` (Gate 2C Approved)
-> **Last Updated**: October 6, 2026 (Gate 3F Completion)
+> **Last Updated**: October 7, 2026 (Gate 3G Completion)
 
 ---
 
@@ -24,11 +24,13 @@
 | **Migrated in Gate 3E** | 6 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
 | **Audited in Gate 3F (Reports, Analytics, Dashboard & AI)** | 24 | Reports (4), Dashboard (3), Analytics (5), Insights (7), Org Insights (3), AI Proxy (2) |
 | **Migrated in Gate 3F** | 24 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Cumulative Endpoints Migrated** | 113 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) + Gate 3E (6) + Gate 3F (24) |
-| **Adopted `authorize()` Primitives** | 113 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses, Reports, Analytics, Dashboard, Insights, AI Proxy |
-| **Legacy `checkRole()` Remaining in App** | 0 in migrated routes | Deferred domains (Customers, Activity) may retain legacy checks |
+| **Audited in Gate 3G (Coupons, Discounts & Held Carts)** | 15 | Coupons (6), Discounts (5), Held Carts (4) |
+| **Migrated in Gate 3G** | 15 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
+| **Cumulative Endpoints Migrated** | 128 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) + Gate 3E (6) + Gate 3F (24) + Gate 3G (15) |
+| **Adopted `authorize()` Primitives** | 128 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses, Reports, Analytics, Dashboard, Insights, AI Proxy, Coupons, Discounts, Held Carts |
+| **Legacy `checkRole()` Remaining in App** | 0 in migrated routes | Deferred domains (Customers, Activity, Billing) may retain legacy checks |
 | **Legacy `checkPermission()` Remaining in App** | 0 in migrated routes | Deferred domains may retain legacy checks |
-| **Remaining Endpoints to Migrate** | 60 | Deferred to Gate 3G onwards (Coupons, Discounts, Held Carts, Billing, M-Pesa, Customers) |
+| **Remaining Endpoints to Migrate** | 45 | Deferred to Gate 3H onwards (Customers, Activity, Billing, M-Pesa) |
 
 ---
 
@@ -265,26 +267,62 @@
 
 ---
 
-## 8. Security Properties Enforced
+## 8. Gate 3G Migration Accounting (Coupons, Discounts & Held Carts)
 
-1. **Identity & Session Validity**: All 113 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
+### 8.1 Route Inventory & Transformation
+
+#### `backend/src/routes/coupons.js` (6 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3G Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `POST` | `/` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_coupons', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'manage_coupons', shopScope: 'current'` | **MIGRATED** |
+| `POST` | `/validate` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'access_pos', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/:id` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'manage_coupons', shopScope: 'current', ownership: { getResource, managerPermission: 'manage_coupons', antiOracle: true }` | **MIGRATED** |
+| `PUT` | `/:id` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_coupons', shopScope: 'current', ownership: { getResource, managerPermission: 'manage_coupons', antiOracle: true }` | **MIGRATED** |
+| `DELETE` | `/:id` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_coupons', shopScope: 'current', ownership: { getResource, managerPermission: 'manage_coupons', antiOracle: true }` | **MIGRATED** |
+
+#### `backend/src/routes/discounts.js` (5 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3G Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `POST` | `/` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_discounts', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'manage_discounts', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/:id` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'manage_discounts', shopScope: 'current', ownership: { getResource, managerPermission: 'manage_discounts', antiOracle: true }` | **MIGRATED** |
+| `PUT` | `/:id` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_discounts', shopScope: 'current', ownership: { getResource, managerPermission: 'manage_discounts', antiOracle: true }` | **MIGRATED** |
+| `DELETE` | `/:id` | `auth, checkRole(['admin', 'manager', 'org_admin'])` | `auth, authzContext, reqSub, authorize` | `permission: 'manage_discounts', shopScope: 'current', ownership: { getResource, managerPermission: 'manage_discounts', antiOracle: true }` | **MIGRATED** |
+
+#### `backend/src/routes/heldCartRoutes.js` (4 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3G Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'access_pos', shopScope: 'current'` (cashier sees own; manager with `manage_held_carts` sees shop) | **MIGRATED** |
+| `POST` | `/` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'access_pos', shopScope: 'current'` (cashierId authoritatively stamped) | **MIGRATED** |
+| `GET` | `/:id/recall` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'access_pos', shopScope: 'current', ownership: { getResource, getOwnerId: r => r.cashierId, managerPermission: 'manage_held_carts', antiOracle: true }` | **MIGRATED** |
+| `DELETE` | `/:id` | `auth` (no RBAC) | `auth, authzContext, reqSub, authorize` | `permission: 'access_pos', shopScope: 'current', ownership: { getResource, getOwnerId: r => r.cashierId, managerPermission: 'manage_held_carts', antiOracle: true }` | **MIGRATED** |
+
+---
+
+## 9. Security Properties Enforced
+
+1. **Identity & Session Validity**: All 128 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
 2. **Database-Backed RBAC**: Forged `role` claims in client JWT tokens are neutralized; authorization context resolves operational and governance roles authoritative from DB memberships.
 3. **Branch Scope Isolation**: Every operation is scoped to caller's authoritative branch via `shopScope: 'current'` or branch parameter scope `{ param: 'id' }`. Parameter tampering attempting to act in other branches is rejected with HTTP 403 `SHOP_ACCESS_DENIED` or `Shop context required`.
-4. **Self-Modification & Escalation Block**: Staff cannot modify their own privileges, roles, or active status. Cashiers cannot access purchases, suppliers, or expense management endpoints.
+4. **Self-Modification & Escalation Block**: Staff cannot modify their own privileges, roles, or active status. Cashiers cannot access purchases, suppliers, expense, coupon, or discount management endpoints.
 5. **Governance Actions Restriction**: Critical financial and operational actions (purchase cancellation, purchase deletion, PO deletion, supplier deletion, expense deletion) are strictly restricted to governance administrators (`roles: ['admin', 'org_admin']`).
-6. **Anti-Oracle Masking**: Unauthorized requests against cross-tenant or cross-branch resources (purchases, purchase orders, suppliers, employees, products, expenses) return uniform HTTP 404 responses identical to non-existent resources, preventing existence probing.
+6. **Anti-Oracle Masking**: Unauthorized requests against cross-tenant or cross-branch resources (purchases, purchase orders, suppliers, employees, products, expenses, coupons, discounts, held carts) return uniform HTTP 404 responses identical to non-existent resources, preventing existence probing.
 7. **Atomic Authorization Epoch Synchronization**: Any mutation modifying roles, positions, active status, branch assignments, or branch access grants/revocations automatically increments `authzVersion` on the target actor within the database transaction, immediately invalidating cached tokens.
 8. **Cross-Tenant Entity Association Defense**: Purchase, PO, and expense creation endpoints strictly validate that entities and shops belong to the caller's organization, rejecting foreign entity IDs with 403/404.
 9. **Financial & Dual Identity Attribution**: Expenses record authoritative `recordedBy` (`userId` for platform users, `employeeId` for employees) derived strictly from `req.authz.identity`. Financial statistics aggregate solely within authorized shop and organization scopes.
 10. **Derived Data Isolation**: Reports, dashboard, analytics, and AI forecasting endpoints enforce strict branch and organization scoping. Parameter tampering via `?shopId=` is caught by `authorize()` defense-in-depth and rejected with 403 `SHOP_ACCESS_DENIED`. Organization-wide analytics require `isOrgAdmin: true` (org owner or admin) verified from DB membership, not JWT claim.
 11. **Inverted Date Range Rejection**: Reports endpoints validate that `startDate ≤ endDate`; inverted ranges are rejected with 400 `INVALID_DATE_RANGE` before any DB query executes.
+12. **Promotions & Held Cart Isolation & Integrity**: Coupons and discount rules are strictly scoped to the branch. Input bounds (non-negative discounts, percentage <= 100%) are verified on creation and updates. Held cart ownership is enforced: cashiers can only view, recall, and delete their own carts unless a manager with `manage_held_carts` executes a branch override. Server-side discount approvals in sales verify credentials against DB/Employee hash, preventing cashier self-approval and cross-shop manager credentials.
 
 ---
 
-## 9. Verification Suite Results
+## 10. Verification Suite Results
 
 | Test Suite | Scope | Result | Passing Rate |
 |---|---|---|---|
+| `tests/gate3gCouponsDiscountsHeldCartsAuthorization.test.js` | 58 adversarial and functional scenarios covering Coupons, Discounts & Held Carts domain | **PASS** | 58 / 58 (100%) |
+| `tests/coupons.test.js` | Coupons & Discounts functional regression suite | **PASS** | 10 / 10 (100%) |
 | `tests/gate3fReportsAnalyticsAuthorization.test.js` | 64 adversarial and functional scenarios covering Reports, Analytics, Dashboard, Insights & AI Proxy | **PASS** | 64 / 64 (100%) |
 | `tests/gate3eExpensesFinancialAuthorization.test.js` | 38 adversarial and functional scenarios covering Expenses & Financial Operations | **PASS** | 38 / 38 (100%) |
 | `tests/gate3dPurchasesSupplierAuthorization.test.js` | 38 adversarial and functional scenarios covering Purchases & Suppliers domain | **PASS** | 38 / 38 (100%) |
@@ -294,7 +332,7 @@
 | `tests/gate3aSalesAuthorization.test.js` | 34 adversarial and functional test scenarios covering Sales domain regression | **PASS** | 34 / 34 (100%) |
 | `tests/gate2aAuthzContext.test.js` | Gate 2A authorization context & epoch regression | **PASS** | 19 / 19 (100%) |
 | `tests/gate2bAuthzEpochMutations.test.js` | Gate 2B epoch invalidation on mutations regression | **PASS** | 20 / 20 (100%) |
-| `tests/gate2cAuthorizationPrimitive.test.js` | Gate 2C central primitive regression | **PASS** | 24 / 24 (100%) |
+| `tests/gate2cAuthorizationPrimitive.test.js` | Gate 2C central primitive regression | **PASS** | 34 / 34 (100%) |
 | `tests/phase6bAuthSecurity.test.js` | Phase 6B authentication and password cutoff regression | **PASS** | 10 / 10 (100%) |
 | `tests/phase6bAuthSessionSecurity.test.js` | Phase 6B session management regression | **PASS** | 8 / 8 (100%) |
 | `tests/phase6bTenantOracleSecurity.test.js` | Phase 6B tenant & oracle elimination regression | **PASS** | 14 / 14 (100%) |
@@ -304,17 +342,17 @@
 | `tests/controllers/insightsController.test.js` | Insights controller unit tests | **PASS** | 3 / 3 (100%) |
 | `tests/analyticsFix.test.js` | Analytics fix regression | **PASS** | 3 / 3 (100%) |
 | `tests/aiClient.test.js` | AI client unit tests | **PASS** | 2 / 2 (100%) |
-| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **308+ / 308+ (100%)** |
-| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (3m 8s) |
+| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **416+ / 416+ (100%)** |
+| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (4m 23s) |
 
 ---
 
-## 10. Deferred Domains (Future Gates)
+## 11. Deferred Domains (Future Gates)
 
 The following domains remain under legacy authorization pipelines pending subsequent migration gates:
 
 1. **Customers & Activity**: `customers.js`, `activity.js`
-2. **Coupons, Discounts & Held Carts**: `coupons.js`, `discounts.js`, `heldCartRoutes.js`
-3. **Billing, Subscriptions & M-Pesa**: `billing.js`, `mpesa.js`
+2. **Billing, Subscriptions & M-Pesa**: `billing.js`, `mpesa.js`
+
 
 

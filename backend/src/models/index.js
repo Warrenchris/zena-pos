@@ -115,6 +115,14 @@ Shop.hasMany(SaleRefund, { foreignKey: 'shopId' });
 HeldCart.belongsTo(Shop, { foreignKey: 'shopId' });
 Shop.hasMany(HeldCart, { foreignKey: 'shopId' });
 
+// Coupon associations
+Coupon.belongsTo(Shop, { foreignKey: 'shopId' });
+Shop.hasMany(Coupon, { foreignKey: 'shopId' });
+
+// DiscountRule associations
+DiscountRule.belongsTo(Shop, { foreignKey: 'shopId' });
+Shop.hasMany(DiscountRule, { foreignKey: 'shopId' });
+
 // ActivityLog employee associations
 ActivityLog.belongsTo(User, { foreignKey: 'userId', constraints: false });
 ActivityLog.belongsTo(Employee, { foreignKey: 'performedByEmployee', as: 'employee' });

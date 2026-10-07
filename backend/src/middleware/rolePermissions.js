@@ -15,7 +15,10 @@ const ROLE_PERMISSIONS = {
     'manage_expenses',
     'view_customers',
     'manage_settings',
-    'process_refunds'
+    'process_refunds',
+    'manage_coupons',
+    'manage_discounts',
+    'manage_held_carts'
   ],
   // Delegated org admin: employee with orgRole='admin' on their
   // OrganizationMembership. Gets manager-equivalent shop-level permissions
@@ -31,7 +34,10 @@ const ROLE_PERMISSIONS = {
     'manage_expenses',
     'view_customers',
     'manage_settings',
-    'process_refunds'
+    'process_refunds',
+    'manage_coupons',
+    'manage_discounts',
+    'manage_held_carts'
   ],
   cashier: [
     'access_pos',
