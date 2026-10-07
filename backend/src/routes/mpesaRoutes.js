@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const { auth } = require('../middleware/auth');
+const { auth, authzContext, authorize } = require('../middleware/auth');
 const sequelize = require('../config/database');
 const mpesaService = require('../services/mpesaService');
 const { PendingPayment, Sale } = require('../models');
@@ -10,10 +10,17 @@ const logger = require('../utils/logger');
 const { recordWebhookAuthFailure } = require('../utils/webhookAlerting');
 
 // POST /api/mpesa/initiate (authenticated)
-router.post('/initiate', auth, async (req, res) => {
+router.post('/initiate',
+  auth,
+  authzContext,
+  authorize({
+    permissions: { any: ['create_sales', 'manage_sales', 'access_pos'] },
+    shopScope: 'current'
+  }),
+  async (req, res) => {
   try {
     const { phone, amount, orderId, saleData } = req.body;
-    const shopId = req.shopId || req.user.shopId;
+    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user.shopId;
 
     if (!phone || !amount || !orderId) {
       return res.status(400).json({ error: 'Phone number, amount, and order ID are required.' });
@@ -31,15 +38,18 @@ router.post('/initiate', auth, async (req, res) => {
       callbackToken
     });
 
+    const isEmployee = req.authz ? req.authz.identity.isEmployee : req.user.isEmployee;
+    const identityId = req.authz ? req.authz.identity.id : req.user.id;
+
     // Enrich saleData with user context and callback verification token
     const enrichedSaleData = {
       ...saleData,
       callbackToken,
       paymentMethod: 'mobile',
       paymentAmount: parseFloat(amount),
-      userId: !req.user.isEmployee ? req.user.id : null,
-      employeeId: req.user.isEmployee ? req.user.id : null,
-      isEmployee: req.user.isEmployee,
+      userId: !isEmployee ? identityId : null,
+      employeeId: isEmployee ? identityId : null,
+      isEmployee: isEmployee,
     };
 
     // Store a pending payment record
@@ -168,10 +178,17 @@ router.post('/callback', async (req, res) => {
 });
 
 // GET /api/mpesa/status/:checkoutRequestId (authenticated/frontend polling)
-router.get('/status/:checkoutRequestId', auth, async (req, res) => {
+router.get('/status/:checkoutRequestId',
+  auth,
+  authzContext,
+  authorize({
+    permissions: { any: ['create_sales', 'manage_sales', 'access_pos'] },
+    shopScope: 'current'
+  }),
+  async (req, res) => {
   try {
     const { checkoutRequestId } = req.params;
-    const userShopId = req.shopId || req.user?.shopId;
+    const userShopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
     const pendingPayment = await PendingPayment.findOne({
       where: { checkoutRequestId }
     });
