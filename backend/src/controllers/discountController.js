@@ -1,8 +1,11 @@
 const { DiscountRule } = require('../models');
 const { Op } = require('sequelize');
 
-// Helper for shop filtering
-const shopWhere = (req) => ({ shopId: req.user.shopId });
+// Helper for shop filtering using canonical authorization context
+const getAuthorizedShopId = (req) => {
+  return req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
+};
+const shopWhere = (req) => ({ shopId: getAuthorizedShopId(req) });
 
 // Get all discount rules for user's shop
 exports.getDiscounts = async (req, res) => {
@@ -65,20 +68,34 @@ exports.createDiscount = async (req, res) => {
       return res.status(400).json({ error: 'Discount rule name is required' });
     }
 
+    const numDiscountValue = parseFloat(discountValue) || 0;
+    if (numDiscountValue < 0) {
+      return res.status(400).json({ error: 'Discount value cannot be negative' });
+    }
+    if ((ruleType || 'percentage') === 'percentage' && numDiscountValue > 100) {
+      return res.status(400).json({ error: 'Discount percentage cannot exceed 100%' });
+    }
+    if (minAmount !== undefined && parseFloat(minAmount) < 0) {
+      return res.status(400).json({ error: 'Minimum amount cannot be negative' });
+    }
+    if (minQuantity !== undefined && parseInt(minQuantity, 10) < 0) {
+      return res.status(400).json({ error: 'Minimum quantity cannot be negative' });
+    }
+
     const rule = await DiscountRule.create({
       name: String(name).trim(),
       ruleType: ruleType || 'percentage',
-      discountValue: parseFloat(discountValue) || 0,
+      discountValue: numDiscountValue,
       scope: scope || 'storewide',
       targetName: targetName ? String(targetName).trim() : 'All Products',
       targetId: targetId ? parseInt(targetId, 10) : null,
-      minQuantity: parseInt(minQuantity, 10) || 1,
-      minAmount: parseFloat(minAmount) || 0,
+      minQuantity: minQuantity !== undefined ? parseInt(minQuantity, 10) : 1,
+      minAmount: minAmount !== undefined ? parseFloat(minAmount) : 0,
       startDate: startDate || null,
       endDate: endDate || null,
       isActive: isActive !== undefined ? isActive : true,
       description: description ? String(description).trim() : null,
-      shopId: req.user.shopId
+      shopId: getAuthorizedShopId(req)
     });
 
     res.status(201).json(rule);
@@ -113,12 +130,34 @@ exports.updateDiscount = async (req, res) => {
 
     if (name !== undefined) rule.name = String(name).trim();
     if (ruleType !== undefined) rule.ruleType = ruleType;
-    if (discountValue !== undefined) rule.discountValue = parseFloat(discountValue);
+    if (discountValue !== undefined) {
+      const numVal = parseFloat(discountValue);
+      if (isNaN(numVal) || numVal < 0) {
+        return res.status(400).json({ error: 'Discount value cannot be negative' });
+      }
+      const targetType = ruleType !== undefined ? ruleType : rule.ruleType;
+      if (targetType === 'percentage' && numVal > 100) {
+        return res.status(400).json({ error: 'Discount percentage cannot exceed 100%' });
+      }
+      rule.discountValue = numVal;
+    }
+    if (minAmount !== undefined) {
+      const numMinAmount = parseFloat(minAmount);
+      if (isNaN(numMinAmount) || numMinAmount < 0) {
+        return res.status(400).json({ error: 'Minimum amount cannot be negative' });
+      }
+      rule.minAmount = numMinAmount;
+    }
+    if (minQuantity !== undefined) {
+      const numMinQty = parseInt(minQuantity, 10);
+      if (isNaN(numMinQty) || numMinQty < 0) {
+        return res.status(400).json({ error: 'Minimum quantity cannot be negative' });
+      }
+      rule.minQuantity = numMinQty;
+    }
     if (scope !== undefined) rule.scope = scope;
     if (targetName !== undefined) rule.targetName = String(targetName).trim();
     if (targetId !== undefined) rule.targetId = targetId ? parseInt(targetId, 10) : null;
-    if (minQuantity !== undefined) rule.minQuantity = parseInt(minQuantity, 10);
-    if (minAmount !== undefined) rule.minAmount = parseFloat(minAmount);
     if (startDate !== undefined) rule.startDate = startDate || null;
     if (endDate !== undefined) rule.endDate = endDate || null;
     if (isActive !== undefined) rule.isActive = isActive;
