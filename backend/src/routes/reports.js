@@ -1,11 +1,20 @@
 const express = require('express');
-const { auth, checkRole } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
+const authzContext = require('../middleware/authzContext');
+const authorize = require('../middleware/authorize');
 const controller = require('../controllers/reportsController');
 const validateDateRange = require('../middleware/validateDateRange');
 
 const router = express.Router();
 
-router.use(auth, checkRole(['admin', 'manager', 'org_admin']));
+router.use(
+  auth,
+  authzContext,
+  authorize({
+    permission: 'view_reports',
+    shopScope: 'current'
+  })
+);
 
 router.get('/sales-summary', validateDateRange, controller.getSalesSummary);
 router.get('/profit-loss', validateDateRange, controller.getProfitAndLoss);

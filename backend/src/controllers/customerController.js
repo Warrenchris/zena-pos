@@ -349,6 +349,17 @@ exports.adjustLoyaltyPoints = async (req, res) => {
 exports.getCustomerStatistics = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
+
+    if (startDate && endDate) {
+      const s = new Date(startDate);
+      const e = new Date(endDate);
+      if (!isNaN(s) && !isNaN(e) && s > e) {
+        return res.status(400).json({
+          error: 'startDate must not be after endDate',
+          code: 'INVALID_DATE_RANGE'
+        });
+      }
+    }
     const organizationId = req.organizationId || req.user?.organizationId;
     const whereClause = startDate && endDate ? {
       createdAt: {

@@ -14,6 +14,10 @@ const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
+const getAuthorizedShopId = (req) => {
+  return req.query?.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
+};
+
 /**
  * Calculate trends from sales and inventory data
  */
@@ -289,8 +293,15 @@ const getStockDepletionForecast = async (shopId, userId) => {
         'productId',
         [sequelize.fn('SUM', sequelize.col('quantity')), 'qty']
       ],
-      include: [{
-        model: Product,
+      group: ['productId'],
+      raw: true
+    });
+
+    const soonOut = [];
+    if (salesByProductAgg.length > 0) {
+      const productIds = salesByProductAgg.map(r => r.productId).filter(Boolean);
+      const products = await Product.findAll({
+        where: { id: productIds },
         attributes: ['id', 'name'],
         include: [{
           model: Inventory,
@@ -298,21 +309,20 @@ const getStockDepletionForecast = async (shopId, userId) => {
           where: { shopId },
           required: false
         }]
-      }],
-      group: ['productId'],
-    });
+      });
+      const productMap = new Map(products.map(p => [p.id, p]));
 
-    const soonOut = [];
-    for (const row of salesByProductAgg) {
-      const prod = row.Product;
-      if (!prod) continue;
-      const invStock = parseFloat(prod.Inventories?.[0]?.stockQuantity || 0);
-      const sold = Number(row.getDataValue('qty') || 0);
-      const daily = sold / lookbackDays;
-      if (daily > 0) {
-        const days = invStock / daily;
-        if (days > 0 && days <= insightsConfig.STOCK_DEPLETION_DAYS) {
-          soonOut.push({ id: prod.id, name: prod.name, daysToDeplete: Math.ceil(days) });
+      for (const row of salesByProductAgg) {
+        const prod = productMap.get(row.productId);
+        if (!prod) continue;
+        const invStock = parseFloat(prod.Inventories?.[0]?.stockQuantity || 0);
+        const sold = Number(row.qty || 0);
+        const daily = sold / lookbackDays;
+        if (daily > 0) {
+          const days = invStock / daily;
+          if (days > 0 && days <= insightsConfig.STOCK_DEPLETION_DAYS) {
+            soonOut.push({ id: prod.id, name: prod.name, daysToDeplete: Math.ceil(days) });
+          }
         }
       }
     }
@@ -365,10 +375,10 @@ const generateAlerts = async (shopId, userId) => {
  */
 const getInsights = async (req, res) => {
   try {
-    if (!req.shopId) {
+    const shopId = getAuthorizedShopId(req);
+    if (!shopId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-    const shopId = req.shopId;
 
     const [trends, recommendations, alerts] = await Promise.all([
       calculateTrends(shopId),
@@ -411,7 +421,7 @@ const getInsights = async (req, res) => {
         [sequelize.fn('SUM', sequelize.literal('(SaleItem.unitPrice - Product.cost - SaleItem.discount) * SaleItem.quantity')), 'profit']
       ],
       include: [{ model: Product, attributes: ['id','name','cost'], where: { shopId } }],
-      group: ['ProductId'],
+      group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.cost'],
       order: [[sequelize.literal('profit'), 'DESC']],
       limit: 1,
     });
@@ -595,7 +605,7 @@ const getInsights = async (req, res) => {
 };
 
 const getCustomerSegments = async (req, res) => {
-  const shopId = req.shopId;
+  const shopId = getAuthorizedShopId(req);
   if (!shopId) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
@@ -638,7 +648,7 @@ const getCustomerSegments = async (req, res) => {
 };
 
 const getMonthlyRevenue = async (req, res) => {
-  const shopId = req.shopId;
+  const shopId = getAuthorizedShopId(req);
   if (!shopId) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
@@ -667,7 +677,7 @@ const getMonthlyRevenue = async (req, res) => {
 };
 
 const getDailySales = async (req, res) => {
-  const shopId = req.shopId;
+  const shopId = getAuthorizedShopId(req);
   if (!shopId) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
@@ -706,7 +716,7 @@ const getDailySales = async (req, res) => {
 };
 
 const getStockDepletion = async (req, res) => {
-  const shopId = req.shopId;
+  const shopId = getAuthorizedShopId(req);
   if (!shopId) return res.status(401).json({ error: 'Unauthorized' });
 
   try {

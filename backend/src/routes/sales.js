@@ -307,7 +307,8 @@ router.get('/:id',
       getResource: (req) => Sale.findByPk(req.params.id),
       getOwnerId: (s) => s.userId || s.employeeId,
       managerPermission: 'manage_sales',
-      antiOracle: true
+      antiOracle: true,
+      notFoundMessage: 'Sale not found'
     }
   }),
   saleController.getSaleById
