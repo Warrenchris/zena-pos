@@ -2,7 +2,7 @@
 
 > **Phase**: Authorization Consolidation & Enforcement
 > **Source-of-Truth Baseline**: Commit `fae41af` (Gate 2C Approved)
-> **Last Updated**: October 5, 2026 (Gate 3E Completion)
+> **Last Updated**: October 6, 2026 (Gate 3F Completion)
 
 ---
 
@@ -22,11 +22,13 @@
 | **Migrated in Gate 3D** | 21 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
 | **Audited in Gate 3E (Expenses & Financial Operations)** | 6 | Expenses (6) |
 | **Migrated in Gate 3E** | 6 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Cumulative Endpoints Migrated** | 89 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) + Gate 3E (6) |
-| **Adopted `authorize()` Primitives** | 89 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses |
-| **Legacy `checkRole()` Remaining in App** | 14 | Deferred domains (Customers, Activity, Reports, System Health, AI Proxy) |
-| **Legacy `checkPermission()` Remaining in App** | 1 in `settings.js` | Deferred domain |
-| **Remaining Endpoints to Migrate** | 84 | Deferred to Gate 3F onwards |
+| **Audited in Gate 3F (Reports, Analytics, Dashboard & AI)** | 24 | Reports (4), Dashboard (3), Analytics (5), Insights (7), Org Insights (3), AI Proxy (2) |
+| **Migrated in Gate 3F** | 24 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
+| **Cumulative Endpoints Migrated** | 113 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) + Gate 3E (6) + Gate 3F (24) |
+| **Adopted `authorize()` Primitives** | 113 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses, Reports, Analytics, Dashboard, Insights, AI Proxy |
+| **Legacy `checkRole()` Remaining in App** | 0 in migrated routes | Deferred domains (Customers, Activity) may retain legacy checks |
+| **Legacy `checkPermission()` Remaining in App** | 0 in migrated routes | Deferred domains may retain legacy checks |
+| **Remaining Endpoints to Migrate** | 60 | Deferred to Gate 3G onwards (Coupons, Discounts, Held Carts, Billing, M-Pesa, Customers) |
 
 ---
 
@@ -209,9 +211,63 @@
 
 ---
 
-## 7. Security Properties Enforced
+## 7. Gate 3F Migration Accounting (Reports, Analytics, Dashboard & Derived Data)
 
-1. **Identity & Session Validity**: All 89 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
+### 7.1 Route Inventory & Transformation
+
+#### `backend/src/routes/reports.js` (4 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3F Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/sales-summary` | `auth, checkRole([...])` | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/profit-loss` | `auth, checkRole([...])` | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/tax-estimate` | `auth, checkRole([...])` | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/employee-sales` | `auth, checkRole([...])` | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+
+#### `backend/src/routes/dashboard.js` (3 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3F Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/stats` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_dashboard', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/revenue` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_dashboard', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/top-products` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_dashboard', shopScope: 'current'` | **MIGRATED** |
+
+#### `backend/src/routes/analytics.js` (5 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3F Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/visitors` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/orders` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/customer-locations` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/sales-channels` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/top-products` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+
+#### `backend/src/routes/insights.js` (7 Endpoints — shop-scoped)
+| Method | Endpoint | Prior Pipeline | Gate 3F Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/customer-segments` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/monthly-revenue` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/daily-sales` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/stock-depletion` | `auth` (no RBAC) | `auth, authzContext, authorize` | `permission: 'view_reports', shopScope: 'current'` | **MIGRATED** |
+| `GET` | `/organization/summary` | `auth, requireOrgAdmin` | `auth, authzContext, authorize, requireOrgAdmin` | `requireOrgAdmin: true` | **MIGRATED** |
+| `GET` | `/organization/inventory-alerts` | `auth, requireOrgAdmin` | `auth, authzContext, authorize, requireOrgAdmin` | `requireOrgAdmin: true` | **MIGRATED** |
+
+#### `backend/src/routes/orgInsightsRoutes.js` (3 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3F Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/organization/daily-sales` | `auth, requireOrgAdmin` | `auth, authzContext, authorize, requireOrgAdmin` | `requireOrgAdmin: true` | **MIGRATED** |
+| `GET` | `/organization/summary` (org-router) | `auth, requireOrgAdmin` | `auth, authzContext, authorize, requireOrgAdmin` | `requireOrgAdmin: true` | **MIGRATED** |
+| `GET` | `/organization/inventory-alerts` (org-router) | `auth, requireOrgAdmin` | `auth, authzContext, authorize, requireOrgAdmin` | `requireOrgAdmin: true` | **MIGRATED** |
+
+#### `backend/src/routes/aiProxy.js` (2 Protected Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3F Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `DELETE` | `/cache/org/:organizationId` | `auth, checkRole([...])` | `auth, authzContext, reqSub, authorize, requireOrgAdmin` | `requireOrgAdmin: true, tenantMismatchMessage` | **MIGRATED** |
+| `DELETE` | `/cache/:shopId` | `auth, checkRole([...])` | `auth, authzContext, reqSub, authorize` | `roles: ['admin','manager','org_admin'], shopScope: { param: 'shopId' }` | **MIGRATED** |
+
+---
+
+## 8. Security Properties Enforced
+
+1. **Identity & Session Validity**: All 113 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
 2. **Database-Backed RBAC**: Forged `role` claims in client JWT tokens are neutralized; authorization context resolves operational and governance roles authoritative from DB memberships.
 3. **Branch Scope Isolation**: Every operation is scoped to caller's authoritative branch via `shopScope: 'current'` or branch parameter scope `{ param: 'id' }`. Parameter tampering attempting to act in other branches is rejected with HTTP 403 `SHOP_ACCESS_DENIED` or `Shop context required`.
 4. **Self-Modification & Escalation Block**: Staff cannot modify their own privileges, roles, or active status. Cashiers cannot access purchases, suppliers, or expense management endpoints.
@@ -220,13 +276,16 @@
 7. **Atomic Authorization Epoch Synchronization**: Any mutation modifying roles, positions, active status, branch assignments, or branch access grants/revocations automatically increments `authzVersion` on the target actor within the database transaction, immediately invalidating cached tokens.
 8. **Cross-Tenant Entity Association Defense**: Purchase, PO, and expense creation endpoints strictly validate that entities and shops belong to the caller's organization, rejecting foreign entity IDs with 403/404.
 9. **Financial & Dual Identity Attribution**: Expenses record authoritative `recordedBy` (`userId` for platform users, `employeeId` for employees) derived strictly from `req.authz.identity`. Financial statistics aggregate solely within authorized shop and organization scopes.
+10. **Derived Data Isolation**: Reports, dashboard, analytics, and AI forecasting endpoints enforce strict branch and organization scoping. Parameter tampering via `?shopId=` is caught by `authorize()` defense-in-depth and rejected with 403 `SHOP_ACCESS_DENIED`. Organization-wide analytics require `isOrgAdmin: true` (org owner or admin) verified from DB membership, not JWT claim.
+11. **Inverted Date Range Rejection**: Reports endpoints validate that `startDate ≤ endDate`; inverted ranges are rejected with 400 `INVALID_DATE_RANGE` before any DB query executes.
 
 ---
 
-## 8. Verification Suite Results
+## 9. Verification Suite Results
 
 | Test Suite | Scope | Result | Passing Rate |
 |---|---|---|---|
+| `tests/gate3fReportsAnalyticsAuthorization.test.js` | 64 adversarial and functional scenarios covering Reports, Analytics, Dashboard, Insights & AI Proxy | **PASS** | 64 / 64 (100%) |
 | `tests/gate3eExpensesFinancialAuthorization.test.js` | 38 adversarial and functional scenarios covering Expenses & Financial Operations | **PASS** | 38 / 38 (100%) |
 | `tests/gate3dPurchasesSupplierAuthorization.test.js` | 38 adversarial and functional scenarios covering Purchases & Suppliers domain | **PASS** | 38 / 38 (100%) |
 | `tests/purchases-and-orders.test.js` | Purchases & Purchase Orders production remediation test suite | **PASS** | 9 / 9 (100%) |
@@ -239,18 +298,23 @@
 | `tests/phase6bAuthSecurity.test.js` | Phase 6B authentication and password cutoff regression | **PASS** | 10 / 10 (100%) |
 | `tests/phase6bAuthSessionSecurity.test.js` | Phase 6B session management regression | **PASS** | 8 / 8 (100%) |
 | `tests/phase6bTenantOracleSecurity.test.js` | Phase 6B tenant & oracle elimination regression | **PASS** | 14 / 14 (100%) |
-| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **300 / 300 (100%)** |
-| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (6m 20s) |
+| `tests/phase6bOperationalReliability.test.js` | Phase 6B operational reliability regression | **PASS** | 25 / 25 (100%) |
+| `tests/taxEstimateReport.test.js` | Tax estimate report functional coverage | **PASS** | 5 / 5 (100%) |
+| `tests/orgInsights.test.js` | Organization insights functional coverage | **PASS** | 10 / 10 (100%) |
+| `tests/controllers/insightsController.test.js` | Insights controller unit tests | **PASS** | 3 / 3 (100%) |
+| `tests/analyticsFix.test.js` | Analytics fix regression | **PASS** | 3 / 3 (100%) |
+| `tests/aiClient.test.js` | AI client unit tests | **PASS** | 2 / 2 (100%) |
+| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **308+ / 308+ (100%)** |
+| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (3m 8s) |
 
 ---
 
-## 9. Deferred Domains (Future Gates)
+## 10. Deferred Domains (Future Gates)
 
 The following domains remain under legacy authorization pipelines pending subsequent migration gates:
 
 1. **Customers & Activity**: `customers.js`, `activity.js`
 2. **Coupons, Discounts & Held Carts**: `coupons.js`, `discounts.js`, `heldCartRoutes.js`
-3. **Reports, Dashboard & Analytics**: `reports.js`, `dashboard.js`, `analyticsRoutes.js`
-4. **Billing, Subscriptions & M-Pesa**: `billing.js`, `mpesa.js`
+3. **Billing, Subscriptions & M-Pesa**: `billing.js`, `mpesa.js`
 
 

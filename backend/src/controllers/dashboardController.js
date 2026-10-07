@@ -27,12 +27,16 @@ const calculateGrowth = (current, previous) => {
   return ((current - previous) / previous) * 100;
 };
 
+const getAuthorizedShopId = (req) => {
+  return req.query?.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
+};
+
 const dashboardController = {
   // Get overall statistics
   async getStats(req, res) {
     try {
       const { start, end } = getValidatedDates(req);
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
 
       const [currentSaleMetrics, customerCount] = await Promise.all([
         Sale.findOne({
@@ -116,7 +120,7 @@ const dashboardController = {
     try {
       const { start, end } = getValidatedDates(req);
       const { period = 'weekly' } = req.query;
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
 
       const sales = await Sale.findAll({
         where: {
@@ -173,23 +177,22 @@ const dashboardController = {
   async getTopProducts(req, res) {
     try {
       const { limit = 5 } = req.query;
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
 
       const topProducts = await SaleItem.findAll({
         attributes: [
           'productId',
-          [sequelize.fn('SUM', sequelize.col('quantity')), 'totalSold'],
-          [sequelize.fn('SUM', sequelize.col('price')), 'totalRevenue']
+          [sequelize.fn('SUM', sequelize.col('SaleItem.quantity')), 'totalSold'],
+          [sequelize.fn('SUM', sequelize.col('SaleItem.price')), 'totalRevenue']
         ],
         include: [{
           model: Product,
-          attributes: ['name', 'price']
+          attributes: ['name', 'price'],
+          where: { shopId },
+          required: true
         }],
-        where: {
-          '$Product.shopId$': shopId
-        },
-        group: ['productId', 'Product.id'],
-        order: [[sequelize.fn('SUM', sequelize.col('quantity')), 'DESC']],
+        group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.price'],
+        order: [[sequelize.fn('SUM', sequelize.col('SaleItem.quantity')), 'DESC']],
         limit: parseInt(limit)
       });
 
@@ -204,7 +207,7 @@ const dashboardController = {
   async getVisitorStats(req, res) {
     try {
       const { start, end } = getValidatedDates(req);
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
       const prevStart = new Date(start);
       prevStart.setDate(prevStart.getDate() - (end - start) / (1000 * 60 * 60 * 24));
 
@@ -257,7 +260,7 @@ const dashboardController = {
   async getOrderStats(req, res) {
     try {
       const { start, end } = getValidatedDates(req);
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
       const prevStart = new Date(start);
       prevStart.setDate(prevStart.getDate() - (end - start) / (1000 * 60 * 60 * 24));
 
@@ -321,7 +324,7 @@ const dashboardController = {
   async getPlatformStats(req, res) {
     try {
       const { start, end } = getValidatedDates(req);
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
 
       const platforms = await Sale.findAll({
         where: {
@@ -364,7 +367,7 @@ const dashboardController = {
   async getLocationStats(req, res) {
     try {
       const { start, end } = getValidatedDates(req);
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
 
       // Get customer locations
       const locations = await Customer.findAll({
