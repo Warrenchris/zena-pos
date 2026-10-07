@@ -360,6 +360,8 @@ exports.getProfitAndLoss = async (req, res) => {
       grossProfit,
       operatingExpenses,
       profit,
+      totalRefunds,
+      returnedCogs,
       // Legacy fields (kept for UI compatibility)
       grossRevenue,
       totalTax,

@@ -109,12 +109,12 @@ export default function Layout() {
       
       {/* Floating Content Area dynamically offset */}
       <div className={`${paddingLeftClass} flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out`}>
+        <SubscriptionBanner />
+        <EmailVerificationBanner />
         <TopNavBar
           onMenuClick={() => setSidebarOpen(true)}
           isSidebarOpen={sidebarOpen}
         />
-        <SubscriptionBanner />
-        <EmailVerificationBanner />
         <main id="main-content" className="flex-1 pb-12 safe-area-padding">
           <div className={location.pathname === '/pos' ? 'w-full px-3 sm:px-6' : 'app-shell app-shell--wide'}>
             <Outlet />
