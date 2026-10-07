@@ -166,12 +166,16 @@ function calculateGrowth(currentTotal, previousTotal) {
     : ((currentTotal - previousTotal) / previousTotal) * 100;
 }
 
+const getAuthorizedShopId = (req) => {
+  return req.query?.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
+};
+
 const analyticsController = {
   // Get visitor statistics - OPTIMIZED with combined query and caching
   async getVisitors(req, res) {
     try {
       const { period = 'week', employeeId, startDate: qStart, endDate: qEnd } = req.query;
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
 
       const cacheParams = { period, employeeId, startDate: qStart, endDate: qEnd };
       // Check cache first
@@ -267,7 +271,7 @@ const analyticsController = {
   async getOrderTracking(req, res) {
     try {
       const { period = 'week', employeeId, startDate: qStart, endDate: qEnd } = req.query;
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
 
       const cacheParams = { period, employeeId, startDate: qStart, endDate: qEnd };
       // Check cache first
@@ -375,7 +379,7 @@ const analyticsController = {
   async getTopProducts(req, res) {
     try {
       const { period = 'week', limit = 5, employeeId, startDate: qStart, endDate: qEnd } = req.query;
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
       const { startDate, endDate, previousStartDate } = resolveDateRange(period, qStart, qEnd);
 
       const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;
@@ -468,7 +472,7 @@ const analyticsController = {
   async getSalesChannels(req, res) {
     try {
       const { period = 'week', employeeId, startDate: qStart, endDate: qEnd } = req.query;
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
       const { startDate, endDate, previousStartDate } = resolveDateRange(period, qStart, qEnd);
 
       const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;
@@ -544,7 +548,7 @@ const analyticsController = {
   async getCustomerLocations(req, res) {
     try {
       const { period = 'week', employeeId, startDate: qStart, endDate: qEnd } = req.query;
-      const shopId = req.user.shopId;
+      const shopId = getAuthorizedShopId(req);
       const { startDate, endDate, previousStartDate } = resolveDateRange(period, qStart, qEnd);
 
       const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;

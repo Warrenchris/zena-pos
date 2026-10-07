@@ -5,7 +5,9 @@ const { createDistributedRateLimiter } = require('../utils/distributedRateLimite
 const getClientIp = require('../utils/getClientIp');
 const logger = require('../utils/logger');
 const router = express.Router();
-const { auth, checkRole } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
+const authzContext = require('../middleware/authzContext');
+const authorize = require('../middleware/authorize');
 const requireOrgAdmin = require('../middleware/requireOrgAdmin');
 const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
 const entitlementService = require('../services/entitlementService');
@@ -102,59 +104,97 @@ router.get('/status', async (req, res) => {
 });
 
 router.use(auth);
+router.use(authzContext);
 router.use(requireActiveSubscription());
 
 router.use('/forward/api/forecasting', aiRateLimiter);
 router.use('/forward/api/insights', aiRateLimiter);
 router.use('/forward/api/finance', aiRateLimiter);
 
-router.delete('/cache/org/:organizationId', requireOrgAdmin, async (req, res) => {
-  const { organizationId } = req.params;
-  const targetOrgId = parseInt(organizationId, 10);
-  if (targetOrgId !== req.organizationId) {
-    return res.status(403).json({
-      success: false,
-      error: 'Access denied: cannot clear cache for another organization',
-      code: 'FORBIDDEN_ORGANIZATION_ACCESS',
-      requestId: req.requestId || req.id
-    });
-  }
-  const keysCleared = await aiCacheService.invalidateOrgForecastCache(targetOrgId);
-  return res.json({
-    success: true,
-    message: 'Organization forecast cache cleared',
-    keysCleared,
-    requestId: req.requestId || req.id
-  });
-});
-
-router.delete('/cache/:shopId', checkRole(['admin', 'manager']), async (req, res) => {
-  const { shopId } = req.params;
-  const targetShopId = parseInt(shopId, 10);
-  const userShopId = req.shopId || req.user?.shopId;
-  const userOrgId = req.organizationId || req.user?.organizationId;
-
-  if (targetShopId !== userShopId) {
-    if (!req.accessibleShopIds || !req.accessibleShopIds.includes(targetShopId)) {
+router.delete('/cache/org/:organizationId',
+  authorize({
+    requireOrgAdmin: true,
+    tenantMismatchMessage: 'Access denied: cannot clear cache for another organization'
+  }),
+  requireOrgAdmin,
+  async (req, res) => {
+    const { organizationId } = req.params;
+    const targetOrgId = parseInt(organizationId, 10);
+    if (targetOrgId !== req.organizationId) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied: cannot clear cache for another shop',
-        code: 'FORBIDDEN_SHOP_ACCESS',
+        error: 'Access denied: cannot clear cache for another organization',
+        code: 'FORBIDDEN_ORGANIZATION_ACCESS',
         requestId: req.requestId || req.id
       });
     }
+    const keysCleared = await aiCacheService.invalidateOrgForecastCache(targetOrgId);
+    return res.json({
+      success: true,
+      message: 'Organization forecast cache cleared',
+      keysCleared,
+      requestId: req.requestId || req.id
+    });
   }
+);
 
-  const keysCleared = await aiCacheService.invalidateShopForecastCache(userOrgId, targetShopId);
-  return res.json({
-    success: true,
-    message: 'Forecast cache cleared',
-    keysCleared,
-    requestId: req.requestId || req.id
-  });
+router.delete('/cache/:shopId',
+  authorize({
+    roles: ['admin', 'manager', 'org_admin'],
+    shopScope: { param: 'shopId' }
+  }),
+  async (req, res) => {
+    const { shopId } = req.params;
+    const targetShopId = parseInt(shopId, 10);
+    const userOrgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
+
+    const keysCleared = await aiCacheService.invalidateShopForecastCache(userOrgId, targetShopId);
+    return res.json({
+      success: true,
+      message: 'Forecast cache cleared',
+      keysCleared,
+      requestId: req.requestId || req.id
+    });
+  }
+);
+
+const forecastAuthzPolicy = authorize({
+  permission: 'view_reports',
+  custom: (req, authz) => {
+    const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
+    if (isOrg) {
+      if (!authz.tenant.isOrgAdmin) {
+        return {
+          allowed: false,
+          status: 403,
+          code: 'ORG_ADMIN_REQUIRED',
+          message: 'Access denied: Organization admin or owner privileges required for organization-wide forecasting.'
+        };
+      }
+    } else {
+      const shopId = req.shopId || req.user?.shopId;
+      if (!shopId) {
+        return {
+          allowed: false,
+          status: 403,
+          code: 'SHOP_CONTEXT_REQUIRED',
+          message: 'Shop context required for branch forecasting.'
+        };
+      }
+      if (!authz.scope.hasShopAccess(shopId)) {
+        return {
+          allowed: false,
+          status: 403,
+          code: 'SHOP_ACCESS_DENIED',
+          message: 'Access denied: You do not have access to this branch.'
+        };
+      }
+    }
+    return { allowed: true };
+  }
 });
 
-router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
+router.post('/forward/api/forecasting/forecast', forecastAuthzPolicy, async (req, res, next) => {
   try {
     const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
     const orgId = req.organizationId || req.user?.organizationId;
@@ -233,7 +273,7 @@ router.post('/forward/api/forecasting/forecast', async (req, res, next) => {
   }
 });
 
-router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
+router.post('/forward/api/forecasting/rf-forecast', forecastAuthzPolicy, async (req, res, next) => {
   const startTime = Date.now();
   const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
   const shopId = req.shopId || req.user?.shopId || 'unknown';
@@ -318,7 +358,7 @@ router.post('/forward/api/forecasting/rf-forecast', async (req, res, next) => {
   }
 });
 
-router.use(async (req, res, next) => {
+router.use(authorize({ permission: 'view_reports' }), async (req, res, next) => {
   try {
     const orig = req.originalUrl || req.url || '';
     const m = orig.match(/\/forward\/?(.*)$/);

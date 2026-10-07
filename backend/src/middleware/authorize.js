@@ -100,7 +100,7 @@ async function evaluateAuthorization(req, options = {}) {
         allowed: false,
         status: 403,
         code: 'TENANT_MISMATCH',
-        message: 'Cross-tenant access forbidden.'
+        message: options.tenantMismatchMessage || 'Cross-tenant access forbidden.'
       };
     }
   }
@@ -173,6 +173,20 @@ async function evaluateAuthorization(req, options = {}) {
             message: 'Resource not found.'
           };
         }
+        return {
+          allowed: false,
+          status: 403,
+          code: 'SHOP_ACCESS_DENIED',
+          message: 'Access denied: You do not have access to this branch.'
+        };
+      }
+    }
+
+    // Defense-in-depth: if client attempts to query a specific shopId via query param
+    const queryShopId = req.query?.shopId;
+    if (queryShopId !== undefined && queryShopId !== null && queryShopId !== '') {
+      const parsedQueryShopId = parseInt(queryShopId, 10);
+      if (!authz.scope.hasShopAccess(parsedQueryShopId)) {
         return {
           allowed: false,
           status: 403,
@@ -330,7 +344,7 @@ async function evaluateAuthorization(req, options = {}) {
             allowed: false,
             status: 404,
             code: 'NOT_FOUND',
-            message: 'Resource not found.'
+            message: options.ownership?.notFoundMessage || options.notFoundMessage || 'Resource not found.'
           };
         }
 
@@ -346,7 +360,7 @@ async function evaluateAuthorization(req, options = {}) {
                 allowed: false,
                 status: 404,
                 code: 'NOT_FOUND',
-                message: 'Resource not found.'
+                message: options.ownership?.notFoundMessage || options.notFoundMessage || 'Resource not found.'
               };
             }
             return {
