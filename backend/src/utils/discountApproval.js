@@ -24,9 +24,32 @@ function discountRequiresApproval(discountType, discountValue) {
 }
 
 /**
+ * Validates discount values to prevent negative, excessive, or malformed inputs.
+ */
+function validateDiscountBounds(discountType, discountValue) {
+  if (discountValue === undefined || discountValue === null) return;
+  const val = parseFloat(discountValue);
+  if (isNaN(val)) {
+    const err = new Error('Malformed discount amount.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (val < 0) {
+    const err = new Error('Discount value cannot be negative.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (discountType === 'percentage' && val > 100) {
+    const err = new Error('Discount percentage cannot exceed 100%.');
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
+/**
  * Determines whether any discount in this sale (cart-level or any item)
  * requires manager approval, and if so, verifies the supplied credential
- * against the real, hashed password on the User record.
+ * against the real, hashed password on the User or Employee record.
  *
  * @returns {Promise<string|null>} the verified approver's display name, or
  *   null if no discount in this sale required approval.
@@ -43,6 +66,12 @@ async function verifyDiscountApprovalIfNeeded({
   managerApprovalId,
   managerPassword
 }) {
+  // 1. Validate numerical and percentage bounds on cart and all items
+  validateDiscountBounds(cartDiscountType, cartDiscountValue);
+  for (const item of items) {
+    validateDiscountBounds(item.discountType, item.discountValue);
+  }
+
   const cartNeedsApproval = discountRequiresApproval(cartDiscountType, cartDiscountValue);
   const anyItemNeedsApproval = items.some(item =>
     discountRequiresApproval(item.discountType, item.discountValue)
@@ -52,12 +81,13 @@ async function verifyDiscountApprovalIfNeeded({
     return null;
   }
 
-  // If the authenticated user making the request is already an active manager or admin,
-  // their own authenticated session authorizes the discount.
-  if (user && ['manager', 'admin', 'org_admin'].includes(user.role)) {
+  // 2. If caller is already an authorized manager, admin, or org_admin, their authenticated session authorizes it
+  const effectiveRole = user?.role || user?.effectiveRole;
+  if (user && ['manager', 'admin', 'org_admin'].includes(effectiveRole)) {
     return user.name || user.email || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Admin/Manager';
   }
 
+  // 3. Otherwise, manager approval credentials are required
   if (!managerApprovalId) {
     const err = new Error('This discount exceeds the unapproved threshold and requires manager approval.');
     err.statusCode = 403;
@@ -69,11 +99,24 @@ async function verifyDiscountApprovalIfNeeded({
     throw err;
   }
 
-  const approvingManager = await User.findOne({
+  // 4. Resolve approving manager from User (platform) or Employee (shop staff)
+  let approvingManager = await User.findOne({
     where: { id: managerApprovalId, shopId, active: true }
   });
+  let managerRole = approvingManager?.role;
 
-  if (!approvingManager || !['manager', 'admin'].includes(approvingManager.role)) {
+  if (!approvingManager) {
+    const Employee = require('../models/Employee');
+    const emp = await Employee.findOne({
+      where: { id: managerApprovalId, shopId, status: 'active' }
+    });
+    if (emp) {
+      approvingManager = emp;
+      managerRole = emp.position?.toLowerCase();
+    }
+  }
+
+  if (!approvingManager || !['manager', 'admin'].includes(managerRole)) {
     const err = new Error('Selected approving user is not an active Manager or Admin.');
     err.statusCode = 403;
     throw err;
@@ -86,12 +129,13 @@ async function verifyDiscountApprovalIfNeeded({
     throw err;
   }
 
-  return approvingManager.name || approvingManager.email;
+  return approvingManager.name || approvingManager.email || `${approvingManager.firstName || ''} ${approvingManager.lastName || ''}`.trim() || 'Manager';
 }
 
 module.exports = {
   DISCOUNT_APPROVAL_PERCENT_THRESHOLD,
   DISCOUNT_APPROVAL_FIXED_THRESHOLD,
   discountRequiresApproval,
+  validateDiscountBounds,
   verifyDiscountApprovalIfNeeded
 };

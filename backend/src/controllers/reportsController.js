@@ -15,6 +15,19 @@ const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 exports.getSalesSummary = async (req, res) => {
   try {
     const { range = 'daily', startDate, endDate } = req.query;
+
+    // Validate: reject inverted date range
+    if (startDate && endDate) {
+      const s = new Date(startDate);
+      const e = new Date(endDate);
+      if (!isNaN(s) && !isNaN(e) && s > e) {
+        return res.status(400).json({
+          error: 'startDate must not be after endDate',
+          code: 'INVALID_DATE_RANGE'
+        });
+      }
+    }
+
     const normalizeRange = (s, e) => {
       const start = s ? new Date(s) : null;
       const end = e ? new Date(e) : null;
@@ -35,7 +48,7 @@ exports.getSalesSummary = async (req, res) => {
                actualRange === 'hourly' ? '%H:00' : '%Y-%m-%d';
     
     // First, let's find the date range of existing sales
-    const shopId = req.user.shopId;
+    const shopId = req.query.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
     const salesRange = await Sale.findOne({
       where: { shopId },
       attributes: [
@@ -262,7 +275,7 @@ exports.getSalesSummary = async (req, res) => {
 exports.getProfitAndLoss = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const targetShopId = req.shopId || req.user?.shopId;
+    const targetShopId = req.query.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
 
     const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
     const expenseWhere = { shopId: targetShopId };
@@ -364,7 +377,7 @@ exports.getProfitAndLoss = async (req, res) => {
 exports.getTaxEstimate = async (req, res) => {
   try {
     const { startDate, endDate, rate } = req.query;
-    const targetShopId = req.shopId || req.user?.shopId;
+    const targetShopId = req.query.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
     const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
 
     if (startDate || endDate) {
@@ -528,8 +541,9 @@ exports.getTaxEstimate = async (req, res) => {
 exports.getEmployeeSales = async (req, res) => {
   try {
     const { startDate, endDate, limit = 10 } = req.query;
+    const targetShopId = req.query.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
     const where = {
-      shopId: req.user.shopId,
+      shopId: targetShopId,
       ...NON_CANCELLED_SALE_FILTER
     };
     if (startDate || endDate) {
@@ -569,11 +583,11 @@ exports.getEmployeeSales = async (req, res) => {
 
     const [users, employees] = await Promise.all([
       User.findAll({
-        where: { id: userIds, shopId: req.user.shopId },
+        where: { id: userIds, shopId: targetShopId },
         attributes: ['id', 'name', 'email']
       }),
       Employee.findAll({
-        where: { id: employeeIds, shopId: req.user.shopId },
+        where: { id: employeeIds, shopId: targetShopId },
         attributes: ['id', 'firstName', 'lastName', 'email', 'position']
       })
     ]);

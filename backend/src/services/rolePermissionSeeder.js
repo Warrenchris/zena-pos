@@ -18,7 +18,10 @@ const DEFAULT_PERMISSIONS = [
   { name: 'manage_employees', description: 'Manage Employee Profiles' },
   { name: 'view_dashboard', description: 'View Business Dashboard Metrics' },
   { name: 'view_own_sales', description: 'View Own Sales History' },
-  { name: 'view_products', description: 'View Products' }
+  { name: 'view_products', description: 'View Products' },
+  { name: 'manage_coupons', description: 'Manage Coupons & Promo Codes' },
+  { name: 'manage_discounts', description: 'Manage Store Discount Rules' },
+  { name: 'manage_held_carts', description: 'Branch-wide Held Cart Management' }
 ];
 
 const managerPermNames = [
@@ -30,8 +33,12 @@ const managerPermNames = [
   'manage_sales',
   'manage_expenses',
   'view_customers',
+  'manage_customers',
   'manage_settings',
-  'process_refunds'
+  'process_refunds',
+  'manage_coupons',
+  'manage_discounts',
+  'manage_held_carts'
 ];
 
 const cashierPermNames = ['access_pos', 'create_sales', 'view_products', 'view_own_sales'];
@@ -58,27 +65,30 @@ async function ensureOrgRolePermissionsSeeded(organizationId) {
   }
 
   if (organizationId) {
-    const existingCount = await RolePermission.count({
+    const existingRolePerms = await RolePermission.findAll({
       where: { organizationId }
     });
+    const existingPairs = new Set(existingRolePerms.map(rp => `${rp.role}:${rp.permissionId}`));
 
-    if (existingCount === 0) {
-      // Seed default role-permission mappings for this organization
-      const adminPerms = permissions.map(p => ({
-        organizationId,
-        role: 'admin',
-        permissionId: p.id
-      }));
+    const adminPerms = permissions.map(p => ({
+      organizationId,
+      role: 'admin',
+      permissionId: p.id
+    }));
 
-      const managerPerms = permissions
-        .filter(p => managerPermNames.includes(p.name))
-        .map(p => ({ organizationId, role: 'manager', permissionId: p.id }));
+    const managerPerms = permissions
+      .filter(p => managerPermNames.includes(p.name))
+      .map(p => ({ organizationId, role: 'manager', permissionId: p.id }));
 
-      const cashierPerms = permissions
-        .filter(p => cashierPermNames.includes(p.name))
-        .map(p => ({ organizationId, role: 'cashier', permissionId: p.id }));
+    const cashierPerms = permissions
+      .filter(p => cashierPermNames.includes(p.name))
+      .map(p => ({ organizationId, role: 'cashier', permissionId: p.id }));
 
-      await RolePermission.bulkCreate([...adminPerms, ...managerPerms, ...cashierPerms], {
+    const allDesired = [...adminPerms, ...managerPerms, ...cashierPerms];
+    const missingRolePerms = allDesired.filter(dp => !existingPairs.has(`${dp.role}:${dp.permissionId}`));
+
+    if (missingRolePerms.length > 0) {
+      await RolePermission.bulkCreate(missingRolePerms, {
         ignoreDuplicates: true
       });
     }

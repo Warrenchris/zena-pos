@@ -1,8 +1,11 @@
 const { Coupon } = require('../models');
 const { Op } = require('sequelize');
 
-// Helper for shop filtering
-const shopWhere = (req) => ({ shopId: req.user.shopId });
+// Helper for shop filtering using canonical authorization context
+const getAuthorizedShopId = (req) => {
+  return req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
+};
+const shopWhere = (req) => ({ shopId: getAuthorizedShopId(req) });
 
 // Get all coupons for user's shop
 exports.getCoupons = async (req, res) => {
@@ -26,6 +29,7 @@ exports.getCoupons = async (req, res) => {
     // Auto-seed default coupons into DB table if empty
     if (coupons.length === 0 && !req.query.search) {
       try {
+        const authorizedShopId = getAuthorizedShopId(req);
         const defaultSeed = [
           {
             code: 'WELCOME10',
@@ -41,7 +45,7 @@ exports.getCoupons = async (req, res) => {
             endDate: '2026-12-31',
             isActive: true,
             description: '10% discount for first-time shoppers on orders over KSh 500.',
-            shopId: req.user.shopId
+            shopId: authorizedShopId
           },
           {
             code: 'EASTER500',
@@ -56,7 +60,7 @@ exports.getCoupons = async (req, res) => {
             endDate: '2026-04-30',
             isActive: true,
             description: 'Flat KSh 500 discount on Easter festival cart totals over KSh 2,500.',
-            shopId: req.user.shopId
+            shopId: authorizedShopId
           },
           {
             code: 'FLASH20',
@@ -72,7 +76,7 @@ exports.getCoupons = async (req, res) => {
             endDate: '2026-08-15',
             isActive: true,
             description: '20% off storewide during Mid-Year Flash Sales.',
-            shopId: req.user.shopId
+            shopId: authorizedShopId
           }
         ];
         await Coupon.bulkCreate(defaultSeed, { ignoreDuplicates: true });
@@ -124,6 +128,17 @@ exports.createCoupon = async (req, res) => {
       return res.status(400).json({ error: 'Code, title, and discountValue are required' });
     }
 
+    const numDiscountValue = parseFloat(discountValue);
+    if (isNaN(numDiscountValue) || numDiscountValue < 0) {
+      return res.status(400).json({ error: 'Discount value cannot be negative' });
+    }
+    if ((discountType || 'percentage') === 'percentage' && numDiscountValue > 100) {
+      return res.status(400).json({ error: 'Discount percentage cannot exceed 100%' });
+    }
+    if (minSpend !== undefined && parseFloat(minSpend) < 0) {
+      return res.status(400).json({ error: 'Minimum spend cannot be negative' });
+    }
+
     const cleanCode = String(code).trim().toUpperCase();
 
     // Check code uniqueness within shop
@@ -138,8 +153,8 @@ exports.createCoupon = async (req, res) => {
       code: cleanCode,
       title: String(title).trim(),
       discountType: discountType || 'percentage',
-      discountValue: parseFloat(discountValue) || 0,
-      minSpend: parseFloat(minSpend) || 0,
+      discountValue: numDiscountValue,
+      minSpend: minSpend ? parseFloat(minSpend) : 0,
       maxDiscount: maxDiscount ? parseFloat(maxDiscount) : null,
       usageLimit: parseInt(usageLimit, 10) || 100,
       usedCount: 0,
@@ -148,7 +163,7 @@ exports.createCoupon = async (req, res) => {
       endDate: endDate || null,
       isActive: isActive !== undefined ? isActive : true,
       description: description ? String(description).trim() : null,
-      shopId: req.user.shopId
+      shopId: getAuthorizedShopId(req)
     });
 
     res.status(201).json(coupon);
@@ -196,8 +211,24 @@ exports.updateCoupon = async (req, res) => {
 
     if (title !== undefined) coupon.title = String(title).trim();
     if (discountType !== undefined) coupon.discountType = discountType;
-    if (discountValue !== undefined) coupon.discountValue = parseFloat(discountValue);
-    if (minSpend !== undefined) coupon.minSpend = parseFloat(minSpend);
+    if (discountValue !== undefined) {
+      const numVal = parseFloat(discountValue);
+      if (isNaN(numVal) || numVal < 0) {
+        return res.status(400).json({ error: 'Discount value cannot be negative' });
+      }
+      const targetType = discountType !== undefined ? discountType : coupon.discountType;
+      if (targetType === 'percentage' && numVal > 100) {
+        return res.status(400).json({ error: 'Discount percentage cannot exceed 100%' });
+      }
+      coupon.discountValue = numVal;
+    }
+    if (minSpend !== undefined) {
+      const numMinSpend = parseFloat(minSpend);
+      if (isNaN(numMinSpend) || numMinSpend < 0) {
+        return res.status(400).json({ error: 'Minimum spend cannot be negative' });
+      }
+      coupon.minSpend = numMinSpend;
+    }
     if (maxDiscount !== undefined) coupon.maxDiscount = maxDiscount ? parseFloat(maxDiscount) : null;
     if (usageLimit !== undefined) coupon.usageLimit = parseInt(usageLimit, 10);
     if (perUserLimit !== undefined) coupon.perUserLimit = parseInt(perUserLimit, 10);
