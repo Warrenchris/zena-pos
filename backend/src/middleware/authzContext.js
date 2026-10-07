@@ -453,3 +453,4 @@ async function authzContext(req, res, next) {
 }
 
 module.exports = authzContext;
+module.exports.authzContext = authzContext;

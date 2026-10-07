@@ -2,8 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 const { Op } = require('sequelize');
-const { auth } = require('../middleware/auth');
-const { requireOrgOwner } = require('../middleware/requireOrgOwner');
+const { auth, authzContext, authorize } = require('../middleware/auth');
 const { requireVerifiedEmail } = require('../middleware/requireVerifiedEmail');
 const billingService = require('../services/billingService');
 const billingPaymentService = require('../services/billingPaymentService');
@@ -58,7 +57,7 @@ router.get('/plans', async (req, res) => {
  * and current quota consumption (active shops and active members).
  * Access: Authenticated active organization member.
  */
-router.get('/subscription', auth, async (req, res) => {
+router.get('/subscription', auth, authzContext, authorize(), async (req, res) => {
   try {
     let orgId = req.organizationId ? parseInt(req.organizationId, 10) : (req.user?.organizationId ? parseInt(req.user.organizationId, 10) : null);
     if (!orgId && req.user?.shopId) {
@@ -212,7 +211,7 @@ router.get('/subscription', auth, async (req, res) => {
  * Returns paginated list of subscription renewal invoices for the calling organization.
  * Access: Organization Owner ONLY.
  */
-router.get('/invoices', auth, requireOrgOwner, async (req, res) => {
+router.get('/invoices', auth, authzContext, authorize({ requireOrgOwner: true }), async (req, res) => {
   try {
     const organizationId = req.organizationId;
     const page = parseInt(req.query.page, 10) || 1;
@@ -253,7 +252,7 @@ router.get('/invoices', auth, requireOrgOwner, async (req, res) => {
  * Initiates subscription renewal via M-Pesa STK Push or Flutterwave Card Checkout.
  * Access Control: Organization Owner ONLY.
  */
-router.post('/subscription/renew', auth, requireOrgOwner, requireVerifiedEmail, async (req, res) => {
+router.post('/subscription/renew', auth, authzContext, requireVerifiedEmail, authorize({ requireOrgOwner: true }), async (req, res) => {
   try {
     const { channel, phone, planId } = req.body;
     const organizationId = req.organizationId;
@@ -323,7 +322,7 @@ router.post('/subscription/renew', auth, requireOrgOwner, requireVerifiedEmail, 
  * Schedules subscription cancellation at period end.
  * Access Control: Organization Owner ONLY.
  */
-router.post('/subscription/cancel', auth, requireOrgOwner, requireVerifiedEmail, async (req, res) => {
+router.post('/subscription/cancel', auth, authzContext, requireVerifiedEmail, authorize({ requireOrgOwner: true }), async (req, res) => {
   try {
     const organizationId = req.organizationId;
     const subscription = await billingService.cancelSubscription(organizationId);
@@ -345,7 +344,7 @@ router.post('/subscription/cancel', auth, requireOrgOwner, requireVerifiedEmail,
  * Reactivates a subscription pending cancellation.
  * Access Control: Organization Owner ONLY.
  */
-router.post('/subscription/reactivate', auth, requireOrgOwner, requireVerifiedEmail, async (req, res) => {
+router.post('/subscription/reactivate', auth, authzContext, requireVerifiedEmail, authorize({ requireOrgOwner: true }), async (req, res) => {
   try {
     const organizationId = req.organizationId;
     const subscription = await billingService.reactivateSubscription(organizationId);

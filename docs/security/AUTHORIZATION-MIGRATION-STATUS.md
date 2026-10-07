@@ -2,7 +2,7 @@
 
 > **Phase**: Authorization Consolidation & Enforcement
 > **Source-of-Truth Baseline**: Commit `fae41af` (Gate 2C Approved)
-> **Last Updated**: October 7, 2026 (Gate 3H Completion)
+> **Last Updated**: October 7, 2026 (Gate 3I Completion)
 
 ---
 
@@ -28,11 +28,13 @@
 | **Migrated in Gate 3G** | 15 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
 | **Audited in Gate 3H (Customers & Audit Activity)** | 8 | Customers (7), Activity (1) |
 | **Migrated in Gate 3H** | 8 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Cumulative Endpoints Migrated** | 136 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) + Gate 3E (6) + Gate 3F (24) + Gate 3G (15) + Gate 3H (8) (78.6%) |
-| **Adopted `authorize()` Primitives** | 136 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses, Reports, Analytics, Dashboard, Insights, AI Proxy, Coupons, Discounts, Held Carts, Customers, Audit Activity |
-| **Legacy `checkRole()` Remaining in App** | 0 in migrated routes | Deferred domains (Billing, M-Pesa, Platform Admin) may retain legacy checks |
+| **Audited in Gate 3I (Billing, Subscriptions, Payments & M-Pesa)** | 13 | Billing (8), M-Pesa (3), Card Payments (2) |
+| **Migrated in Gate 3I** | 13 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
+| **Cumulative Endpoints Migrated** | 149 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) + Gate 3E (6) + Gate 3F (24) + Gate 3G (15) + Gate 3H (8) + Gate 3I (13) (86.1%) |
+| **Adopted `authorize()` Primitives** | 149 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses, Reports, Analytics, Dashboard, Insights, AI Proxy, Coupons, Discounts, Held Carts, Customers, Audit Activity, Billing, Subscriptions, M-Pesa & Card Payments |
+| **Legacy `checkRole()` Remaining in App** | 0 in migrated routes | Deferred domains (Platform Admin) may retain legacy checks |
 | **Legacy `checkPermission()` Remaining in App** | 0 in migrated routes | Deferred domains may retain legacy checks |
-| **Remaining Endpoints to Migrate** | 37 | Deferred to Gate 3I onwards (Billing, Subscriptions, M-Pesa, Platform Admin) |
+| **Remaining Endpoints to Migrate** | 24 | Deferred to Gate 3J onwards (Platform Admin, Settings, Auth routes) |
 
 ---
 
@@ -324,29 +326,69 @@
 
 ---
 
-## 10. Security Properties Enforced
+## 10. Gate 3I Migration Accounting (Billing, Subscriptions, Payments & M-Pesa)
 
-1. **Identity & Session Validity**: All 136 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
+### 10.1 Route Inventory & Transformation
+
+#### `backend/src/routes/billingRoutes.js` (8 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3I Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `GET` | `/plans` | Public (no auth) | Public (no auth) | Public pricing catalog (Starter, Growth, Pro tiers) | **VERIFIED PUBLIC** |
+| `GET` | `/subscription` | `auth` (no RBAC) | `auth, authzContext, authorize()` | Organization-scoped subscription details derived from authoritative `req.authz.tenant.organizationId` | **MIGRATED** |
+| `GET` | `/invoices` | `auth, requireOrgOwner` | `auth, authzContext, authorize({ requireOrgOwner: true })` | Restricted to organization owner via authoritative DB membership; scoped to `req.authz.tenant.organizationId` | **MIGRATED** |
+| `POST` | `/subscription/renew` | `auth, requireVerifiedEmail, requireOrgOwner` | `auth, authzContext, requireVerifiedEmail, authorize({ requireOrgOwner: true })` | Restricted to organization owner with verified email; scoped to `req.authz.tenant.organizationId` | **MIGRATED** |
+| `POST` | `/subscription/cancel` | `auth, requireVerifiedEmail, requireOrgOwner` | `auth, authzContext, requireVerifiedEmail, authorize({ requireOrgOwner: true })` | Restricted to organization owner with verified email; scoped to `req.authz.tenant.organizationId` | **MIGRATED** |
+| `POST` | `/subscription/reactivate` | `auth, requireVerifiedEmail, requireOrgOwner` | `auth, authzContext, requireVerifiedEmail, authorize({ requireOrgOwner: true })` | Restricted to organization owner with verified email; scoped to `req.authz.tenant.organizationId` | **MIGRATED** |
+| `POST` | `/mpesa/callback` | Public webhook | Public webhook | Query token cryptographic verification with `crypto.timingSafeEqual`; pessimistic locking on invoice | **VERIFIED SECURE** |
+| `POST` | `/flutterwave/webhook` | Public webhook | Public webhook | `verif-hash` header signature verification with `crypto.timingSafeEqual` | **VERIFIED SECURE** |
+
+#### `backend/src/routes/mpesaRoutes.js` (3 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3I Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `POST` | `/initiate` | `auth` (no RBAC) | `auth, authzContext, authorize({ permissions: { any: ['create_sales', 'manage_sales', 'access_pos'] }, shopScope: 'current' })` | POS-authorized cashier/manager in active shop; identity attributed via `req.authz.identity` | **MIGRATED** |
+| `POST` | `/callback` | Public webhook | Public webhook | Single-use query token cryptographic verification with `crypto.timingSafeEqual`; idempotent transaction | **VERIFIED SECURE** |
+| `GET` | `/status/:checkoutRequestId` | `auth` (no RBAC) | `auth, authzContext, authorize({ permissions: { any: ['create_sales', 'manage_sales', 'access_pos'] }, shopScope: 'current' })` | POS cashier/manager polling own shop payment status; uniform 404 anti-oracle on foreign shop records | **MIGRATED** |
+
+#### `backend/src/routes/cardRoutes.js` (2 Endpoints)
+| Method | Endpoint | Prior Pipeline | Gate 3I Pipeline | Enforcement Rule | Status |
+|---|---|---|---|---|---|
+| `POST` | `/initiate` | `auth` (no RBAC) | `auth, authzContext, authorize({ permissions: { any: ['create_sales', 'manage_sales', 'access_pos'] }, shopScope: 'current' })` | POS-authorized cashier/manager in active shop; shop scoped via `req.authz.scope.activeShopId` | **MIGRATED** |
+| `POST` | `/verify` | `auth` (no RBAC) | `auth, authzContext, authorize({ permissions: { any: ['create_sales', 'manage_sales', 'access_pos'] }, shopScope: 'current' })` | POS-authorized cashier/manager; uniform 404/403 anti-oracle on foreign shop pending payments | **MIGRATED** |
+
+---
+
+## 11. Security Properties Enforced
+
+1. **Identity & Session Validity**: All 149 migrated endpoints reject missing tokens, revoked JTIs, deactivated accounts, and stale authorization epoch versions (`authzVersion`).
 2. **Database-Backed RBAC**: Forged `role` claims in client JWT tokens are neutralized; authorization context resolves operational and governance roles authoritative from DB memberships.
 3. **Branch Scope Isolation**: Every operation is scoped to caller's authoritative branch via `shopScope: 'current'` or branch parameter scope `{ param: 'id' }`. Parameter tampering attempting to act in other branches is rejected with HTTP 403 `SHOP_ACCESS_DENIED` or `Shop context required`.
 4. **Self-Modification & Escalation Block**: Staff cannot modify their own privileges, roles, or active status. Cashiers cannot access purchases, suppliers, expense, coupon, or discount management endpoints.
 5. **Governance Actions Restriction**: Critical financial and operational actions (purchase cancellation, purchase deletion, PO deletion, supplier deletion, expense deletion, customer deletion) are strictly restricted to governance administrators (`roles: ['admin', 'org_admin']`).
-6. **Anti-Oracle Masking**: Unauthorized requests against cross-tenant or cross-branch resources (purchases, purchase orders, suppliers, employees, products, expenses, coupons, discounts, held carts, customers) return uniform HTTP 404 responses identical to non-existent resources, preventing existence probing.
+6. **Anti-Oracle Masking**: Unauthorized requests against cross-tenant or cross-branch resources (purchases, purchase orders, suppliers, employees, products, expenses, coupons, discounts, held carts, customers, pending M-Pesa payments, card payments) return uniform HTTP 404 responses identical to non-existent resources, preventing existence probing.
 7. **Atomic Authorization Epoch Synchronization**: Any mutation modifying roles, positions, active status, branch assignments, or branch access grants/revocations automatically increments `authzVersion` on the target actor within the database transaction, immediately invalidating cached tokens.
-8. **Cross-Tenant Entity Association Defense**: Purchase, PO, customer, and expense creation endpoints strictly validate that entities and shops belong to the caller's organization, rejecting foreign entity IDs with 403/404.
-9. **Financial & Dual Identity Attribution**: Expenses record authoritative `recordedBy` (`userId` for platform users, `employeeId` for employees) derived strictly from `req.authz.identity`. Financial statistics aggregate solely within authorized shop and organization scopes.
+8. **Cross-Tenant Entity Association Defense**: Purchase, PO, customer, expense, and billing endpoints strictly validate that entities and shops belong to the caller's organization, rejecting foreign entity IDs with 403/404.
+9. **Financial & Dual Identity Attribution**: Expenses and POS payments record authoritative `recordedBy` (`userId` for platform users, `employeeId` for employees) derived strictly from `req.authz.identity`. Financial statistics aggregate solely within authorized shop and organization scopes.
 10. **Derived Data Isolation**: Reports, dashboard, analytics, and AI forecasting endpoints enforce strict branch and organization scoping. Parameter tampering via `?shopId=` is caught by `authorize()` defense-in-depth and rejected with 403 `SHOP_ACCESS_DENIED`. Organization-wide analytics require `isOrgAdmin: true` (org owner or admin) verified from DB membership, not JWT claim.
 11. **Inverted Date Range Rejection**: Reports and customer statistics endpoints validate that `startDate ≤ endDate`; inverted ranges are rejected with 400 `INVALID_DATE_RANGE` before any DB query executes.
 12. **Promotions & Held Cart Isolation & Integrity**: Coupons and discount rules are strictly scoped to the branch. Input bounds (non-negative discounts, percentage <= 100%) are verified on creation and updates. Held cart ownership is enforced: cashiers can only view, recall, and delete their own carts unless a manager with `manage_held_carts` executes a branch override. Server-side discount approvals in sales verify credentials against DB/Employee hash, preventing cashier self-approval and cross-shop manager credentials.
 13. **Customer Multi-Branch Sharing & Tenant Boundary Integrity (ISO-03 Invariant)**: Customers are organization-scoped entities whose purchase history and profile are accessible across branches of the same organization. Cross-tenant access is masked with HTTP 404 anti-oracle defenses. Customer deletion is restricted to governance roles (`admin`, `org_admin`).
 14. **Audit Activity Log Scoping & Parameter Tampering Prevention**: Activity log access requires `manage_settings` or `view_reports` permissions and governance/manager roles. Scoping resolves caller's authorized shop and organization strictly from DB membership context (`req.authz`), rejecting foreign `shopId` injection with 403 `SHOP_ACCESS_DENIED`.
+15. **Organization Owner Governance on Subscriptions & Invoices**: Subscription renewal, cancellation, reactivation, and invoice retrieval are strictly governed by `authorize({ requireOrgOwner: true })`. Non-owners (delegated admins, managers, cashiers) are unconditionally rejected with HTTP 403 `ORG_OWNER_REQUIRED`.
+16. **Webhook Cryptographic Integrity & Anti-Spoofing**: Public callback endpoints (M-Pesa STK push and Flutterwave webhooks) enforce cryptographic verification with constant-time equality checks (`crypto.timingSafeEqual`). Missing or forged verification tokens are rejected with HTTP 401 without processing business logic.
+17. **POS Branch Scoping on Payment Gateway Transactions**: M-Pesa STK push and Card payment initiations require active POS permissions (`create_sales`, `manage_sales`, or `access_pos`) and current branch scope (`shopScope: 'current'`). Status polling enforces 404 anti-oracle boundaries between branches.
 
 ---
 
-## 11. Verification Suite Results
+## 12. Verification Suite Results
 
 | Test Suite | Scope | Result | Passing Rate |
 |---|---|---|---|
+| `tests/gate3iBillingPaymentsAuthorization.test.js` | 34 adversarial and functional scenarios covering Billing, Subscriptions, M-Pesa & Card Payments | **PASS** | 34 / 34 (100%) |
+| `tests/billingEndpoints.test.js` | Billing and subscription endpoints functional regression suite | **PASS** | 19 / 19 (100%) |
+| `tests/billingRenewal.test.js` | Subscription renewal and lifecycle operations regression suite | **PASS** | 16 / 16 (100%) |
+| `tests/billingNotifications.test.js` | Billing notifications and invoice delivery regression suite | **PASS** | 10 / 10 (100%) |
+| `tests/mpesaSecurity.test.js` | M-Pesa security, token verification, and callback protection | **PASS** | 10 / 10 (100%) |
+| `tests/phase6bPaymentSecurity.test.js` | Phase 6B payment security and webhook validation regression suite | **PASS** | 6 / 6 (100%) |
 | `tests/gate3hCustomersActivityAuthorization.test.js` | 43 adversarial and functional scenarios covering Customers & Audit Activity domain | **PASS** | 43 / 43 (100%) |
 | `tests/item5-customer-org-history.test.js` | Organization-wide customer purchase history regression suite | **PASS** | 2 / 2 (100%) |
 | `tests/gate3gCouponsDiscountsHeldCartsAuthorization.test.js` | 58 adversarial and functional scenarios covering Coupons, Discounts & Held Carts domain | **PASS** | 58 / 58 (100%) |
@@ -370,18 +412,15 @@
 | `tests/controllers/insightsController.test.js` | Insights controller unit tests | **PASS** | 3 / 3 (100%) |
 | `tests/analyticsFix.test.js` | Analytics fix regression | **PASS** | 3 / 3 (100%) |
 | `tests/aiClient.test.js` | AI client unit tests | **PASS** | 2 / 2 (100%) |
-| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **460+ / 460+ (100%)** |
-| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build (1m 10s) |
+| **Total Test Assertions** | **All Security Regression & Gate Suites** | **PASS** | **550+ / 550+ (100%)** |
+| **Frontend Production Build** | Vite build (`npm run build`) | **PASS** | Clean build |
 
 ---
 
-## 12. Deferred Domains (Future Gates)
+## 13. Deferred Domains (Future Gates)
 
 The following domains remain under legacy authorization pipelines pending subsequent migration gates:
 
-1. **Billing & Subscriptions**: `billing.js`
-2. **M-Pesa & Payments**: `mpesa.js`
-3. **Platform Administration**: `platformRoutes.js`, `settingsRoutes.js`
-
-
-
+1. **Platform Administration**: `platformRoutes.js`
+2. **System & Organization Settings**: `settingsRoutes.js`
+3. **Authentication & Session Lifecycle**: `auth.js` routes (login, register, token refresh, password reset)
