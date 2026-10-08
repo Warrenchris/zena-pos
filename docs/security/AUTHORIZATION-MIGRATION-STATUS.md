@@ -1,40 +1,31 @@
 # Zana POS — Authorization Migration Status Tracker
 
-> **Phase**: Authorization Consolidation & Enforcement
+> **Program**: Authorization Consolidation & Enforcement
 > **Source-of-Truth Baseline**: Commit `fae41af` (Gate 2C Approved)
-> **Last Updated**: October 7, 2026 (Gate 3I Completion)
+> **Final Audit & Closure Milestone**: Gate 3J Approved
+> **Status**: **COMPLETE — 100% AUTHORIZATION COVERAGE REACHED**
+> **Core Assertion**: *Every reachable endpoint has an intentional and documented authorization boundary appropriate to its purpose.*
 
 ---
 
 ## 1. Executive Summary
 
+The Authorization Consolidation & Enforcement program is **COMPLETE**. Across Gates 2A–2C and Gates 3A–3J, all reachable endpoints across the Zana POS platform were systematically audited, classified, hardened, and verified under adversarial regression suites.
+
 | Metric | Count | Status / Notes |
-|---|---|---|
-| **Total Route Endpoints in Repository** | 173 | Canonical inventory established in Gate 0 (`AUTHORIZATION-MATRIX.md`) |
-| **Total Domains** | 17 | Sales, Invoices, Auth, Users, Employees, Shops, Products, Categories, Transfers, Brands, Units, Purchases, Suppliers, Expenses, Reports, Analytics, Held Carts, Customers, Activity, Billing, M-Pesa |
-| **Audited in Gate 3A (Sales & Invoices)** | 24 | Sales (15), Split Sales (1), Invoices (8) |
-| **Migrated in Gate 3A** | 24 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Audited in Gate 3B (Inventory & Products)** | 26 | Products (9), Categories (5), Transfers (2), Brands (5), Units (5) |
-| **Migrated in Gate 3B** | 26 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Audited in Gate 3C (Employees & Staff Admin)** | 12 | Employees (5), Users (3), Shop Access Delegation (4) |
-| **Migrated in Gate 3C** | 12 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Audited in Gate 3D (Purchases & Suppliers)** | 21 | Purchases (8), Purchase Orders (8), Suppliers (5) |
-| **Migrated in Gate 3D** | 21 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Audited in Gate 3E (Expenses & Financial Operations)** | 6 | Expenses (6) |
-| **Migrated in Gate 3E** | 6 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Audited in Gate 3F (Reports, Analytics, Dashboard & AI)** | 24 | Reports (4), Dashboard (3), Analytics (5), Insights (7), Org Insights (3), AI Proxy (2) |
-| **Migrated in Gate 3F** | 24 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Audited in Gate 3G (Coupons, Discounts & Held Carts)** | 15 | Coupons (6), Discounts (5), Held Carts (4) |
-| **Migrated in Gate 3G** | 15 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Audited in Gate 3H (Customers & Audit Activity)** | 8 | Customers (7), Activity (1) |
-| **Migrated in Gate 3H** | 8 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Audited in Gate 3I (Billing, Subscriptions, Payments & M-Pesa)** | 13 | Billing (8), M-Pesa (3), Card Payments (2) |
-| **Migrated in Gate 3I** | 13 | Fully transitioned to `auth` → `authzContext` → `authorize()` |
-| **Cumulative Endpoints Migrated** | 149 | Gate 3A (24) + Gate 3B (26) + Gate 3C (12) + Gate 3D (21) + Gate 3E (6) + Gate 3F (24) + Gate 3G (15) + Gate 3H (8) + Gate 3I (13) (86.1%) |
-| **Adopted `authorize()` Primitives** | 149 | Complete policy coverage across Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses, Reports, Analytics, Dashboard, Insights, AI Proxy, Coupons, Discounts, Held Carts, Customers, Audit Activity, Billing, Subscriptions, M-Pesa & Card Payments |
-| **Legacy `checkRole()` Remaining in App** | 0 in migrated routes | Deferred domains (Platform Admin) may retain legacy checks |
-| **Legacy `checkPermission()` Remaining in App** | 0 in migrated routes | Deferred domains may retain legacy checks |
-| **Remaining Endpoints to Migrate** | 24 | Deferred to Gate 3J onwards (Platform Admin, Settings, Auth routes) |
+|---|:---:|---|
+| **Total Mounted Endpoints in Application** | **187** | Exhaustively discovered and verified via Express route layer stack audit |
+| **Migrated / Canonicalized Endpoints** | **156** | Fully governed by `auth` → `authzContext` → `authorize()` or caller token self-scoping |
+| **Public Endpoints** | **9** | Intentionally public routes (health probes, public plan catalog, rate-limited auth onboarding) |
+| **Cryptographic Webhooks** | **3** | M-Pesa & Flutterwave callbacks secured with `crypto.timingSafeEqual` and single-use tokens |
+| **Platform Super-Admin Endpoints** | **6** | SaaS operator endpoints under `/api/platform/*` guarded by `requirePlatformSuperAdmin` |
+| **Legacy-Compatibility Endpoints** | **13** | Server-enforced DB owner checks under transaction locks or hardened `checkPermission` |
+| **Verified Security Gaps** | **0** | Zero unauthenticated, leaking, or unauthorized endpoints across the codebase |
+| **Active Runtime Authorization Coverage** | **100%** | 187 / 187 active mounted endpoints have verified, intentional authorization boundaries |
+| **Dead / Unmounted Route Definitions** | **12** | In unmounted files (`dashboardRoutes.js` [7], `categoryRoutes.js` [5]); excluded from attack surface |
+| **Cumulative Tenant Endpoints Migrated (Gates 3A–3I)** | **149** | Complete policy coverage across all 9 core tenant business domains |
+| **Adversarial Security Test Pass Rate** | **100%** | All 450+ security and authorization regression tests passing cleanly |
+| **Frontend Production Build** | **PASS** | `tsc && vite build` clean with zero regressions |
 
 ---
 
@@ -417,10 +408,35 @@
 
 ---
 
-## 13. Deferred Domains (Future Gates)
+## 13. Gate 3J Final Closure & Program Completion Accounting
 
-The following domains remain under legacy authorization pipelines pending subsequent migration gates:
+With the execution and approval of Gate 3J, the Authorization Consolidation & Enforcement program has reached full completion. No domains remain deferred.
 
-1. **Platform Administration**: `platformRoutes.js`
-2. **System & Organization Settings**: `settingsRoutes.js`
-3. **Authentication & Session Lifecycle**: `auth.js` routes (login, register, token refresh, password reset)
+### 13.1 Authoritative Endpoint Inventory Accounting
+A comprehensive layer-stack audit of all mounted Express routes and handlers established the exact distribution across the 187 active mounted endpoints:
+
+1. **Migrated / Canonicalized (156 Endpoints)**:
+   - Gates 3A–3I Tenant Business Domains: **149 Endpoints** fully governed by `auth` → `authzContext` → `authorize()` (Sales, Invoices, Products, Categories, Transfers, Brands, Units, Employees, Staff Admin, Shop Access, Purchases, Purchase Orders, Suppliers, Expenses, Reports, Analytics, Dashboard, Insights, Org Insights, AI Proxy, Coupons, Discounts, Held Carts, Customers, Audit Activity, Billing, Subscriptions, M-Pesa POS, Card POS).
+   - Authenticated Session Self-Service (`auth.js`): **5 Endpoints** (`/profile`, `/change-password`, `/logout`, `/resend-verification`, `/switch-shop`) strictly bounded by caller identity.
+   - Branch Self-Scoping (`shop.js`): **2 Endpoints** (`/accessible`, `/me`) returning caller's active authorized branch context.
+2. **Public Endpoints (9 Endpoints)**:
+   - Root Healthcheck (`GET /`), System Health Ping (`GET /api/system/health`), AI Status Probe (`GET /api/ai/status`), Public SaaS Pricing Catalog (`GET /api/billing/plans`), and 5 rate-limited authentication entry points (`POST /api/auth/register`, `/login`, `/forgot-password`, `/reset-password`, `/verify-email`).
+3. **Cryptographic Webhooks (3 Endpoints)**:
+   - Billing M-Pesa (`POST /api/billing/mpesa/callback`), Flutterwave (`POST /api/billing/flutterwave/webhook`), and POS M-Pesa (`POST /api/mpesa/callback`), secured via timing-safe HMAC signatures or single-use verification tokens.
+4. **Platform Operator Endpoints (6 Endpoints)**:
+   - All `/api/platform/*` endpoints protected by `requirePlatformSuperAdmin` operating outside tenant organizational scope.
+5. **Legacy-Compatibility Endpoints (13 Endpoints)**:
+   - Store settings mutation (`PUT /api/settings`, `/logo`, `/reset`, `/backup-status`) governed by `checkPermission('manage_settings')` evaluating authoritative `req.authz.permissions`.
+   - Branch lifecycle (`POST /api/shop`, `PATCH /:id/deactivate`, `PATCH /:id/activate`) enforcing database-level `owner`/`admin` membership under transaction locks.
+   - Organization governance (`/members`, `/export`, `/close-account`) enforcing database-level `owner`/`admin` checks with audit trails.
+   - Permission matrix management (`GET /matrix`, `PUT /matrix`) enforcing owner verification on updates.
+   - Cache telemetry (`GET /api/system/health/cache-stats`) reporting non-sensitive cache hit/miss stats.
+6. **Dead / Unmounted Code (12 Endpoints)**:
+   - `dashboardRoutes.js` (7) and `categoryRoutes.js` (5) are unmounted in `app.js` and excluded from the runtime attack surface.
+7. **Verified Security Gaps**: **0**.
+
+### 13.2 Program Conclusion
+Every reachable endpoint in Zana POS has an intentional, server-enforced, and documented security boundary. Multi-tenant isolation, branch scoping, ownership attribution, and token epoch invalidation are universally enforced across all operational paths.
+
+**AUTHORIZATION CONSOLIDATION & ENFORCEMENT — COMPLETE.**
+
