@@ -91,6 +91,7 @@ function buildAuthPayload({
     organizationId: resolvedOrgId,
     shop: serializedShop,
     emailVerified: isEmployee ? true : Boolean(entity?.emailVerifiedAt || entity?.emailVerified),
+    createdAt: entity?.createdAt || null,
     ...(subscriptionStatus ? { subscriptionStatus } : {})
   };
 
