@@ -141,4 +141,13 @@ describe('buildAuthPayload', () => {
     });
     expect(payload.user.emailVerified).toBe(true);
   });
+
+  test('createdAt timestamp is preserved on serialized user payload', () => {
+    const createdAt = new Date('2026-10-06T10:00:00.000Z');
+    const payload = buildAuthPayload({
+      user: { id: 1, name: 'Owner', email: 'owner@test.com', role: 'admin', createdAt },
+      shop: { id: 1, name: 'HQ', organizationId: 1 }
+    });
+    expect(payload.user.createdAt).toBe(createdAt);
+  });
 });
