@@ -1,5 +1,17 @@
 import React, { useEffect, useState } from 'react';
+import {
+  FunnelIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ExclamationCircleIcon,
+  BellAlertIcon,
+} from '@heroicons/react/24/outline';
 import { platformAPI } from '../../services/platformAPI';
+import PageHeader from '../../components/ui/PageHeader';
+import Card from '../../components/ui/Card';
+import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
+import EmptyState from '../../components/ui/EmptyState';
 
 export default function PlatformNotifications() {
   const [notifications, setNotifications] = useState([]);
@@ -31,117 +43,144 @@ export default function PlatformNotifications() {
     loadNotifications();
   }, [pagination.page, statusFilter, eventTypeFilter]);
 
+  const renderStatusBadge = (status) => {
+    switch (status) {
+      case 'sent':
+        return <Badge variant="success" dot size="sm">Sent</Badge>;
+      case 'skipped':
+        return <Badge variant="neutral" dot size="sm">Skipped</Badge>;
+      case 'failed':
+        return <Badge variant="danger" dot size="sm">Failed</Badge>;
+      default:
+        return <Badge variant="neutral" size="sm">{status}</Badge>;
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Notification Audit Logs</h1>
-        <p className="text-sm text-slate-400 mt-1">Audit trail of automated lifecycle reminder and receipt emails dispatched to tenant owners.</p>
-      </div>
+      {/* Header */}
+      <PageHeader
+        title="Notification Audit Logs"
+        description="Audit trail of automated lifecycle reminder and receipt emails dispatched to tenant owners."
+      />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900 p-4 border border-slate-800 rounded-xl">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div>
-            <label className="text-xs text-slate-400 font-medium mr-2">Event:</label>
-            <select
-              value={eventTypeFilter}
-              onChange={(e) => {
-                setEventTypeFilter(e.target.value);
-                setPagination(prev => ({ ...prev, page: 1 }));
-              }}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
-            >
-              <option value="">All Events</option>
-              <option value="TRIAL_ENDING_5D">Trial Ending (5d)</option>
-              <option value="TRIAL_ENDING_1D">Trial Ending (1d)</option>
-              <option value="RENEWAL_DUE_7D">Renewal Due (7d)</option>
-              <option value="RENEWAL_DUE_1D">Renewal Due (1d)</option>
-              <option value="PAYMENT_RECEIPT">Payment Receipt</option>
-              <option value="PAYMENT_FAILED">Payment Failed</option>
-              <option value="ACCOUNT_SUSPENDED">Account Suspended</option>
-              <option value="ACCOUNT_REACTIVATED">Account Reactivated</option>
-            </select>
-          </div>
+      {/* Filters Card */}
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+            <div className="flex items-center gap-2">
+              <label className="text-small font-medium text-text-secondary flex items-center gap-1.5 shrink-0">
+                <FunnelIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                <span>Event:</span>
+              </label>
+              <select
+                value={eventTypeFilter}
+                onChange={(e) => {
+                  setEventTypeFilter(e.target.value);
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}
+                className="bg-surface border border-border-default rounded-xl px-3 py-2 text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 cursor-pointer"
+              >
+                <option value="">All Events</option>
+                <option value="TRIAL_ENDING_5D">Trial Ending (5d)</option>
+                <option value="TRIAL_ENDING_1D">Trial Ending (1d)</option>
+                <option value="RENEWAL_DUE_7D">Renewal Due (7d)</option>
+                <option value="RENEWAL_DUE_1D">Renewal Due (1d)</option>
+                <option value="PAYMENT_RECEIPT">Payment Receipt</option>
+                <option value="PAYMENT_FAILED">Payment Failed</option>
+                <option value="ACCOUNT_SUSPENDED">Account Suspended</option>
+                <option value="ACCOUNT_REACTIVATED">Account Reactivated</option>
+              </select>
+            </div>
 
-          <div>
-            <label className="text-xs text-slate-400 font-medium mr-2">Status:</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPagination(prev => ({ ...prev, page: 1 }));
-              }}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
-            >
-              <option value="">All Statuses</option>
-              <option value="sent">Sent</option>
-              <option value="failed">Failed</option>
-              <option value="skipped">Skipped</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <label className="text-small font-medium text-text-secondary shrink-0">
+                Status:
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}
+                className="bg-surface border border-border-default rounded-xl px-3 py-2 text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 cursor-pointer"
+              >
+                <option value="">All Statuses</option>
+                <option value="sent">Sent</option>
+                <option value="failed">Failed</option>
+                <option value="skipped">Skipped</option>
+              </select>
+            </div>
           </div>
         </div>
-      </div>
+      </Card>
 
+      {/* Error alert */}
       {error && (
-        <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-xl text-sm">
-          {error}
+        <div className="p-4 rounded-2xl bg-danger/10 border border-danger/20 text-danger text-small flex items-center gap-3">
+          <ExclamationCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </div>
       )}
 
       {/* Notifications Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+      <div className="rounded-2xl border border-border-default bg-surface shadow-floating overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-950/60 text-slate-400 text-xs font-semibold uppercase tracking-wider border-b border-slate-800">
+          <table className="w-full text-left text-body border-collapse">
+            <thead className="bg-surface-2/70 text-text-secondary text-caption font-semibold uppercase tracking-wider border-b border-border-default">
               <tr>
-                <th className="py-3.5 px-4">Event Type</th>
-                <th className="py-3.5 px-4">Organization</th>
-                <th className="py-3.5 px-4">Recipient</th>
-                <th className="py-3.5 px-4">Period Key</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Sent At</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Event Type</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Organization</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Recipient</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Period Key</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Status</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold text-right">Sent At</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 text-slate-300">
+            <tbody className="divide-y divide-border-default text-text-primary">
               {loading ? (
-                <tr>
-                  <td colSpan="6" className="py-12 text-center text-slate-500">
-                    Loading notification logs...
-                  </td>
-                </tr>
+                Array.from({ length: 5 }).map((_, rIdx) => (
+                  <tr key={rIdx} className="animate-pulse">
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-36" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-32" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-40" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-24" /></td>
+                    <td className="py-4 px-4"><div className="h-5 bg-surface-2 rounded-full w-16" /></td>
+                    <td className="py-4 px-4 text-right"><div className="h-4 bg-surface-2 rounded-md w-28 ml-auto" /></td>
+                  </tr>
+                ))
               ) : notifications.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-12 text-center text-slate-500">
-                    No notification logs recorded.
+                  <td colSpan="6" className="py-12">
+                    <EmptyState
+                      icon={BellAlertIcon}
+                      title="No notification logs found"
+                      description="No notification audit records match your filter criteria."
+                    />
                   </td>
                 </tr>
               ) : (
                 notifications.map((n) => (
-                  <tr key={n.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-mono font-medium text-blue-400">
+                  <tr
+                    key={n.id}
+                    className="hover:bg-surface-2/60 transition-colors duration-150"
+                  >
+                    <td className="py-3.5 px-4 font-mono font-semibold text-primary">
                       {n.eventType}
                     </td>
-                    <td className="py-3 px-4 font-medium text-slate-200">
+                    <td className="py-3.5 px-4 font-medium text-text-primary">
                       {n.Organization?.name || `Org #${n.organizationId}`}
                     </td>
-                    <td className="py-3 px-4 text-xs font-mono text-slate-300">
+                    <td className="py-3.5 px-4 text-small font-mono text-text-secondary">
                       {n.recipientEmail}
                     </td>
-                    <td className="py-3 px-4 text-xs font-mono text-slate-400">
+                    <td className="py-3.5 px-4 text-caption font-mono text-text-muted">
                       {n.periodKey}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-0.5 text-xs font-semibold rounded-full capitalize ${
-                        n.status === 'sent'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : (n.status === 'skipped'
-                              ? 'bg-slate-800 text-slate-400 border border-slate-700'
-                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20')
-                      }`}>
-                        {n.status}
-                      </span>
+                    <td className="py-3.5 px-4">
+                      {renderStatusBadge(n.status)}
                     </td>
-                    <td className="py-3 px-4 text-xs text-slate-400 text-right">
+                    <td className="py-3.5 px-4 text-caption text-text-secondary text-right">
                       {new Date(n.sentAt || n.createdAt).toLocaleString()}
                     </td>
                   </tr>
@@ -153,25 +192,30 @@ export default function PlatformNotifications() {
 
         {/* Pagination Footer */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-950/60 border-t border-slate-800">
-            <span className="text-xs text-slate-400">
-              Showing page <strong className="text-slate-200">{pagination.page}</strong> of <strong className="text-slate-200">{pagination.totalPages}</strong> ({pagination.total} total)
-            </span>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-surface-2/40 border-t border-border-default text-small text-text-secondary">
+            <div>
+              Showing page <strong className="font-semibold text-text-primary">{pagination.page}</strong> of{' '}
+              <strong className="font-semibold text-text-primary">{pagination.totalPages}</strong> ({pagination.total} total)
+            </div>
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={ChevronLeftIcon}
                 disabled={pagination.page <= 1}
                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-xs font-medium rounded border border-slate-700 transition-colors"
               >
                 Previous
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                rightIcon={ChevronRightIcon}
                 disabled={pagination.page >= pagination.totalPages}
                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-xs font-medium rounded border border-slate-700 transition-colors"
               >
                 Next
-              </button>
+              </Button>
             </div>
           </div>
         )}

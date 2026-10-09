@@ -1,5 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import {
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ExclamationCircleIcon,
+  DocumentTextIcon,
+} from '@heroicons/react/24/outline';
 import { platformAPI } from '../../services/platformAPI';
+import PageHeader from '../../components/ui/PageHeader';
+import Card from '../../components/ui/Card';
+import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
+import EmptyState from '../../components/ui/EmptyState';
 
 export default function PlatformInvoices() {
   const [invoices, setInvoices] = useState([]);
@@ -38,115 +51,143 @@ export default function PlatformInvoices() {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
+  const renderStatusBadge = (status) => {
+    switch (status) {
+      case 'paid':
+        return <Badge variant="success" dot size="sm">Paid</Badge>;
+      case 'pending':
+        return <Badge variant="warning" dot size="sm">Pending</Badge>;
+      case 'failed':
+        return <Badge variant="danger" dot size="sm">Failed</Badge>;
+      default:
+        return <Badge variant="neutral" size="sm">{status}</Badge>;
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Platform Invoices</h1>
-        <p className="text-sm text-slate-400 mt-1">Global audit ledger of all tenant subscription renewals and receipts.</p>
-      </div>
+      {/* Header */}
+      <PageHeader
+        title="Platform Invoices"
+        description="Global audit ledger of all tenant subscription renewals and receipts."
+      />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900 p-4 border border-slate-800 rounded-xl">
-        <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full sm:w-80">
-          <input
-            type="text"
-            placeholder="Search by invoice # or ref..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-          />
-          <button
-            type="submit"
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            Search
-          </button>
-        </form>
+      {/* Filters Card */}
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2.5 w-full sm:w-96">
+            <div className="relative w-full">
+              <div className="pointer-events-none absolute inset-y-0 left-0 pl-3.5 flex items-center text-text-muted">
+                <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search by invoice # or ref..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full bg-surface border border-border-default rounded-xl pl-10 pr-3.5 py-2 text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              />
+            </div>
+            <Button type="submit" variant="primary" size="sm">
+              Search
+            </Button>
+          </form>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <label className="text-xs text-slate-400 font-medium">Status:</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPagination(prev => ({ ...prev, page: 1 }));
-            }}
-            className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
-          >
-            <option value="">All Statuses</option>
-            <option value="paid">Paid</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-          </select>
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <label className="text-small font-medium text-text-secondary flex items-center gap-1.5 shrink-0">
+              <FunnelIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
+              <span>Status:</span>
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPagination(prev => ({ ...prev, page: 1 }));
+              }}
+              className="bg-surface border border-border-default rounded-xl px-3 py-2 text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 cursor-pointer"
+            >
+              <option value="">All Statuses</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
         </div>
-      </div>
+      </Card>
 
+      {/* Error alert */}
       {error && (
-        <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-xl text-sm">
-          {error}
+        <div className="p-4 rounded-2xl bg-danger/10 border border-danger/20 text-danger text-small flex items-center gap-3">
+          <ExclamationCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </div>
       )}
 
       {/* Invoices Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+      <div className="rounded-2xl border border-border-default bg-surface shadow-floating overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-950/60 text-slate-400 text-xs font-semibold uppercase tracking-wider border-b border-slate-800">
+          <table className="w-full text-left text-body border-collapse">
+            <thead className="bg-surface-2/70 text-text-secondary text-caption font-semibold uppercase tracking-wider border-b border-border-default">
               <tr>
-                <th className="py-3.5 px-4">Invoice #</th>
-                <th className="py-3.5 px-4">Organization</th>
-                <th className="py-3.5 px-4">Plan</th>
-                <th className="py-3.5 px-4">Amount</th>
-                <th className="py-3.5 px-4">Channel</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Created</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Invoice #</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Organization</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Plan</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Amount</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Channel</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold">Status</th>
+                <th scope="col" className="py-3.5 px-4 font-semibold text-right">Created</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 text-slate-300">
+            <tbody className="divide-y divide-border-default text-text-primary">
               {loading ? (
-                <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-500">
-                    Loading invoices...
-                  </td>
-                </tr>
+                Array.from({ length: 5 }).map((_, rIdx) => (
+                  <tr key={rIdx} className="animate-pulse">
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-28" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-36" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-20" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-24" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-surface-2 rounded-md w-16" /></td>
+                    <td className="py-4 px-4"><div className="h-5 bg-surface-2 rounded-full w-16" /></td>
+                    <td className="py-4 px-4 text-right"><div className="h-4 bg-surface-2 rounded-md w-20 ml-auto" /></td>
+                  </tr>
+                ))
               ) : invoices.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-500">
-                    No invoices matching your criteria.
+                  <td colSpan="7" className="py-12">
+                    <EmptyState
+                      icon={DocumentTextIcon}
+                      title="No invoices found"
+                      description="No invoices match your search or filter criteria."
+                    />
                   </td>
                 </tr>
               ) : (
                 invoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-mono font-medium text-white">
+                  <tr
+                    key={inv.id}
+                    className="hover:bg-surface-2/60 transition-colors duration-150"
+                  >
+                    <td className="py-3.5 px-4 font-mono font-semibold text-text-primary">
                       {inv.invoiceNumber}
                     </td>
-                    <td className="py-3 px-4 font-medium text-slate-200">
+                    <td className="py-3.5 px-4 font-medium text-text-primary">
                       {inv.Organization?.name || 'N/A'}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className="text-xs font-medium text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    <td className="py-3.5 px-4">
+                      <Badge variant="neutral" size="sm">
                         {inv.Plan?.name || 'Standard'}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="py-3 px-4 font-medium text-white">
+                    <td className="py-3.5 px-4 font-semibold text-text-primary">
                       {inv.currency || 'KES'} {Number(inv.amount).toFixed(2)}
                     </td>
-                    <td className="py-3 px-4 uppercase text-xs font-mono text-slate-400">
+                    <td className="py-3.5 px-4 uppercase text-caption font-mono text-text-secondary">
                       {inv.paymentChannel || 'manual'}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-0.5 text-xs font-semibold rounded-full capitalize ${
-                        inv.status === 'paid'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : (inv.status === 'pending'
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20')
-                      }`}>
-                        {inv.status}
-                      </span>
+                    <td className="py-3.5 px-4">
+                      {renderStatusBadge(inv.status)}
                     </td>
-                    <td className="py-3 px-4 text-xs text-slate-400 text-right">
+                    <td className="py-3.5 px-4 text-caption text-text-secondary text-right">
                       {new Date(inv.createdAt).toLocaleDateString()}
                     </td>
                   </tr>
@@ -158,25 +199,30 @@ export default function PlatformInvoices() {
 
         {/* Pagination Footer */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-950/60 border-t border-slate-800">
-            <span className="text-xs text-slate-400">
-              Showing page <strong className="text-slate-200">{pagination.page}</strong> of <strong className="text-slate-200">{pagination.totalPages}</strong> ({pagination.total} total)
-            </span>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-surface-2/40 border-t border-border-default text-small text-text-secondary">
+            <div>
+              Showing page <strong className="font-semibold text-text-primary">{pagination.page}</strong> of{' '}
+              <strong className="font-semibold text-text-primary">{pagination.totalPages}</strong> ({pagination.total} total)
+            </div>
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={ChevronLeftIcon}
                 disabled={pagination.page <= 1}
                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-xs font-medium rounded border border-slate-700 transition-colors"
               >
                 Previous
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                rightIcon={ChevronRightIcon}
                 disabled={pagination.page >= pagination.totalPages}
                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-xs font-medium rounded border border-slate-700 transition-colors"
               >
                 Next
-              </button>
+              </Button>
             </div>
           </div>
         )}
