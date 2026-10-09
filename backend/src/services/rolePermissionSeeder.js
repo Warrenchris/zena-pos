@@ -65,30 +65,26 @@ async function ensureOrgRolePermissionsSeeded(organizationId) {
   }
 
   if (organizationId) {
-    const existingRolePerms = await RolePermission.findAll({
+    const existingCount = await RolePermission.count({
       where: { organizationId }
     });
-    const existingPairs = new Set(existingRolePerms.map(rp => `${rp.role}:${rp.permissionId}`));
 
-    const adminPerms = permissions.map(p => ({
-      organizationId,
-      role: 'admin',
-      permissionId: p.id
-    }));
+    if (existingCount === 0) {
+      const adminPerms = permissions.map(p => ({
+        organizationId,
+        role: 'admin',
+        permissionId: p.id
+      }));
 
-    const managerPerms = permissions
-      .filter(p => managerPermNames.includes(p.name))
-      .map(p => ({ organizationId, role: 'manager', permissionId: p.id }));
+      const managerPerms = permissions
+        .filter(p => managerPermNames.includes(p.name))
+        .map(p => ({ organizationId, role: 'manager', permissionId: p.id }));
 
-    const cashierPerms = permissions
-      .filter(p => cashierPermNames.includes(p.name))
-      .map(p => ({ organizationId, role: 'cashier', permissionId: p.id }));
+      const cashierPerms = permissions
+        .filter(p => cashierPermNames.includes(p.name))
+        .map(p => ({ organizationId, role: 'cashier', permissionId: p.id }));
 
-    const allDesired = [...adminPerms, ...managerPerms, ...cashierPerms];
-    const missingRolePerms = allDesired.filter(dp => !existingPairs.has(`${dp.role}:${dp.permissionId}`));
-
-    if (missingRolePerms.length > 0) {
-      await RolePermission.bulkCreate(missingRolePerms, {
+      await RolePermission.bulkCreate([...adminPerms, ...managerPerms, ...cashierPerms], {
         ignoreDuplicates: true
       });
     }

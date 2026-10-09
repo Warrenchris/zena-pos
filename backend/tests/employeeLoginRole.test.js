@@ -75,7 +75,7 @@ describe('Employee login JWT role vs checkRole', () => {
     adminToken = `Bearer ${login.body.token}`;
   });
 
-  test('cashier employee login can GET /api/employees and cannot POST (admin-only)', async () => {
+  test('cashier employee login cannot GET /api/employees (requires manage_employees) and cannot POST (admin-only)', async () => {
     const loginRes = await request(app)
       .post('/api/auth/login')
       .send({ email: cashierEmp.email, password: 'Password123!' })
@@ -90,7 +90,8 @@ describe('Employee login JWT role vs checkRole', () => {
       .get('/api/employees')
       .set('Authorization', `Bearer ${loginRes.body.token}`);
 
-    expect(listRes.status).toBe(200);
+    // Gate 3D (commit bfa4d7e): GET /api/employees requires manage_employees; cashiers cannot enumerate employee records
+    expect(listRes.status).toBe(403);
 
     const createRes = await request(app)
       .post('/api/employees')
