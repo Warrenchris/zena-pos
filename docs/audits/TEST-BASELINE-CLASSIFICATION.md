@@ -4,7 +4,7 @@
 **Repository:** Warrenchris/zena-pos  
 **Target Branch:** master at HEAD (`6ddb834`)  
 **Baseline Commit:** `1f45448` (Pre-Gate Authorization Baseline)  
-**Status:** AUDIT COMPLETE (Phase 1 — Read-Only; No application code, test edits, or commits applied)
+**Status:** PHASE 2 COMPLETE — Implemented & Verified on review branch `fix/test-baseline-phase2` (commit `69910c6`)
 
 ---
 
@@ -93,7 +93,7 @@ Every test that fails at HEAD has been classified into exactly one bucket:
 | 11 | `tests/gate3iBillingPaymentsAuthorization.test.js` | `5.1: GET /api/billing/plans is public and returns exactly 3 active public tiers` | Expected: `3`<br>Received: `14` (suite) / `9` (solo) | **D (Order-Dependent / Isolation Failure)** | `27301fa`<br>(Setup baseline reset) | **Fix Test Isolation:** Resolved by `setupAfterEnv.js` baseline snapshot cleanup. |
 | 12 | `tests/settingsAllowlist.test.js` | `does NOT overwrite stored encrypted M-Pesa secrets when masked placeholder is sent` | `ENCRYPTION_SECRET environment variable is missing.` | **A (Pre-Existing)** | Pre-existing (`1f45448` and prior) | **Fix Test Fixture:** Provide default test fallback in `tests/setupAfterEnv.js` strictly when `NODE_ENV === 'test'`. Never in application code or `.env.example`. |
 | 13 | `tests/settingsAllowlist.test.js` | `redacts consumerKey in ActivityLog metadata but still records it in updatedFields` | Expected: `200`<br>Received: `500` (Cascade) | **A (Pre-Existing)** | Pre-existing (`1f45448` and prior) | **Fix Test Fixture:** Resolved by the same test-only `ENCRYPTION_SECRET` fixture fallback. |
-| 14 | `tests/resetPasswordAccountTypeIsolation.test.js` | `a user reset token cannot fall back to an employee account` | Expected: `400`<br>Received: `200` | **C (Regression / Isolation Bug)** | `afb2a57`<br>(Accidental hotfix commit) | **Fix Code:** Remove User -> Employee fallback in `authController.resetPassword` (tokens carry `isEmployee` explicitly). Retain test and make it pass. |
+| 14 | `tests/resetPasswordAccountTypeIsolation.test.js` | `a user reset token cannot fall back to an employee account` | Expected: `400`<br>Received: `200` | **C (Regression / Isolation Bug)** | `afb2a57`<br>(Accidental hotfix commit) | **Fix Code (Actual Outcome):** User -> Employee fallback in `authController.resetPassword` was REMOVED and test was KEPT (it now passes). `forgotPassword` always issues `isEmployee: true` for employees, so fallback had no legitimate use. |
 
 ---
 
@@ -239,7 +239,7 @@ Every test that fails at HEAD has been classified into exactly one bucket:
   - Solo Re-run 2: Failed (`200` vs `400`).
 - **Introducing Commit:** `afb2a57` (*fix: resolve effectiveRole hotfix, held cart scoping, pnl balance*).
 - **Root Cause:** Committed accidentally during the hotfix commit. `src/controllers/authController.js` (lines 436-439) explicitly implements an intentional fallback where a token issued without `isEmployee: true` falls back to `Employee.findByPk(decoded.id)`. The stray test asserted that this fallback must be rejected with 400, directly contradicting the existing implementation.
-- **Proposed Action:** Remove this accidental stray test file or adjust according to user direction.
+- **Proposed Action (Actual Outcome):** The User -> Employee fallback in `authController.resetPassword` was REMOVED and the test was KEPT (it now passes). `forgotPassword` always issues `isEmployee: true` for employee accounts, so the fallback had no legitimate use.
 
 ---
 
@@ -324,60 +324,56 @@ Upon user review and explicit approval, the following minimal, surgical remediat
    ```javascript
    process.env.ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || 'e7b4198c61fa2d75a02482310bf8b975e5330e2fbd08544c4897f1f415ef414a';
    ```
-3. **`tests/resetPasswordAccountTypeIsolation.test.js` (Stray Test):**
-   - Delete or isolate this accidentally committed 103-line test file.
+3. **`tests/resetPasswordAccountTypeIsolation.test.js` (Account Type Isolation):**
+   - Actual Outcome: The User -> Employee fallback in `authController.resetPassword` was REMOVED and the test was KEPT (it now passes). `forgotPassword` always issues `isEmployee: true` for employee accounts, so the fallback had no legitimate use.
 
 ---
- 
-## 7. Phase 2 Implementation & Final Verification Results
- 
-### 7.1 Implemented Changes Summary
- 
-1. **User Controller Self-Modification Guard (`backend/src/controllers/userController.js`):**
-   - Permit no-op self-modifications (e.g. name or unchanged role/active/orgRole) for both Users and Employees.
-   - Strictly reject any request where `isSelf === true` attempts to change `role`, `active`, or `orgRole` (HTTP 403 `Access denied: users cannot modify their own privileges or status.`).
-   - Self-modification check positioned before elevation checks to ensure consistent 403 rejection.
-   - Added comprehensive tests in `tests/orgAdminAccessControl.test.js`: owner no-op self-edit (200), owner self-demote (403), owner self-deactivate (403).
- 
-2. **Role Permission Seeder & Idempotent Migration (`backend/migrations/...` & `backend/src/services/rolePermissionSeeder.js`):**
-   - Added migration `20261008120000-backfill-gate3-default-role-permissions.js` backfilling default permissions introduced since `1f45448` (`manage_coupons`, `manage_discounts`, `manage_held_carts` for admin/manager, `manage_customers` for manager) across all existing organizations. Migration joins against existing `Organizations` to prevent foreign key errors and is strictly idempotent.
-   - Modified `rolePermissionSeeder.js` so per-organization `RolePermission` records are seeded only when the organization has zero existing permissions (`existingCount === 0`). Explicit revokes now persist across restarts and cache invalidations.
-   - Added mandatory future permission migration documentation note in `docs/security/AUTHORIZATION-MIGRATION-STATUS.md` (Section 13.3).
- 
-3. **Password Reset Token Isolation (`backend/src/controllers/authController.js`):**
-   - Removed the fallback from User to Employee in `authController.resetPassword`. Password reset tokens for employees explicitly carry `isEmployee: true` (issued via `forgotPassword`).
-   - Verified that `tests/resetPasswordAccountTypeIsolation.test.js` passes completely.
- 
-4. **Test Setup Isolation & Hard Safety Guards (`backend/tests/setupAfterEnv.js`):**
-   - Added hard safety assertion: throws immediately if the active database name does not contain `"test"`, ensuring `zana_pos` can never be modified.
-   - Added test-only default fallback for `ENCRYPTION_SECRET` to fix pre-existing `settingsAllowlist.test.js` failure.
-   - Added pruning query in `resetDatabaseToBaselineSnapshot()` removing non-standard test plans: `DELETE FROM Plans WHERE code NOT IN ('starter', 'growth', 'pro', 'grandfathered')`.
- 
-5. **Test Drift Updates (Citing Gates & Commits):**
-   - `tests/employeeLoginRole.test.js`: Updated `GET /api/employees` expectation to 403 citing Gate 3D (`bfa4d7e`).
-   - `tests/phase2.test.js`: Updated `GET /api/employees/:id` expectation to 404 citing Gate 3D anti-oracle enumeration policy (`bfa4d7e`).
-   - `tests/phase3UserTenantSecurity.test.js`: Updated expected error code to `"TENANT_MISMATCH"` (Gate 2B `fae41af`) and branch rejection regex (Gate 3H `6e2841f`).
-   - `tests/phase6aReleaseBlockers.test.js`: Updated `DATA-01` employee fixture from cashier to manager citing Gate 3E (`8de4016`, `manage_expenses` requirement).
- 
-### 7.2 Full Suite Verification at HEAD
- 
-| Metric | Baseline (`1f45448`) | HEAD Audit (Phase 1) | HEAD Final (Phase 2 Post-Fix) |
-| :--- | :--- | :--- | :--- |
-| **Total Test Suites** | 69 | 84 | **84** |
-| **Passed Test Suites** | 67 | 74 | **84 (100%)** |
-| **Failed Test Suites** | 2 | 10 | **0 (0%)** |
-| **Total Tests** | 696 | 1,162 | **1,165** |
-| **Passed Tests** | 694 | 1,148 | **1,165 (100%)** |
-| **Failed Tests** | 2 | 14 | **0 (0%)** |
-| **Execution Wall Time** | 971s | 785s | **476s** |
- 
-### 7.3 Baseline Failing Suites Verification at HEAD
-- `tests/controllers/insightsController.test.js`: **PASSED (3/3)**
-- `tests/testInfraCoverage.test.js`: **PASSED (4/4)**
- 
-### 7.4 Environment Cleanup Verification
-- Git worktree `../zana-baseline`: Removed and pruned.
-- Scratch database `zana_test_baseline`: Dropped from MySQL.
-- Redis DB 2: Flushed and purged.
-- Developer database `zana_pos`: Completely untouched and intact.
+
+## Phase 2 outcomes
+
+### 1. Per-Bucket Results
+- **Bucket B (Test Drift):** Expectations updated to reflect authorized gate behavior with explanatory comments:
+  - `backend/tests/employeeLoginRole.test.js`: Expects 403 on `GET /api/employees` for cashier employee lacking `manage_employees` (Gate 3D `bfa4d7e`).
+  - `backend/tests/phase6aReleaseBlockers.test.js`: Updated test fixture from cashier to manager for UUID expense attribution requiring `manage_expenses` (Gate 3E `8de4016`).
+  - `backend/tests/phase2.test.js`: Expects 404 on `GET /api/employees/:id` per anti-enumeration policy (Gate 3D `bfa4d7e`).
+  - `backend/tests/phase3UserTenantSecurity.test.js`: Aligned error code to `"TENANT_MISMATCH"` (Gate 2B `fae41af`) and branch rejection regex (Gate 3H `6e2841f`).
+- **Bucket C (Regressions):**
+  - **Owner Self-Edit Guard:** In `backend/src/controllers/userController.js`, no-op self-edits are allowed (200), but self-modifications altering own `role`, `active`, or `orgRole` return 403 for all callers (including owners).
+  - **Permission-Revocation Seeder Bug:** Revoked permissions were being re-created on every permission-cache miss. In `backend/src/services/rolePermissionSeeder.js`, runtime seeding now only runs when an org has zero `RolePermission` rows (`existingCount === 0`).
+- **Bucket D (Isolation):**
+  - In `backend/tests/setupAfterEnv.js`, `resetDatabaseToBaselineSnapshot()` prunes test plans via `DELETE FROM Plans WHERE code NOT IN ('starter', 'growth', 'pro', 'grandfathered')`.
+  - Added hard guard: `setupAfterEnv.js` immediately throws if the active database name does not contain `'test'`.
+- **Bucket E / A (Environment & Account Isolation):**
+  - `ENCRYPTION_SECRET` test-only fallback added to `backend/tests/setupAfterEnv.js` (strictly for tests; never in application code or `.env.example`).
+  - Removed User -> Employee fallback in `backend/src/controllers/authController.js` `resetPassword`.
+
+### 2. Seeder Fix & Backfill Migration
+- Revoked permissions were being re-created on every permission-cache miss because the seeder queried missing role-permission pairs against defaults. Runtime seeding now only runs when an org has zero `RolePermission` rows.
+- Idempotent backfill migration `20261008120000-backfill-gate3-default-role-permissions.js` adds `manage_coupons`, `manage_discounts`, `manage_held_carts` (admin, manager) and `manage_customers` (manager) for existing orgs. Verified safe to run multiple times with zero changes on pass two.
+- **Decision:** `manage_customers` for managers is kept as the Gate 3H default change.
+- **Standing Rule:** Every future permission needs its own backfill migration.
+
+### 3. Security Finding: Platform Authority Isolation (`super_admin`)
+- `updateRole` previously accepted arbitrary role strings, enabling tenant callers to assign role `"super_admin"` (platform operator authority via `requirePlatformSuperAdmin`).
+- Fixed by enforcing a strict allowlist (`['admin', 'manager', 'cashier']`), normalizing and validating `active`/`role`/`orgRole`, and rejecting `role: 'super_admin'` with 400 across User and Employee branches.
+- Tested: owner, shop admin, and delegated org_admin callers attempting `role: 'super_admin'` receive 400 with target user role unchanged in the database.
+- **Recommended DB Check:** Query non-throwaway databases for unexpected super_admin users:
+  ```sql
+  SELECT id, email, role FROM Users WHERE role = 'super_admin';
+  ```
+
+### 4. Owner Self-Edit Policy
+- No-op self-edits are allowed (200).
+- Real changes to caller's own `role`, `active`, or `orgRole` return 403.
+
+### 5. Evidence Statement
+- Full suite executed on **October 9, 2026** with command:
+  ```bash
+  npx jest --runInBand --forceExit --json --outputFile="<scratch>/final_reconciled_after_hardening.json"
+  ```
+- **Observed Results:**
+  - **Test Suites:** 84 passed, 84 total (100%)
+  - **Tests:** 1,177 passed, 1,177 total (100%)
+  - **Wall Time:** 584.976s
+- Dev database `zana_pos` verified untouched (`Users` count = 1).
 
