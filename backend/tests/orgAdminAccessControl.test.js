@@ -28,6 +28,8 @@ describe('Org Admin Access Control & Security Invariants', () => {
   let orgAdminToken;
   let cashierEmp;
   let cashierToken;
+  let shopAdminUser;
+  let shopAdminToken;
 
   beforeAll(async () => {
     const ts = Date.now();
@@ -268,9 +270,6 @@ describe('Org Admin Access Control & Security Invariants', () => {
   });
 
   describe('Invariant 5: Shop-level admin (User.role="admin") cannot create admin accounts or modify owner account', () => {
-    let shopAdminUser;
-    let shopAdminToken;
-
     beforeAll(async () => {
       const ts = Date.now();
       shopAdminUser = await User.create({
@@ -379,7 +378,7 @@ describe('Org Admin Access Control & Security Invariants', () => {
       expect(res.body.role).toBe('admin');
     });
 
-    test('actual organization owner can edit any user in their shop including themselves', async () => {
+    test('actual organization owner can edit any user in their shop including themselves (no-op)', async () => {
       // Owner edits another user
       const editOtherRes = await request(app)
         .put(`/api/users/${shopAdminUser.id}/role`)
@@ -392,7 +391,7 @@ describe('Org Admin Access Control & Security Invariants', () => {
       expect(editOtherRes.status).toBe(200);
       expect(editOtherRes.body.role).toBe('manager');
 
-      // Owner edits themselves (no regression)
+      // Owner edits themselves with unchanged values (no-op self-edit -> 200)
       const editSelfRes = await request(app)
         .put(`/api/users/${ownerUser.id}/role`)
         .set('Authorization', ownerToken)
@@ -402,6 +401,188 @@ describe('Org Admin Access Control & Security Invariants', () => {
         });
 
       expect(editSelfRes.status).toBe(200);
+    });
+
+    test('actual organization owner cannot self-demote role (403)', async () => {
+      const res = await request(app)
+        .put(`/api/users/${ownerUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({
+          role: 'manager'
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Access denied: users cannot modify their own privileges or status.');
+
+      const ownerInDb = await User.findByPk(ownerUser.id);
+      expect(ownerInDb.role).toBe('admin');
+    });
+
+    test('actual organization owner cannot self-deactivate status (403)', async () => {
+      const res = await request(app)
+        .put(`/api/users/${ownerUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({
+          active: false
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Access denied: users cannot modify their own privileges or status.');
+
+      const ownerInDb = await User.findByPk(ownerUser.id);
+      expect(ownerInDb.active).toBe(true);
+    });
+
+    test('owner self-deactivate with active: "false" returns 403 (never 200)', async () => {
+      const res = await request(app)
+        .put(`/api/users/${ownerUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({ active: 'false' });
+
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(200);
+      expect(res.body.error).toBe('Access denied: users cannot modify their own privileges or status.');
+
+      const ownerInDb = await User.findByPk(ownerUser.id);
+      expect(ownerInDb.active).toBe(true);
+    });
+
+    test('owner self-deactivate with active: 0 returns 400 or 403 (never 200)', async () => {
+      const res = await request(app)
+        .put(`/api/users/${ownerUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({ active: 0 });
+
+      expect([400, 403]).toContain(res.status);
+      expect(res.status).not.toBe(200);
+
+      const ownerInDb = await User.findByPk(ownerUser.id);
+      expect(ownerInDb.active).toBe(true);
+    });
+
+    test('owner self-deactivate with active: "0" returns 400 or 403 (never 200)', async () => {
+      const res = await request(app)
+        .put(`/api/users/${ownerUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({ active: '0' });
+
+      expect([400, 403]).toContain(res.status);
+      expect(res.status).not.toBe(200);
+
+      const ownerInDb = await User.findByPk(ownerUser.id);
+      expect(ownerInDb.active).toBe(true);
+    });
+
+    test('owner no-op self-edit with normalized active: "true" still returns 200', async () => {
+      const res = await request(app)
+        .put(`/api/users/${ownerUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({ active: 'true' });
+
+      expect(res.status).toBe(200);
+
+      const ownerInDb = await User.findByPk(ownerUser.id);
+      expect(ownerInDb.active).toBe(true);
+    });
+  });
+
+  describe('Invariant 6: Platform authority isolation — role "super_admin" cannot be assigned via updateRole', () => {
+    let targetUser;
+    let shopAdminCaller;
+    let shopAdminCallerToken;
+
+    beforeAll(async () => {
+      const ts = Date.now();
+      targetUser = await User.create({
+        name: 'Target User For SuperAdmin Test',
+        email: `target_user_${ts}@example.com`,
+        password: 'Password123!',
+        role: 'cashier',
+        shopId: shopA.id,
+        active: true
+      });
+      await OrganizationMembership.create({
+        organizationId: org.id,
+        userId: targetUser.id,
+        orgRole: 'member',
+        status: 'active'
+      });
+
+      shopAdminCaller = await User.create({
+        name: 'Shop Admin Caller',
+        email: `shop_admin_caller_${ts}@example.com`,
+        password: 'Password123!',
+        role: 'admin',
+        shopId: shopA.id,
+        active: true
+      });
+      await OrganizationMembership.create({
+        organizationId: org.id,
+        userId: shopAdminCaller.id,
+        orgRole: 'admin',
+        status: 'active'
+      });
+      const adminLogin = await request(app)
+        .post('/api/auth/login')
+        .send({ email: shopAdminCaller.email, password: 'Password123!' });
+      shopAdminCallerToken = `Bearer ${adminLogin.body.token}`;
+    });
+
+    test('owner attempting role: "super_admin" on another user returns 400 (never 200) and leaves role unchanged in DB', async () => {
+      const res = await request(app)
+        .put(`/api/users/${targetUser.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({ role: 'super_admin' });
+
+      expect(res.status).toBe(400);
+      expect(res.status).not.toBe(200);
+      expect(res.body.error).toMatch(/Invalid role value/i);
+
+      const targetInDb = await User.findByPk(targetUser.id);
+      expect(targetInDb.role).toBe('cashier');
+    });
+
+    test('non-owner shop admin attempting role: "super_admin" on another user returns 400 (never 200) and leaves role unchanged', async () => {
+      const res = await request(app)
+        .put(`/api/users/${targetUser.id}/role`)
+        .set('Authorization', shopAdminCallerToken)
+        .send({ role: '  SUPER_ADMIN  ' });
+
+      expect(res.status).toBe(400);
+      expect(res.status).not.toBe(200);
+      expect(res.body.error).toMatch(/Invalid role value/i);
+
+      const targetInDb = await User.findByPk(targetUser.id);
+      expect(targetInDb.role).toBe('cashier');
+    });
+
+    test('delegated org_admin employee attempting role: "super_admin" on another user returns 400 (never 200) and leaves role unchanged', async () => {
+      const res = await request(app)
+        .put(`/api/users/${targetUser.id}/role`)
+        .set('Authorization', orgAdminToken)
+        .send({ role: 'Super_Admin' });
+
+      expect(res.status).toBe(400);
+      expect(res.status).not.toBe(200);
+      expect(res.body.error).toMatch(/Invalid role value/i);
+
+      const targetInDb = await User.findByPk(targetUser.id);
+      expect(targetInDb.role).toBe('cashier');
+    });
+
+    test('Employee branch cannot be used to set position/role "super_admin" (returns 400, never 200, position unchanged in DB)', async () => {
+      const initialPosition = cashierEmp.position;
+      const res = await request(app)
+        .put(`/api/users/${cashierEmp.id}/role`)
+        .set('Authorization', ownerToken)
+        .send({ role: 'super_admin' });
+
+      expect(res.status).toBe(400);
+      expect(res.status).not.toBe(200);
+      expect(res.body.error).toMatch(/Invalid role value/i);
+
+      const empInDb = await Employee.findByPk(cashierEmp.id);
+      expect(empInDb.position).toBe(initialPosition);
     });
   });
 });

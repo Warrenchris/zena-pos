@@ -167,19 +167,66 @@ exports.updateRole = async (req, res) => {
 
     const { id } = req.params;
     const { role, active, orgRole } = req.body;
+
+    const ALLOWED_ROLES = ['admin', 'manager', 'cashier'];
+    const ALLOWED_ORG_ROLES = ['owner', 'admin', 'member', 'billing_admin'];
+
+    let normalizedActive = undefined;
+    if (active !== undefined && active !== null) {
+      if (typeof active === 'boolean') {
+        normalizedActive = active;
+      } else if (typeof active === 'string') {
+        const lower = active.trim().toLowerCase();
+        if (lower === 'true') {
+          normalizedActive = true;
+        } else if (lower === 'false') {
+          normalizedActive = false;
+        } else {
+          await transaction.rollback();
+          return res.status(400).json({ error: 'Invalid active value. Must be a boolean or "true"/"false".' });
+        }
+      } else {
+        await transaction.rollback();
+        return res.status(400).json({ error: 'Invalid active value. Must be a boolean or "true"/"false".' });
+      }
+    }
+
+    let normalizedRole = undefined;
+    if (role !== undefined && role !== null) {
+      if (typeof role !== 'string') {
+        await transaction.rollback();
+        return res.status(400).json({ error: 'Invalid role value. Must be a string.' });
+      }
+      const lowerRole = role.trim().toLowerCase();
+      if (!ALLOWED_ROLES.includes(lowerRole)) {
+        await transaction.rollback();
+        return res.status(400).json({ error: `Invalid role value '${role}'. Must be one of: ${ALLOWED_ROLES.join(', ')}.` });
+      }
+      normalizedRole = lowerRole;
+    }
+
+    let normalizedOrgRole = undefined;
+    if (orgRole !== undefined && orgRole !== null) {
+      if (typeof orgRole !== 'string') {
+        await transaction.rollback();
+        return res.status(400).json({ error: 'Invalid orgRole value. Must be a string.' });
+      }
+      const lowerOrgRole = orgRole.trim().toLowerCase();
+      if (!ALLOWED_ORG_ROLES.includes(lowerOrgRole)) {
+        await transaction.rollback();
+        return res.status(400).json({ error: `Invalid orgRole value '${orgRole}'. Must be one of: ${ALLOWED_ORG_ROLES.join(', ')}.` });
+      }
+      normalizedOrgRole = lowerOrgRole;
+    }
+
     const requesterOrgRole = await getRequesterOrgRole(req, transaction);
     const isOwnerCaller = Boolean(req.authz?.tenant?.isOwner || requesterOrgRole === 'owner');
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
 
-    // Self-modification guard
+    // Self-modification context
     const callerId = req.authz?.identity?.id || req.user?.id;
     const callerIsEmployee = Boolean(req.authz?.identity?.isEmployee !== undefined ? req.authz.identity.isEmployee : req.user?.isEmployee);
-    if (String(callerId) === String(id) && callerIsEmployee === isUuid) {
-      if (role || active !== undefined || orgRole) {
-        await transaction.rollback();
-        return res.status(403).json({ error: 'Access denied: users cannot modify their own privileges or status.' });
-      }
-    }
+    const isSelf = String(callerId) === String(id) && callerIsEmployee === isUuid;
 
     if (isUuid) {
       const emp = await Employee.findByPk(id, { transaction });
@@ -212,33 +259,38 @@ exports.updateRole = async (req, res) => {
         return res.status(403).json({ error: "Cannot modify the organization owner's account." });
       }
 
+      const roleChanged = Boolean(normalizedRole && normalizedRole !== String(emp.position).toLowerCase());
+      const activeChanged = Boolean(normalizedActive !== undefined && (emp.status === 'active') !== normalizedActive);
+      const orgRoleChanged = Boolean(normalizedOrgRole && membership && membership.orgRole !== normalizedOrgRole);
+
+      if (isSelf && (roleChanged || activeChanged || orgRoleChanged)) {
+        await transaction.rollback();
+        return res.status(403).json({ error: 'Access denied: users cannot modify their own privileges or status.' });
+      }
+
       // Elevating to admin/owner requires owner caller
-      const isElevating = (role && String(role).toLowerCase() === 'admin') || (orgRole === 'admin') || (orgRole === 'owner');
+      const isElevating = (normalizedRole && normalizedRole === 'admin') || (normalizedOrgRole === 'admin') || (normalizedOrgRole === 'owner');
       if (isElevating && !isOwnerCaller) {
         await transaction.rollback();
         return res.status(403).json({ error: 'Access denied: only organization owners can grant administrator privileges.' });
       }
 
-      const roleChanged = Boolean(role && role !== emp.position);
-      const activeChanged = Boolean(active !== undefined && (emp.status === 'active') !== Boolean(active));
-      const orgRoleChanged = Boolean(orgRole && membership && membership.orgRole !== orgRole);
-
-      if (role) emp.position = role;
-      if (active !== undefined) emp.status = active ? 'active' : 'inactive';
+      if (normalizedRole) emp.position = normalizedRole;
+      if (normalizedActive !== undefined) emp.status = normalizedActive ? 'active' : 'inactive';
       await emp.save({ transaction });
 
       // Synchronize OrganizationMembership
       let membershipUpdated = false;
       if (membership) {
-        if (active !== undefined) {
-          membership.status = active ? 'active' : 'suspended';
+        if (normalizedActive !== undefined) {
+          membership.status = normalizedActive ? 'active' : 'suspended';
           membershipUpdated = true;
         }
-        if (orgRole) {
-          membership.orgRole = orgRole;
+        if (normalizedOrgRole) {
+          membership.orgRole = normalizedOrgRole;
           membershipUpdated = true;
         } else if (roleChanged) {
-          membership.orgRole = staffCreationService.positionToOrgRole(role);
+          membership.orgRole = staffCreationService.positionToOrgRole(normalizedRole);
           membershipUpdated = true;
         }
         if (membershipUpdated) {
@@ -253,8 +305,8 @@ exports.updateRole = async (req, res) => {
 
       await transaction.commit();
 
-      if (active !== undefined) {
-        await tokenRevocationService.setUserStatus(emp.id, true, active ? 'active' : 'inactive');
+      if (normalizedActive !== undefined) {
+        await tokenRevocationService.setUserStatus(emp.id, true, normalizedActive ? 'active' : 'inactive');
       }
 
       return res.json({
@@ -297,35 +349,40 @@ exports.updateRole = async (req, res) => {
       return res.status(403).json({ error: "Cannot modify the organization owner's account." });
     }
 
-    const isElevating = (role && String(role).toLowerCase() === 'admin') || (orgRole === 'admin') || (orgRole === 'owner');
+    const roleChanged = Boolean(normalizedRole && normalizedRole !== String(user.role).toLowerCase());
+    const activeChanged = Boolean(normalizedActive !== undefined && Boolean(user.active) !== normalizedActive);
+    const orgRoleChanged = Boolean(normalizedOrgRole && membership && membership.orgRole !== normalizedOrgRole);
+
+    if (isSelf && (roleChanged || activeChanged || orgRoleChanged)) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Access denied: users cannot modify their own privileges or status.' });
+    }
+
+    const isElevating = (normalizedRole && normalizedRole === 'admin') || (normalizedOrgRole === 'admin') || (normalizedOrgRole === 'owner');
     if (isElevating && !isOwnerCaller) {
       await transaction.rollback();
       return res.status(403).json({ error: 'Access denied: only organization owners can grant administrator privileges.' });
     }
 
-    const roleChanged = Boolean(role && role !== user.role);
-    const activeChanged = Boolean(active !== undefined && user.active !== Boolean(active));
-    const orgRoleChanged = Boolean(orgRole && membership && membership.orgRole !== orgRole);
-
-    if (role) user.role = role;
-    if (active !== undefined) user.active = active;
+    if (normalizedRole) user.role = normalizedRole;
+    if (normalizedActive !== undefined) user.active = normalizedActive;
     await user.save({ transaction });
 
     // Synchronize OrganizationMembership
     let membershipUpdated = false;
     if (membership) {
-      if (active !== undefined) {
-        membership.status = active ? 'active' : 'suspended';
+      if (normalizedActive !== undefined) {
+        membership.status = normalizedActive ? 'active' : 'suspended';
         membershipUpdated = true;
       }
-      if (orgRole) {
-        membership.orgRole = orgRole;
+      if (normalizedOrgRole) {
+        membership.orgRole = normalizedOrgRole;
         membershipUpdated = true;
       } else if (roleChanged) {
-        if (role === 'admin' && membership.orgRole !== 'owner') {
+        if (normalizedRole === 'admin' && membership.orgRole !== 'owner') {
           membership.orgRole = 'admin';
           membershipUpdated = true;
-        } else if (role !== 'admin' && membership.orgRole !== 'owner') {
+        } else if (normalizedRole !== 'admin' && membership.orgRole !== 'owner') {
           membership.orgRole = 'member';
           membershipUpdated = true;
         }
@@ -342,8 +399,8 @@ exports.updateRole = async (req, res) => {
 
     await transaction.commit();
 
-    if (active !== undefined) {
-      await tokenRevocationService.setUserStatus(user.id, false, active ? 'active' : 'inactive');
+    if (normalizedActive !== undefined) {
+      await tokenRevocationService.setUserStatus(user.id, false, normalizedActive ? 'active' : 'inactive');
     }
 
     res.json(user);
