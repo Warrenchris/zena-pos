@@ -8,9 +8,6 @@ on:
       - '.github/workflows/ai-service-ci.yml'
   pull_request:
     branches: [master, main, develop]
-    paths:
-      - 'ai_service/**'
-      - '.github/workflows/ai-service-ci.yml'
 
 permissions:
   contents: read

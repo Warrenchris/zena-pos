@@ -10,11 +10,6 @@ on:
       - '.github/workflows/frontend-ci.yml'
   pull_request:
     branches: [master, main, develop]
-    paths:
-      - 'frontend/**'
-      - 'docker-compose.yml'
-      - 'docker-compose.prod.yml'
-      - '.github/workflows/frontend-ci.yml'
 
 permissions:
   contents: read
