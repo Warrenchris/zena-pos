@@ -10,11 +10,6 @@ on:
       - '.github/workflows/backend-ci.yml'
   pull_request:
     branches: [master, main, develop]
-    paths:
-      - 'backend/**'
-      - 'docker-compose.yml'
-      - 'docker-compose.prod.yml'
-      - '.github/workflows/backend-ci.yml'
 
 permissions:
   contents: read
