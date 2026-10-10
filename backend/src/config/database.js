@@ -3,6 +3,14 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 require('dotenv').config();
 
+const parsePoolInt = (val, fallback) => {
+  if (val === undefined || val === null || String(val).trim() === '') return fallback;
+  const parsed = Number(val);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const defaultPoolMax = process.env.NODE_ENV === 'development' ? 15 : 5;
+
 const sequelize = new Sequelize(
   process.env.DB_NAME,
   process.env.DB_USER,
@@ -11,12 +19,12 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST || '127.0.0.1',
     port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
     dialect: 'mysql',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    logging: process.env.DEBUG_SQL === 'true' ? console.log : false,
     pool: {
-      max: 5,
-      min: 0,
-      acquire: 30000,
-      idle: 10000
+      max: parsePoolInt(process.env.DB_POOL_MAX, defaultPoolMax),
+      min: parsePoolInt(process.env.DB_POOL_MIN, 0),
+      acquire: parsePoolInt(process.env.DB_POOL_ACQUIRE_MS, 30000),
+      idle: parsePoolInt(process.env.DB_POOL_IDLE_MS, 10000)
     },
     dialectOptions: {
       connectTimeout: 60000
