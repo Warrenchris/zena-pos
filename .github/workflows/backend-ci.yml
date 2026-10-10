@@ -89,7 +89,7 @@ jobs:
             -e DB_USER=test \
             -e DB_PASS=test \
             -e DB_HOST=127.0.0.1 \
-            -e NODE_ENV=test \
+            -e NODE_ENV=development \
             --entrypoint node \
             zana-backend-ci \
             -e "require('./src/utils/startupValidation').validateStartup(); console.log('startup validation ok')"
