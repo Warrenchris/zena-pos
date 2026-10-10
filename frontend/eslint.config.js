@@ -38,7 +38,7 @@ export default [
       'no-empty': 'warn',
       'no-useless-escape': 'warn',
       'no-regex-spaces': 'warn',
-      'react-hooks/rules-of-hooks': 'warn',
+      'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
