@@ -22,9 +22,13 @@ const {
   DiscountRule,
   HeldCart,
   Plan,
-  Subscription
+  Subscription,
+  Sale,
+  SaleItem,
+  Expense
 } = require('../src/models');
 const tokenRevocationService = require('../src/services/tokenRevocationService');
+const emailService = require('../src/services/emailService');
 
 function tokenFor(payload) {
   const privateKey = process.env.JWT_PRIVATE_KEY
@@ -1325,10 +1329,320 @@ describe('Gate 3G: Coupons, Discounts & Held Carts Authorization Verification', 
     });
   });
 
+  // =========================================================================
+  // 9. UUID-to-Integer MySQL Type Coercion Regression Tests
+  // =========================================================================
+  describe('9. UUID-to-Integer MySQL Type Coercion Regression Tests', () => {
+    let collisionManagerUser;
+    let collidingCashierEmp;
+    let collidingManagerEmp;
+
+    beforeAll(async () => {
+      const ts = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+
+      // 1. Create a manager User with integer id N in shopA1 (unverified)
+      collisionManagerUser = await User.create({
+        name: `Collision Manager User ${ts}`,
+        email: `collision.mgr.user.${ts}@example.com`,
+        password: MANAGER_PASSWORD,
+        role: 'manager',
+        shopId: shopA1.id,
+        active: true,
+        authzVersion: 1,
+        emailVerifiedAt: null,
+        emailVerificationSentAt: null
+      });
+
+      const memUser = await OrganizationMembership.create({
+        organizationId: orgA.id,
+        userId: collisionManagerUser.id,
+        orgRole: 'member',
+        status: 'active'
+      });
+
+      await ShopAccess.create({
+        membershipId: memUser.id,
+        shopId: shopA1.id,
+        role: 'manager'
+      });
+
+      const N = collisionManagerUser.id;
+      const collidingPrefix = `${N}aaaaaaa`.slice(0, 8);
+
+      // 2. Create a cashier Employee whose UUID starts with N followed by 'a's
+      collidingCashierEmp = await Employee.create({
+        id: `${collidingPrefix}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+        firstName: 'Colliding',
+        lastName: `Cashier ${ts}`,
+        email: `colliding.cashier.${ts}@example.com`,
+        password: 'CashierPassword123!',
+        salary: 30000,
+        position: 'cashier',
+        status: 'active',
+        shopId: shopA1.id,
+        organizationId: orgA.id,
+        isActive: true,
+        authzVersion: 1
+      });
+
+      const memCollidingCashier = await OrganizationMembership.create({
+        organizationId: orgA.id,
+        employeeId: collidingCashierEmp.id,
+        orgRole: 'member',
+        status: 'active'
+      });
+
+      await ShopAccess.create({
+        membershipId: memCollidingCashier.id,
+        shopId: shopA1.id,
+        role: 'cashier'
+      });
+
+      // 3. Create a manager Employee whose UUID also starts with N followed by 'a's (for purchase payment test)
+      collidingManagerEmp = await Employee.create({
+        id: `${collidingPrefix}-bbbb-4bbb-8bbb-bbbbbbbbbbbb`,
+        firstName: 'Colliding',
+        lastName: `ManagerEmp ${ts}`,
+        email: `colliding.mgremp.${ts}@example.com`,
+        password: MANAGER_PASSWORD,
+        salary: 50000,
+        position: 'manager',
+        status: 'active',
+        shopId: shopA1.id,
+        organizationId: orgA.id,
+        isActive: true,
+        authzVersion: 1
+      });
+
+      const memCollidingMgr = await OrganizationMembership.create({
+        organizationId: orgA.id,
+        employeeId: collidingManagerEmp.id,
+        orgRole: 'member',
+        status: 'active'
+      });
+
+      await ShopAccess.create({
+        membershipId: memCollidingMgr.id,
+        shopId: shopA1.id,
+        role: 'manager'
+      });
+    });
+
+    it('9.1: Discount approval: colliding cashier Employee UUID fails with 403 (never 401), while manager Employee UUID and integer manager User ID approve (201)', async () => {
+      // Negative collision test: cashier Employee UUID prefix collides with collisionManagerUser.id
+      const resCollision = await request(app)
+        .post('/api/sales')
+        .set('Authorization', tokenCashierA1())
+        .send({
+          paymentMethod: 'cash',
+          amountPaid: 1000,
+          discount: 150,
+          discountType: 'percentage',
+          discountValue: 15,
+          managerApprovalId: collidingCashierEmp.id,
+          managerPassword: 'CashierPassword123!',
+          items: [{ productId: productA1.id, quantity: 1, unitPrice: 1000, discount: 0 }]
+        });
+      expect(resCollision.status).toBe(403);
+      expect(resCollision.body.error).toBe('Selected approving user is not an active Manager or Admin.');
+
+      // Positive control A: real manager Employee (UUID) with correct password approves discount
+      const resEmpMgr = await request(app)
+        .post('/api/sales')
+        .set('Authorization', tokenCashierA1())
+        .send({
+          paymentMethod: 'cash',
+          paymentAmount: 850,
+          amountPaid: 850,
+          total: 850,
+          discount: 150,
+          discountType: 'percentage',
+          discountValue: 15,
+          managerApprovalId: managerEmployeeA1.id,
+          managerPassword: MANAGER_PASSWORD,
+          items: [{ productId: productA1.id, quantity: 1, price: 1000, discount: 0 }]
+        });
+      expect(resEmpMgr.status).toBe(201);
+
+      // Positive control B: integer manager User ID with correct password approves discount
+      const resUserMgr = await request(app)
+        .post('/api/sales')
+        .set('Authorization', tokenCashierA1())
+        .send({
+          paymentMethod: 'cash',
+          paymentAmount: 850,
+          amountPaid: 850,
+          total: 850,
+          discount: 150,
+          discountType: 'percentage',
+          discountValue: 15,
+          managerApprovalId: collisionManagerUser.id,
+          managerPassword: MANAGER_PASSWORD,
+          items: [{ productId: productA1.id, quantity: 1, price: 1000, discount: 0 }]
+        });
+      expect(resUserMgr.status).toBe(201);
+    });
+
+    it('9.2: Refund approval: colliding cashier Employee UUID fails with 403 (never 401) on both threshold and explicit paths, while integer manager User ID approves (200)', async () => {
+      const saleForRefund = await Sale.create({
+        invoiceNumber: `INV-COLL-${Date.now()}`,
+        subtotal: 6000,
+        discount: 0,
+        tax: 0,
+        total: 6000,
+        paymentAmount: 6000,
+        paymentMethod: 'cash',
+        saleStatus: 'completed',
+        shopId: shopA1.id,
+        employeeId: cashierEmployeeA1.id
+      });
+
+      await SaleItem.create({
+        saleId: saleForRefund.id,
+        productId: productA1.id,
+        quantity: 6,
+        unitPrice: 1000,
+        price: 1000,
+        subtotal: 6000,
+        discount: 0,
+        shopId: shopA1.id
+      });
+
+      // 1. Threshold refund (6000 > 5000 maxUnapproved) with colliding cashier Employee UUID -> 403 (never 401)
+      const resThresholdCollision = await request(app)
+        .post(`/api/sales/${saleForRefund.id}/refund`)
+        .set('Authorization', tokenMgrA1())
+        .send({
+          items: [{ productId: productA1.id, quantity: 6 }],
+          managerApprovalId: collidingCashierEmp.id,
+          managerPassword: 'CashierPassword123!'
+        });
+      expect(resThresholdCollision.status).toBe(403);
+      expect(resThresholdCollision.body.error).toBe('Selected approving user is not an active Manager or Admin.');
+
+      // 2. Below-threshold refund (1000 <= 5000) with explicit colliding cashier Employee UUID -> 403 (never 401)
+      const resExplicitCollision = await request(app)
+        .post(`/api/sales/${saleForRefund.id}/refund`)
+        .set('Authorization', tokenMgrA1())
+        .send({
+          items: [{ productId: productA1.id, quantity: 1 }],
+          managerApprovalId: collidingCashierEmp.id,
+          managerPassword: 'CashierPassword123!'
+        });
+      expect(resExplicitCollision.status).toBe(403);
+      expect(resExplicitCollision.body.error).toBe('Selected approving user is not an active Manager or Admin.');
+
+      // 3. Positive control: integer manager User ID with correct password approves threshold refund -> 200
+      const resValidUserApprove = await request(app)
+        .post(`/api/sales/${saleForRefund.id}/refund`)
+        .set('Authorization', tokenMgrA1())
+        .send({
+          items: [{ productId: productA1.id, quantity: 6 }],
+          managerApprovalId: collisionManagerUser.id,
+          managerPassword: MANAGER_PASSWORD
+        });
+      expect(resValidUserApprove.status).toBe(200);
+      expect(resValidUserApprove.body.totalRefundAmount).toBe(6000);
+    });
+
+    it('9.3: purchaseService.recordPaymentExpense: colliding Employee UUID records employeeId and userId null; User ID records userId and employeeId null', async () => {
+      const tokenCollidingMgrEmp = tokenFor({
+        id: collidingManagerEmp.id,
+        role: 'manager',
+        shopId: shopA1.id,
+        organizationId: orgA.id,
+        authzVersion: 1,
+        isEmployee: true
+      });
+
+      const empRefNo = `PO-EMP-COLL-${Date.now()}`;
+      const resEmpPurchase = await request(app)
+        .post('/api/purchases')
+        .set('Authorization', tokenCollidingMgrEmp)
+        .send({
+          referenceNo: empRefNo,
+          supplierName: 'Collision Test Supplier',
+          status: 'RECEIVED',
+          paymentStatus: 'PAID',
+          paymentMethod: 'cash',
+          items: [{ productId: productA1.id, quantity: 2, unitCost: 200 }]
+        });
+      expect(resEmpPurchase.status).toBe(201);
+
+      const empExpense = await Expense.findOne({
+        where: { reference: empRefNo, shopId: shopA1.id }
+      });
+      expect(empExpense).not.toBeNull();
+      expect(empExpense.userId).toBeNull();
+      expect(empExpense.employeeId).toBe(collidingManagerEmp.id);
+
+      // Positive control: User-created purchase payment records userId and leaves employeeId null
+      const tokenCollisionUser = tokenFor({
+        id: collisionManagerUser.id,
+        role: 'manager',
+        shopId: shopA1.id,
+        organizationId: orgA.id,
+        authzVersion: 1,
+        isEmployee: false
+      });
+
+      const userRefNo = `PO-USR-COLL-${Date.now()}`;
+      const resUserPurchase = await request(app)
+        .post('/api/purchases')
+        .set('Authorization', tokenCollisionUser)
+        .send({
+          referenceNo: userRefNo,
+          supplierName: 'Collision Test Supplier',
+          status: 'RECEIVED',
+          paymentStatus: 'PAID',
+          paymentMethod: 'cash',
+          items: [{ productId: productA1.id, quantity: 1, unitCost: 200 }]
+        });
+      expect(resUserPurchase.status).toBe(201);
+
+      const userExpense = await Expense.findOne({
+        where: { reference: userRefNo, shopId: shopA1.id }
+      });
+      expect(userExpense).not.toBeNull();
+      expect(userExpense.userId).toBe(collisionManagerUser.id);
+      expect(userExpense.employeeId).toBeNull();
+    });
+
+    it('9.4: authController.resendVerification: colliding Employee UUID returns 400 without querying/updating colliding unverified User or sending email', async () => {
+      const emailSpy = jest.spyOn(emailService, 'sendVerificationEmail').mockResolvedValue(true);
+
+      try {
+        const tokenCollidingCashier = tokenFor({
+          id: collidingCashierEmp.id,
+          role: 'cashier',
+          shopId: shopA1.id,
+          organizationId: orgA.id,
+          authzVersion: 1,
+          isEmployee: true
+        });
+
+        const res = await request(app)
+          .post('/api/auth/resend-verification')
+          .set('Authorization', tokenCollidingCashier)
+          .send({});
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('Email verification is not applicable to employee accounts.');
+
+        await collisionManagerUser.reload();
+        expect(collisionManagerUser.emailVerificationSentAt).toBeNull();
+        expect(emailSpy).not.toHaveBeenCalled();
+      } finally {
+        emailSpy.mockRestore();
+      }
+    });
+  });
+
   afterAll(async () => {
     if (redisClient && typeof redisClient.quit === 'function') {
       try { await redisClient.quit(); } catch (e) { /* ignore */ }
     }
   });
 });
+
 

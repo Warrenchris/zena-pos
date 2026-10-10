@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { isUuid, isIntegerId } = require('./idKind');
 
 /**
  * Shared discount-authorization rules and verification, used by every
@@ -99,21 +100,25 @@ async function verifyDiscountApprovalIfNeeded({
     throw err;
   }
 
-  // 4. Resolve approving manager from User (platform) or Employee (shop staff)
-  let approvingManager = await User.findOne({
-    where: { id: managerApprovalId, shopId, active: true }
-  });
-  let managerRole = approvingManager?.role;
+  // 4. Resolve approving manager strictly by ID type to prevent MySQL string->integer coercion
+  let approvingManager = null;
+  let managerRole = null;
 
-  if (!approvingManager) {
-    const Employee = require('../models/Employee');
-    const emp = await Employee.findOne({
-      where: { id: managerApprovalId, shopId, status: 'active' }
+  if (isIntegerId(managerApprovalId)) {
+    approvingManager = await User.findOne({
+      where: { id: parseInt(managerApprovalId, 10), shopId, active: true }
     });
-    if (emp) {
-      approvingManager = emp;
-      managerRole = emp.position?.toLowerCase();
-    }
+    managerRole = approvingManager?.role;
+  } else if (isUuid(managerApprovalId)) {
+    const Employee = require('../models/Employee');
+    approvingManager = await Employee.findOne({
+      where: { id: String(managerApprovalId).trim(), shopId, status: 'active' }
+    });
+    managerRole = approvingManager?.position?.toLowerCase();
+  } else {
+    const err = new Error('Selected approving user is not an active Manager or Admin.');
+    err.statusCode = 403;
+    throw err;
   }
 
   if (!approvingManager || !['manager', 'admin'].includes(managerRole)) {
