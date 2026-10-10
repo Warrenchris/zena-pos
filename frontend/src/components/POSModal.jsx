@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { XMarkIcon, ShoppingBagIcon, TrashIcon, UserIcon, CreditCardIcon, BanknotesIcon } from '@heroicons/react/24/outline';
 import { createSale } from '../store/slices/salesSlice';
 import Button from './ui/Button';

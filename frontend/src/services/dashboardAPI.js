@@ -1,3 +1,5 @@
+import api from './api';
+
 // Dashboard API
 export const dashboardAPI = {
   getStats: (params) =>
