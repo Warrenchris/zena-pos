@@ -6,6 +6,8 @@ from datetime import datetime
 import time
 import math
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 from ..middleware.auth import get_current_user
 from ..models.financial_models import FinancialForecastModel
@@ -333,91 +335,159 @@ async def random_forest_forecast(
     }
 
 
+MAX_FORECAST_WORKERS = min(4, os.cpu_count() or 2)
+DEFAULT_DEPLETION_BUDGET_SECONDS = float(os.getenv("STOCK_DEPLETION_TIMEOUT_SECONDS", "30.0"))
+
+# Shared, globally bounded thread pool executor across all incoming requests
+_DEPLETION_EXECUTOR = ThreadPoolExecutor(
+    max_workers=MAX_FORECAST_WORKERS,
+    thread_name_prefix="stock-depletion"
+)
+
+
+def _safe_float(val, default: float = 0.0) -> float:
+    try:
+        f = float(val)
+        return default if math.isnan(f) else f
+    except (ValueError, TypeError):
+        return default
+
+
+def _linear_depletion(product: ProductForecastItem, alert_threshold_days: int, algorithm: str = "linear_extrapolation") -> dict:
+    if len(product.daily_sales) > 0:
+        valid_quantities = [_safe_float(d.get('quantity', 0)) for d in product.daily_sales]
+        avg_daily = sum(valid_quantities) / len(product.daily_sales)
+        days = product.current_stock / avg_daily if avg_daily > 0 else 999
+    else:
+        days = 999
+
+    return {
+        "product_id": product.product_id,
+        "product_name": product.product_name,
+        "current_stock": product.current_stock,
+        "days_until_depletion": round(days, 1),
+        "alert": days <= alert_threshold_days,
+        "algorithm": algorithm,
+        "confidence": "low",
+        "data_points": len(product.daily_sales)
+    }
+
+
+def _fit_single_prophet_product(product: ProductForecastItem, alert_threshold_days: int, deadline: float = None) -> dict:
+    if deadline and time.time() > deadline:
+        res = _linear_depletion(product, alert_threshold_days)
+        res["fallback_reason"] = "time_budget_exceeded"
+        return res
+
+    try:
+        import pandas as pd
+        from prophet import Prophet
+
+        df = pd.DataFrame(product.daily_sales)
+        df = df.rename(columns={'date': 'ds', 'quantity': 'y'})
+        df['ds'] = pd.to_datetime(df['ds'])
+        df['y'] = pd.to_numeric(df['y'], errors='coerce').fillna(0)
+
+        m = Prophet(
+            daily_seasonality=False,
+            weekly_seasonality=True,
+            yearly_seasonality=len(product.daily_sales) > 180,
+            changepoint_prior_scale=0.05,
+            interval_width=0.80
+        )
+        m.fit(df)
+
+        future = m.make_future_dataframe(periods=60)
+        forecast = m.predict(future)
+        future_forecast = forecast[forecast['ds'] > df['ds'].max()]
+
+        cumulative = 0.0
+        days_until_depletion = 60
+
+        for _, row in future_forecast.iterrows():
+            daily_demand = max(0, row['yhat'])
+            cumulative += daily_demand
+            days = (row['ds'] - df['ds'].max()).days
+            if cumulative >= product.current_stock:
+                days_until_depletion = days
+                break
+
+        return {
+            "product_id": product.product_id,
+            "product_name": product.product_name,
+            "current_stock": product.current_stock,
+            "days_until_depletion": days_until_depletion,
+            "alert": days_until_depletion <= alert_threshold_days,
+            "algorithm": "prophet",
+            "confidence": "high" if len(product.daily_sales) >= 60 else "medium",
+            "data_points": len(product.daily_sales)
+        }
+    except Exception as e:
+        logger.warning("[StockDepletion] Prophet failed for %s: %s; falling back to linear extrapolation", product.product_name, e)
+        res = _linear_depletion(product, alert_threshold_days, algorithm="linear_extrapolation")
+        res["warning"] = f"Prophet fitting error: {e}"
+        return res
+
+
 @router.post("/stock-depletion")
 async def stock_depletion_forecast(
     request: StockDepletionRequest,
     user: dict = Depends(get_current_user)
 ):
     """
-    Prophet-based per-product stock depletion forecasting.
+    Bounded parallel Prophet-based per-product stock depletion forecasting.
+    Includes request-level time budgeting and graceful linear fallback.
     """
-    import pandas as pd
-    from prophet import Prophet
-
+    start_time = time.time()
     results = []
+    prophet_candidates = []
 
+    # 1. Immediate linear extrapolation for products with sparse data (< 14 daily sales)
     for product in request.products:
         if len(product.daily_sales) < 14:
-            if len(product.daily_sales) > 0:
-                avg_daily = sum(float(d.get('quantity', 0)) for d in product.daily_sales) / len(product.daily_sales)
-                days = product.current_stock / avg_daily if avg_daily > 0 else 999
-            else:
-                days = 999
+            results.append(_linear_depletion(product, request.alert_threshold_days))
+        else:
+            prophet_candidates.append(product)
 
-            results.append({
-                "product_id": product.product_id,
-                "product_name": product.product_name,
-                "current_stock": product.current_stock,
-                "days_until_depletion": round(days, 1),
-                "alert": days <= request.alert_threshold_days,
-                "algorithm": "linear_extrapolation",
-                "confidence": "low",
-                "data_points": len(product.daily_sales)
-            })
-            continue
+    # 2. Bounded parallel Prophet fitting for eligible products via shared executor
+    if prophet_candidates:
+        budget_seconds = DEFAULT_DEPLETION_BUDGET_SECONDS
+        deadline = start_time + budget_seconds
+
+        future_to_product = {
+            _DEPLETION_EXECUTOR.submit(_fit_single_prophet_product, p, request.alert_threshold_days, deadline): p
+            for p in prophet_candidates
+        }
+
+        completed_futures = set()
+        remaining_budget = max(0.01, deadline - time.time())
 
         try:
-            df = pd.DataFrame(product.daily_sales)
-            df = df.rename(columns={'date': 'ds', 'quantity': 'y'})
-            df['ds'] = pd.to_datetime(df['ds'])
-            df['y'] = pd.to_numeric(df['y'], errors='coerce').fillna(0)
-
-            m = Prophet(
-                daily_seasonality=False,
-                weekly_seasonality=True,
-                yearly_seasonality=len(product.daily_sales) > 180,
-                changepoint_prior_scale=0.05,
-                interval_width=0.80
-            )
-            m.fit(df)
-
-            future = m.make_future_dataframe(periods=60)
-            forecast = m.predict(future)
-            future_forecast = forecast[forecast['ds'] > df['ds'].max()]
-
-            cumulative = 0.0
-            days_until_depletion = 60
-
-            for _, row in future_forecast.iterrows():
-                daily_demand = max(0, row['yhat'])
-                cumulative += daily_demand
-                days = (row['ds'] - df['ds'].max()).days
-                if cumulative >= product.current_stock:
-                    days_until_depletion = days
-                    break
-
-            results.append({
-                "product_id": product.product_id,
-                "product_name": product.product_name,
-                "current_stock": product.current_stock,
-                "days_until_depletion": days_until_depletion,
-                "alert": days_until_depletion <= request.alert_threshold_days,
-                "algorithm": "prophet",
-                "confidence": "high" if len(product.daily_sales) >= 60 else "medium",
-                "data_points": len(product.daily_sales)
-            })
-
+            for future in as_completed(future_to_product.keys(), timeout=remaining_budget):
+                completed_futures.add(future)
+                product = future_to_product[future]
+                try:
+                    res = future.result()
+                    results.append(res)
+                except Exception as e:
+                    logger.warning("[StockDepletion] Error forecasting %s: %s", product.product_name, e)
+                    fallback_res = _linear_depletion(product, request.alert_threshold_days)
+                    fallback_res["warning"] = str(e)
+                    results.append(fallback_res)
         except Exception as e:
-            print(f"[StockDepletion] Prophet failed for {product.product_name}: {e}")
-            results.append({
-                "product_id": product.product_id,
-                "product_name": product.product_name,
-                "current_stock": product.current_stock,
-                "days_until_depletion": None,
-                "alert": False,
-                "algorithm": "error",
-                "error": str(e)
-            })
+            logger.warning(
+                "[StockDepletion] Request time budget (%.1fs) exceeded or interrupted: %s. Falling back to linear extrapolation",
+                budget_seconds,
+                e
+            )
+
+        # Any futures not completed within deadline are cancelled and get linear fallback immediately
+        for future, product in future_to_product.items():
+            if future not in completed_futures:
+                future.cancel()
+                fallback_res = _linear_depletion(product, request.alert_threshold_days)
+                fallback_res["fallback_reason"] = "time_budget_exceeded"
+                results.append(fallback_res)
 
     results.sort(key=lambda x: x['days_until_depletion'] if x['days_until_depletion'] is not None else 999)
     alerts = [r for r in results if r.get('alert')]

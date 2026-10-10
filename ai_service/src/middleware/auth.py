@@ -22,6 +22,8 @@ security = HTTPBearer()
 # RS256 Configuration
 JWT_PUBLIC_KEY_PATH = os.getenv("JWT_PUBLIC_KEY_PATH", "./jwt_public_key.pem")
 JWT_ALGORITHM = "RS256"
+JWT_EXPECTED_ISSUER = os.getenv("JWT_EXPECTED_ISSUER", "zana-backend")
+JWT_EXPECTED_AUDIENCE = os.getenv("JWT_EXPECTED_AUDIENCE", "ai-service")
 
 def load_public_key():
     """Load RSA public key from file, returning None if not found or unreadable"""
@@ -64,12 +66,27 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
     token = credentials.credentials
     
     try:
-        # Verify with public key
+        decode_kwargs = {
+            "algorithms": [JWT_ALGORITHM],
+        }
+        if JWT_EXPECTED_ISSUER:
+            decode_kwargs["issuer"] = JWT_EXPECTED_ISSUER
+        if JWT_EXPECTED_AUDIENCE:
+            decode_kwargs["audience"] = JWT_EXPECTED_AUDIENCE
+
+        # Verify with public key, enforcing signature, expiry, issuer, and audience
         payload = jwt.decode(
             token,
             PUBLIC_KEY,
-            algorithms=[JWT_ALGORITHM]
+            **decode_kwargs
         )
+
+        # Enforce that audience is explicitly present if an expected audience is configured
+        if JWT_EXPECTED_AUDIENCE and not payload.get("aud"):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token: missing required audience"
+            )
         
         # Extract user information
         user_id = payload.get("id")
