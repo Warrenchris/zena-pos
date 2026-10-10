@@ -12,10 +12,18 @@ on:
       - 'ai_service/**'
       - '.github/workflows/ai-service-ci.yml'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ai-service-ci:
     name: AI Service Verification & Docker Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     defaults:
       run:
@@ -23,6 +31,7 @@ jobs:
 
     env:
       JWT_PUBLIC_KEY_PATH: ./test_jwt_public_key.pem
+      PYTHONPATH: .
 
     steps:
       - name: Checkout repository
@@ -53,7 +62,7 @@ jobs:
       - name: Run pytest (if tests exist)
         run: |
           if [ -d "tests" ] && [ "$(ls -A tests)" ]; then
-            pytest
+            python -m pytest
           else
             echo "No test suite directory configured yet, skipping pytest execution."
           fi
