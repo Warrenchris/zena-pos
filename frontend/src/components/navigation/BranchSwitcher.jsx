@@ -25,6 +25,7 @@ export default function BranchSwitcher({
 
   let toast;
   try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- tolerant of missing ToastProvider
     toast = useToast();
   } catch (_) {
     toast = null;

@@ -37,7 +37,12 @@ for (const name of toCheck) {
     require.resolve(name, { paths: [ROOT] });
     resolved.push(name);
   } catch {
-    missing.push(name);
+    try {
+      require.resolve(`${name}/package.json`, { paths: [ROOT] });
+      resolved.push(name);
+    } catch {
+      missing.push(name);
+    }
   }
 }
 

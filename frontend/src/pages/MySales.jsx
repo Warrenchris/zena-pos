@@ -8,7 +8,7 @@ import { cashierAPI } from '../services/cashierAPI';
 import useCurrency from '../hooks/useCurrency';
 import api from '../services/api';
 import SaleDetailModal from '../components/SaleDetailModal';
-import { formatDateTime } from '../utils/formatters';
+import { formatCurrency, formatDateTime } from '../utils/formatters';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 
 const SaleDetails = ({ sale, onClose }) => {
