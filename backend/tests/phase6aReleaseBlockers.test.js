@@ -21,7 +21,9 @@ const {
   Employee,
   Invoice,
   InvoiceItem,
-  Expense
+  Expense,
+  OrganizationMembership,
+  ShopAccess
 } = require('../src/models');
 
 function tokenFor(payload) {
@@ -628,9 +630,42 @@ describe('Phase 6A: Release Blocker Remediation Verification Suite', () => {
     });
 
     test('Employee creates expense with UUID employeeId without column truncation', async () => {
+      // Gate 3E (commit 8de4016): POST /api/expenses requires manage_expenses; cashiers may not create expenses.
+      // Use a manager employee fixture to verify UUID dual-identity column attribution.
+      const managerEmp = await Employee.create({
+        id: crypto.randomUUID(),
+        firstName: 'Manager',
+        lastName: `Exp ${Date.now()}`,
+        email: `manager-exp-${Date.now()}@example.com`,
+        password: 'password123',
+        position: 'manager',
+        role: 'manager',
+        salary: 45000,
+        status: 'active',
+        shopId: shopA.id
+      });
+      const mgrMem = await OrganizationMembership.create({
+        organizationId: orgA.id,
+        employeeId: managerEmp.id,
+        orgRole: 'member',
+        status: 'active'
+      });
+      await ShopAccess.create({
+        membershipId: mgrMem.id,
+        shopId: shopA.id,
+        role: 'manager'
+      });
+      const tokenManagerEmp = tokenFor({
+        id: managerEmp.id,
+        role: 'manager',
+        shopId: shopA.id,
+        organizationId: orgA.id,
+        isEmployee: true
+      });
+
       const res = await request(app)
         .post('/api/expenses')
-        .set('Authorization', tokenEmployeeA)
+        .set('Authorization', tokenManagerEmp)
         .send({
           description: 'Store Cleaning Supplies',
           amount: 1200,
@@ -639,11 +674,11 @@ describe('Phase 6A: Release Blocker Remediation Verification Suite', () => {
         });
 
       expect(res.status).toBe(201);
-      expect(res.body.employeeId).toBe(employeeA.id);
+      expect(res.body.employeeId).toBe(managerEmp.id);
       expect(res.body.userId).toBeNull();
       expect(res.body.organizationId).toBe(orgA.id);
       expect(res.body.employee).toBeDefined();
-      expect(res.body.employee.firstName).toBe('Cashier');
+      expect(res.body.employee.firstName).toBe('Manager');
     });
 
     test('getAllExpenses lists expenses created by both Users and Employees', async () => {

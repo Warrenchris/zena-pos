@@ -15,6 +15,7 @@ const { sequelize, Organization, OrganizationMembership, ShopAccess, Subscriptio
 const { buildAuthPayload, resolveAuthRole } = require('../utils/serializeAuthResponse');
 const logger = require('../utils/logger');
 const tokenRevocationService = require('../services/tokenRevocationService');
+const { isIntegerId } = require('../utils/idKind');
 
 class PlanNotFoundError extends Error {
   constructor(planCode = 'growth') {
@@ -433,10 +434,6 @@ exports.resetPassword = async (req, res) => {
       account = await Employee.findByPk(decoded.id);
     } else {
       account = await User.findByPk(decoded.id);
-      if (!account) {
-        account = await Employee.findByPk(decoded.id);
-        if (account) isEmployee = true;
-      }
     }
 
     if (!account) return res.status(400).json({ error: 'Invalid token' });
@@ -781,7 +778,11 @@ exports.resendVerification = async (req, res) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const user = await User.findByPk(req.user.id);
+    if (req.user.isEmployee || !isIntegerId(req.user.id)) {
+      return res.status(400).json({ error: 'Email verification is not applicable to employee accounts.' });
+    }
+
+    const user = await User.findByPk(parseInt(req.user.id, 10));
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }

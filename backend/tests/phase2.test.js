@@ -846,10 +846,11 @@ describe('Phase 2 Remediation Tests', () => {
     });
 
     // Cashier token trying to access another employee's profile
+    // Gate 3D (commit bfa4d7e): antiOracle masking returns 404 instead of 403 to prevent employee ID enumeration
     await request(app)
       .get(`/api/employees/${otherEmp.id}`)
       .set('Authorization', cashierToken)
-      .expect(403);
+      .expect(404);
   });
 
   // TEST 2.14d — Non-admin employee can view their OWN profile via JWT token (200 OK)

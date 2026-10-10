@@ -22,6 +22,7 @@ const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('..
 const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
 const { invalidateShopProductCache } = require('../services/productCache');
 const { normalizeIdempotencyKey, generateSaleFingerprint, isIdempotencyUniqueError } = require('../utils/idempotencyUtils');
+const { isIntegerId } = require('../utils/idKind');
 
 const round2 = (num) => Math.round((parseFloat(num || 0) + Number.EPSILON) * 100) / 100;
 
@@ -1431,8 +1432,12 @@ exports.processRefund = async (req, res) => {
         return res.status(401).json({ error: 'Manager password credential is strictly required for threshold approval.' });
       }
 
+      if (!isIntegerId(managerApprovalId)) {
+        return res.status(403).json({ error: 'Selected approving user is not an active Manager or Admin.' });
+      }
+
       const approvingManager = await User.findOne({
-        where: { id: managerApprovalId, shopId, active: true }
+        where: { id: parseInt(managerApprovalId, 10), shopId, active: true }
       });
 
       if (!approvingManager || !['manager', 'admin'].includes(approvingManager.role)) {
@@ -1451,8 +1456,12 @@ exports.processRefund = async (req, res) => {
           return res.status(401).json({ error: 'Manager password credential is strictly required when submitting manager approval.' });
         }
 
+        if (!isIntegerId(managerApprovalId)) {
+          return res.status(403).json({ error: 'Selected approving user is not an active Manager or Admin.' });
+        }
+
         const approvingManager = await User.findOne({
-          where: { id: managerApprovalId, shopId, active: true }
+          where: { id: parseInt(managerApprovalId, 10), shopId, active: true }
         });
 
         if (!approvingManager || !['manager', 'admin'].includes(approvingManager.role)) {
