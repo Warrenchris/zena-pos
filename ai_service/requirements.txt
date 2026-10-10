@@ -1,6 +1,7 @@
 # AI Service Requirements
 # Generated from pyproject.toml for Docker compatibility
-fastapi>=0.100.0
+fastapi>=0.100.0,<0.116.0
+starlette>=0.37.2,<0.47.0
 uvicorn[standard]>=0.22.0
 pandas>=2.0.3
 numpy>=1.25.1
@@ -11,3 +12,4 @@ python-dotenv>=1.0.0
 pydantic>=2.1.1
 plotly>=5.15.0
 sentry-sdk[fastapi]>=2.0.0,<3.0.0
+httpx>=0.26.0,<0.28.0

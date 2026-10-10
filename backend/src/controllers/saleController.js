@@ -15,6 +15,7 @@ const SalePayment = require('../models/SalePayment');
 const SystemSettings = require('../models/SystemSettings');
 const Inventory = require('../models/Inventory');
 const StockMovement = require('../models/StockMovement');
+const { Shop } = require('../models');
 const logger = require('../utils/logger');
 const { parseDate } = require('../utils/dateUtils');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');

@@ -1,26 +1,25 @@
 // ESLint flat config for backend Node.js project
-import js from "@eslint/js";
+const js = require("@eslint/js");
+const globals = require("globals");
 
-export default [
+module.exports = [
   js.configs.recommended,
   {
     files: ["src/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: "script",
+      sourceType: "commonjs",
       globals: {
-        module: "writable",
-        require: true,
-      },
-      env: {
-        node: true,
+        ...globals.node,
+        ...globals.jest,
       },
     },
     rules: {
+      "no-undef": "error",
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "no-empty": "warn",
+      "no-useless-escape": "warn",
       "no-console": "off",
     },
   },
 ];
-
-

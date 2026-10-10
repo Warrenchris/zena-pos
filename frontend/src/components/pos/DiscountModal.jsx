@@ -216,7 +216,7 @@ export default function DiscountModal({
               value={discountValue}
               onChange={(e) => {
                 setDiscountValue(e.target.value);
-                setPinError('');
+                setApprovalError('');
               }}
               className="w-full px-3.5 py-2.5 bg-surface border border-border-default text-text-primary font-bold text-h3 rounded-xl focus:ring-2 focus:ring-primary/30"
               autoFocus

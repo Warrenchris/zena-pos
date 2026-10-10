@@ -6,18 +6,28 @@ on:
     paths:
       - 'backend/**'
       - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     branches: [master, main, develop]
     paths:
       - 'backend/**'
       - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
       - '.github/workflows/backend-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend-ci:
     name: Backend Test & Docker Validation
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     services:
       mysql:
@@ -53,6 +63,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run ESLint
+        run: npm run lint
+
       - name: Check dependency integrity
         run: node scripts/check-dependencies.js
 
@@ -73,14 +86,19 @@ jobs:
           ENCRYPTION_SECRET: "e7b4198c61fa2d75a02482310bf8b975e5330e2fbd08544c4897f1f415ef414a"
         run: npm test
 
-      - name: Build backend Docker image
-        run: docker build -t zana-backend-ci .
+      - name: Build production backend Docker image
+        run: docker build -f Dockerfile.prod -t zana-backend-prod-ci .
 
-      - name: Verify dependencies resolve in Docker image
+      - name: Verify Node 20 and dependencies in production Docker image
         run: |
-          docker run --rm --entrypoint node zana-backend-ci scripts/check-dependencies.js
+          docker run --rm --entrypoint node zana-backend-prod-ci -e "
+            const major = Number(process.versions.node.split('.')[0]);
+            console.log('Container Node version:', process.version);
+            if (major !== 20) { console.error('Expected Node 20, got', process.version); process.exit(1); }
+          "
+          docker run --rm --entrypoint node zana-backend-prod-ci scripts/check-dependencies.js
 
-      - name: Verify startup validation in Docker container
+      - name: Verify startup validation in production Docker container
         run: |
           docker run --rm \
             -e JWT_PRIVATE_KEY="test-private-key" \
@@ -91,5 +109,153 @@ jobs:
             -e DB_HOST=127.0.0.1 \
             -e NODE_ENV=development \
             --entrypoint node \
-            zana-backend-ci \
+            zana-backend-prod-ci \
             -e "require('./src/utils/startupValidation').validateStartup(); console.log('startup validation ok')"
+
+      - name: Run production migration smoke test
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -P 3306 -uroot -proot -e "DROP DATABASE IF EXISTS zana_pos_smoke; CREATE DATABASE zana_pos_smoke;"
+
+          echo "=== 1. Migrate from scratch using production Docker image ==="
+          docker run --rm --network host \
+            -e NODE_ENV=production \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=3306 \
+            -e DB_NAME=zana_pos_smoke \
+            -e DB_USER=root \
+            -e DB_PASS=root \
+            --entrypoint npx \
+            zana-backend-prod-ci \
+            sequelize-cli db:migrate
+
+          echo "=== 2. Assert no pending migrations via db:migrate:status ==="
+          STATUS_OUTPUT=$(docker run --rm --network host \
+            -e NODE_ENV=production \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=3306 \
+            -e DB_NAME=zana_pos_smoke \
+            -e DB_USER=root \
+            -e DB_PASS=root \
+            --entrypoint npx \
+            zana-backend-prod-ci \
+            sequelize-cli db:migrate:status)
+          echo "$STATUS_OUTPUT"
+          if echo "$STATUS_OUTPUT" | grep -E "^down "; then
+            echo "ERROR: Pending migrations remain after db:migrate"
+            exit 1
+          fi
+          echo "$STATUS_OUTPUT" | grep -q "up 20261008120000-backfill-gate3-default-role-permissions.js"
+
+          echo "=== 3. Re-run db:migrate to verify idempotency ==="
+          RERUN_OUTPUT=$(docker run --rm --network host \
+            -e NODE_ENV=production \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=3306 \
+            -e DB_NAME=zana_pos_smoke \
+            -e DB_USER=root \
+            -e DB_PASS=root \
+            --entrypoint npx \
+            zana-backend-prod-ci \
+            sequelize-cli db:migrate)
+          echo "$RERUN_OUTPUT"
+          echo "$RERUN_OUTPUT" | grep -q "No migrations were executed, database schema was already up to date."
+
+          echo "=== 4. Verify backfilled permissions (manage_coupons, manage_discounts, manage_held_carts) ==="
+          PERM_COUNT=$(mysql -h 127.0.0.1 -P 3306 -uroot -proot -N -s zana_pos_smoke \
+            -e "SELECT COUNT(*) FROM Permissions WHERE name IN ('manage_coupons','manage_discounts','manage_held_carts');")
+          echo "Backfilled permission count: $PERM_COUNT"
+          if [ "$PERM_COUNT" != "3" ]; then
+            echo "ERROR: Expected 3 backfilled permissions, got $PERM_COUNT"
+            exit 1
+          fi
+
+      - name: Run production container HTTP and authenticated smoke test
+        run: |
+          set -euo pipefail
+          cleanup() {
+            docker rm -f zana-backend-smoke >/dev/null 2>&1 || true
+            rm -f /tmp/smoke_jwt_priv.pem /tmp/smoke_jwt_pub.pem
+          }
+          trap cleanup EXIT
+
+          openssl genrsa -out /tmp/smoke_jwt_priv.pem 2048
+          openssl rsa -in /tmp/smoke_jwt_priv.pem -pubout -out /tmp/smoke_jwt_pub.pem
+
+          docker run -d --name zana-backend-smoke --network host \
+            -e NODE_ENV=production \
+            -e PORT=5000 \
+            -e FRONTEND_URL=https://smoke.zana.test \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=3306 \
+            -e DB_NAME=zana_pos_smoke \
+            -e DB_USER=root \
+            -e DB_PASS=root \
+            -e REDIS_HOST=127.0.0.1 \
+            -e REDIS_PORT=6379 \
+            -e REDIS_DB=2 \
+            -e JWT_PRIVATE_KEY="$(cat /tmp/smoke_jwt_priv.pem)" \
+            -e JWT_PUBLIC_KEY="$(cat /tmp/smoke_jwt_pub.pem)" \
+            -e ENCRYPTION_SECRET="e7b4198c61fa2d75a02482310bf8b975e5330e2fbd08544c4897f1f415ef414a" \
+            zana-backend-prod-ci
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5000/ >/dev/null 2>&1; then
+              echo "Backend container reachable on http://127.0.0.1:5000/"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "ERROR: Backend container failed to become healthy within 30s"
+              docker logs zana-backend-smoke
+              exit 1
+            fi
+            sleep 1
+          done
+
+          ROOT_STATUS=$(curl -s -o /tmp/root_resp.json -w "%{http_code}" http://127.0.0.1:5000/)
+          echo "GET / -> HTTP $ROOT_STATUS: $(cat /tmp/root_resp.json)"
+          test "$ROOT_STATUS" = "200"
+
+          REG_STATUS=$(curl -s -o /tmp/reg_resp.json -w "%{http_code}" \
+            -X POST http://127.0.0.1:5000/api/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"CI Smoke User","email":"ci-smoke@zana-pos.org","password":"SmokePassword123!","shop":{"name":"CI Smoke Shop"}}')
+          echo "POST /api/auth/register -> HTTP $REG_STATUS"
+          if [ "$REG_STATUS" != "201" ]; then
+            cat /tmp/reg_resp.json
+            docker logs zana-backend-smoke
+            exit 1
+          fi
+
+          LOGIN_STATUS=$(curl -s -o /tmp/login_resp.json -w "%{http_code}" \
+            -X POST http://127.0.0.1:5000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci-smoke@zana-pos.org","password":"SmokePassword123!"}')
+          echo "POST /api/auth/login -> HTTP $LOGIN_STATUS"
+          if [ "$LOGIN_STATUS" != "200" ]; then
+            cat /tmp/login_resp.json
+            docker logs zana-backend-smoke
+            exit 1
+          fi
+
+          TOKEN=$(node -e "const d = require('/tmp/login_resp.json'); if (!d.token) process.exit(1); process.stdout.write(d.token);")
+
+          PROFILE_STATUS=$(curl -s -o /tmp/profile_resp.json -w "%{http_code}" \
+            -H "Authorization: Bearer $TOKEN" \
+            http://127.0.0.1:5000/api/auth/profile)
+          echo "GET /api/auth/profile -> HTTP $PROFILE_STATUS"
+          if [ "$PROFILE_STATUS" != "200" ]; then
+            cat /tmp/profile_resp.json
+            docker logs zana-backend-smoke
+            exit 1
+          fi
+
+          STATS_STATUS=$(curl -s -o /tmp/stats_resp.json -w "%{http_code}" \
+            -H "Authorization: Bearer $TOKEN" \
+            http://127.0.0.1:5000/api/sales/statistics)
+          echo "GET /api/sales/statistics -> HTTP $STATS_STATUS: $(cat /tmp/stats_resp.json)"
+          if [ "$STATS_STATUS" != "200" ]; then
+            cat /tmp/stats_resp.json
+            docker logs zana-backend-smoke
+            exit 1
+          fi

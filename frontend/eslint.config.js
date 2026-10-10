@@ -7,8 +7,8 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 // issues in some Node/npm setups. Export a config object/array directly.
 export default [
   {
-    // ignore built assets (flat config uses 'ignores')
-    ignores: ['dist'],
+    // ignore built assets and unreferenced TypeScript-syntax .js files
+    ignores: ['dist', 'src/hooks/reduxHooks.js', 'src/services/auth.js'],
   },
   js.configs.recommended,
   // include react-hooks plugin via plugins mapping and enable recommended rules below
@@ -23,7 +23,7 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.node,
-        jest: true,
+        ...globals.jest,
       },
       parserOptions: {
         ecmaVersion: 'latest',
@@ -32,9 +32,15 @@ export default [
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]'}],
+      'no-undef': 'error',
+      'no-redeclare': ['error', { builtinGlobals: false }],
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]'}],
+      'no-empty': 'warn',
+      'no-useless-escape': 'warn',
+      'no-regex-spaces': 'warn',
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
 ]
+

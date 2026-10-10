@@ -1,6 +1,6 @@
 # Backend Dockerfile
-# Using Node 18 (LTS) as it is the current stable version for this project
-FROM node:18-alpine
+# Using Node 20 (LTS) as it is the current stable version for this project
+FROM node:20-alpine
 
 WORKDIR /app
 
