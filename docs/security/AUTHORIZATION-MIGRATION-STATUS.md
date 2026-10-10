@@ -435,8 +435,14 @@ A comprehensive layer-stack audit of all mounted Express routes and handlers est
    - `dashboardRoutes.js` (7) and `categoryRoutes.js` (5) are unmounted in `app.js` and excluded from the runtime attack surface.
 7. **Verified Security Gaps**: **0**.
 
-### 13.2 Program Conclusion
+### 13.3 Role Permission Lifecycle & Seeding Policy
+To prevent regression of permission revocations made by tenant owners in `/api/permissions/matrix`:
+1. **Zero-Count Lazy Seeding**: Runtime per-organization role permission seeding in `src/services/rolePermissionSeeder.js` (`ensureOrgRolePermissionsSeeded`) strictly executes **only** when an organization has zero existing `RolePermissions` rows (`existingCount === 0`). It does not automatically resurrect permissions that a tenant owner has explicitly revoked.
+2. **Backfill Migrations Mandatory**: **Every future permission introduced to the platform requires a dedicated, idempotent data migration** backfilling the newly introduced role-permission mappings across all existing seeded organizations (following the pattern in `20261008120000-backfill-gate3-default-role-permissions.js`). Runtime code must never infer or backfill missing permissions into existing tenant matrices on read/write paths.
+
+### 13.4 Program Conclusion
 Every reachable endpoint in Zana POS has an intentional, server-enforced, and documented security boundary. Multi-tenant isolation, branch scoping, ownership attribution, and token epoch invalidation are universally enforced across all operational paths.
 
 **AUTHORIZATION CONSOLIDATION & ENFORCEMENT — COMPLETE.**
+
 

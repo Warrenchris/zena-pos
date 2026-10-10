@@ -490,7 +490,8 @@ describe('Phase 3: User Creation, Tenant Membership & Quota Integrity', () => {
         })
         .expect(403);
 
-      expect(res.body.code).toBe('SHOP_ACCESS_DENIED');
+      // Gate 2B (commit fae41af): Central authorization rejects organization context tampering with canonical TENANT_MISMATCH
+      expect(res.body.code).toBe('TENANT_MISMATCH');
       const orphan = await Employee.findOne({ where: { email: `tamper_org_${ts}@test.com` } });
       expect(orphan).toBeNull();
     });
@@ -888,7 +889,8 @@ describe('Phase 3: User Creation, Tenant Membership & Quota Integrity', () => {
         .set('Authorization', orgAdminToken)
         .expect(403);
 
-      expect(crossTenantRes.body.error).toMatch(/Shop does not belong to your organization|Cross-tenant/i);
+      // Gate 3H (commit 6e2841f): Central authorization unifies branch rejection to canonical message
+      expect(crossTenantRes.body.error).toMatch(/Shop does not belong to your organization|Cross-tenant|Access denied: You do not have access to this branch/i);
     });
   });
 });

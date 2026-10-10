@@ -2,6 +2,7 @@ const { Product, Inventory, StockMovement, Supplier, Expense, PurchaseItem, Purc
 const { invalidateShopProductCache } = require('./productCache');
 const { logActivity } = require('../middleware/logger');
 const logger = require('../utils/logger');
+const { isUuid, isIntegerId } = require('../utils/idKind');
 
 // Map frontend payment methods to Expense ENUM ('cash', 'card', 'bank_transfer', 'mobile_money', 'other')
 const mapPaymentMethodToExpense = (method) => {
@@ -247,9 +248,12 @@ async function recordPaymentExpense({ shopId, purchase, amount, paymentMethod, u
   if (isNaN(payAmount) || payAmount <= 0) return null;
 
   let validUserId = null;
-  if (userId) {
-    const existingUser = await User.findByPk(userId, { attributes: ['id'], transaction });
+  let validEmployeeId = null;
+  if (isIntegerId(userId)) {
+    const existingUser = await User.findByPk(parseInt(userId, 10), { attributes: ['id'], transaction });
     if (existingUser) validUserId = existingUser.id;
+  } else if (isUuid(userId)) {
+    validEmployeeId = String(userId).trim();
   }
 
   const expenseCategory = 'inventory';
@@ -264,7 +268,8 @@ async function recordPaymentExpense({ shopId, purchase, amount, paymentMethod, u
     reference: purchase.referenceNo,
     notes: `Inventory purchase payment for ${purchase.referenceNo}`,
     shopId,
-    userId: validUserId
+    userId: validUserId,
+    employeeId: validEmployeeId
   }, { transaction });
 
   return expense;

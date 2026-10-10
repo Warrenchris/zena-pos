@@ -12,7 +12,8 @@ const {
   RolePermission,
   Permission,
   Product,
-  Inventory
+  Inventory,
+  sequelize
 } = require('../src/models');
 const permissionCache = require('../src/services/permissionCache');
 
@@ -969,6 +970,227 @@ describe('Tenant-Scoped Role Permission Matrix & Enforcement', () => {
         .set('Authorization', cashierTokenK);
       expect(postBackfillRes.status).toBe(200);
       console.log('[Test 9] Backfilled org: pre-backfill=403, post-backfill=200 OK');
+    });
+  });
+
+  // =========================================================================
+  // SEEDER REVOCATION INVARIANT & MIGRATION BACKFILL (Phase 2 Requirement 2)
+  // =========================================================================
+  describe('Seeder & Backfill Migration Invariants (Phase 2 Requirement 2)', () => {
+    let orgM, shopM, ownerM, ownerTokenM, managerM, managerTokenM;
+
+    beforeAll(async () => {
+      const ts = Date.now() + 1500;
+      orgM = await Organization.create({
+        name: `Org M Invariant ${ts}`,
+        slug: `org-m-invariant-${ts}`,
+        status: 'active'
+      });
+      cleanupOrgs.push(orgM);
+
+      shopM = await Shop.create({
+        name: `Shop M ${ts}`,
+        organizationId: orgM.id,
+        active: true
+      });
+
+      ownerM = await User.create({
+        name: 'Owner M',
+        email: `owner_m_${ts}@test.com`,
+        password: 'Password123!',
+        role: 'admin',
+        shopId: shopM.id,
+        active: true
+      });
+      await OrganizationMembership.create({
+        organizationId: orgM.id,
+        userId: ownerM.id,
+        orgRole: 'owner',
+        status: 'active'
+      });
+      const ownerLogin = await request(app)
+        .post('/api/auth/login')
+        .send({ email: ownerM.email, password: 'Password123!' });
+      ownerTokenM = `Bearer ${ownerLogin.body.token}`;
+
+      managerM = await User.create({
+        name: 'Manager M',
+        email: `manager_m_${ts}@test.com`,
+        password: 'Password123!',
+        role: 'manager',
+        shopId: shopM.id,
+        active: true
+      });
+      await OrganizationMembership.create({
+        organizationId: orgM.id,
+        userId: managerM.id,
+        orgRole: 'member',
+        status: 'active'
+      });
+      const mgrLogin = await request(app)
+        .post('/api/auth/login')
+        .send({ email: managerM.email, password: 'Password123!' });
+      managerTokenM = `Bearer ${mgrLogin.body.token}`;
+
+      // Initialize matrix for Org M so defaults are seeded
+      await request(app)
+        .get('/api/permissions/matrix')
+        .set('Authorization', ownerTokenM);
+    });
+
+    it('(a) revoke a permission via PUT /api/permissions/matrix, invalidate the permission cache, assert it stays revoked on the next request', async () => {
+      // 1. Owner revokes manage_settings for manager
+      const revokeRes = await request(app)
+        .put('/api/permissions/matrix')
+        .set('Authorization', ownerTokenM)
+        .send({
+          updates: [
+            { role: 'manager', permissionName: 'manage_settings', enabled: false }
+          ]
+        });
+      expect(revokeRes.status).toBe(200);
+      expect(revokeRes.body.matrix.manager.manage_settings).toBe(false);
+
+      // 2. Invalidate permission cache
+      await permissionCache.clearAllCaches();
+
+      // 3. Manager makes request to /api/settings -> must stay revoked (403 Permission denied)
+      const deniedRes = await request(app)
+        .put('/api/settings')
+        .set('Authorization', managerTokenM)
+        .send({ taxRate: 15 });
+      expect(deniedRes.status).toBe(403);
+      expect(deniedRes.body.error).toBe('Permission denied');
+
+      // 4. Matrix endpoint also reflects false after cache clear
+      const matrixRes = await request(app)
+        .get('/api/permissions/matrix')
+        .set('Authorization', ownerTokenM);
+      expect(matrixRes.body.matrix.manager.manage_settings).toBe(false);
+    });
+
+    it('(b) org with RolePermission rows but missing manage_coupons/manage_discounts/manage_held_carts: run the backfill migration, assert the right roles gain them and previously revoked OLD permissions are NOT re-granted', async () => {
+      const ts = Date.now() + 2000;
+      const orgN = await Organization.create({
+        name: `Org N Backfill ${ts}`,
+        slug: `org-n-backfill-${ts}`,
+        status: 'active'
+      });
+      cleanupOrgs.push(orgN);
+
+      // Seed initial base permissions mimicking pre-migration org
+      const basePerms = await Permission.findAll({
+        where: { name: ['access_pos', 'create_sales', 'manage_sales', 'manage_expenses', 'process_refunds', 'view_customers'] }
+      });
+      for (const p of basePerms) {
+        await RolePermission.create({ organizationId: orgN.id, role: 'admin', permissionId: p.id });
+        await RolePermission.create({ organizationId: orgN.id, role: 'manager', permissionId: p.id });
+      }
+
+      // Explicitly ensure manage_settings was revoked (NOT present in RolePermission for manager)
+      const settingsPerm = await Permission.findOne({ where: { name: 'manage_settings' } });
+      const revokedCheck = await RolePermission.findOne({
+        where: { organizationId: orgN.id, role: 'manager', permissionId: settingsPerm.id }
+      });
+      expect(revokedCheck).toBeNull();
+
+      // Run backfill migration
+      const migration = require('../migrations/20261008120000-backfill-gate3-default-role-permissions');
+      const qi = sequelize.getQueryInterface();
+      await migration.up(qi, sequelize.Sequelize);
+
+      // Assert admin gained manage_coupons, manage_discounts, manage_held_carts
+      const targetPerms = await Permission.findAll({
+        where: { name: ['manage_coupons', 'manage_discounts', 'manage_held_carts'] }
+      });
+      expect(targetPerms.length).toBe(3);
+      for (const tp of targetPerms) {
+        const adminMapping = await RolePermission.findOne({
+          where: { organizationId: orgN.id, role: 'admin', permissionId: tp.id }
+        });
+        expect(adminMapping).not.toBeNull();
+
+        const managerMapping = await RolePermission.findOne({
+          where: { organizationId: orgN.id, role: 'manager', permissionId: tp.id }
+        });
+        expect(managerMapping).not.toBeNull();
+      }
+
+      // Assert manager gained manage_customers
+      const custPerm = await Permission.findOne({ where: { name: 'manage_customers' } });
+      const managerCust = await RolePermission.findOne({
+        where: { organizationId: orgN.id, role: 'manager', permissionId: custPerm.id }
+      });
+      expect(managerCust).not.toBeNull();
+
+      // Assert previously revoked OLD permission (manage_settings) was NOT re-granted to manager
+      const settingsStillRevoked = await RolePermission.findOne({
+        where: { organizationId: orgN.id, role: 'manager', permissionId: settingsPerm.id }
+      });
+      expect(settingsStillRevoked).toBeNull();
+    });
+
+    it('(c) run the migration a second time: zero changes (idempotent)', async () => {
+      const migration = require('../migrations/20261008120000-backfill-gate3-default-role-permissions');
+      const qi = sequelize.getQueryInterface();
+
+      const [[{ countBefore }]] = await sequelize.query('SELECT COUNT(*) AS countBefore FROM `RolePermissions`');
+      const [[{ permCountBefore }]] = await sequelize.query('SELECT COUNT(*) AS permCountBefore FROM `Permissions`');
+
+      // Run migration second time
+      await migration.up(qi, sequelize.Sequelize);
+
+      const [[{ countAfter }]] = await sequelize.query('SELECT COUNT(*) AS countAfter FROM `RolePermissions`');
+      const [[{ permCountAfter }]] = await sequelize.query('SELECT COUNT(*) AS permCountAfter FROM `Permissions`');
+
+      expect(countAfter).toBe(countBefore);
+      expect(permCountAfter).toBe(permCountBefore);
+    });
+
+    it('(d) brand-new org with zero rows gets full defaults', async () => {
+      const ts = Date.now() + 3000;
+      const orgP = await Organization.create({
+        name: `Org P BrandNew ${ts}`,
+        slug: `org-p-brandnew-${ts}`,
+        status: 'active'
+      });
+      cleanupOrgs.push(orgP);
+
+      // Brand-new org has exactly 0 rows initially
+      const initialCount = await RolePermission.count({ where: { organizationId: orgP.id } });
+      expect(initialCount).toBe(0);
+
+      // Trigger lazy seeding
+      const rolePermissionSeeder = require('../src/services/rolePermissionSeeder');
+      await rolePermissionSeeder.ensureOrgRolePermissionsSeeded(orgP.id);
+
+      // Verify org gets full defaults
+      const [seededRows] = await sequelize.query(
+        'SELECT rp.role, p.name FROM `RolePermissions` rp INNER JOIN `Permissions` p ON rp.`permissionId` = p.`id` WHERE rp.`organizationId` = ?',
+        { replacements: [orgP.id] }
+      );
+
+      const adminPerms = seededRows.filter(r => r.role === 'admin').map(r => r.name);
+      const managerPerms = seededRows.filter(r => r.role === 'manager').map(r => r.name);
+      const cashierPerms = seededRows.filter(r => r.role === 'cashier').map(r => r.name);
+
+      // Admin gets all defaults including new ones
+      expect(adminPerms).toContain('manage_coupons');
+      expect(adminPerms).toContain('manage_discounts');
+      expect(adminPerms).toContain('manage_held_carts');
+      expect(adminPerms).toContain('manage_settings');
+      expect(adminPerms.length).toBeGreaterThanOrEqual(18);
+
+      // Manager gets manager defaults including new ones
+      expect(managerPerms).toContain('manage_coupons');
+      expect(managerPerms).toContain('manage_discounts');
+      expect(managerPerms).toContain('manage_held_carts');
+      expect(managerPerms).toContain('manage_customers');
+      expect(managerPerms).toContain('manage_settings');
+
+      // Cashier gets cashier defaults
+      expect(cashierPerms).toEqual(expect.arrayContaining(['access_pos', 'create_sales', 'view_products', 'view_own_sales']));
+      expect(cashierPerms).not.toContain('manage_coupons');
     });
   });
 });
