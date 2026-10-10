@@ -5,17 +5,29 @@ on:
     branches: [master, main, develop]
     paths:
       - 'frontend/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
       - '.github/workflows/frontend-ci.yml'
   pull_request:
     branches: [master, main, develop]
     paths:
       - 'frontend/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
       - '.github/workflows/frontend-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   frontend-ci:
     name: Frontend Build & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     defaults:
       run:
@@ -35,6 +47,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run ESLint
+        run: npx eslint "src/**/*.{js,jsx}"
+
+      - name: Run unit tests
+        run: npm test -- --passWithNoTests
+
       - name: Build frontend (TypeScript & Vite)
         run: npm run build
         env:
@@ -45,6 +63,5 @@ jobs:
           # app's Sentry.init({release}) and the uploaded source maps agree.
           VITE_SENTRY_RELEASE: zana-pos-frontend@${{ github.sha }}
 
-      - name: Run unit tests
-        run: npm test -- --passWithNoTests
-        continue-on-error: true
+      - name: Build production frontend Docker image
+        run: docker build -f Dockerfile.prod -t zana-frontend-prod-ci .
