@@ -12,12 +12,16 @@ const {
   ShopAccess
 } = require('../models');
 
+const completedAuthzRequests = new WeakSet();
+
 /**
  * Canonical Authorization Context Middleware
  * Constructs and attaches immutable req.authz to Express request.
  */
 async function authzContext(req, res, next) {
   try {
+    if (completedAuthzRequests.has(req) && req.authz) return next();
+
     if (!req.user || !req.user.id) {
       return res.status(401).json({
         error: 'Authentication required: missing user session.',
@@ -128,6 +132,7 @@ async function authzContext(req, res, next) {
         role: 'super_admin',
         authzVersion: currentVersion
       };
+      completedAuthzRequests.add(req);
       return next();
     }
 
@@ -441,6 +446,7 @@ async function authzContext(req, res, next) {
     req.organizationId = organization.id;
     req.membership = membership;
 
+    completedAuthzRequests.add(req);
     next();
   } catch (error) {
     logger.error('[AUTHZ] Error initializing canonical authorization context:',

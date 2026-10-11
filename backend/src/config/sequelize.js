@@ -2,10 +2,10 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 require('dotenv').config();
 
-const parsePoolInt = (val, fallback) => {
+const parsePoolInt = (val, fallback, minVal = 0) => {
   if (val === undefined || val === null || String(val).trim() === '') return fallback;
   const parsed = Number(val);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  return Number.isFinite(parsed) && parsed >= minVal ? parsed : fallback;
 };
 
 module.exports = {
@@ -18,7 +18,7 @@ module.exports = {
     dialect: 'mysql',
     logging: process.env.DEBUG_SQL === 'true' ? console.log : false,
     pool: {
-      max: parsePoolInt(process.env.DB_POOL_MAX, 15),
+      max: parsePoolInt(process.env.DB_POOL_MAX, 15, 1),
       min: parsePoolInt(process.env.DB_POOL_MIN, 0),
       acquire: parsePoolInt(process.env.DB_POOL_ACQUIRE_MS, 60000),
       idle: parsePoolInt(process.env.DB_POOL_IDLE_MS, 10000)
@@ -33,7 +33,7 @@ module.exports = {
     dialect: 'mysql',
     logging: process.env.DEBUG_SQL === 'true' ? console.log : false,
     pool: {
-      max: parsePoolInt(process.env.DB_POOL_MAX, 5),
+      max: parsePoolInt(process.env.DB_POOL_MAX, 5, 1),
       min: parsePoolInt(process.env.DB_POOL_MIN, 0),
       acquire: parsePoolInt(process.env.DB_POOL_ACQUIRE_MS, 60000),
       idle: parsePoolInt(process.env.DB_POOL_IDLE_MS, 10000)
@@ -48,7 +48,7 @@ module.exports = {
     dialect: 'mysql',
     logging: process.env.DEBUG_SQL === 'true' ? console.log : false,
     pool: {
-      max: parsePoolInt(process.env.DB_POOL_MAX, 10),
+      max: parsePoolInt(process.env.DB_POOL_MAX, 10, 1),
       min: parsePoolInt(process.env.DB_POOL_MIN, 2),
       acquire: parsePoolInt(process.env.DB_POOL_ACQUIRE_MS, 30000),
       idle: parsePoolInt(process.env.DB_POOL_IDLE_MS, 10000)
