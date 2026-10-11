@@ -226,8 +226,78 @@ When the Dashboard mounts, it fires 11 requests concurrently across `Dashboard.j
 
 ---
 
-## 5. Verification & Cleanup
+## 5. Verification & Cleanup (Stage A)
 
 - **Throwaway Benchmark Cleanup**: `DROP DATABASE IF EXISTS zana_perf_test` executed on `127.0.0.1:3307`; `FLUSHDB` executed on Redis DB `3`. Local dev DB (`zana_pos`) and test DB (`zana_pos_test`) were never touched by the benchmark.
 - **Backend Lint (`npm run lint`)**: Exited `0` (`0` errors).
 - **Backend Test Suite (`npm test`)**: `Test Suites: 84 passed, 84 total` | `Tests: 1181 passed, 1181 total` (`0` failed, identical to `master`).
+
+---
+
+## 6. Stage A2 Re-Measurement (`AFTER-A2` — `authzContext` Per-Request `WeakSet` Guard)
+
+Measured on `2026-10-11T13:25:04.007Z` using the identical throwaway-DB (`zana_perf_test`) and Redis (`REDIS_DB=3`) harness (`bench_stage_a.js`) after adding the module-private `WeakSet` guard in [`backend/src/middleware/authzContext.js`](../../backend/src/middleware/authzContext.js), enforcing `DB_POOL_MAX >= 1` in [`backend/src/config/database.js`](../../backend/src/config/database.js) and [`backend/src/config/sequelize.js`](../../backend/src/config/sequelize.js), and setting `DB_POOL_MAX: ${DB_POOL_MAX:-10}` in [`docker-compose.prod.yml`](../../docker-compose.prod.yml).
+
+### 6.1 SQL Query & Redis Command Counts (`BASELINE` vs `AFTER-A` vs `AFTER-A2`)
+
+| Endpoint | Cache State | HTTP Status | `BASELINE` SQL (Pre / Handler) | `AFTER-A` SQL (Pre / Handler) | `AFTER-A2` SQL (Pre / Handler) | `BASELINE` / `AFTER-A` Redis | `AFTER-A2` Redis | `BASELINE` (`ms`) | `AFTER-A` (`ms`) | `AFTER-A2` (`ms`) |
+| :--- | :--- | :---: | :---: | :---: | :---: | ---: | ---: | ---: | ---: | ---: |
+| `GET /api/auth/profile` | **Cold** | `200` | `9` (`7` / `2`) | `9` (`7` / `2`) | **`9` (`7` / `2`)** | `12` | **`12`** | `155.07` | `182.32` | `138.75` |
+| `GET /api/auth/profile` | **Warm** | `200` | `6` (`4` / `2`) | `6` (`4` / `2`) | **`6` (`4` / `2`)** | `7` | **`7`** | `46.53` | `62.76` | `58.35` |
+| `GET /api/sales/statistics` | **Cold** | `200` | `16` (`12` / `4`) | `16` (`12` / `4`) | **`12` (`8` / `4`)** | `15` | **`13`** | `141.36` | `256.04` | `149.55` |
+| `GET /api/sales/statistics` | **Warm** | `200` | `12` (`8` / `4`) | `12` (`8` / `4`) | **`8` (`4` / `4`)** | `10` | **`8`** | `109.73` | `259.81` | `95.16` |
+
+- On `GET /api/sales/statistics` (and all 20 route files mounting both `auth` and `authzContext`), warm pre-handler SQL queries dropped by **50%** (`8` -> `4`), total warm SQL queries dropped by **33.3%** (`12` -> `8`), and warm Redis commands dropped from `10` to `8`.
+- `GET /api/auth/profile` is unchanged (`6` warm SQL queries) because `routes/auth.js` mounts only `auth` (so `authzContext` already ran once on `/api/auth/profile`).
+
+### 6.2 Latency, SQL Volume & Pool Comparison (`BASELINE` vs `AFTER-A` vs `AFTER-A2`)
+
+| Metric | `BASELINE` (`pool.max = 5`) | `AFTER-A` (`pool.max = 15`) | `AFTER-A2` (`pool.max = 15` + `WeakSet` guard) | `AFTER-A2` vs `BASELINE` | `AFTER-A2` vs `AFTER-A` |
+| :--- | ---: | ---: | ---: | :--- | :--- |
+| **`GET /api/auth/profile` (50 Sequential) — `p50`** | `45.20 ms` | `77.68 ms` | **`41.40 ms`** | `-3.80 ms` (`-8.4%`) | `-36.28 ms` (`-46.7%`) |
+| **`GET /api/auth/profile` (50 Sequential) — `p95`** | `63.65 ms` | `180.77 ms` | **`95.46 ms`** | `+31.81 ms` | `-85.31 ms` (`-47.2%`) |
+| **`GET /api/auth/profile` (50 Sequential) — `min` / `max` / `mean`** | `39.93` / `68.76` / `48.46 ms` | `40.47` / `376.29` / `94.11 ms` | **`33.56` / `111.62` / `48.24 ms`** | `300` SQL queries total | `300` SQL queries total |
+| **`GET /api/auth/profile` (50 Sequential) — Pool Acquire `p50` / `p95`** | `0.05 ms` / `0.14 ms` | `0.06 ms` / `0.15 ms` | **`0.05 ms` / `0.09 ms`** | Unchanged | Unchanged |
+| **Dashboard Burst (11 reqs) — Run 1 (Cold) Total Time** | `966.19 ms` | `858.38 ms` | **`684.22 ms`** | **`-281.97 ms` (`-29.2%`)** | **`-174.16 ms` (`-20.3%`)** |
+| **Dashboard Burst — Run 1 (Cold) SQL Queries** | `140` | `144` | **`86`** | **`-54` queries (`-38.6%`)** | **`-58` queries (`-40.3%`)** |
+| **Dashboard Burst — Run 1 Pool Acquire `p50` / `p95` / `max`** | `10.95` / `48.82` / `151.27 ms` | `0.08` / `41.39` / `64.30 ms` | **`0.10` / `22.23` / `28.78 ms`** | **`p95` `-54.5%`, `max` `-81.0%`** | **`p95` `-46.3%`, `max` `-55.2%`** |
+| **Dashboard Burst — Run 1 Queued Pool Acquires** | `116 / 140` (`82.9%`) | `14 / 144` (`9.7%`) | **`12 / 86` (`14.0%`)** | **`-89.7%` queued acquires** | `-2` queued acquires |
+| **Dashboard Burst (11 reqs) — Runs 2–20 (Warm) SQL Queries / Burst** | `109` | `109` | **`65`** | **`-44` queries (`-40.4%`)** | **`-44` queries (`-40.4%`)** |
+| **Dashboard Burst (11 reqs) — Runs 2–20 (Warm) `p50` Total Time** | `345.66 ms` | `371.55 ms` | **`246.78 ms`** | **`-98.88 ms` (`-28.6%`)** | **`-124.77 ms` (`-33.6%`)** |
+| **Dashboard Burst (11 reqs) — Runs 2–20 (Warm) `p95` Total Time** | `624.31 ms` | `794.81 ms` | **`376.11 ms`** | **`-248.20 ms` (`-39.8%`)** | **`-418.70 ms` (`-52.7%`)** |
+| **Dashboard Burst (11 reqs) — Runs 2–20 `min` / `max` / `mean`** | `269.88` / `624.31` / `371.94 ms` | `283.56` / `794.81` / `399.20 ms` | **`186.40` / `376.11` / `253.15 ms`** | **Mean `-118.79 ms` (`-31.9%`)** | **Mean `-146.05 ms` (`-36.6%`)** |
+| **Dashboard Burst — Runs 2–20 Peak Waiting Requests in Pool Queue** | `5` waiting | `0` waiting | **`0` waiting** | **`-100%` pool queue backlog** | `0` waiting across all 19 runs |
+| **Dashboard Burst — Runs 2–20 Avg Queued Acquires per Burst** | `82.9 / 109` (`76.1%`) | `0.2 / 109` (`0.2%`) | **`0.0 / 65` (`0.0%`)** | **`-100%` queued acquires** | `0` queued acquires on all 19 runs |
+| **Dashboard Burst — Runs 2–20 Pool Acquire `p95` (Median across runs)** | `14.18 ms` | `0.77 ms` | **`0.60 ms`** *(range `0.41–2.61 ms`)* | **`-95.8%`** | **`-22.1%`** |
+| **Dashboard Burst — Runs 2–20 Pool Acquire `max` (Median across runs)** | `17.14 ms` | `1.78 ms` | **`1.40 ms`** *(range `1.06–2.90 ms`)* | **`-91.8%`** | **`-21.3%`** |
+
+### 6.3 Per-Run Dashboard Burst Breakdown (`AFTER-A2`, All 20 Runs)
+
+| Run | `AFTER-A2` Burst (`ms`) | `AFTER-A2` SQL Queries | `AFTER-A2` Queued Acquires | `AFTER-A2` Max Waiting | `AFTER-A2`Max Used Conns | `AFTER-A2` Acquire `p50` / `p95` / `max` (`ms`) |
+| --: | ---: | ---: | ---: | ---: | ---: | :--- |
+| **1 (Cold)** | `684.22` | `86` | `12` | `4` | `12` | `0.10` / `22.23` / `28.78` |
+| **2** | `239.77` | `65` | `0` | `0` | `10` | `0.07` / `0.73` / `1.36` |
+| **3** | `236.47` | `65` | `0` | `0` | `10` | `0.05` / `0.91` / `1.62` |
+| **4** | `232.52` | `65` | `0` | `0` | `10` | `0.04` / `0.57` / `1.45` |
+| **5** | `246.78` | `65` | `0` | `0` | `10` | `0.05` / `0.60` / `1.22` |
+| **6** | `324.13` | `65` | `0` | `0` | `10` | `0.05` / `0.54` / `1.91` |
+| **7** | `297.16` | `65` | `0` | `0` | `10` | `0.04` / `0.79` / `1.73` |
+| **8** | `245.95` | `65` | `0` | `0` | `10` | `0.04` / `0.60` / `1.38` |
+| **9** | `186.40` | `65` | `0` | `0` | `10` | `0.04` / `0.86` / `1.43` |
+| **10** | `196.14` | `65` | `0` | `0` | `10` | `0.04` / `1.31` / `1.80` |
+| **11** | `186.43` | `65` | `0` | `0` | `10` | `0.04` / `0.50` / `1.54` |
+| **12** | `191.34` | `65` | `0` | `0` | `10` | `0.04` / `0.61` / `1.40` |
+| **13** | `253.67` | `65` | `0` | `0` | `10` | `0.04` / `0.41` / `1.19` |
+| **14** | `258.03` | `65` | `0` | `0` | `11` | `0.04` / `0.88` / `1.33` |
+| **15** | `376.11` | `65` | `0` | `0` | `10` | `0.04` / `0.59` / `1.31` |
+| **16** | `259.67` | `65` | `0` | `0` | `10` | `0.04` / `0.54` / `1.21` |
+| **17** | `277.99` | `65` | `0` | `0` | `10` | `0.04` / `0.59` / `1.34` |
+| **18** | `309.94` | `65` | `0` | `0` | `10` | `0.04` / `2.61` / `2.90` |
+| **19** | `283.35` | `65` | `0` | `0` | `10` | `0.04` / `0.88` / `1.41` |
+| **20** | `208.01` | `65` | `0` | `0` | `10` | `0.04` / `0.53` / `1.06` |
+
+### 6.4 Cleanup & Verification (Stage A2)
+
+- **Throwaway Benchmark Cleanup**: `DROP DATABASE IF EXISTS zana_perf_test` executed on `127.0.0.1:3307`; `FLUSHDB` executed on Redis DB `3`.
+- **Remaining Pre-Handler Queries for Stage B/C**: Each warm authenticated request still executes `4` pre-handler SQL queries (`User.findByPk`, `OrganizationMembership.findOne`, `Organization.findByPk`, `Shop.findAll` in `authzContext` once per request), totaling `44` of the `65` SQL queries in a warm 11-request dashboard burst.
+
