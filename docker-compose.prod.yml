@@ -106,6 +106,7 @@ services:
       DB_NAME: ${DB_NAME:-zana_pos}
       DB_USER: ${DB_USER:-zana_app}
       DB_PASS: ${DB_PASSWORD}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env.prod}
