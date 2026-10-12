@@ -3,9 +3,8 @@
 const logger = require('../utils/logger');
 const tokenRevocationService = require('../services/tokenRevocationService');
 const permissionCache = require('../services/permissionCache');
+const { getRequestActor } = require('../utils/requestAuthState');
 const {
-  User,
-  Employee,
   Organization,
   OrganizationMembership,
   Shop,
@@ -42,7 +41,7 @@ async function authzContext(req, res, next) {
     } = req.user;
 
     // 1. Authoritative Authorization Epoch Check
-    let currentVersion = await tokenRevocationService.getAuthzVersion(id, !!isEmployee);
+    let currentVersion = await tokenRevocationService.getAuthzVersion(id, !!isEmployee, req);
     const sessionVersion = tokenAuthzVersion !== undefined && tokenAuthzVersion !== null
       ? Number(tokenAuthzVersion)
       : 1;
@@ -62,9 +61,7 @@ async function authzContext(req, res, next) {
 
     // 2. Platform super_admin special case (out of tenant scope)
     if (tokenRole === 'super_admin' && !isEmployee) {
-      const superAdminUser = await User.findByPk(id, {
-        attributes: ['id', 'name', 'email', 'role', 'active', 'authzVersion']
-      });
+      const superAdminUser = await getRequestActor(req, id, false);
 
       if (!superAdminUser || !superAdminUser.active) {
         return res.status(401).json({
@@ -146,9 +143,7 @@ async function authzContext(req, res, next) {
     let name = '';
 
     if (isEmployee) {
-      entityEmployee = await Employee.findByPk(id, {
-        attributes: ['id', 'firstName', 'lastName', 'email', 'position', 'status', 'shopId', 'authzVersion']
-      });
+      entityEmployee = await getRequestActor(req, id, true);
       if (!entityEmployee || entityEmployee.status !== 'active') {
         return res.status(401).json({
           error: 'Account is deactivated or terminated.',
@@ -175,9 +170,7 @@ async function authzContext(req, res, next) {
       email = entityEmployee.email;
       name = `${entityEmployee.firstName || ''} ${entityEmployee.lastName || ''}`.trim() || entityEmployee.email;
     } else {
-      entityUser = await User.findByPk(id, {
-        attributes: ['id', 'name', 'email', 'role', 'active', 'shopId', 'authzVersion']
-      });
+      entityUser = await getRequestActor(req, id, false);
       if (!entityUser || !entityUser.active) {
         return res.status(401).json({
           error: 'Account is deactivated or terminated.',
@@ -269,7 +262,7 @@ async function authzContext(req, res, next) {
       });
     }
 
-    const orgStatus = await tokenRevocationService.getOrgStatus(organization.id);
+    const orgStatus = await tokenRevocationService.getOrgStatus(organization.id, req);
     if (orgStatus === 'deleted') {
       return res.status(403).json({
         error: 'Organization has been deactivated or deleted.',

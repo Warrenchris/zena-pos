@@ -1,8 +1,6 @@
-const jwt = require('jsonwebtoken');
-const fs = require('fs');
-const path = require('path');
 const logger = require('../utils/logger');
 const tokenRevocationService = require('../services/tokenRevocationService');
+const { verifyRequestJwt } = require('../utils/requestAuthState');
 const authzContext = require('./authzContext');
 
 const auth = async (req, res, next) => {
@@ -12,8 +10,7 @@ const auth = async (req, res, next) => {
       return res.status(401).json({ error: 'Authorization token required.' });
     }
 
-    const publicKey = (process.env.JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n');
-    const decoded = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+    const decoded = verifyRequestJwt(req, token);
 
     // Reject tokens with non-session purpose (SEC-03 completion)
     if (decoded.purpose === 'password_reset') {
@@ -42,7 +39,7 @@ const auth = async (req, res, next) => {
 
     // 2. Check active user/employee status (AUTH-01)
     if (decoded.id) {
-      const userStatus = await tokenRevocationService.getUserStatus(decoded.id, !!decoded.isEmployee);
+      const userStatus = await tokenRevocationService.getUserStatus(decoded.id, !!decoded.isEmployee, req);
       if (userStatus === 'inactive') {
         return res.status(401).json({ error: 'Account is deactivated or terminated.' });
       }
@@ -76,7 +73,7 @@ const auth = async (req, res, next) => {
 
     // 3. Check organization suspension status (AUTH-01)
     if (req.organizationId) {
-      const orgStatus = await tokenRevocationService.getOrgStatus(req.organizationId);
+      const orgStatus = await tokenRevocationService.getOrgStatus(req.organizationId, req);
       if (orgStatus === 'deleted') {
         return res.status(403).json({
           error: 'Organization has been deactivated or deleted.',
