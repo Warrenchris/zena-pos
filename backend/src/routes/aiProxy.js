@@ -158,6 +158,91 @@ router.delete('/cache/:shopId',
   }
 );
 
+const buildForwardHeaders = (req) => {
+  const forwardHeaders = {};
+  if (req.headers && typeof req.headers === 'object') {
+    for (const [key, value] of Object.entries(req.headers)) {
+      const lower = key.toLowerCase();
+      if (lower === 'host' || lower === 'content-length' || lower === 'authorization') {
+        continue;
+      }
+      forwardHeaders[key] = value;
+    }
+  }
+  if (req.requestId) {
+    forwardHeaders['x-request-id'] = req.requestId;
+  }
+  return forwardHeaders;
+};
+
+const validateSuppliedScopeOverrides = (req, authz, isOrg = false) => {
+  const untrustedOrgId = req.body?.organization_id ?? req.body?.organizationId ?? req.query?.organization_id ?? req.query?.organizationId;
+  if (untrustedOrgId !== undefined && untrustedOrgId !== null && untrustedOrgId !== '') {
+    if (Number(untrustedOrgId) !== Number(authz.tenant?.organizationId)) {
+      return {
+        allowed: false,
+        status: 403,
+        code: 'TENANT_MISMATCH',
+        message: 'Cross-tenant access forbidden.'
+      };
+    }
+  }
+
+  if (!isOrg) {
+    const suppliedShopId = req.query?.shopId ?? req.query?.shop_id ?? req.body?.shopId ?? req.body?.shop_id;
+    if (suppliedShopId !== undefined && suppliedShopId !== null && suppliedShopId !== '') {
+      const parsedShopId = parseInt(suppliedShopId, 10);
+      if (Number.isNaN(parsedShopId) || !authz.scope.hasShopAccess(parsedShopId)) {
+        return {
+          allowed: false,
+          status: 403,
+          code: 'SHOP_ACCESS_DENIED',
+          message: 'Access denied: You do not have access to this branch.'
+        };
+      }
+    }
+  }
+
+  return { allowed: true };
+};
+
+const resolveVerifiedShopId = (req) => {
+  const suppliedShopId = req.query?.shopId ?? req.query?.shop_id ?? req.body?.shopId ?? req.body?.shop_id;
+  if (suppliedShopId !== undefined && suppliedShopId !== null && suppliedShopId !== '') {
+    const parsedShopId = parseInt(suppliedShopId, 10);
+    if (!Number.isNaN(parsedShopId) && (!req.authz?.scope?.hasShopAccess || req.authz.scope.hasShopAccess(parsedShopId))) {
+      return parsedShopId;
+    }
+  }
+  return req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
+};
+
+const sanitizeForwardPayload = (payload, { shopId, orgId, isOrg = false } = {}) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return payload;
+  }
+  const sanitized = { ...payload };
+  if ('shop_id' in sanitized) {
+    sanitized.shop_id = isOrg && orgId
+      ? `org_${orgId}`
+      : (shopId !== undefined && shopId !== null ? String(shopId) : undefined);
+  }
+  if ('shopId' in sanitized) {
+    if (isOrg) {
+      delete sanitized.shopId;
+    } else {
+      sanitized.shopId = shopId;
+    }
+  }
+  if ('organization_id' in sanitized) {
+    sanitized.organization_id = orgId;
+  }
+  if ('organizationId' in sanitized) {
+    sanitized.organizationId = orgId;
+  }
+  return sanitized;
+};
+
 const forecastAuthzPolicy = authorize({
   permission: 'view_reports',
   custom: (req, authz) => {
@@ -190,15 +275,21 @@ const forecastAuthzPolicy = authorize({
         };
       }
     }
-    return { allowed: true };
+    return validateSuppliedScopeOverrides(req, authz, isOrg);
   }
+});
+
+const forwardAuthzPolicy = authorize({
+  permission: 'view_reports',
+  shopScope: 'current',
+  custom: (req, authz) => validateSuppliedScopeOverrides(req, authz, false)
 });
 
 router.post('/forward/api/forecasting/forecast', forecastAuthzPolicy, async (req, res, next) => {
   try {
     const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
-    const orgId = req.organizationId || req.user?.organizationId;
-    const shopId = req.shopId || req.user?.shopId;
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
+    const shopId = resolveVerifiedShopId(req);
 
     if (isOrg && orgId) {
       const featRes = await entitlementService.canUseFeature(orgId, 'org_insights');
@@ -214,32 +305,30 @@ router.post('/forward/api/forecasting/forecast', forecastAuthzPolicy, async (req
       }
     }
 
-    const periods = req.query.periods || req.body.periods || 30;
+    const sanitizedBody = sanitizeForwardPayload(req.body, { shopId, orgId, isOrg });
+    const periods = req.query.periods || sanitizedBody?.periods || 30;
     const cacheKey = (isOrg && orgId)
-      ? aiCacheService.buildOrgForecastCacheKey(orgId, req.body, periods, 'prophet')
-      : aiCacheService.buildForecastCacheKey(orgId, shopId, req.body, periods, 'prophet');
+      ? aiCacheService.buildOrgForecastCacheKey(orgId, sanitizedBody, periods, 'prophet')
+      : aiCacheService.buildForecastCacheKey(orgId, shopId, sanitizedBody, periods, 'prophet');
 
     const cached = await aiCacheService.getForecast(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });
     }
 
-    const forwardHeaders = { ...req.headers };
-    delete forwardHeaders['host'];
-    delete forwardHeaders['content-length'];
-    if (req.requestId) {
-      forwardHeaders['x-request-id'] = req.requestId;
-    }
+    const forwardHeaders = buildForwardHeaders(req);
 
     const resp = await aiClient.request({
       method: 'POST',
       url: `/api/forecasting/forecast?periods=${periods}`,
-      data: req.body,
+      data: sanitizedBody,
       headers: forwardHeaders,
       timeout: 30000,
       validateStatus: () => true,
       shopId,
-      userId: req.user?.id
+      userId: req.user?.id,
+      user: req.user,
+      authz: req.authz
     });
 
     if (resp.status >= 200 && resp.status < 300) {
@@ -276,12 +365,12 @@ router.post('/forward/api/forecasting/forecast', forecastAuthzPolicy, async (req
 router.post('/forward/api/forecasting/rf-forecast', forecastAuthzPolicy, async (req, res, next) => {
   const startTime = Date.now();
   const isOrg = req.body?.isOrgForecast || req.query?.isOrgForecast === 'true' || req.query?.scope === 'organization';
-  const shopId = req.shopId || req.user?.shopId || 'unknown';
-  const periods = req.body.periods || 30;
-  const datesCount = Array.isArray(req.body.dates) ? req.body.dates.length : 0;
+  const shopId = resolveVerifiedShopId(req) || 'unknown';
+  const periods = req.body?.periods || 30;
+  const datesCount = Array.isArray(req.body?.dates) ? req.body.dates.length : 0;
 
   try {
-    const orgId = req.organizationId || req.user?.organizationId;
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
     if (isOrg && orgId) {
       const featRes = await entitlementService.canUseFeature(orgId, 'org_insights');
       if (!featRes.allowed) {
@@ -296,31 +385,29 @@ router.post('/forward/api/forecasting/rf-forecast', forecastAuthzPolicy, async (
       }
     }
 
+    const sanitizedBody = sanitizeForwardPayload(req.body, { shopId, orgId, isOrg });
     const cacheKey = (isOrg && orgId)
-      ? aiCacheService.buildOrgForecastCacheKey(orgId, req.body, periods, 'rf')
-      : aiCacheService.buildForecastCacheKey(orgId, shopId, req.body, periods, 'rf');
+      ? aiCacheService.buildOrgForecastCacheKey(orgId, sanitizedBody, periods, 'rf')
+      : aiCacheService.buildForecastCacheKey(orgId, shopId, sanitizedBody, periods, 'rf');
 
     const cached = await aiCacheService.getForecast(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true, cache_hit: true });
     }
 
-    const forwardHeaders = { ...req.headers };
-    delete forwardHeaders['host'];
-    delete forwardHeaders['content-length'];
-    if (req.requestId) {
-      forwardHeaders['x-request-id'] = req.requestId;
-    }
+    const forwardHeaders = buildForwardHeaders(req);
 
     const resp = await aiClient.request({
       method: 'POST',
       url: '/api/forecasting/rf-forecast',
-      data: req.body,
+      data: sanitizedBody,
       headers: forwardHeaders,
       timeout: 30000,
       validateStatus: () => true,
       shopId,
-      userId: req.user?.id
+      userId: req.user?.id,
+      user: req.user,
+      authz: req.authz
     });
 
     const duration = Date.now() - startTime;
@@ -358,18 +445,13 @@ router.post('/forward/api/forecasting/rf-forecast', forecastAuthzPolicy, async (
   }
 });
 
-router.use(authorize({ permission: 'view_reports' }), async (req, res, next) => {
+router.use(forwardAuthzPolicy, async (req, res, next) => {
   try {
     const orig = req.originalUrl || req.url || '';
     const m = orig.match(/\/forward\/?(.*)$/);
     if (!m) return next();
     const path = m[1] || '';
-    const forwardHeaders = { ...req.headers };
-    delete forwardHeaders['host'];
-    delete forwardHeaders['content-length'];
-    if (req.requestId) {
-      forwardHeaders['x-request-id'] = req.requestId;
-    }
+    const forwardHeaders = buildForwardHeaders(req);
 
     const axiosConfig = {
       headers: forwardHeaders,
@@ -377,13 +459,16 @@ router.use(authorize({ permission: 'view_reports' }), async (req, res, next) => 
       validateStatus: () => true,
     };
 
-    const shopId = req.shopId || req.user?.shopId;
+    const orgId = req.authz?.tenant?.organizationId || req.organizationId || req.user?.organizationId;
+    const shopId = resolveVerifiedShopId(req);
     const userId = req.user?.id;
+    const sanitizedQuery = sanitizeForwardPayload(req.query, { shopId, orgId, isOrg: false });
+    const sanitizedBody = sanitizeForwardPayload(req.body, { shopId, orgId, isOrg: false });
     let resp;
     if (req.method === 'GET' || req.method === 'DELETE') {
-      resp = await aiClient.request({ method: req.method, url: path, params: req.query, shopId, userId, ...axiosConfig });
+      resp = await aiClient.request({ method: req.method, url: path, params: sanitizedQuery, shopId, userId, user: req.user, authz: req.authz, ...axiosConfig });
     } else {
-      resp = await aiClient.request({ method: req.method, url: path, data: req.body, params: req.query, shopId, userId, ...axiosConfig });
+      resp = await aiClient.request({ method: req.method, url: path, data: sanitizedBody, params: sanitizedQuery, shopId, userId, user: req.user, authz: req.authz, ...axiosConfig });
     }
 
     const responseHeaders = { ...resp.headers };
@@ -416,3 +501,5 @@ module.exports.forecastCache = aiCacheService.l1Cache;
 module.exports.buildForecastCacheKey = aiCacheService.buildForecastCacheKey;
 module.exports.buildOrgForecastCacheKey = aiCacheService.buildOrgForecastCacheKey;
 module.exports.stopProbe = stopProbe;
+module.exports.buildForwardHeaders = buildForwardHeaders;
+module.exports.sanitizeForwardPayload = sanitizeForwardPayload;
