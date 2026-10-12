@@ -301,3 +301,45 @@ Measured on `2026-10-11T13:25:04.007Z` using the identical throwaway-DB (`zana_p
 - **Throwaway Benchmark Cleanup**: `DROP DATABASE IF EXISTS zana_perf_test` executed on `127.0.0.1:3307`; `FLUSHDB` executed on Redis DB `3`.
 - **Remaining Pre-Handler Queries for Stage B/C**: Each warm authenticated request still executes `4` pre-handler SQL queries (`User.findByPk`, `OrganizationMembership.findOne`, `Organization.findByPk`, `Shop.findAll` in `authzContext` once per request), totaling `44` of the `65` SQL queries in a warm 11-request dashboard burst.
 
+---
+
+## 7. Stage C1 Re-Measurement (`AFTER-C1` — Request-Scoped Auth State Sharing)
+
+Measured on `2026-10-12T12:17:58.291Z` using the identical throwaway-DB (`zana_perf_test`) and Redis (`REDIS_DB=3`) harness (`bench_stage_a.js`) after introducing [`backend/src/utils/requestAuthState.js`](../../backend/src/utils/requestAuthState.js) (module-private `WeakMap` keyed by `req`) to share:
+1. **Single JWT verification per request** (`verifyRequestJwt(req, token)`) between `emailVerification7DayGate` and `auth.js`.
+2. **Single non-secret `User` / `Employee` lookup per request** (`getRequestActor(req, id, isEmployee)`) across `emailVerification7DayGate`, `requireVerifiedEmail`, `tokenRevocationService.getUserStatus`, `tokenRevocationService.getAuthzVersion`, and `authzContext.js`.
+3. **Single `tokenRevocationService.getOrgStatus(orgId, req)` resolution per request** between `auth.js` and `authzContext.js`.
+
+### 7.1 Deterministic SQL Query & Redis Command Counts (`BASELINE` vs `AFTER-A2` vs `AFTER-C1`)
+
+*(Per the benchmark methodology, deterministic SQL and Redis command counts are primary; latency numbers are omitted here because `BASELINE` was recorded in an earlier session.)*
+
+| Endpoint / Workload | Cache State | HTTP Status | `BASELINE` SQL (Pre / Handler) | `AFTER-A2` SQL (Pre / Handler) | `AFTER-C1` SQL (Pre / Handler) | `AFTER-A2` Pre-Handler `Users` Reads | `AFTER-C1` Pre-Handler `Users` Reads | `BASELINE` Redis | `AFTER-A2` Redis | `AFTER-C1` Redis |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | ---: | ---: | ---: |
+| `GET /api/auth/profile` | **Cold** | `200` | `9` (`7` / `2`) | `9` (`7` / `2`) | **`7` (`5` / `2`)** | `3` | **`1`** | `12` | `12` | **`11`** |
+| `GET /api/auth/profile` | **Warm** | `200` | `6` (`4` / `2`) | `6` (`4` / `2`) | **`6` (`4` / `2`)** | `1` | **`1`** | `7` | `7` | **`6`** |
+| `GET /api/sales/statistics` | **Cold** | `200` | `16` (`12` / `4`) | `12` (`8` / `4`) | **`9` (`5` / `4`)** | `4` *(3 without SMTP)* | **`1`** | `15` | `13` | **`12`** |
+| `GET /api/sales/statistics` | **Warm** | `200` | `12` (`8` / `4`) | `8` (`4` / `4`) | **`8` (`4` / `4`)** | `1` | **`1`** | `10` | `8` | **`7`** |
+| **Dashboard Burst (11 reqs)** | **Cold (Run 1)** | `200` | `140` | `86` | **`80`** | — | — | — | — | — |
+| **Dashboard Burst (11 reqs)** | **Warm (Runs 2–20)** | `200` | `109` | `65` | **`65`** | `11` (`1` / req) | **`11` (`1` / req)** | — | — | — |
+
+### 7.2 Exact Recorded SQL & Redis Commands in `AFTER-C1`
+
+#### `GET /api/auth/profile` — Cold (`7` SQL queries [`5` pre + `2` handler], `11` Redis commands)
+- **Pre-Handler SQL (`5`)**:
+  1. `SELECT id, name, email, role, active, shopId, authzVersion, emailVerifiedAt, createdAt FROM Users AS User WHERE User.id = 1;` *(shared across `getUserStatus`, `getAuthzVersion`, and `authzContext`)*
+  2. `SELECT Subscription.*, Plan.* FROM Subscriptions AS Subscription INNER JOIN Plans AS Plan ON Subscription.planId = Plan.id WHERE Subscription.organizationId = 3;`
+  3. `SELECT id, organizationId, userId, employeeId, orgRole, status, createdAt, updatedAt FROM OrganizationMemberships AS OrganizationMembership WHERE OrganizationMembership.userId = 1 LIMIT 1;`
+  4. `SELECT id, name, status FROM Organizations AS Organization WHERE Organization.id = 3;`
+  5. `SELECT id FROM Shops AS Shop WHERE Shop.organizationId = 3 AND Shop.active = true;`
+- **Handler SQL (`2`)**: `Users LEFT OUTER JOIN Shops` + `OrganizationMemberships` in `authController.getProfile`.
+- **Warm Redis Commands (`6`)**: `EVAL` (rate limiter), `GET revoked_token:bench-stage-a-jti-001`, `GET revoked_tokens_cutoff:user:1`, `GET auth_status:user:1`, `GET auth_status:org:3` *(once per request)*, `GET authz_version:user:1`.
+
+#### `GET /api/sales/statistics` — Cold (`9` SQL queries [`5` pre + `4` handler], `12` Redis commands) & Warm (`8` SQL queries, `7` Redis commands)
+- **Pre-Handler Cold SQL (`5`)**: Same 5 queries as above (`emailVerification7DayGate`, `getUserStatus`, `getAuthzVersion`, and `authzContext` all share the single `Users` query `#1`).
+- **Handler SQL (`4`)**: `4` `Sales` aggregation queries in `saleController.getSalesStatistics`.
+- **Warm Redis Commands (`7`)**: `EVAL` (rate limiter), `GET revoked_token:bench-stage-a-jti-001`, `GET revoked_tokens_cutoff:user:1`, `GET auth_status:user:1`, `GET auth_status:org:3` *(once per request)*, `GET authz_version:user:1`, `GET cache:entitlements:org:3` (`requireActiveSubscription`).
+
+### 7.3 Cleanup & Verification (Stage C1)
+- **Throwaway Benchmark Cleanup**: `DROP DATABASE IF EXISTS zana_perf_test` executed on `127.0.0.1:3307`; `FLUSHDB` executed on Redis DB `3`.
+
