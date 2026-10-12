@@ -1,7 +1,7 @@
 const { Op, Sequelize } = require('sequelize');
 const sequelize = require('../config/database');
 const { Sale, Product, Inventory } = require('../models');
-const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
+const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER, NET_SALE_REVENUE_SQL } = require('../constants/saleFilters');
 
 /**
  * Controller: orgInsightsController
@@ -269,14 +269,14 @@ const getOrganizationDailySales = async (req, res) => {
     const dailySalesRows = await Sale.findAll({
       where: {
         shopId: { [Op.in]: shopIds },
-        saleStatus: 'completed',
+        ...REALIZED_SALE_FILTER,
         createdAt: { [Op.gte]: ninetyDaysAgo }
       },
       attributes: [
         [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-        [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+        [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue'],
         [sequelize.fn('COUNT', sequelize.col('id')), 'transaction_count'],
-        [sequelize.fn('AVG', sequelize.col('total')), 'avg_transaction_value'],
+        [sequelize.literal(`AVG(${NET_SALE_REVENUE_SQL})`), 'avg_transaction_value'],
       ],
       group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
       order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']],

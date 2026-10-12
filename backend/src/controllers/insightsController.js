@@ -3,19 +3,41 @@ const Product = require('../models/Product');
 const Inventory = require('../models/Inventory');
 const Expense = require('../models/Expense');
 const SaleItem = require('../models/SaleItem');
+const SaleRefund = require('../models/SaleRefund');
 const SystemSettings = require('../models/SystemSettings');
+require('../models'); // Ensure all Sequelize model associations are initialized
 const { Op, Sequelize } = require('sequelize');
 const sequelize = require('../config/database');
 const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
 const aiClient = require('../utils/aiClient');
-const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
+const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER, NET_SALE_REVENUE_SQL } = require('../constants/saleFilters');
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 const getAuthorizedShopId = (req) => {
-  return req.query?.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
+  const defaultShopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
+  if (req.query?.shopId !== undefined && req.query?.shopId !== null && req.query?.shopId !== '') {
+    const requestedShopId = parseInt(req.query.shopId, 10);
+    if (Number.isNaN(requestedShopId) || requestedShopId <= 0) {
+      return null;
+    }
+    if (req.authz?.scope?.hasShopAccess && typeof req.authz.scope.hasShopAccess === 'function') {
+      return req.authz.scope.hasShopAccess(requestedShopId) ? requestedShopId : null;
+    }
+    if (req.user) {
+      const role = req.user.role || 'user';
+      if ((req.user.isEmployee && role !== 'manager') || role === 'cashier' || !['admin', 'org_admin', 'manager', 'super_admin'].includes(role)) {
+        return Number(req.user.shopId) === requestedShopId ? requestedShopId : null;
+      }
+      if (Array.isArray(req.user.accessibleShopIds) && !req.user.isOwner && !['org_admin', 'super_admin'].includes(role)) {
+        return req.user.accessibleShopIds.map(Number).includes(requestedShopId) ? requestedShopId : null;
+      }
+    }
+    return requestedShopId;
+  }
+  return defaultShopId;
 };
 
 /**
@@ -136,12 +158,13 @@ const generateRuleBasedAlerts = async (shopId) => {
   const weeklySales = await Sale.findAll({
     where: {
       shopId,
+      ...REALIZED_SALE_FILTER,
       createdAt: { [Op.gte]: lastWeek }
     },
     attributes: [
       [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
       [sequelize.fn('COUNT', sequelize.col('id')), 'saleCount'],
-      [sequelize.fn('SUM', sequelize.col('total')), 'total']
+      [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'total']
     ],
     group: [sequelize.fn('DATE', sequelize.col('createdAt'))]
   });
@@ -171,21 +194,23 @@ const generateRuleBasedAlerts = async (shopId) => {
 /**
  * AI-powered sales anomaly detection using Isolation Forest
  */
-const generateSmartAlerts = async (shopId, userId) => {
+const generateSmartAlerts = async (shopId, userOrId) => {
+  const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : null;
+  const userId = user?.id || (typeof userOrId === 'number' || typeof userOrId === 'string' ? userOrId : null);
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
   const dailySales = await Sale.findAll({
     where: {
       shopId,
-      saleStatus: 'completed',
+      ...REALIZED_SALE_FILTER,
       createdAt: { [Op.gte]: ninetyDaysAgo }
     },
     attributes: [
       [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-      [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+      [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue'],
       [sequelize.fn('COUNT', sequelize.col('id')), 'transaction_count'],
-      [sequelize.fn('AVG', sequelize.col('total')), 'avg_transaction_value'],
+      [sequelize.literal(`AVG(${NET_SALE_REVENUE_SQL})`), 'avg_transaction_value'],
     ],
     group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
     order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']],
@@ -200,7 +225,7 @@ const generateSmartAlerts = async (shopId, userId) => {
     const aiResponse = await aiClient.post(
       `/api/insights/anomalies`,
       { daily_data: dailySales, contamination: 0.05 },
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId }
+      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId, user: user || (userId ? { id: userId } : null) }
     );
 
     return aiResponse.data.anomalies.slice(0, 3).map((anomaly) => ({
@@ -219,9 +244,82 @@ const generateSmartAlerts = async (shopId, userId) => {
 };
 
 /**
+ * Helper to build Sequelize query options for retrieving net sales demand
+ * from SaleItems, joined with Sales and adjusted for processed refunds.
+ * Strictly excludes cancelled, refunded, pending, and failed transactions,
+ * accounts for partial refunds without double-subtracting when a single sale
+ * contains multiple SaleItem rows for the same productId, and preserves shop isolation.
+ */
+const buildNetDemandQuery = (shopId, sinceDate, groupByDate = true) => {
+  const saleProductNetExpr = `(
+    COALESCE((
+      SELECT SUM(\`si_sum\`.\`quantity\`)
+      FROM \`SaleItems\` AS \`si_sum\`
+      WHERE \`si_sum\`.\`saleId\` = \`SaleItem\`.\`saleId\`
+        AND \`si_sum\`.\`productId\` = \`SaleItem\`.\`productId\`
+    ), 0) - COALESCE((
+      SELECT SUM(\`sr\`.\`quantity\`)
+      FROM \`SaleRefunds\` AS \`sr\`
+      WHERE \`sr\`.\`saleId\` = \`SaleItem\`.\`saleId\`
+        AND \`sr\`.\`productId\` = \`SaleItem\`.\`productId\`
+        AND \`sr\`.\`status\` = 'processed'
+    ), 0)
+  )`;
+
+  const netQtyLiteral = `SUM(
+    CASE
+      WHEN \`SaleItem\`.\`id\` = (
+        SELECT MIN(\`si_min\`.\`id\`)
+        FROM \`SaleItems\` AS \`si_min\`
+        WHERE \`si_min\`.\`saleId\` = \`SaleItem\`.\`saleId\`
+          AND \`si_min\`.\`productId\` = \`SaleItem\`.\`productId\`
+      ) AND ${saleProductNetExpr} > 0
+      THEN ${saleProductNetExpr}
+      ELSE 0
+    END
+  )`;
+
+  const attributes = groupByDate
+    ? [
+        'productId',
+        [sequelize.fn('DATE', sequelize.col('SaleItem.createdAt')), 'date'],
+        [sequelize.literal(netQtyLiteral), 'quantity']
+      ]
+    : [
+        'productId',
+        [sequelize.literal(netQtyLiteral), 'qty']
+      ];
+
+  const group = groupByDate
+    ? ['productId', sequelize.fn('DATE', sequelize.col('SaleItem.createdAt'))]
+    : ['productId'];
+
+  return {
+    include: [{
+      model: Sale,
+      required: true,
+      attributes: [],
+      where: {
+        shopId,
+        ...REALIZED_SALE_FILTER
+      }
+    }],
+    where: {
+      shopId,
+      createdAt: { [Op.gte]: sinceDate }
+    },
+    attributes,
+    group,
+    raw: true
+  };
+};
+
+/**
  * Prophet-based stock depletion forecast via AI service
  */
-const getStockDepletionForecast = async (shopId, userId) => {
+const getStockDepletionForecast = async (shopId, userOrId) => {
+  const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : null;
+  const userId = user?.id || (typeof userOrId === 'number' || typeof userOrId === 'string' ? userOrId : null);
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
@@ -238,39 +336,37 @@ const getStockDepletionForecast = async (shopId, userId) => {
 
   if (!products.length) return [];
 
-  const dailySalesRows = await SaleItem.findAll({
-    where: { shopId, createdAt: { [Op.gte]: ninetyDaysAgo } },
-    attributes: [
-      'productId',
-      [sequelize.fn('DATE', sequelize.col('SaleItem.createdAt')), 'date'],
-      [sequelize.fn('SUM', sequelize.col('quantity')), 'quantity'],
-    ],
-    group: ['productId', sequelize.fn('DATE', sequelize.col('SaleItem.createdAt'))],
-    raw: true
-  });
+  const dailySalesRows = await SaleItem.findAll(buildNetDemandQuery(shopId, ninetyDaysAgo, true));
 
   const salesByProduct = {};
   for (const row of dailySalesRows) {
     const pid = row.productId;
+    const qty = parseFloat(row.quantity || 0);
+    if (qty <= 0) continue;
     if (!salesByProduct[pid]) salesByProduct[pid] = [];
-    salesByProduct[pid].push({ date: row.date, quantity: parseFloat(row.quantity || 0) });
+    salesByProduct[pid].push({ date: row.date, quantity: qty });
   }
 
+  const todayIso = new Date().toISOString().slice(0, 10);
   const payload = {
     products: products.map((p) => ({
       product_id: String(p.id),
       product_name: p.name,
       current_stock: parseFloat(p.Inventories?.[0]?.stockQuantity || 0),
-      daily_sales: salesByProduct[p.id] || []
+      daily_sales: salesByProduct[p.id] || [],
+      lookback_days: 90,
+      reference_date: todayIso
     })),
-    alert_threshold_days: insightsConfig.STOCK_DEPLETION_DAYS
+    alert_threshold_days: insightsConfig.STOCK_DEPLETION_DAYS,
+    lookback_days: 90,
+    reference_date: todayIso
   };
 
   try {
     const aiResponse = await aiClient.post(
       `/api/forecasting/stock-depletion`,
       payload,
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId }
+      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId, user: user || (userId ? { id: userId } : null) }
     );
 
     return (aiResponse.data.alerts || []).map((item) => ({
@@ -287,42 +383,22 @@ const getStockDepletionForecast = async (shopId, userId) => {
     const twoWeeksAgo = new Date();
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - lookbackDays);
 
-    const salesByProductAgg = await SaleItem.findAll({
-      where: { shopId, createdAt: { [Op.gte]: twoWeeksAgo } },
-      attributes: [
-        'productId',
-        [sequelize.fn('SUM', sequelize.col('quantity')), 'qty']
-      ],
-      group: ['productId'],
-      raw: true
-    });
+    const salesByProductAgg = await SaleItem.findAll(buildNetDemandQuery(shopId, twoWeeksAgo, false));
+    const soldMap = new Map(salesByProductAgg.map(r => [r.productId, Number(r.qty || 0)]));
 
     const soonOut = [];
-    if (salesByProductAgg.length > 0) {
-      const productIds = salesByProductAgg.map(r => r.productId).filter(Boolean);
-      const products = await Product.findAll({
-        where: { id: productIds },
-        attributes: ['id', 'name'],
-        include: [{
-          model: Inventory,
-          attributes: ['stockQuantity'],
-          where: { shopId },
-          required: false
-        }]
-      });
-      const productMap = new Map(products.map(p => [p.id, p]));
-
-      for (const row of salesByProductAgg) {
-        const prod = productMap.get(row.productId);
-        if (!prod) continue;
-        const invStock = parseFloat(prod.Inventories?.[0]?.stockQuantity || 0);
-        const sold = Number(row.qty || 0);
-        const daily = sold / lookbackDays;
-        if (daily > 0) {
-          const days = invStock / daily;
-          if (days > 0 && days <= insightsConfig.STOCK_DEPLETION_DAYS) {
-            soonOut.push({ id: prod.id, name: prod.name, daysToDeplete: Math.ceil(days) });
-          }
+    for (const prod of products) {
+      const invStock = parseFloat(prod.Inventories?.[0]?.stockQuantity || 0);
+      if (invStock <= 0) {
+        soonOut.push({ id: prod.id, name: prod.name, daysToDeplete: 0 });
+        continue;
+      }
+      const sold = soldMap.get(prod.id) || 0;
+      const daily = sold / lookbackDays;
+      if (daily > 0) {
+        const days = invStock / daily;
+        if (days > 0 && days <= insightsConfig.STOCK_DEPLETION_DAYS) {
+          soonOut.push({ id: prod.id, name: prod.name, daysToDeplete: Math.ceil(days) });
         }
       }
     }
@@ -333,7 +409,7 @@ const getStockDepletionForecast = async (shopId, userId) => {
 /**
  * Generate business alerts based on critical metrics
  */
-const generateAlerts = async (shopId, userId) => {
+const generateAlerts = async (shopId, userOrId) => {
   const alerts = [];
 
   const criticalInventories = await Inventory.findAll({
@@ -364,7 +440,7 @@ const generateAlerts = async (shopId, userId) => {
     });
   }
 
-  const salesAlerts = await generateSmartAlerts(shopId, userId);
+  const salesAlerts = await generateSmartAlerts(shopId, userOrId);
   alerts.push(...salesAlerts);
 
   return alerts;
@@ -383,7 +459,7 @@ const getInsights = async (req, res) => {
     const [trends, recommendations, alerts] = await Promise.all([
       calculateTrends(shopId),
       generateRecommendations(shopId),
-      generateAlerts(shopId, req.user?.id)
+      generateAlerts(shopId, req.user)
     ]);
 
     // Smart dashboard insights (heuristics)
@@ -420,7 +496,10 @@ const getInsights = async (req, res) => {
         'ProductId',
         [sequelize.fn('SUM', sequelize.literal('(SaleItem.unitPrice - Product.cost - SaleItem.discount) * SaleItem.quantity')), 'profit']
       ],
-      include: [{ model: Product, attributes: ['id','name','cost'], where: { shopId } }],
+      include: [
+        { model: Sale, required: true, attributes: [], where: { shopId, ...REALIZED_SALE_FILTER } },
+        { model: Product, attributes: ['id', 'name', 'cost'], required: true }
+      ],
       group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.cost'],
       order: [[sequelize.literal('profit'), 'DESC']],
       limit: 1,
@@ -438,7 +517,7 @@ const getInsights = async (req, res) => {
     }
 
     // 3) Stock depletion forecast (Prophet via AI service)
-    const soonOut = await getStockDepletionForecast(shopId, req.user?.id);
+    const soonOut = await getStockDepletionForecast(shopId, req.user);
     if (soonOut.length) {
       smartRecommendations.push({
         type: 'FORECAST',
@@ -477,8 +556,6 @@ const getInsights = async (req, res) => {
     // Try augmenting with AI-driven insights
     let aiRecs = [];
     try {
-      const aiServiceUrl = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://localhost:8000';
-
       // Build simple monthly aggregates for the last 6 months
       const months = [];
       const now = new Date();
@@ -562,32 +639,26 @@ const getInsights = async (req, res) => {
         average_transaction_value.push(s.tx > 0 ? s.revenue / s.tx : 0);
       }
 
-      // Get JWT token from request headers to forward to AI service
-      const authHeader = req.headers.authorization || req.headers.Authorization;
-      
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), insightsConfig.AI_SERVICE_TIMEOUT_MS);
-      const resp = await fetch(`${aiServiceUrl}/api/insights/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authHeader ? { 'Authorization': authHeader } : {})
-        },
-        body: JSON.stringify({ revenue, costs, customer_count, transaction_count, average_transaction_value }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (resp.ok) {
-        const ai = await resp.json();
-        if (Array.isArray(ai)) {
-          aiRecs = ai.map((x) => ({
-            type: x.insight_type || 'AI',
-            priority: 'MEDIUM',
-            message: x.description || 'AI insight',
-            details: x.recommendations || [],
-          }));
+      const aiResponse = await aiClient.post(
+        '/api/insights/analyze',
+        { revenue, costs, customer_count, transaction_count, average_transaction_value },
+        {
+          timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS,
+          shopId,
+          userId: req.user?.id,
+          user: req.user,
+          authz: req.authz
         }
+      );
+
+      const ai = aiResponse?.data;
+      if (Array.isArray(ai)) {
+        aiRecs = ai.map((x) => ({
+          type: x.insight_type || 'AI',
+          priority: 'MEDIUM',
+          message: x.description || 'AI insight',
+          details: x.recommendations || [],
+        }));
       }
     } catch (e) {
       console.error('[InsightsController] AI service call failed:', e.message);
@@ -610,12 +681,12 @@ const getCustomerSegments = async (req, res) => {
 
   try {
     const customerMetrics = await Sale.findAll({
-      where: { shopId, saleStatus: 'completed' },
+      where: { shopId, ...REALIZED_SALE_FILTER },
       attributes: [
         'customerId',
-        [sequelize.fn('SUM', sequelize.col('total')), 'total_spend'],
+        [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'total_spend'],
         [sequelize.fn('COUNT', sequelize.col('id')), 'purchase_frequency'],
-        [sequelize.fn('AVG', sequelize.col('total')), 'avg_transaction_value'],
+        [sequelize.literal(`AVG(${NET_SALE_REVENUE_SQL})`), 'avg_transaction_value'],
         [sequelize.fn('DATEDIFF', sequelize.fn('NOW'), sequelize.fn('MAX', sequelize.col('createdAt'))), 'days_since_last_purchase'],
       ],
       group: ['customerId'],
@@ -634,7 +705,7 @@ const getCustomerSegments = async (req, res) => {
     const aiResponse = await aiClient.post(
       `/api/insights/customer-segments`,
       { customers: customerMetrics },
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId: req.user?.id }
+      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId: req.user?.id, user: req.user }
     );
 
     res.json(aiResponse.data);
@@ -687,14 +758,14 @@ const getDailySales = async (req, res) => {
     const dailySales = await Sale.findAll({
       where: {
         shopId,
-        saleStatus: 'completed',
+        ...REALIZED_SALE_FILTER,
         createdAt: { [Op.gte]: ninetyDaysAgo }
       },
       attributes: [
         [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-        [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+        [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue'],
         [sequelize.fn('COUNT', sequelize.col('id')), 'transaction_count'],
-        [sequelize.fn('AVG', sequelize.col('total')), 'avg_transaction_value'],
+        [sequelize.literal(`AVG(${NET_SALE_REVENUE_SQL})`), 'avg_transaction_value'],
       ],
       group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
       order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']],
@@ -734,24 +805,18 @@ const getStockDepletion = async (req, res) => {
       }]
     });
 
-    const dailySalesRows = await SaleItem.findAll({
-      where: { shopId, createdAt: { [Op.gte]: ninetyDaysAgo } },
-      attributes: [
-        'productId',
-        [sequelize.fn('DATE', sequelize.col('SaleItem.createdAt')), 'date'],
-        [sequelize.fn('SUM', sequelize.col('quantity')), 'quantity'],
-      ],
-      group: ['productId', sequelize.fn('DATE', sequelize.col('SaleItem.createdAt'))],
-      raw: true
-    });
+    const dailySalesRows = await SaleItem.findAll(buildNetDemandQuery(shopId, ninetyDaysAgo, true));
 
     const salesByProduct = {};
     for (const row of dailySalesRows) {
       const pid = row.productId;
+      const qty = parseFloat(row.quantity || 0);
+      if (qty <= 0) continue;
       if (!salesByProduct[pid]) salesByProduct[pid] = [];
-      salesByProduct[pid].push({ date: row.date, quantity: parseFloat(row.quantity || 0) });
+      salesByProduct[pid].push({ date: row.date, quantity: qty });
     }
 
+    const todayIso = new Date().toISOString().slice(0, 10);
     const aiResponse = await aiClient.post(
       `/api/forecasting/stock-depletion`,
       {
@@ -759,11 +824,15 @@ const getStockDepletion = async (req, res) => {
           product_id: String(p.id),
           product_name: p.name,
           current_stock: parseFloat(p.Inventories?.[0]?.stockQuantity || 0),
-          daily_sales: salesByProduct[p.id] || []
+          daily_sales: salesByProduct[p.id] || [],
+          lookback_days: 90,
+          reference_date: todayIso
         })),
-        alert_threshold_days: insightsConfig.STOCK_DEPLETION_DAYS
+        alert_threshold_days: insightsConfig.STOCK_DEPLETION_DAYS,
+        lookback_days: 90,
+        reference_date: todayIso
       },
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId: req.user?.id }
+      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId: req.user?.id, user: req.user }
     );
 
     res.json(aiResponse.data);
@@ -782,4 +851,7 @@ module.exports = {
   getMonthlyRevenue,
   getDailySales,
   getStockDepletion,
+  getStockDepletionForecast,
+  buildNetDemandQuery,
+  getAuthorizedShopId,
 };

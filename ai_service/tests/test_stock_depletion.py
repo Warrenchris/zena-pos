@@ -7,7 +7,8 @@ from src.routers.forecasting import (
     stock_depletion_forecast,
     StockDepletionRequest,
     ProductForecastItem,
-    MAX_FORECAST_WORKERS
+    MAX_FORECAST_WORKERS,
+    _parse_and_calendarize_sales
 )
 
 
@@ -224,6 +225,147 @@ class TestStockDepletionForecasting(unittest.TestCase):
         self.assertEqual(len(res2["products"]), 3)
         self.assertEqual(res1["threshold_days"], 7)
         self.assertEqual(res2["threshold_days"], 7)
+
+    def test_sparse_90_day_demand_single_active_sale_day(self):
+        """Test 9: A product with 1 sale day (10 units) in a 90-day window has velocity 10/90, not 10/1."""
+        req = StockDepletionRequest(
+            products=[
+                ProductForecastItem(
+                    product_id="P-SPARSE-90",
+                    product_name="Slow Moving Item",
+                    current_stock=10.0,
+                    daily_sales=[{"date": "2026-02-15", "quantity": 10.0}]
+                )
+            ],
+            alert_threshold_days=7,
+            lookback_days=90,
+            reference_date="2026-03-31"
+        )
+
+        data = asyncio.run(stock_depletion_forecast(req, user=self.mock_user))
+        item = data["products"][0]
+        self.assertEqual(item["algorithm"], "linear_extrapolation")
+        # 10 units / (10 / 90 units/day) = 90.0 days until depletion (NOT 1.0 day)
+        self.assertEqual(item["days_until_depletion"], 90.0)
+        self.assertFalse(item["alert"])
+        self.assertEqual(data["alert_count"], 0)
+
+    def test_sparse_multi_day_gap_uses_calendar_span(self):
+        """Test 10: Sparse sales spanning 90 calendar days (2 active days, 88 zero days) divide by 90 days."""
+        req = StockDepletionRequest(
+            products=[
+                ProductForecastItem(
+                    product_id="P-GAP-90",
+                    product_name="Gap Item",
+                    current_stock=10.0,
+                    daily_sales=[
+                        {"date": "2026-01-01", "quantity": 5.0},
+                        {"date": "2026-03-31", "quantity": 5.0}
+                    ]
+                )
+            ],
+            alert_threshold_days=7
+        )
+
+        data = asyncio.run(stock_depletion_forecast(req, user=self.mock_user))
+        item = data["products"][0]
+        self.assertEqual(item["days_until_depletion"], 90.0)
+        self.assertFalse(item["alert"])
+
+    def test_zero_and_negative_stock_return_zero_days_until_depletion(self):
+        """Test 11: Products already at or below zero stock immediately return 0 days until depletion."""
+        req = StockDepletionRequest(
+            products=[
+                ProductForecastItem(
+                    product_id="P-ZERO-SPARSE",
+                    product_name="Zero Stock Sparse",
+                    current_stock=0.0,
+                    daily_sales=[]
+                ),
+                ProductForecastItem(
+                    product_id="P-NEG-SPARSE",
+                    product_name="Negative Stock Sparse",
+                    current_stock=-3.0,
+                    daily_sales=make_daily_sales(4, base_qty=2.0)
+                ),
+                ProductForecastItem(
+                    product_id="P-ZERO-PROPHET",
+                    product_name="Zero Stock Prophet",
+                    current_stock=0.0,
+                    daily_sales=make_daily_sales(20, base_qty=4.0)
+                )
+            ],
+            alert_threshold_days=7
+        )
+
+        data = asyncio.run(stock_depletion_forecast(req, user=self.mock_user))
+        self.assertEqual(len(data["products"]), 3)
+        for p in data["products"]:
+            self.assertEqual(p["days_until_depletion"], 0)
+            self.assertTrue(p["alert"])
+        self.assertEqual(data["alert_count"], 3)
+
+    def test_prophet_calendarizes_zero_sales_dates_and_anchors_stale_last_sale_date(self):
+        """Test 12: Prophet input zero-fills missing dates, anchors at reference_date, and prevents future leakage."""
+        # 15 active days in early Jan 2026 (5 units/day = 75 total), then 45 zero-sale days up to 2026-03-01,
+        # plus 1 accidental future row beyond reference_date that must be excluded.
+        sales = [
+            {"date": (datetime(2026, 1, 1) + timedelta(days=i)).strftime("%Y-%m-%d"), "quantity": 5.0}
+            for i in range(15)
+        ]
+        sales.append({"date": "2026-03-10", "quantity": 999.0})  # future row beyond reference_date
+
+        cal_df, window_days, anchor_dt = _parse_and_calendarize_sales(
+            sales,
+            lookback_days=60,
+            reference_date="2026-03-01"
+        )
+
+        # Must span 2026-01-01 to 2026-03-01 inclusive (60 calendar days), excluding 2026-03-10
+        self.assertEqual(window_days, 60)
+        self.assertEqual(len(cal_df), 60)
+        self.assertEqual(anchor_dt.strftime("%Y-%m-%d"), "2026-03-01")
+        self.assertEqual(float(cal_df["y"].sum()), 75.0)
+        zero_days = int((cal_df["y"] == 0.0).sum())
+        self.assertEqual(zero_days, 45)
+
+        # Verify end-to-end Prophet forecast with stale last-sale date vs continuous high demand
+        req = StockDepletionRequest(
+            products=[
+                ProductForecastItem(
+                    product_id="P-STALE-PROPHET",
+                    product_name="Stale Demand Product",
+                    current_stock=30.0,
+                    daily_sales=sales[:15],
+                    lookback_days=60,
+                    reference_date="2026-03-01"
+                ),
+                ProductForecastItem(
+                    product_id="P-ACTIVE-PROPHET",
+                    product_name="Continuous Demand Product",
+                    current_stock=30.0,
+                    daily_sales=[
+                        {"date": (datetime(2026, 1, 1) + timedelta(days=i)).strftime("%Y-%m-%d"), "quantity": 5.0}
+                        for i in range(60)
+                    ],
+                    lookback_days=60,
+                    reference_date="2026-03-01"
+                )
+            ],
+            alert_threshold_days=7
+        )
+
+        data = asyncio.run(stock_depletion_forecast(req, user=self.mock_user))
+        p_stale = next(p for p in data["products"] if p["product_id"] == "P-STALE-PROPHET")
+        p_active = next(p for p in data["products"] if p["product_id"] == "P-ACTIVE-PROPHET")
+
+        self.assertEqual(p_stale["algorithm"], "prophet")
+        self.assertEqual(p_active["algorithm"], "prophet")
+        # Continuous 5/day product depletes 30 units in ~6 days (alerts <= 7),
+        # while product with 45 trailing zero-sale days has much longer depletion and does NOT alert
+        self.assertLessEqual(p_active["days_until_depletion"], 7)
+        self.assertGreater(p_stale["days_until_depletion"], p_active["days_until_depletion"])
+        self.assertFalse(p_stale["alert"])
 
 
 if __name__ == '__main__':

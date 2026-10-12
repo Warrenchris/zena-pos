@@ -116,47 +116,220 @@ exports.getAllSales = async (req, res) => {
   }
 };
 
+const restoreSaleInventoryIfNeeded = async (sale, reqUser, shopId, organizationId, t) => {
+  if (
+    sale.saleStatus === 'cancelled' ||
+    sale.status === 'cancelled' ||
+    sale.saleStatus === 'refunded' ||
+    sale.metadata?.stockReversed === true ||
+    sale.metadata?.isDeleted === true
+  ) {
+    return;
+  }
+
+  const isUnfulfilledStatus =
+    ['pending', 'confirmed', 'processing'].includes(sale.saleStatus) ||
+    sale.status === 'pending' ||
+    sale.fulfillmentStatus === 'failed';
+
+  if (isUnfulfilledStatus) {
+    const saleRefs = [sale.invoiceNumber, String(sale.id)].filter(Boolean);
+    const saleDeductionCount = await StockMovement.count({
+      where: {
+        shopId,
+        type: 'SALE',
+        reference: { [Op.in]: saleRefs }
+      },
+      transaction: t
+    });
+    if (saleDeductionCount === 0) {
+      return;
+    }
+  }
+
+  const saleItems = await SaleItem.findAll({
+    where: { saleId: sale.id },
+    transaction: t
+  });
+  if (!saleItems || saleItems.length === 0) {
+    return;
+  }
+
+  const soldByProduct = new Map();
+  for (const si of saleItems) {
+    const prev = soldByProduct.get(si.productId) || 0;
+    soldByProduct.set(si.productId, prev + Number(si.quantity || 0));
+  }
+
+  const processedRefunds = await SaleRefund.findAll({
+    where: { saleId: sale.id, status: 'processed' },
+    transaction: t
+  });
+  const refundedByProduct = new Map();
+  for (const sr of processedRefunds) {
+    const prev = refundedByProduct.get(sr.productId) || 0;
+    refundedByProduct.set(sr.productId, prev + Number(sr.quantity || 0));
+  }
+
+  const cancelRefs = [
+    sale.invoiceNumber ? `CANCEL-${sale.invoiceNumber}` : null,
+    `CANCEL-${sale.id}`
+  ].filter(Boolean);
+
+  const existingCancelMovements = await StockMovement.findAll({
+    where: {
+      shopId,
+      type: 'SALE_REFUND',
+      reference: { [Op.in]: cancelRefs }
+    },
+    transaction: t
+  });
+  const alreadyCancelledByProduct = new Map();
+  for (const sm of existingCancelMovements) {
+    const prev = alreadyCancelledByProduct.get(sm.productId) || 0;
+    alreadyCancelledByProduct.set(sm.productId, prev + Math.abs(Number(sm.quantity || 0)));
+  }
+
+  let resolvedOrgId = organizationId || reqUser?.organizationId;
+  if (!resolvedOrgId && shopId) {
+    const shopRecord = await Shop.findByPk(shopId, { attributes: ['organizationId'], transaction: t });
+    resolvedOrgId = shopRecord?.organizationId;
+  }
+
+  const jwtId = reqUser?.id;
+  const resolvedUserId = (typeof jwtId === 'number')
+    ? jwtId
+    : (typeof jwtId === 'string' && /^\d+$/.test(jwtId))
+      ? parseInt(jwtId, 10)
+      : null;
+
+  for (const [productId, soldQty] of soldByProduct.entries()) {
+    const refundedQty = refundedByProduct.get(productId) || 0;
+    const alreadyCancelledQty = alreadyCancelledByProduct.get(productId) || 0;
+    const qtyToRestore = Math.max(0, soldQty - refundedQty - alreadyCancelledQty);
+    if (qtyToRestore <= 0) {
+      continue;
+    }
+
+    let inventory = await Inventory.findOne({
+      where: { productId, shopId },
+      lock: t.LOCK.UPDATE,
+      transaction: t
+    });
+
+    const product = await Product.findOne({
+      where: { id: productId },
+      transaction: t
+    });
+
+    if (!inventory && product) {
+      inventory = await Inventory.create({
+        productId: product.id,
+        shopId,
+        stockQuantity: 0,
+        reorderPoint: 10
+      }, { transaction: t });
+    }
+
+    if (inventory) {
+      const prevStock = parseFloat(inventory.stockQuantity || 0);
+      const newStock = prevStock + qtyToRestore;
+      await inventory.update({ stockQuantity: newStock }, { transaction: t });
+
+      await StockMovement.create({
+        shopId,
+        organizationId: resolvedOrgId || product?.organizationId,
+        productId,
+        quantity: qtyToRestore,
+        previousStock: prevStock,
+        newStock,
+        type: 'SALE_REFUND',
+        reference: `CANCEL-${sale.invoiceNumber || sale.id}`,
+        userId: !reqUser?.isEmployee ? resolvedUserId : null,
+        employeeId: reqUser?.isEmployee ? reqUser.id : null
+      }, { transaction: t });
+    }
+  }
+};
+
 // Update sale status and notes
 exports.updateSale = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { status, notes } = req.body;
+    const { status, saleStatus: requestedSaleStatus, notes } = req.body;
+    const shopId = req.shopId || req.user?.shopId;
+    const organizationId = req.organizationId || req.user?.organizationId;
 
-    // Find the sale
+    // Find and lock the sale
     const sale = await Sale.findOne({
       where: {
         id,
-        shopId: req.user.shopId
-      }
+        shopId
+      },
+      lock: t.LOCK.UPDATE,
+      transaction: t
     });
 
     if (!sale) {
+      await t.rollback();
       return res.status(404).json({ error: 'Sale not found' });
     }
 
+    const effectiveRequestedStatus = requestedSaleStatus || status;
+    const isCancelling = effectiveRequestedStatus === 'cancelled';
+
+    if (isCancelling) {
+      await restoreSaleInventoryIfNeeded(sale, req.user, shopId, organizationId, t);
+    }
+
+    const validLegacyStatuses = ['pending', 'completed', 'cancelled'];
+    const nextLegacyStatus = isCancelling
+      ? 'cancelled'
+      : (validLegacyStatuses.includes(status) ? status : sale.status);
+
+    const validSaleStatuses = ['pending', 'confirmed', 'processing', 'completed', 'cancelled', 'refunded', 'partially_refunded', 'partial_refund'];
+    const nextSaleStatus = isCancelling
+      ? 'cancelled'
+      : (validSaleStatuses.includes(effectiveRequestedStatus) ? effectiveRequestedStatus : sale.saleStatus);
+
+    const updatedMetadata = {
+      ...(sale.metadata || {}),
+      ...(isCancelling ? { stockReversed: true, cancelledBy: String(req.user.id) } : {})
+    };
+
     // Update the sale
     const updatedSale = await sale.update({
-      status,
-      notes,
-      updatedBy: req.user.id
-    });
+      ...(nextLegacyStatus ? { status: nextLegacyStatus } : {}),
+      ...(nextSaleStatus ? { saleStatus: nextSaleStatus } : {}),
+      ...(notes !== undefined ? { notes } : {}),
+      ...(isCancelling && !sale.cancelledAt ? { cancelledAt: new Date() } : {}),
+      lastModifiedBy: String(req.user.id),
+      metadata: updatedMetadata
+    }, { transaction: t });
 
     // Log the activity
     await logActivity({
-      shopId: req.user.shopId || req.shopId,
+      shopId,
       performedBy: req.user.id,
       performedByType: req.user.isEmployee ? 'employee' : 'user',
       action: 'UPDATE_SALE',
       entity: 'Sale',
       entityId: sale.id,
-      details: `Updated sale ${sale.invoiceNumber} status to ${status}`
-    });
+      details: `Updated sale ${sale.invoiceNumber} status to ${effectiveRequestedStatus || sale.saleStatus}`
+    }, t);
 
-    // Invalidate analytics cache for the shop
-    invalidateAnalyticsCache(sale.shopId || req.user.shopId);
+    await t.commit();
+
+    // Invalidate analytics and product caches for the shop
+    invalidateAnalyticsCache(sale.shopId || shopId);
+    if (isCancelling) {
+      await invalidateShopProductCache(sale.shopId || shopId);
+    }
 
     res.json(updatedSale);
   } catch (error) {
+    await t.rollback();
     console.error('Error updating sale:', error);
     res.status(500).json({ error: 'Failed to update sale' });
   }
@@ -168,19 +341,17 @@ exports.deleteSale = async (req, res) => {
 
   try {
     const { id } = req.params;
+    const shopId = req.shopId || req.user?.shopId;
+    const organizationId = req.organizationId || req.user?.organizationId;
 
-    // Find the sale
+    // Find and lock the sale
     const sale = await Sale.findOne({
       where: {
         id,
-        shopId: req.user.shopId
+        shopId
       },
-      include: [
-        {
-          model: SaleItem,
-          include: [Product]
-        }
-      ]
+      lock: t.LOCK.UPDATE,
+      transaction: t
     });
 
     if (!sale) {
@@ -188,16 +359,27 @@ exports.deleteSale = async (req, res) => {
       return res.status(404).json({ error: 'Sale not found' });
     }
 
-    // Mark sale as deleted and store who deleted it
+    await restoreSaleInventoryIfNeeded(sale, req.user, shopId, organizationId, t);
+
+    const now = new Date();
+    // Mark sale as cancelled/deleted using valid ENUM values and store audit metadata
     await sale.update({
-      status: 'deleted',
-      deletedAt: new Date(),
-      deletedBy: req.user.id
+      status: 'cancelled',
+      saleStatus: 'cancelled',
+      cancelledAt: sale.cancelledAt || now,
+      lastModifiedBy: String(req.user.id),
+      metadata: {
+        ...(sale.metadata || {}),
+        isDeleted: true,
+        deletedAt: sale.metadata?.deletedAt || now.toISOString(),
+        deletedBy: String(req.user.id),
+        stockReversed: true
+      }
     }, { transaction: t });
 
     // Log the activity
     await logActivity({
-      shopId: req.user.shopId || req.shopId,
+      shopId,
       performedBy: req.user.id,
       performedByType: req.user.isEmployee ? 'employee' : 'user',
       action: 'DELETE_SALE',
@@ -207,7 +389,8 @@ exports.deleteSale = async (req, res) => {
     }, t);
 
     await t.commit();
-    invalidateAnalyticsCache(sale.shopId || req.user.shopId);
+    invalidateAnalyticsCache(sale.shopId || shopId);
+    await invalidateShopProductCache(sale.shopId || shopId);
     res.json({ message: 'Sale deleted successfully' });
   } catch (error) {
     await t.rollback();
@@ -1281,6 +1464,22 @@ exports.processRefund = async (req, res) => {
       return res.status(404).json({ error: 'Sale not found' });
     }
 
+    if (
+      sale.saleStatus === 'cancelled' ||
+      sale.status === 'cancelled' ||
+      sale.metadata?.isDeleted === true
+    ) {
+      return res.status(400).json({ error: 'Cannot process refund for a cancelled or deleted sale' });
+    }
+
+    if (
+      ['pending', 'confirmed', 'processing'].includes(sale.saleStatus) ||
+      sale.status === 'pending' ||
+      sale.fulfillmentStatus === 'failed'
+    ) {
+      return res.status(400).json({ error: 'Cannot process refund for an uncompleted or failed sale' });
+    }
+
     // Fetch system settings for return policy & approval thresholds
     const systemSettings = await SystemSettings.findOne({ where: { shopId } });
     const returnWindowDays = systemSettings?.returnWindowDays !== undefined ? systemSettings.returnWindowDays : 30;
@@ -1298,7 +1497,43 @@ exports.processRefund = async (req, res) => {
       where: { saleId }
     });
 
-    const saleItemsMap = new Map(saleItems.map(si => [si.productId, si]));
+    // Aggregate duplicate SaleItem lines for the same productId within a sale
+    const saleItemsMap = new Map();
+    for (const si of saleItems) {
+      const pid = si.productId;
+      const lineQty = Number(si.quantity || 0);
+      const unitPrice = parseFloat(si.unitPrice || si.price || si.originalPrice || 0);
+      const grossLine = lineQty * unitPrice;
+      const recordedSub = parseFloat(si.subtotal !== undefined && si.subtotal !== null ? si.subtotal : grossLine);
+      const lineDisc = parseFloat(si.discount || 0);
+      const lineTaxAmt = parseFloat(si.taxAmount || 0);
+      const lineTaxRt = parseFloat(si.taxRate || 0);
+
+      if (!saleItemsMap.has(pid)) {
+        saleItemsMap.set(pid, {
+          productId: pid,
+          quantity: lineQty,
+          unitPrice,
+          price: parseFloat(si.price || unitPrice || 0),
+          originalPrice: parseFloat(si.originalPrice || unitPrice || 0),
+          subtotal: recordedSub,
+          discount: lineDisc,
+          taxAmount: lineTaxAmt,
+          taxRate: lineTaxRt,
+          metadata: si.metadata || {}
+        });
+      } else {
+        const existing = saleItemsMap.get(pid);
+        const prevQty = existing.quantity;
+        const newQty = prevQty + lineQty;
+        existing.quantity = newQty;
+        existing.subtotal = existing.subtotal + recordedSub;
+        existing.discount = existing.discount + lineDisc;
+        existing.taxAmount = existing.taxAmount + lineTaxAmt;
+        existing.unitPrice = newQty > 0 ? ((existing.unitPrice * prevQty) + grossLine) / newQty : unitPrice;
+        existing.price = existing.unitPrice;
+      }
+    }
 
     // Find all previous refunds for this sale
     const previousRefunds = await SaleRefund.findAll({
@@ -1327,6 +1562,7 @@ exports.processRefund = async (req, res) => {
     }
 
     // Validate each item, non-returnable status, and available quantity
+    const requestedQtyByProduct = new Map();
     for (const item of itemsToRefund) {
       const saleItem = saleItemsMap.get(item.productId);
       if (!saleItem) {
@@ -1334,13 +1570,15 @@ exports.processRefund = async (req, res) => {
       }
 
       const prevQty = previouslyRefundedMap.get(item.productId) || 0;
-      const availableQty = saleItem.quantity - prevQty;
+      const alreadyRequestedQty = requestedQtyByProduct.get(item.productId) || 0;
+      const availableQty = saleItem.quantity - prevQty - alreadyRequestedQty;
 
       if (item.quantity > availableQty) {
         return res.status(400).json({
-          error: `Cannot refund ${item.quantity} units of product ${item.productId}. Only ${availableQty} units available for refund.`
+          error: `Cannot refund ${item.quantity} units of product ${item.productId}. Only ${Math.max(0, availableQty)} units available for refund.`
         });
       }
+      requestedQtyByProduct.set(item.productId, alreadyRequestedQty + item.quantity);
 
       // Check Non-Returnable flag on Product (gated server-side by admin/manager role)
       const productRecord = await Product.findOne({ where: { id: item.productId, shopId } });
@@ -1356,6 +1594,13 @@ exports.processRefund = async (req, res) => {
 
     // Calculate total net refund amount across all requested items (net price accounting for discounts and tax)
     let calculatedTotalRefund = 0;
+    const runningRefundedByProduct = new Map(previouslyRefundedMap);
+    const runningRefundedTaxByProduct = new Map();
+    previousRefunds.forEach(r => {
+      const prevTax = runningRefundedTaxByProduct.get(r.productId) || 0;
+      runningRefundedTaxByProduct.set(r.productId, prevTax + parseFloat(r.metadata?.taxAmount || 0));
+    });
+
     const itemsWithNetPrice = itemsToRefund.map(item => {
       const saleItem = saleItemsMap.get(item.productId);
       const lineQuantity = saleItem.quantity || 1;
@@ -1380,20 +1625,24 @@ exports.processRefund = async (req, res) => {
       const lineTaxRate = parseFloat(saleItem.taxRate || 0);
       const effectiveTaxCategory = saleItem.metadata?.taxCategory || (lineTaxRate > 0 ? 'standard' : 'exempt');
 
-      const prevQty = previouslyRefundedMap.get(item.productId) || 0;
+      const prevQty = runningRefundedByProduct.get(item.productId) || 0;
       const isFinalItemRefund = (prevQty + item.quantity) >= lineQuantity;
 
       let lineRefundTax = 0;
       if (lineTaxAmount > 0) {
         if (isFinalItemRefund) {
-          const prevRefundedTaxOnItem = previousRefunds
-            .filter(r => r.productId === item.productId)
-            .reduce((sum, r) => sum + parseFloat(r.metadata?.taxAmount || 0), 0);
+          const prevRefundedTaxOnItem = runningRefundedTaxByProduct.get(item.productId) || 0;
           lineRefundTax = Math.max(0, round2(lineTaxAmount - prevRefundedTaxOnItem));
         } else {
           lineRefundTax = round2(lineTaxAmount * (item.quantity / lineQuantity));
         }
       }
+
+      runningRefundedByProduct.set(item.productId, prevQty + item.quantity);
+      runningRefundedTaxByProduct.set(
+        item.productId,
+        (runningRefundedTaxByProduct.get(item.productId) || 0) + lineRefundTax
+      );
 
       // Total refund for line: in inclusive mode, shelf price includes tax; in exclusive mode, tax is refunded on top
       let lineRefundAmount;
@@ -1613,7 +1862,7 @@ exports.processRefund = async (req, res) => {
       });
 
       let allFullyRefunded = true;
-      for (const saleItem of saleItems) {
+      for (const saleItem of saleItemsMap.values()) {
         const totalRefunded = updatedRefundedMap.get(saleItem.productId) || 0;
         if (totalRefunded < saleItem.quantity) {
           allFullyRefunded = false;
