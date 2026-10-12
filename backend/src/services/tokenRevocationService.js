@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
 const Organization = require('../models/Organization');
+const { getRequestActor, getRequestOrgStatus } = require('../utils/requestAuthState');
 
 const STATUS_CACHE_TTL = 300; // 5 minutes for active status
 const TOMBSTONE_CACHE_TTL = 86400; // 24 hours for inactive/suspended status
@@ -171,7 +172,7 @@ const tokenRevocationService = {
   /**
    * Get active status for user or employee. Checks Redis first, then DB fallback.
    */
-  async getUserStatus(id, isEmployee) {
+  async getUserStatus(id, isEmployee, req = null) {
     if (!id) return 'inactive';
     const key = `auth_status:${isEmployee ? 'employee' : 'user'}:${id}`;
     
@@ -185,14 +186,18 @@ const tokenRevocationService = {
       logger.warn(`[AUTH-01] Redis error getting user status for ${id}:`, err.message);
     }
 
-    // 2. Query MySQL fallback
+    // 2. Query MySQL fallback (shared per-request when req is provided)
     try {
       let status = 'inactive';
       if (isEmployee) {
-        const emp = await Employee.findByPk(id, { attributes: ['id', 'status'] });
+        const emp = req
+          ? await getRequestActor(req, id, true)
+          : await Employee.findByPk(id, { attributes: ['id', 'status'] });
         status = emp && emp.status === 'active' ? 'active' : 'inactive';
       } else {
-        const user = await User.findByPk(id, { attributes: ['id', 'active'] });
+        const user = req
+          ? await getRequestActor(req, id, false)
+          : await User.findByPk(id, { attributes: ['id', 'active'] });
         status = user && user.active ? 'active' : 'inactive';
       }
 
@@ -228,9 +233,9 @@ const tokenRevocationService = {
   },
 
   /**
-   * Get organization status. Checks Redis first, then DB fallback.
+   * Internal resolver for organization status (Redis first, then DB fallback).
    */
-  async getOrgStatus(orgId) {
+  async _resolveOrgStatus(orgId) {
     if (!orgId) return null;
     const key = `auth_status:org:${orgId}`;
 
@@ -267,10 +272,22 @@ const tokenRevocationService = {
   },
 
   /**
+   * Get organization status. Checks request-scoped cache when req is provided,
+   * then Redis, then DB fallback.
+   */
+  async getOrgStatus(orgId, req = null) {
+    if (!orgId) return null;
+    if (req) {
+      return getRequestOrgStatus(req, orgId, (targetOrgId) => this._resolveOrgStatus(targetOrgId));
+    }
+    return this._resolveOrgStatus(orgId);
+  },
+
+  /**
    * Get authoritative authorization version (epoch) for user or employee.
    * Checks Redis cache first, then DB fallback.
    */
-  async getAuthzVersion(id, isEmployee) {
+  async getAuthzVersion(id, isEmployee, req = null) {
     if (!id) return 1;
     const key = `authz_version:${isEmployee ? 'employee' : 'user'}:${id}`;
 
@@ -291,16 +308,20 @@ const tokenRevocationService = {
       return inMemoryAuthzVersions.get(key);
     }
 
-    // 2. Authoritative Database lookup
+    // 2. Authoritative Database lookup (shared per-request when req is provided)
     try {
       let version = 1;
       if (isEmployee) {
-        const emp = await Employee.findByPk(id, { attributes: ['id', 'authzVersion'] });
+        const emp = req
+          ? await getRequestActor(req, id, true)
+          : await Employee.findByPk(id, { attributes: ['id', 'authzVersion'] });
         if (emp && emp.authzVersion !== undefined && emp.authzVersion !== null) {
           version = Number(emp.authzVersion);
         }
       } else {
-        const user = await User.findByPk(id, { attributes: ['id', 'authzVersion'] });
+        const user = req
+          ? await getRequestActor(req, id, false)
+          : await User.findByPk(id, { attributes: ['id', 'authzVersion'] });
         if (user && user.authzVersion !== undefined && user.authzVersion !== null) {
           version = Number(user.authzVersion);
         }
