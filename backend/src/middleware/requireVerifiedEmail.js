@@ -1,8 +1,8 @@
 'use strict';
 
-const jwt = require('jsonwebtoken');
-const { User, OrganizationMembership } = require('../models');
+const { OrganizationMembership } = require('../models');
 const { isEmailConfigured } = require('../services/emailService');
+const { verifyRequestJwt, getRequestActor } = require('../utils/requestAuthState');
 const logger = require('../utils/logger');
 
 // Startup warning logged once if email is not configured
@@ -124,9 +124,7 @@ async function requireVerifiedEmail(req, res, next) {
       return next();
     }
 
-    const user = await User.findByPk(req.user.id, {
-      attributes: ['id', 'emailVerifiedAt']
-    });
+    const user = await getRequestActor(req, req.user.id, false);
 
     if (user && user.emailVerifiedAt) {
       verifiedCache.set(req.user.id, true);
@@ -187,8 +185,7 @@ async function emailVerification7DayGate(req, res, next) {
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
         try {
-          const publicKey = (process.env.JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n');
-          userPayload = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+          userPayload = verifyRequestJwt(req, token);
         } catch (e) {
           // Token is invalid/expired; let downstream auth middleware return standard 401
           return next();
@@ -212,10 +209,8 @@ async function emailVerification7DayGate(req, res, next) {
       return next();
     }
 
-    // Query User by PK
-    const user = await User.findByPk(userPayload.id, {
-      attributes: ['id', 'emailVerifiedAt', 'createdAt']
-    });
+    // Query User by PK (shared per-request on cold requests)
+    const user = await getRequestActor(req, userPayload.id, false);
 
     if (!user) {
       return next();
