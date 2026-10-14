@@ -6,7 +6,7 @@ const Product = require('../models/Product');
 const SaleItem = require('../models/SaleItem');
 const User = require('../models/User');
 const { parseDate } = require('../utils/dateUtils');
-const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
+const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER } = require('../constants/saleFilters');
 
 // Helper function to resolve start and end dates from req
 const getValidatedDates = (req) => {
@@ -185,12 +185,23 @@ const dashboardController = {
           [sequelize.fn('SUM', sequelize.col('SaleItem.quantity')), 'totalSold'],
           [sequelize.fn('SUM', sequelize.col('SaleItem.price')), 'totalRevenue']
         ],
-        include: [{
-          model: Product,
-          attributes: ['name', 'price'],
-          where: { shopId },
-          required: true
-        }],
+        include: [
+          {
+            model: Product,
+            attributes: ['name', 'price'],
+            where: { shopId },
+            required: true
+          },
+          {
+            model: Sale,
+            attributes: [],
+            where: {
+              shopId,
+              ...REALIZED_SALE_FILTER
+            },
+            required: true
+          }
+        ],
         group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.price'],
         order: [[sequelize.fn('SUM', sequelize.col('SaleItem.quantity')), 'DESC']],
         limit: parseInt(limit)

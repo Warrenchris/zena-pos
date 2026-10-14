@@ -26,19 +26,25 @@ JWT_EXPECTED_ISSUER = os.getenv("JWT_EXPECTED_ISSUER", "zana-backend")
 JWT_EXPECTED_AUDIENCE = os.getenv("JWT_EXPECTED_AUDIENCE", "ai-service")
 
 def load_public_key():
-    """Load RSA public key from file, returning None if not found or unreadable"""
+    """Load RSA public key from JWT_PUBLIC_KEY env var or JWT_PUBLIC_KEY_PATH file, returning None if not found or unreadable"""
+    env_key = os.getenv("JWT_PUBLIC_KEY", "").strip()
+    if env_key:
+        return env_key.replace("\\n", "\n").strip()
+
+    key_path_str = os.getenv("JWT_PUBLIC_KEY_PATH", JWT_PUBLIC_KEY_PATH)
     try:
-        key_path = Path(JWT_PUBLIC_KEY_PATH)
+        key_path = Path(key_path_str)
         if not key_path.exists():
             logger.warning(
-                f"JWT public key not found at '{JWT_PUBLIC_KEY_PATH}'. "
+                f"JWT public key not found at '{key_path_str}'. "
                 "Requests requiring auth will fail until a valid key is configured."
             )
             return None
         with open(key_path, 'r') as f:
-            return f.read()
+            content = f.read().strip()
+            return content if content else None
     except Exception as e:
-        logger.warning(f"Failed to read JWT public key at '{JWT_PUBLIC_KEY_PATH}': {e}")
+        logger.warning(f"Failed to read JWT public key at '{key_path_str}': {e}")
         return None
 
 PUBLIC_KEY = load_public_key()
@@ -81,6 +87,20 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
             **decode_kwargs
         )
 
+        # Enforce that expiration is explicitly present
+        if not payload.get("exp"):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token: missing required expiration"
+            )
+
+        # Enforce that issuer is explicitly present if an expected issuer is configured
+        if JWT_EXPECTED_ISSUER and not payload.get("iss"):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token: missing required issuer"
+            )
+
         # Enforce that audience is explicitly present if an expected audience is configured
         if JWT_EXPECTED_AUDIENCE and not payload.get("aud"):
             raise HTTPException(
@@ -91,7 +111,8 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
         # Extract user information
         user_id = payload.get("id")
         role = payload.get("role")
-        shop_id = payload.get("shopId")
+        shop_id = payload.get("shopId") if payload.get("shopId") is not None else payload.get("shop_id")
+        organization_id = payload.get("organizationId") if payload.get("organizationId") is not None else payload.get("organization_id")
         is_employee = payload.get("isEmployee", False)
         
         if not user_id:
@@ -114,10 +135,14 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
             "id": user_id,
             "role": role,
             "shopId": shop_id,
+            "shop_id": shop_id,
+            "organizationId": organization_id,
             "isEmployee": is_employee,
             "payload": payload
         }
         
+    except HTTPException:
+        raise
     except JWTError as e:
         raise HTTPException(
             status_code=401,

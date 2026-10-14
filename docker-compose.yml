@@ -135,7 +135,7 @@ services:
       dockerfile: Dockerfile
     container_name: zana-ai-service
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./ai_service:/app
     env_file:

@@ -30,6 +30,11 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
   const [refundQuantities, setRefundQuantities] = useState({});
   const [refundReasons, setRefundReasons] = useState({});
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
+  const [refundIdempotencyKey, setRefundIdempotencyKey] = useState(() =>
+    (typeof window !== 'undefined' && window.crypto?.randomUUID)
+      ? window.crypto.randomUUID()
+      : 'ref_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
+  );
 
   const fetchRefunds = async () => {
     if (!sale || !sale.id) return;
@@ -119,20 +124,40 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
 
     if (refundItems.length === 0) return;
 
+    const currentKey = refundIdempotencyKey || (
+      (typeof window !== 'undefined' && window.crypto?.randomUUID)
+        ? window.crypto.randomUUID()
+        : 'ref_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
+    );
+    if (!refundIdempotencyKey) {
+      setRefundIdempotencyKey(currentKey);
+    }
+
     setIsSubmittingRefund(true);
     try {
       const response = await api.post(`/api/sales/${sale.id}/refund`, {
-        items: refundItems
+        items: refundItems,
+        idempotencyKey: currentKey
+      }, {
+        headers: {
+          'Idempotency-Key': currentKey
+        }
       });
       
       sale.status = response.data.saleStatus.toUpperCase();
       setShowRefundModal(false);
       setRefundQuantities({});
       setRefundReasons({});
+      setRefundIdempotencyKey(
+        (typeof window !== 'undefined' && window.crypto?.randomUUID)
+          ? window.crypto.randomUUID()
+          : 'ref_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
+      );
       fetchRefunds();
       if (onClose) onClose();
       window.location.reload();
     } catch (err) {
+      // Keep refundIdempotencyKey unchanged so that user retrying uses the identical idempotency key
       alert(err.response?.data?.error || 'Failed to submit refund.');
     } finally {
       setIsSubmittingRefund(false);
