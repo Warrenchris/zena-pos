@@ -11,7 +11,7 @@ const SaleItem = require('../models/SaleItem');
 const Product = require('../models/Product');
 const { validateEmployee } = require('../utils/validation');
 const sequelize = require('../config/database');
-const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
+const { REALIZED_SALE_FILTER, withSaleFilter } = require('../constants/saleFilters');
 const entitlementService = require('../services/entitlementService');
 const { sendUpgradePrompt } = require('../utils/upgradePrompt');
 const staffCreationService = require('../services/staffCreationService');
@@ -159,18 +159,17 @@ exports.getEmployeeById = async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 10;
     const offset = (page - 1) * limit;
 
-    const saleWhere = {
+    const saleWhere = withSaleFilter({
       shopId,
-      ...NON_CANCELLED_SALE_FILTER,
       [isUser ? 'userId' : 'employeeId']: targetId
-    };
+    }, REALIZED_SALE_FILTER);
 
     // 1. Sales Performance Stats
     const salesStats = await Sale.findOne({
       where: saleWhere,
       attributes: [
         [sequelize.fn('COUNT', sequelize.col('id')), 'totalSales'],
-        [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('total')), 0), 'totalRevenue'],
+        [sequelize.literal("COALESCE(SUM(GREATEST(0, total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))), 0)"), 'totalRevenue'],
         [sequelize.fn('MIN', sequelize.col('createdAt')), 'firstSaleDate'],
         [sequelize.fn('MAX', sequelize.col('createdAt')), 'lastSaleDate']
       ],
@@ -184,11 +183,7 @@ exports.getEmployeeById = async (req, res) => {
     const lastSaleDate = salesStats?.lastSaleDate || null;
 
     // 2. Paginated Sales History
-    const historyWhere = {
-      shopId,
-      ...NON_CANCELLED_SALE_FILTER,
-      [isUser ? 'userId' : 'employeeId']: targetId
-    };
+    const historyWhere = saleWhere;
 
     const { count: orderCount, rows: sales } = await Sale.findAndCountAll({
       where: historyWhere,

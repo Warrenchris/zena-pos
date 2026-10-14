@@ -271,6 +271,68 @@ exports.getSalesSummary = async (req, res) => {
   }
 };
 
+const round2 = (num) => Math.round((parseFloat(num || 0) + Number.EPSILON) * 100) / 100;
+
+/**
+ * Resolves pre-tax net refund amount, refunded tax amount, and gross refund amount
+ * from a SaleRefund record and its optional parent Sale.
+ *
+ * Priority:
+ * 1. Explicit metadata.netAmount / metadata.taxAmount (handling tax-inclusive parent sales).
+ * 2. Proportional pre-tax fallback from parent Sale ((total - tax) / total) for legacy refunds without metadata.
+ * 3. Gross amount with 0 tax when the parent sale had no tax.
+ */
+function resolveRefundPreTaxAndTax(ref) {
+  const grossAmount = parseFloat(ref.amount ?? ref.refundAmount ?? 0) || 0;
+  const meta = ref.metadata || {};
+  const hasMetaTax = meta.taxAmount !== undefined && meta.taxAmount !== null;
+  const hasMetaNet = meta.netAmount !== undefined && meta.netAmount !== null;
+  const parentSale = ref.sale || ref.Sale || null;
+  const isParentTaxInclusive = Boolean(parentSale?.metadata?.taxInclusive);
+
+  if (hasMetaTax || hasMetaNet) {
+    const taxAmt = hasMetaTax ? (parseFloat(meta.taxAmount) || 0) : 0;
+    let netAmt;
+    if (hasMetaNet) {
+      const rawNet = parseFloat(meta.netAmount) || 0;
+      if (isParentTaxInclusive && taxAmt > 0 && Math.abs(rawNet - grossAmount) <= 0.01) {
+        netAmt = Math.max(0, round2(grossAmount - taxAmt));
+      } else {
+        netAmt = rawNet;
+      }
+    } else {
+      netAmt = Math.max(0, round2(grossAmount - taxAmt));
+    }
+    return {
+      netAmount: round2(netAmt),
+      taxAmount: round2(taxAmt),
+      grossAmount: round2(grossAmount)
+    };
+  }
+
+  if (parentSale) {
+    const saleTax = parseFloat(parentSale.tax || 0) || 0;
+    const saleTotal = parseFloat(parentSale.total || 0) || 0;
+    if (saleTax > 0 && saleTotal > 0) {
+      const preTaxSaleBase = Math.max(0, saleTotal - saleTax);
+      const netRatio = preTaxSaleBase / saleTotal;
+      const netAmt = round2(grossAmount * netRatio);
+      const taxAmt = Math.max(0, round2(grossAmount - netAmt));
+      return {
+        netAmount: netAmt,
+        taxAmount: taxAmt,
+        grossAmount: round2(grossAmount)
+      };
+    }
+  }
+
+  return {
+    netAmount: round2(grossAmount),
+    taxAmount: 0,
+    grossAmount: round2(grossAmount)
+  };
+}
+
 // GET /api/reports/profit-loss?startDate=&endDate=
 exports.getProfitAndLoss = async (req, res) => {
   try {
@@ -278,6 +340,7 @@ exports.getProfitAndLoss = async (req, res) => {
     const targetShopId = req.query.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
 
     const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
+    const nonCancelledParentWhere = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
     const expenseWhere = { shopId: targetShopId };
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
@@ -296,7 +359,7 @@ exports.getProfitAndLoss = async (req, res) => {
     ]);
 
     // If subtotal is null in some records, reconstruct revenue from items
-    let revenuePreDiscount = Number(subtotalSum || 0);
+    let revenuePreDiscount = round2(Number(subtotalSum || 0));
     if (!revenuePreDiscount) {
       const row = await SaleItem.findOne({
         include: [{ model: Sale, required: true, where, attributes: [] }],
@@ -305,15 +368,41 @@ exports.getProfitAndLoss = async (req, res) => {
         ],
         raw: true
       });
-      revenuePreDiscount = Number(row?.amount || 0);
+      revenuePreDiscount = round2(Number(row?.amount || 0));
     }
-    const totalDiscount = Number(discountSum || 0);
+    const totalDiscount = round2(Number(discountSum || 0));
     const refundWhere = { shopId: targetShopId, status: 'processed' };
     if (where.createdAt) {
       refundWhere.createdAt = where.createdAt;
     }
-    const totalRefunds = Number(await SaleRefund.sum('amount', { where: refundWhere }) || 0);
-    const revenue = Math.max(0, revenuePreDiscount - totalDiscount - totalRefunds);
+
+    const processedRefundRows = await SaleRefund.findAll({
+      where: refundWhere,
+      include: [
+        {
+          model: Sale,
+          as: 'sale',
+          required: true,
+          where: nonCancelledParentWhere,
+          attributes: ['id', 'subtotal', 'discount', 'tax', 'total', 'metadata']
+        }
+      ]
+    });
+
+    let preTaxRefundSum = 0;
+    let refundedTaxSum = 0;
+    let grossRefundSum = 0;
+    for (const ref of processedRefundRows) {
+      const { netAmount, taxAmount, grossAmount } = resolveRefundPreTaxAndTax(ref);
+      preTaxRefundSum += netAmount;
+      refundedTaxSum += taxAmount;
+      grossRefundSum += grossAmount;
+    }
+
+    const totalRefunds = round2(preTaxRefundSum);
+    const grossRefunds = round2(grossRefundSum);
+    const refundedTax = round2(refundedTaxSum);
+    const revenue = round2(Math.max(0, revenuePreDiscount - totalDiscount - totalRefunds));
 
     // COGS from items (quantity * Product.cost)
     const cogsRow = await SaleItem.findOne({
@@ -324,12 +413,13 @@ exports.getProfitAndLoss = async (req, res) => {
       attributes: [[sequelize.literal('SUM(SaleItem.quantity * COALESCE(Product.cost, 0))'), 'cogs']],
       raw: true
     });
-    const grossCogs = Number(cogsRow?.cogs || 0);
+    const grossCogs = round2(Number(cogsRow?.cogs || 0));
 
-    // Subtract cost of restocked returned items from COGS
+    // Subtract cost of restocked returned items from COGS (excluding refunds on cancelled sales)
     const refundCogsRow = await SaleRefund.findOne({
       include: [
-        { model: Product, as: 'product', required: true, attributes: [] }
+        { model: Product, as: 'product', required: true, attributes: [] },
+        { model: Sale, as: 'sale', required: true, where: nonCancelledParentWhere, attributes: [] }
       ],
       where: {
         ...refundWhere,
@@ -338,19 +428,20 @@ exports.getProfitAndLoss = async (req, res) => {
       attributes: [[sequelize.literal('SUM(SaleRefund.quantity * COALESCE(product.cost, 0))'), 'returnedCogs']],
       raw: true
     });
-    const returnedCogs = Number(refundCogsRow?.returnedCogs || 0);
-    const cogs = Math.max(0, grossCogs - returnedCogs);
+    const returnedCogs = round2(Number(refundCogsRow?.returnedCogs || 0));
+    const cogs = round2(Math.max(0, grossCogs - returnedCogs));
 
     // Operating expenses
-    const operatingExpenses = Number(await Expense.sum('amount', { where: expenseWhere }) || 0);
+    const operatingExpenses = round2(Number(await Expense.sum('amount', { where: expenseWhere }) || 0));
 
-    const grossProfit = revenue - cogs;
-    const profit = grossProfit - operatingExpenses;
+    const grossProfit = round2(revenue - cogs);
+    const profit = round2(grossProfit - operatingExpenses);
 
     // Backward-compatible fields
     const grossRevenue = revenuePreDiscount; // pre-discount, pre-tax subtotal
-    const totalTax = Number(taxSum || 0);
-    const netRevenue = revenue; // after discounts, before tax
+    const grossTax = round2(Number(taxSum || 0));
+    const totalTax = round2(Math.max(0, grossTax - refundedTax));
+    const netRevenue = revenue; // after discounts and pre-tax refunds, before tax
     const totalExpenses = operatingExpenses;
 
     res.json({
@@ -361,9 +452,12 @@ exports.getProfitAndLoss = async (req, res) => {
       operatingExpenses,
       profit,
       totalRefunds,
+      grossRefunds,
+      refundedTax,
       returnedCogs,
       // Legacy fields (kept for UI compatibility)
       grossRevenue,
+      grossTax,
       totalTax,
       totalDiscount,
       netRevenue,
@@ -381,6 +475,7 @@ exports.getTaxEstimate = async (req, res) => {
     const { startDate, endDate, rate } = req.query;
     const targetShopId = req.query.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
     const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
+    const nonCancelledParentWhere = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
 
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
@@ -400,7 +495,7 @@ exports.getTaxEstimate = async (req, res) => {
           model: Sale,
           required: true,
           where,
-          attributes: ['id', 'createdAt', 'taxRate']
+          attributes: ['id', 'createdAt', 'taxRate', 'metadata']
         },
         {
           model: Product,
@@ -418,12 +513,23 @@ exports.getTaxEstimate = async (req, res) => {
       attributes: ['id', 'productId', 'quantity', 'unitPrice', 'price', 'subtotal', 'discount', 'taxRate', 'taxAmount', 'metadata']
     });
 
-    // Query refunds for sales within date range to deduct refunded tax and revenue
+    // Query refunds for non-cancelled sales within date range to deduct refunded tax and revenue
     const refundWhere = { shopId: targetShopId, status: 'processed' };
     if (where.createdAt) {
       refundWhere.createdAt = where.createdAt;
     }
-    const refunds = await SaleRefund.findAll({ where: refundWhere });
+    const refunds = await SaleRefund.findAll({
+      where: refundWhere,
+      include: [
+        {
+          model: Sale,
+          as: 'sale',
+          required: true,
+          where: nonCancelledParentWhere,
+          attributes: ['id', 'subtotal', 'discount', 'tax', 'total', 'taxRate', 'metadata']
+        }
+      ]
+    });
 
     const breakdown = {
       standard: { taxableAmount: 0, taxAmount: 0, taxRate: 16.00, count: 0 },
@@ -447,8 +553,10 @@ exports.getTaxEstimate = async (req, res) => {
       const lineQuantity = parseInt(item.quantity || 1, 10);
       const unitPrice = parseFloat(item.unitPrice || item.price || 0);
       const gross = lineQuantity * unitPrice;
-      const subtotal = parseFloat(item.subtotal !== undefined && item.subtotal !== null ? item.subtotal : gross);
+      const rawSubtotal = parseFloat(item.subtotal !== undefined && item.subtotal !== null ? item.subtotal : gross);
       const lineTax = parseFloat(item.taxAmount || 0);
+      const isInclusive = Boolean(item.Sale?.metadata?.taxInclusive);
+      const subtotal = isInclusive ? Math.max(0, round2(rawSubtotal - lineTax)) : rawSubtotal;
 
       breakdown[cat].taxableAmount += subtotal;
       breakdown[cat].taxAmount += lineTax;
@@ -458,20 +566,7 @@ exports.getTaxEstimate = async (req, res) => {
       totalTaxableRevenue += subtotal;
     }
 
-    // Deduct refunded tax and amounts by category
-    for (const ref of refunds) {
-      const refCategory = ref.metadata?.taxCategory || (parseFloat(ref.metadata?.taxRate || 0) > 0 ? 'standard' : 'exempt');
-      const cat = ['standard', 'zero_rated', 'exempt'].includes(refCategory) ? refCategory : 'standard';
-      const refTax = parseFloat(ref.metadata?.taxAmount || 0);
-      const refNet = parseFloat(ref.metadata?.netAmount || ref.amount || 0);
-
-      breakdown[cat].taxAmount = Math.max(0, breakdown[cat].taxAmount - refTax);
-      breakdown[cat].taxableAmount = Math.max(0, breakdown[cat].taxableAmount - refNet);
-      totalRecordedTax = Math.max(0, totalRecordedTax - refTax);
-      totalTaxableRevenue = Math.max(0, totalTaxableRevenue - refNet);
-    }
-
-    // If no SaleItems exist (e.g. legacy sales without item rows), fall back to Sale sums
+    // If no SaleItems exist (e.g. legacy sales without item rows), fall back to Sale sums before deducting refunds
     if (saleItems.length === 0) {
       const [saleSubtotalSum, saleTaxSum] = await Promise.all([
         Sale.sum('subtotal', { where }),
@@ -485,7 +580,17 @@ exports.getTaxEstimate = async (req, res) => {
       breakdown.standard.taxAmount = legacyTax;
     }
 
-    const round2 = (num) => Math.round((parseFloat(num || 0) + Number.EPSILON) * 100) / 100;
+    // Deduct refunded tax and pre-tax amounts by category
+    for (const ref of refunds) {
+      const { netAmount: refNet, taxAmount: refTax } = resolveRefundPreTaxAndTax(ref);
+      const refCategory = ref.metadata?.taxCategory || (parseFloat(ref.metadata?.taxRate || 0) > 0 || refTax > 0 ? 'standard' : 'exempt');
+      const cat = ['standard', 'zero_rated', 'exempt'].includes(refCategory) ? refCategory : 'standard';
+
+      breakdown[cat].taxAmount = Math.max(0, breakdown[cat].taxAmount - refTax);
+      breakdown[cat].taxableAmount = Math.max(0, breakdown[cat].taxableAmount - refNet);
+      totalRecordedTax = Math.max(0, totalRecordedTax - refTax);
+      totalTaxableRevenue = Math.max(0, totalTaxableRevenue - refNet);
+    }
 
     res.json({
       taxableRevenue: round2(totalTaxableRevenue),
