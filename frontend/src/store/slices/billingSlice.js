@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import billingService from '../../services/billing.service';
+import { logout } from './authSlice';
 
 export const fetchPlans = createAsyncThunk(
   'billing/fetchPlans',
@@ -148,6 +149,9 @@ const billingSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Drop cached subscription/errors on logout so the next login re-fetches cleanly
+      .addCase(logout, () => initialState)
+
       // fetchPlans
       .addCase(fetchPlans.pending, (state) => {
         state.loading.plans = true;

@@ -455,7 +455,7 @@ const analyticsController = {
         WHERE s.shopId = :shopId
           AND ${buildRealizedSaleSqlCondition('s')}
           AND s.createdAt BETWEEN :startDate AND :endDate
-          AND p.shopId = :shopId
+          AND (p.shopId = :shopId OR p.shopId IS NULL)
           ${employeeCondition}
         GROUP BY p.id, p.name, p.price, p.sku
         HAVING quantity > 0

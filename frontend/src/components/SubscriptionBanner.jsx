@@ -20,7 +20,7 @@ import { fetchSubscription } from '../store/slices/billingSlice';
 export default function SubscriptionBanner() {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
-  const { subscription, loading } = useSelector((state) => state.billing);
+  const { subscription, loading, error } = useSelector((state) => state.billing);
 
   const [isDismissed, setIsDismissed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -30,10 +30,11 @@ export default function SubscriptionBanner() {
   });
 
   useEffect(() => {
-    if (!subscription && !loading.subscription && user) {
+    // Skip when a previous attempt failed to avoid a re-fetch loop on 4xx/5xx.
+    if (!subscription && !loading.subscription && !error?.subscription && user) {
       dispatch(fetchSubscription());
     }
-  }, [subscription, loading.subscription, user, dispatch]);
+  }, [subscription, loading.subscription, error?.subscription, user, dispatch]);
 
   if (isDismissed || !subscription) {
     return null;

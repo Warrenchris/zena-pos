@@ -11,6 +11,43 @@ export function useToast() {
   return context;
 }
 
+const KNOWN_TOAST_TYPES = new Set(['success', 'error', 'warning', 'info']);
+
+export const normalizeToastArgs = (arg1, arg2, arg3) => {
+  // If first argument is an object (and not null/array)
+  if (typeof arg1 === 'object' && arg1 !== null) {
+    const { type = 'info', title, message, duration = 4000, id } = arg1;
+    return {
+      type: KNOWN_TOAST_TYPES.has(type) ? type : 'info',
+      title,
+      message,
+      duration: typeof duration === 'number' ? duration : 4000,
+      id
+    };
+  }
+
+  // If first argument is a string
+  if (typeof arg1 === 'string') {
+    // Case 1: showToast(type, message, title) -> e.g. showToast('success', 'Saved!', 'Title')
+    if (KNOWN_TOAST_TYPES.has(arg1.toLowerCase())) {
+      const type = arg1.toLowerCase();
+      const message = typeof arg2 === 'string' ? arg2 : '';
+      const title = typeof arg3 === 'string' ? arg3 : undefined;
+      return { type, message, title, duration: 4000 };
+    }
+
+    // Case 2: showToast(message, type, title) -> e.g. showToast('Item added', 'success')
+    const message = arg1;
+    const type = typeof arg2 === 'string' && KNOWN_TOAST_TYPES.has(arg2.toLowerCase())
+      ? arg2.toLowerCase()
+      : 'info';
+    const title = typeof arg3 === 'string' ? arg3 : undefined;
+    return { type, message, title, duration: 4000 };
+  }
+
+  return { type: 'info', message: String(arg1 || ''), duration: 4000 };
+};
+
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const timeoutsRef = useRef(new Map());
@@ -26,8 +63,9 @@ export function ToastProvider({ children }) {
   useEffect(() => {
     // Make toast function globally accessible
     if (typeof window !== 'undefined') {
-      window.showToast = ({ type = 'info', title, message, duration = 4000, id }) => {
-        const toastId = id || Math.random().toString(36).substring(2, 11);
+      window.showToast = (arg1, arg2, arg3) => {
+        const normalized = normalizeToastArgs(arg1, arg2, arg3);
+        const toastId = normalized.id || Math.random().toString(36).substring(2, 11);
 
         setToasts(current => {
           // If a toast with the same id already exists, ignore duplicate
@@ -39,11 +77,11 @@ export function ToastProvider({ children }) {
           const timeoutId = setTimeout(() => {
             timeoutsRef.current.delete(toastId);
             setToasts(curr => curr.filter(toast => toast.id !== toastId));
-          }, duration);
+          }, normalized.duration);
 
           timeoutsRef.current.set(toastId, timeoutId);
 
-          const newToast = { id: toastId, type, title, message, duration };
+          const newToast = { ...normalized, id: toastId };
           const nextToasts = [...current, newToast];
 
           // Keep at most 3 toasts visible to prevent vertical clutter
@@ -72,9 +110,9 @@ export function ToastProvider({ children }) {
     };
   }, []);
 
-  const showToast = ({ type = 'info', title, message, duration = 4000, id }) => {
+  const showToast = (arg1, arg2, arg3) => {
     if (window.showToast) {
-      window.showToast({ type, title, message, duration, id });
+      window.showToast(arg1, arg2, arg3);
     }
   };
 
@@ -82,7 +120,7 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       <div
-        className="fixed z-[9999] pointer-events-none flex flex-col gap-3 items-center bottom-5 left-4 right-4 pb-[env(safe-area-inset-bottom)] md:items-end md:bottom-5 md:right-5 md:left-auto max-w-md w-full sm:w-auto"
+        className="fixed z-[9999] pointer-events-none flex flex-col gap-3 items-center top-4 left-4 right-4 md:items-end md:top-5 md:right-5 md:left-auto max-w-md w-full sm:w-auto"
         aria-live="polite"
         role="region"
         aria-label="Notifications"
@@ -148,7 +186,7 @@ function Toast({ type = 'info', title, message, duration = 4000, onClose }) {
             </p>
           )}
           {message && (
-            <p className="mt-1 text-sm text-text-secondary break-words whitespace-normal leading-relaxed font-normal">
+            <p className={`${title ? 'mt-1 text-sm text-text-secondary' : 'text-sm font-medium text-text-primary'} break-words whitespace-normal leading-relaxed`}>
               {message}
             </p>
           )}
