@@ -112,6 +112,11 @@ export default function SalesReturns() {
   const [refundMethod, setRefundMethod] = useState('cash');
   const [submittingRefund, setSubmittingRefund] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [refundIdempotencyKey, setRefundIdempotencyKey] = useState(() =>
+    (typeof window !== 'undefined' && window.crypto?.randomUUID)
+      ? window.crypto.randomUUID()
+      : 'ref_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
+  );
 
   // Priority 2: Manager Approval Modal State
   const [showManagerModal, setShowManagerModal] = useState(false);
@@ -307,9 +312,19 @@ export default function SalesReturns() {
       reasonNotes: item.reasonNotes || ''
     }));
 
+    const currentKey = refundIdempotencyKey || (
+      (typeof window !== 'undefined' && window.crypto?.randomUUID)
+        ? window.crypto.randomUUID()
+        : 'ref_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
+    );
+    if (!refundIdempotencyKey) {
+      setRefundIdempotencyKey(currentKey);
+    }
+
     const payload = {
       items: payloadItems,
       refundMethod,
+      idempotencyKey: currentKey,
       managerApprovalId: overrideManagerId || undefined,
       managerPassword: overrideManagerPassword || undefined,
       adminOverride: adminOverrideActive || undefined
@@ -318,12 +333,21 @@ export default function SalesReturns() {
     setSubmittingRefund(true);
 
     try {
-      await salesAPI.processRefund(selectedSaleId, payload);
+      await salesAPI.processRefund(selectedSaleId, payload, {
+        headers: {
+          'Idempotency-Key': currentKey
+        }
+      });
 
       showToast('success', 'Return processed successfully and inventory updated!');
       setShowProcessModal(false);
       setShowManagerModal(false);
       setManagerPassword('');
+      setRefundIdempotencyKey(
+        (typeof window !== 'undefined' && window.crypto?.randomUUID)
+          ? window.crypto.randomUUID()
+          : 'ref_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
+      );
       fetchReturns();
     } catch (err) {
       console.error('Error processing refund:', err);

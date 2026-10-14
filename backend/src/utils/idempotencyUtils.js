@@ -92,6 +92,29 @@ function isIdempotencyUniqueError(err) {
 }
 
 /**
+ * Determines whether a database error is a unique constraint collision specifically
+ * on the RefundIdempotencies unique index uk_refund_idemp_shop_key.
+ */
+function isRefundIdempotencyUniqueError(err) {
+  if (!err) return false;
+
+  const isUniqueConstraint = err.name === 'SequelizeUniqueConstraintError' ||
+    err.parent?.code === 'ER_DUP_ENTRY' ||
+    err.original?.code === 'ER_DUP_ENTRY';
+
+  if (!isUniqueConstraint) return false;
+
+  if (err.fields && (err.fields.idempotencyKey !== undefined || err.fields['RefundIdempotencies.idempotencyKey'] !== undefined)) {
+    return true;
+  }
+
+  const message = (err.message || '') + (err.parent?.message || '') + (err.original?.message || '');
+  return message.includes('unique_refund_idempotency_shop_key') ||
+    message.includes('RefundIdempotencies') ||
+    (message.includes('idempotencyKey') && !message.includes('unique_sales_shop_idempotency_key'));
+}
+
+/**
  * Generates a deterministic SHA-256 fingerprint of a refund request payload.
  *
  * PURPOSE
@@ -163,5 +186,6 @@ module.exports = {
   normalizeIdempotencyKey,
   generateSaleFingerprint,
   generateRefundFingerprint,
-  isIdempotencyUniqueError
+  isIdempotencyUniqueError,
+  isRefundIdempotencyUniqueError
 };
