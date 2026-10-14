@@ -54,11 +54,15 @@ class ProductForecastItem(BaseModel):
     product_name: str
     current_stock: float
     daily_sales: List[dict]
+    lookback_days: Optional[int] = None
+    reference_date: Optional[str] = None
 
 
 class StockDepletionRequest(BaseModel):
     products: List[ProductForecastItem]
     alert_threshold_days: int = 7
+    lookback_days: Optional[int] = None
+    reference_date: Optional[str] = None
 
 
 def _quality_label(mape: Optional[float]) -> str:
@@ -353,11 +357,146 @@ def _safe_float(val, default: float = 0.0) -> float:
         return default
 
 
+def _parse_and_calendarize_sales(
+    daily_sales: List[dict],
+    lookback_days: Optional[int] = None,
+    reference_date: Optional[str] = None
+):
+    """
+    Parse sparse daily_sales observations, aggregate duplicate dates, prevent
+    future-data leakage beyond the reference/anchor date, and calendarize over
+    the continuous daily observation window by filling zero-sales days with 0.0.
+
+    Lookback & anchor semantics:
+    1. If reference_date is provided, anchor_dt is normalized reference_date and
+       any observations after anchor_dt are excluded to avoid future-data leakage.
+    2. Otherwise, if the latest observed sale date falls within the active lookback
+       window relative to today UTC (default 90 days), anchor_dt is today UTC so
+       trailing zero-sales days after a stale last-sale date are included.
+       If the latest observed date is older than the lookback window (e.g., a
+       deterministic historical test fixture), anchor_dt defaults to max_dt.
+    3. When lookback_days is specified, the observation window spans at least
+       lookback_days ending at anchor_dt; otherwise it spans (anchor_dt - min_dt) + 1.
+    """
+    if not daily_sales:
+        eff_window = max(1, int(lookback_days)) if (lookback_days and int(lookback_days) > 0) else 0
+        return pd.DataFrame(columns=["ds", "y"]), eff_window, None
+
+    records = []
+    for d in daily_sales:
+        if not isinstance(d, dict):
+            raise ValueError("Each daily_sales entry must be a dict")
+        raw_date = d.get("date")
+        if raw_date is None or (isinstance(raw_date, str) and not raw_date.strip()):
+            raise ValueError("Missing date in daily_sales entry")
+        dt = pd.to_datetime(raw_date, errors="raise")
+        if getattr(dt, "tzinfo", None) is not None or getattr(dt, "tz", None) is not None:
+            dt = pd.Timestamp(dt).tz_convert("UTC").tz_localize(None)
+        else:
+            dt = pd.Timestamp(dt)
+        dt = dt.normalize()
+
+        raw_qty = d.get("quantity", 0)
+        try:
+            qty = float(raw_qty)
+            if math.isnan(qty) or math.isinf(qty):
+                raise ValueError(f"Non-finite quantity: {raw_qty}")
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid quantity in daily_sales: {raw_qty}") from exc
+
+        records.append({"ds": dt, "y": max(0.0, qty)})
+
+    df = pd.DataFrame(records)
+    grouped = df.groupby("ds", as_index=False)["y"].sum().sort_values("ds").reset_index(drop=True)
+
+    today_dt = pd.Timestamp.utcnow().tz_localize(None).normalize()
+    max_window = int(lookback_days) if (lookback_days is not None and int(lookback_days) > 0) else 90
+
+    if reference_date is not None and str(reference_date).strip():
+        ref_dt = pd.to_datetime(reference_date, errors="raise")
+        if getattr(ref_dt, "tzinfo", None) is not None or getattr(ref_dt, "tz", None) is not None:
+            ref_dt = pd.Timestamp(ref_dt).tz_convert("UTC").tz_localize(None)
+        else:
+            ref_dt = pd.Timestamp(ref_dt)
+        anchor_dt = ref_dt.normalize()
+        grouped = grouped[grouped["ds"] <= anchor_dt].reset_index(drop=True)
+    else:
+        # Exclude accidental future-dated rows relative to today when today_dt >= min_dt
+        if grouped["ds"].min() <= today_dt and grouped["ds"].max() > today_dt:
+            grouped = grouped[grouped["ds"] <= today_dt].reset_index(drop=True)
+
+        if grouped.empty:
+            eff_window = max(1, int(lookback_days)) if (lookback_days and int(lookback_days) > 0) else 1
+            return pd.DataFrame(columns=["ds", "y"]), eff_window, today_dt
+
+        max_dt = grouped["ds"].max()
+        days_since_last = (today_dt - max_dt).days
+        if 0 < days_since_last <= max_window:
+            anchor_dt = today_dt
+        else:
+            anchor_dt = max_dt
+
+    if grouped.empty:
+        eff_window = max(1, int(lookback_days)) if (lookback_days and int(lookback_days) > 0) else 1
+        full_idx = pd.date_range(
+            start=anchor_dt - pd.Timedelta(days=eff_window - 1),
+            end=anchor_dt,
+            freq="D"
+        )
+        cal_df = pd.DataFrame({"ds": full_idx, "y": 0.0})
+        return cal_df, eff_window, anchor_dt
+
+    min_dt = grouped["ds"].min()
+    span_days = max(1, int((anchor_dt - min_dt).days) + 1)
+
+    if lookback_days is not None and int(lookback_days) > 0:
+        window_days = max(int(lookback_days), span_days)
+        start_dt = min(min_dt, anchor_dt - pd.Timedelta(days=window_days - 1))
+    else:
+        window_days = span_days
+        start_dt = min_dt
+
+    full_index = pd.date_range(start=start_dt, end=anchor_dt, freq="D")
+    cal_df = (
+        grouped.set_index("ds")
+        .reindex(full_index, fill_value=0.0)
+        .rename_axis("ds")
+        .reset_index()
+    )
+    return cal_df, len(cal_df), anchor_dt
+
+
 def _linear_depletion(product: ProductForecastItem, alert_threshold_days: int, algorithm: str = "linear_extrapolation") -> dict:
+    current_stock = _safe_float(product.current_stock, 0.0)
+    if current_stock <= 0:
+        return {
+            "product_id": product.product_id,
+            "product_name": product.product_name,
+            "current_stock": product.current_stock,
+            "days_until_depletion": 0.0,
+            "alert": 0 <= alert_threshold_days,
+            "algorithm": algorithm,
+            "confidence": "low",
+            "data_points": len(product.daily_sales)
+        }
+
     if len(product.daily_sales) > 0:
-        valid_quantities = [_safe_float(d.get('quantity', 0)) for d in product.daily_sales]
-        avg_daily = sum(valid_quantities) / len(product.daily_sales)
-        days = product.current_stock / avg_daily if avg_daily > 0 else 999
+        try:
+            cal_df, window_days, _ = _parse_and_calendarize_sales(
+                product.daily_sales,
+                lookback_days=getattr(product, "lookback_days", None),
+                reference_date=getattr(product, "reference_date", None)
+            )
+            total_qty = float(cal_df["y"].sum()) if not cal_df.empty else 0.0
+            denom = max(1, window_days)
+            avg_daily = total_qty / denom if denom > 0 else 0.0
+        except Exception:
+            valid_quantities = [max(0.0, _safe_float(d.get('quantity', 0))) for d in product.daily_sales if isinstance(d, dict)]
+            fallback_window = getattr(product, "lookback_days", None)
+            denom = max(1, int(fallback_window) if (fallback_window and int(fallback_window) > 0) else len(product.daily_sales))
+            avg_daily = sum(valid_quantities) / denom if denom > 0 else 0.0
+
+        days = current_stock / avg_daily if avg_daily > 0 else 999
     else:
         days = 999
 
@@ -383,32 +522,49 @@ def _fit_single_prophet_product(product: ProductForecastItem, alert_threshold_da
         import pandas as pd
         from prophet import Prophet
 
-        df = pd.DataFrame(product.daily_sales)
-        df = df.rename(columns={'date': 'ds', 'quantity': 'y'})
-        df['ds'] = pd.to_datetime(df['ds'])
-        df['y'] = pd.to_numeric(df['y'], errors='coerce').fillna(0)
+        cal_df, window_days, anchor_dt = _parse_and_calendarize_sales(
+            product.daily_sales,
+            lookback_days=getattr(product, "lookback_days", None),
+            reference_date=getattr(product, "reference_date", None)
+        )
+
+        if cal_df is None or len(cal_df) < 2 or anchor_dt is None:
+            raise ValueError("Insufficient valid daily sales observations for Prophet")
+
+        current_stock = _safe_float(product.current_stock, 0.0)
+        if current_stock <= 0:
+            return {
+                "product_id": product.product_id,
+                "product_name": product.product_name,
+                "current_stock": product.current_stock,
+                "days_until_depletion": 0,
+                "alert": 0 <= alert_threshold_days,
+                "algorithm": "prophet",
+                "confidence": "high" if len(product.daily_sales) >= 60 else "medium",
+                "data_points": len(product.daily_sales)
+            }
 
         m = Prophet(
             daily_seasonality=False,
             weekly_seasonality=True,
-            yearly_seasonality=len(product.daily_sales) > 180,
+            yearly_seasonality=len(cal_df) > 180,
             changepoint_prior_scale=0.05,
             interval_width=0.80
         )
-        m.fit(df)
+        m.fit(cal_df[['ds', 'y']])
 
         future = m.make_future_dataframe(periods=60)
         forecast = m.predict(future)
-        future_forecast = forecast[forecast['ds'] > df['ds'].max()]
+        future_forecast = forecast[forecast['ds'] > anchor_dt]
 
         cumulative = 0.0
         days_until_depletion = 60
 
         for _, row in future_forecast.iterrows():
-            daily_demand = max(0, row['yhat'])
+            daily_demand = max(0.0, float(row['yhat']))
             cumulative += daily_demand
-            days = (row['ds'] - df['ds'].max()).days
-            if cumulative >= product.current_stock:
+            days = (row['ds'] - anchor_dt).days
+            if cumulative >= current_stock:
                 days_until_depletion = days
                 break
 
@@ -442,8 +598,13 @@ async def stock_depletion_forecast(
     results = []
     prophet_candidates = []
 
-    # 1. Immediate linear extrapolation for products with sparse data (< 14 daily sales)
+    # 1. Propagate request-level lookback_days / reference_date and route sparse products (< 14 daily sales)
     for product in request.products:
+        if product.lookback_days is None and request.lookback_days is not None:
+            product.lookback_days = request.lookback_days
+        if product.reference_date is None and request.reference_date is not None:
+            product.reference_date = request.reference_date
+
         if len(product.daily_sales) < 14:
             results.append(_linear_depletion(product, request.alert_threshold_days))
         else:

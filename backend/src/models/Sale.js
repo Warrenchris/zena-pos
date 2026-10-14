@@ -99,6 +99,10 @@ const Sale = sequelize.define('Sale', {
     type: DataTypes.ENUM('pos', 'online', 'phone', 'mobile_app'),
     defaultValue: 'pos'
   },
+  status: {
+    type: DataTypes.ENUM('pending', 'completed', 'cancelled'),
+    allowNull: true
+  },
   saleStatus: {
     type: DataTypes.ENUM(
       'pending', 

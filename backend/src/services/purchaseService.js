@@ -78,7 +78,13 @@ async function applyStockReceipt({ shopId, items, reference, userId, employeeId,
     }
   }
 
-  for (const item of items) {
+  // Sort items by productId ascending before acquiring row locks.
+  // This matches the lock-acquisition order used by processRefund and
+  // restoreSaleInventoryIfNeeded, preventing lock-inversion deadlocks under
+  // concurrent checkout + refund/cancellation traffic (H-01).
+  const sortedItems = [...items].sort((a, b) => Number(a.productId) - Number(b.productId));
+
+  for (const item of sortedItems) {
     const qty = parseFloat(item.quantity || item.quantityReceived || 0);
     const unitCost = parseFloat(item.unitCost || 0);
 
@@ -185,7 +191,11 @@ async function reverseStockReceipt({ shopId, items, reference, userId, employeeI
     }
   }
 
-  for (const item of items) {
+  // Sort items by productId ascending before acquiring row locks.
+  // Consistent with applyStockReceipt, processRefund, and restoreSaleInventoryIfNeeded (H-01).
+  const sortedItems = [...items].sort((a, b) => Number(a.productId) - Number(b.productId));
+
+  for (const item of sortedItems) {
     const qty = parseFloat(item.quantity || 0);
 
     if (qty > 0 && item.productId) {

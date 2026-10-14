@@ -473,8 +473,8 @@ export const salesAPI = {
   getMySales: (params) =>
     api.get('/api/sales/my-sales', { params }),
   // Refund & Returns endpoints
-  processRefund: (saleId, refundData) =>
-    api.post(`/api/sales/${saleId}/refund`, refundData),
+  processRefund: (saleId, refundData, config) =>
+    api.post(`/api/sales/${saleId}/refund`, refundData, config),
   getRefunds: (saleId) =>
     api.get(`/api/sales/${saleId}/refunds`),
   getAllReturns: () =>
