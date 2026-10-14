@@ -14,13 +14,16 @@ export function useEntitlement(featureKey) {
   const user = useSelector((state) => state.auth?.user);
   const subscription = useSelector((state) => state.billing?.subscription);
   const loading = useSelector((state) => Boolean(state.billing?.loading?.subscription));
+  const subscriptionError = useSelector((state) => state.billing?.error?.subscription);
 
   // Self-hydrate subscription if not yet loaded
   useEffect(() => {
-    if (!subscription && !loading && user) {
+    // Skip when a previous attempt failed: a rejected fetch leaves subscription null
+    // and loading false, which would otherwise re-trigger this effect in a tight loop.
+    if (!subscription && !loading && !subscriptionError && user) {
       dispatch(fetchSubscription());
     }
-  }, [subscription, loading, user, dispatch]);
+  }, [subscription, loading, subscriptionError, user, dispatch]);
 
   return useMemo(() => {
     if (loading && !subscription) {
@@ -95,13 +98,16 @@ export function useQuota(quotaKey) {
   const subscription = useSelector((state) => state.billing?.subscription);
   const quotas = useSelector((state) => state.billing?.quotas);
   const loading = useSelector((state) => Boolean(state.billing?.loading?.subscription));
+  const subscriptionError = useSelector((state) => state.billing?.error?.subscription);
 
   // Self-hydrate subscription if not yet loaded
   useEffect(() => {
-    if (!subscription && !loading && user) {
+    // Skip when a previous attempt failed: a rejected fetch leaves subscription null
+    // and loading false, which would otherwise re-trigger this effect in a tight loop.
+    if (!subscription && !loading && !subscriptionError && user) {
       dispatch(fetchSubscription());
     }
-  }, [subscription, loading, user, dispatch]);
+  }, [subscription, loading, subscriptionError, user, dispatch]);
 
   return useMemo(() => {
     const normalizedKey = {

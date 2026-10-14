@@ -185,11 +185,14 @@ const dashboardController = {
           [sequelize.fn('SUM', sequelize.col('SaleItem.quantity')), 'totalSold'],
           [sequelize.fn('SUM', sequelize.col('SaleItem.price')), 'totalRevenue']
         ],
+        where: { shopId },
         include: [
           {
             model: Product,
             attributes: ['name', 'price'],
-            where: { shopId },
+            where: {
+              [Op.or]: [{ shopId }, { shopId: null }]
+            },
             required: true
           },
           {

@@ -1,0 +1,155 @@
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 559745c..1e3a119 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -41,6 +41,18 @@ services:
+     networks:
+       - zana-network
+ 
++  # Mailpit: local SMTP catcher for dev (UI at http://localhost:8025).
++  # Set SMTP_HOST=mailpit and SMTP_PORT=1025 in backend/.env.
++  mailpit:
++    image: axllent/mailpit:latest
++    container_name: zana-mailpit
++    ports:
++      - "8025:8025"
++      - "1025:1025"
++    restart: unless-stopped
++    networks:
++      - zana-network
++
+   # Backend Database Migrations (Run once before Backend starts)
+   backend-migrate:
+     build:
+diff --git a/frontend/src/components/SubscriptionBanner.jsx b/frontend/src/components/SubscriptionBanner.jsx
+index 6c2849f..0828316 100644
+--- a/frontend/src/components/SubscriptionBanner.jsx
++++ b/frontend/src/components/SubscriptionBanner.jsx
+@@ -20,7 +20,7 @@ import { fetchSubscription } from '../store/slices/billingSlice';
+ export default function SubscriptionBanner() {
+   const dispatch = useDispatch();
+   const { user } = useSelector((state) => state.auth);
+-  const { subscription, loading } = useSelector((state) => state.billing);
++  const { subscription, loading, error } = useSelector((state) => state.billing);
+ 
+   const [isDismissed, setIsDismissed] = useState(() => {
+     if (typeof window !== 'undefined') {
+@@ -30,10 +30,11 @@ export default function SubscriptionBanner() {
+   });
+ 
+   useEffect(() => {
+-    if (!subscription && !loading.subscription && user) {
++    // Skip when a previous attempt failed to avoid a re-fetch loop on 4xx/5xx.
++    if (!subscription && !loading.subscription && !error?.subscription && user) {
+       dispatch(fetchSubscription());
+     }
+-  }, [subscription, loading.subscription, user, dispatch]);
++  }, [subscription, loading.subscription, error?.subscription, user, dispatch]);
+ 
+   if (isDismissed || !subscription) {
+     return null;
+diff --git a/frontend/src/hooks/__tests__/useEntitlement.noRefetchLoop.test.jsx b/frontend/src/hooks/__tests__/useEntitlement.noRefetchLoop.test.jsx
+new file mode 100644
+index 0000000..05edf52
+--- /dev/null
++++ b/frontend/src/hooks/__tests__/useEntitlement.noRefetchLoop.test.jsx
+@@ -0,0 +1,36 @@
++import React from 'react';
++import { renderHook, waitFor } from '@testing-library/react';
++import { Provider } from 'react-redux';
++import { configureStore } from '@reduxjs/toolkit';
++import billingReducer from '../../store/slices/billingSlice';
++import { useEntitlement } from '../useEntitlement';
++import billingService from '../../services/billing.service';
++
++jest.mock('../../services/billing.service', () => ({
++  __esModule: true,
++  default: { getSubscription: jest.fn(), getPlans: jest.fn(), getInvoices: jest.fn() },
++}));
++
++const makeStore = () =>
++  configureStore({
++    reducer: {
++      billing: billingReducer,
++      auth: (state = { user: { id: 1, orgRole: 'owner' } }) => state,
++    },
++  });
++
++describe('useEntitlement subscription hydration', () => {
++  it('does not re-fetch in a loop after a 403', async () => {
++    billingService.getSubscription.mockRejectedValue({
++      response: { status: 403, data: { code: 'EMAIL_VERIFICATION_REQUIRED', error: 'blocked' } },
++    });
++    const store = makeStore();
++    const wrapper = ({ children }) => <Provider store={store}>{children}</Provider>;
++
++    renderHook(() => useEntitlement('multi_shop'), { wrapper });
++    await waitFor(() => expect(store.getState().billing.error.subscription).toBeTruthy());
++    await new Promise((r) => setTimeout(r, 200));
++
++    expect(billingService.getSubscription).toHaveBeenCalledTimes(1);
++  });
++});
+diff --git a/frontend/src/hooks/useEntitlement.js b/frontend/src/hooks/useEntitlement.js
+index 17ef116..0e052ff 100644
+--- a/frontend/src/hooks/useEntitlement.js
++++ b/frontend/src/hooks/useEntitlement.js
+@@ -14,13 +14,16 @@ export function useEntitlement(featureKey) {
+   const user = useSelector((state) => state.auth?.user);
+   const subscription = useSelector((state) => state.billing?.subscription);
+   const loading = useSelector((state) => Boolean(state.billing?.loading?.subscription));
++  const subscriptionError = useSelector((state) => state.billing?.error?.subscription);
+ 
+   // Self-hydrate subscription if not yet loaded
+   useEffect(() => {
+-    if (!subscription && !loading && user) {
++    // Skip when a previous attempt failed: a rejected fetch leaves subscription null
++    // and loading false, which would otherwise re-trigger this effect in a tight loop.
++    if (!subscription && !loading && !subscriptionError && user) {
+       dispatch(fetchSubscription());
+     }
+-  }, [subscription, loading, user, dispatch]);
++  }, [subscription, loading, subscriptionError, user, dispatch]);
+ 
+   return useMemo(() => {
+     if (loading && !subscription) {
+@@ -95,13 +98,16 @@ export function useQuota(quotaKey) {
+   const subscription = useSelector((state) => state.billing?.subscription);
+   const quotas = useSelector((state) => state.billing?.quotas);
+   const loading = useSelector((state) => Boolean(state.billing?.loading?.subscription));
++  const subscriptionError = useSelector((state) => state.billing?.error?.subscription);
+ 
+   // Self-hydrate subscription if not yet loaded
+   useEffect(() => {
+-    if (!subscription && !loading && user) {
++    // Skip when a previous attempt failed: a rejected fetch leaves subscription null
++    // and loading false, which would otherwise re-trigger this effect in a tight loop.
++    if (!subscription && !loading && !subscriptionError && user) {
+       dispatch(fetchSubscription());
+     }
+-  }, [subscription, loading, user, dispatch]);
++  }, [subscription, loading, subscriptionError, user, dispatch]);
+ 
+   return useMemo(() => {
+     const normalizedKey = {
+diff --git a/frontend/src/store/slices/billingSlice.js b/frontend/src/store/slices/billingSlice.js
+index 0e1c802..4348662 100644
+--- a/frontend/src/store/slices/billingSlice.js
++++ b/frontend/src/store/slices/billingSlice.js
+@@ -1,5 +1,6 @@
+ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+ import billingService from '../../services/billing.service';
++import { logout } from './authSlice';
+ 
+ export const fetchPlans = createAsyncThunk(
+   'billing/fetchPlans',
+@@ -148,6 +149,9 @@ const billingSlice = createSlice({
+   },
+   extraReducers: (builder) => {
+     builder
++      // Drop cached subscription/errors on logout so the next login re-fetches cleanly
++      .addCase(logout, () => initialState)
++
+       // fetchPlans
+       .addCase(fetchPlans.pending, (state) => {
+         state.loading.plans = true;

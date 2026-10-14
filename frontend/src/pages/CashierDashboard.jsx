@@ -840,8 +840,6 @@ export default function CashierDashboard() {
       items: updatedItems,
       total: totals.total
     }));
-
-    showToast(`Added ${product.name} to cart`, 'success');
   };
 
   const commitRemoval = (itemId) => {
