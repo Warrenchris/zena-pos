@@ -16,13 +16,20 @@ const SystemSettings = require('../models/SystemSettings');
 const Inventory = require('../models/Inventory');
 const StockMovement = require('../models/StockMovement');
 const { Shop } = require('../models');
+const RefundIdempotency = require('../models/RefundIdempotency');
 const logger = require('../utils/logger');
 const { parseDate } = require('../utils/dateUtils');
 const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
 const { invalidateShopProductCache } = require('../services/productCache');
-const { normalizeIdempotencyKey, generateSaleFingerprint, generateRefundFingerprint, isIdempotencyUniqueError } = require('../utils/idempotencyUtils');
+const {
+  normalizeIdempotencyKey,
+  generateSaleFingerprint,
+  generateRefundFingerprint,
+  isIdempotencyUniqueError,
+  isRefundIdempotencyUniqueError
+} = require('../utils/idempotencyUtils');
 const { isIntegerId } = require('../utils/idKind');
 const { REALIZED_SALE_FILTER, withSaleFilter } = require('../constants/saleFilters');
 
@@ -1697,33 +1704,82 @@ exports.processRefund = async (req, res) => {
       }
 
       // 2. Idempotency check under the Sale row lock
-      const existingIdempotencyMap = sale.metadata?.refundIdempotency || {};
-      if (cleanIdempotencyKey && existingIdempotencyMap[cleanIdempotencyKey]) {
-        const entry = existingIdempotencyMap[cleanIdempotencyKey];
-        if (entry.fingerprint && entry.fingerprint !== refundFingerprint) {
-          await t.rollback();
-          return res.status(409).json({
-            error: 'Idempotency key has already been used with a different refund payload',
-            code: 'IDEMPOTENCY_KEY_REUSED'
+      if (cleanIdempotencyKey) {
+        // Primary check: dedicated database-level RefundIdempotency table
+        const existingTableRecord = await RefundIdempotency.findOne({
+          where: { shopId, idempotencyKey: cleanIdempotencyKey },
+          lock: t.LOCK.UPDATE,
+          transaction: t
+        });
+
+        if (existingTableRecord) {
+          // Cross-sale protection: prevent replaying or exposing a different sale's refund
+          if (Number(existingTableRecord.saleId) !== Number(sale.id)) {
+            await t.rollback();
+            return res.status(409).json({
+              error: 'Idempotency key has already been used for a different sale',
+              code: 'IDEMPOTENCY_KEY_REUSED'
+            });
+          }
+
+          if (existingTableRecord.requestFingerprint && existingTableRecord.requestFingerprint !== refundFingerprint) {
+            await t.rollback();
+            return res.status(409).json({
+              error: 'Idempotency key has already been used with a different refund payload',
+              code: 'IDEMPOTENCY_KEY_REUSED'
+            });
+          }
+
+          let duplicateRefunds = [];
+          if (Array.isArray(existingTableRecord.refundIds) && existingTableRecord.refundIds.length > 0) {
+            duplicateRefunds = await SaleRefund.findAll({
+              where: { id: existingTableRecord.refundIds, saleId: sale.id, shopId },
+              transaction: t
+            });
+          }
+
+          const cachedPayload = existingTableRecord.responsePayload || {};
+
+          await t.commit();
+          return res.status(200).json({
+            refunds: duplicateRefunds.length > 0 ? duplicateRefunds : (cachedPayload.refunds || []),
+            saleStatus: existingTableRecord.saleStatus || sale.saleStatus,
+            totalRefundAmount: parseFloat(existingTableRecord.totalRefundAmount || cachedPayload.totalRefundAmount || 0),
+            totalTaxRefunded: parseFloat(existingTableRecord.totalTaxRefunded || cachedPayload.totalTaxRefunded || 0),
+            taxRefunded: parseFloat(existingTableRecord.totalTaxRefunded || cachedPayload.totalTaxRefunded || 0),
+            isDuplicate: true
           });
         }
 
-        const duplicateRefunds = Array.isArray(entry.refundIds) && entry.refundIds.length > 0
-          ? await SaleRefund.findAll({
-              where: { id: entry.refundIds, saleId: sale.id, shopId },
-              transaction: t
-            })
-          : [];
+        // Secondary fallback for legacy refunds stored in Sale.metadata
+        const existingIdempotencyMap = sale.metadata?.refundIdempotency || {};
+        if (existingIdempotencyMap[cleanIdempotencyKey]) {
+          const entry = existingIdempotencyMap[cleanIdempotencyKey];
+          if (entry.fingerprint && entry.fingerprint !== refundFingerprint) {
+            await t.rollback();
+            return res.status(409).json({
+              error: 'Idempotency key has already been used with a different refund payload',
+              code: 'IDEMPOTENCY_KEY_REUSED'
+            });
+          }
 
-        await t.commit();
-        return res.status(200).json({
-          refunds: duplicateRefunds,
-          saleStatus: entry.saleStatus || sale.saleStatus,
-          totalRefundAmount: entry.totalRefundAmount,
-          totalTaxRefunded: entry.totalTaxRefunded,
-          taxRefunded: entry.totalTaxRefunded,
-          isDuplicate: true
-        });
+          const duplicateRefunds = Array.isArray(entry.refundIds) && entry.refundIds.length > 0
+            ? await SaleRefund.findAll({
+                where: { id: entry.refundIds, saleId: sale.id, shopId },
+                transaction: t
+              })
+            : [];
+
+          await t.commit();
+          return res.status(200).json({
+            refunds: duplicateRefunds,
+            saleStatus: entry.saleStatus || sale.saleStatus,
+            totalRefundAmount: entry.totalRefundAmount,
+            totalTaxRefunded: entry.totalTaxRefunded,
+            taxRefunded: entry.totalTaxRefunded,
+            isDuplicate: true
+          });
+        }
       }
 
       // 3. Validate sale lifecycle state inside the transaction
@@ -2234,21 +2290,83 @@ exports.processRefund = async (req, res) => {
         details: `Processed ${allFullyRefunded ? 'full' : 'partial'} refund for sale ${sale.invoiceNumber} (Total: ${totalRefundAmount} KSh)`
       }, t);
 
-      await t.commit();
-      invalidateAnalyticsCache(shopId);
-      await invalidateShopProductCache(shopId);
-
-      res.json({
+      const responsePayload = {
         refunds: createdRefunds,
         saleStatus,
         totalRefundAmount,
         totalTaxRefunded: totalRefundTax,
         taxRefunded: totalRefundTax
-      });
+      };
+
+      if (cleanIdempotencyKey) {
+        await RefundIdempotency.create({
+          shopId,
+          saleId: parseInt(saleId, 10),
+          idempotencyKey: cleanIdempotencyKey,
+          requestFingerprint: refundFingerprint,
+          refundIds: createdRefunds.map(r => r.id),
+          responsePayload,
+          saleStatus,
+          totalRefundAmount,
+          totalTaxRefunded: totalRefundTax
+        }, { transaction: t });
+      }
+
+      await t.commit();
+      invalidateAnalyticsCache(shopId);
+      await invalidateShopProductCache(shopId);
+
+      res.json(responsePayload);
     } catch (error) {
       if (!t.finished) {
         await t.rollback();
       }
+
+      // Handle race condition: concurrent request with the same idempotencyKey
+      if (cleanIdempotencyKey && isRefundIdempotencyUniqueError(error)) {
+        try {
+          const winningRecord = await RefundIdempotency.findOne({
+            where: { shopId, idempotencyKey: cleanIdempotencyKey }
+          });
+
+          if (winningRecord) {
+            if (Number(winningRecord.saleId) !== parseInt(saleId, 10)) {
+              return res.status(409).json({
+                error: 'Idempotency key has already been used for a different sale',
+                code: 'IDEMPOTENCY_KEY_REUSED'
+              });
+            }
+
+            if (winningRecord.requestFingerprint && winningRecord.requestFingerprint !== refundFingerprint) {
+              return res.status(409).json({
+                error: 'Idempotency key has already been used with a different refund payload',
+                code: 'IDEMPOTENCY_KEY_REUSED'
+              });
+            }
+
+            let duplicateRefunds = [];
+            if (Array.isArray(winningRecord.refundIds) && winningRecord.refundIds.length > 0) {
+              duplicateRefunds = await SaleRefund.findAll({
+                where: { id: winningRecord.refundIds, saleId: parseInt(saleId, 10), shopId }
+              });
+            }
+
+            const cachedPayload = winningRecord.responsePayload || {};
+
+            return res.status(200).json({
+              refunds: duplicateRefunds.length > 0 ? duplicateRefunds : (cachedPayload.refunds || []),
+              saleStatus: winningRecord.saleStatus || cachedPayload.saleStatus || 'refunded',
+              totalRefundAmount: parseFloat(winningRecord.totalRefundAmount || cachedPayload.totalRefundAmount || 0),
+              totalTaxRefunded: parseFloat(winningRecord.totalTaxRefunded || cachedPayload.totalTaxRefunded || 0),
+              taxRefunded: parseFloat(winningRecord.totalTaxRefunded || cachedPayload.totalTaxRefunded || 0),
+              isDuplicate: true
+            });
+          }
+        } catch (recoveryErr) {
+          console.error('Error recovering winning refund idempotency:', recoveryErr);
+        }
+      }
+
       throw error;
     }
   } catch (error) {

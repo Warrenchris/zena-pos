@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const sequelize = require('../src/config/database');
 const {
   Shop,
@@ -12,8 +13,10 @@ const {
   ActivityLog,
   User,
   Plan,
-  Subscription
+  Subscription,
+  RefundIdempotency
 } = require('../src/models');
+const { generateRefundFingerprint, isRefundIdempotencyUniqueError } = require('../src/utils/idempotencyUtils');
 const insightsController = require('../src/controllers/insightsController');
 const { buildNetDemandQuery } = insightsController;
 const saleController = require('../src/controllers/saleController');
@@ -1353,6 +1356,7 @@ describe('H-01 & H-03 Regressions: lock-order sort and refund idempotency contra
 
   afterAll(async () => {
     try {
+      if (shop) await RefundIdempotency.destroy({ where: { shopId: shop.id } });
       if (shop) await SaleRefund.destroy({ where: { shopId: shop.id } });
       if (shop) await SaleItem.destroy({ where: { shopId: shop.id } });
       if (shop) await SalePayment.destroy({ where: { shopId: shop.id } });
@@ -1814,6 +1818,552 @@ describe('H-01 & H-03 Regressions: lock-order sort and refund idempotency contra
 
       const reloadedValidSale = await Sale.findByPk(validSale.id);
       expect(reloadedValidSale.metadata?.refundIdempotency?.[retryKey]).toBeDefined();
+    });
+  });
+
+  describe('Stage 3F.1: Dedicated Database-Backed Refund Idempotency Suite', () => {
+    const buildRes = () => ({
+      statusCode: 200,
+      body: null,
+      status: jest.fn(function (c) { this.statusCode = c; return this; }),
+      json: jest.fn(function (b) { this.body = b; return this; })
+    });
+
+    afterAll(async () => {
+      try {
+        if (shop) await RefundIdempotency.destroy({ where: { shopId: shop.id } });
+      } catch (e) {
+        console.warn('Cleanup error in Stage 3F.1 block:', e.message);
+      }
+    });
+
+    it('Stage 3F.1 - Test 1: New idempotency key inserts into dedicated RefundIdempotencies table with full response payload', async () => {
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3F1-TBL-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 200.0,
+        tax: 32.0,
+        total: 232.0,
+        paymentMethod: 'cash',
+        paymentAmount: 232.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodA.id,
+        quantity: 2,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 200.0,
+        taxAmount: 32.0,
+        taxRate: 16.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        amount: 232.0,
+        paymentMethod: 'cash',
+        paymentReference: sale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const testKey = 'key-3f1-tbl-' + Date.now();
+      const refundItems = [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }];
+
+      const res = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': testKey },
+        body: { items: refundItems },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.isDuplicate).toBeFalsy();
+
+      // Verify row in RefundIdempotencies table
+      const idempRecord = await RefundIdempotency.findOne({
+        where: { shopId: shop.id, idempotencyKey: testKey }
+      });
+      expect(idempRecord).not.toBeNull();
+      expect(Number(idempRecord.saleId)).toBe(sale.id);
+      expect(idempRecord.requestFingerprint).toBe(generateRefundFingerprint(sale.id, shop.id, refundItems));
+      expect(Array.isArray(idempRecord.refundIds)).toBe(true);
+      expect(idempRecord.refundIds.length).toBe(1);
+      expect(idempRecord.saleStatus).toBe('partial_refund');
+      expect(parseFloat(idempRecord.totalRefundAmount)).toBe(116.0);
+      expect(idempRecord.responsePayload).toBeDefined();
+      expect(idempRecord.responsePayload.saleStatus).toBe('partial_refund');
+    });
+
+    it('Stage 3F.1 - Test 2: Identical key and payload replays cached response with isDuplicate: true and zero additional mutations', async () => {
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3F1-REPLAY-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 100.0,
+        total: 100.0,
+        paymentMethod: 'cash',
+        paymentAmount: 100.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodA.id,
+        quantity: 1,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        amount: 100.0,
+        paymentMethod: 'cash',
+        paymentReference: sale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const initialInv = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+      const initialStock = Number(initialInv.stockQuantity);
+
+      const testKey = 'key-3f1-replay-' + Date.now();
+      const refundItems = [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }];
+
+      const makeReq = () => ({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': testKey },
+        body: { items: refundItems },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      });
+
+      // First call: succeeds
+      const res1 = buildRes();
+      await saleController.processRefund(makeReq(), res1);
+      expect(res1.statusCode).toBe(200);
+      expect(res1.body.isDuplicate).toBeFalsy();
+
+      const invAfter1 = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+      expect(Number(invAfter1.stockQuantity)).toBe(initialStock + 1);
+
+      // Second call: replay
+      const res2 = buildRes();
+      await saleController.processRefund(makeReq(), res2);
+      expect(res2.statusCode).toBe(200);
+      expect(res2.body.isDuplicate).toBe(true);
+      expect(res2.body.totalRefundAmount).toBe(100);
+
+      // Verify ZERO additional mutations
+      const invAfter2 = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+      expect(Number(invAfter2.stockQuantity)).toBe(initialStock + 1);
+
+      const refundCount = await SaleRefund.count({ where: { saleId: sale.id } });
+      expect(refundCount).toBe(1);
+
+      const paymentReversalCount = await SalePayment.count({
+        where: { saleId: sale.id, amount: { [Op.lt]: 0 } }
+      });
+      expect(paymentReversalCount).toBe(1);
+
+      const idempCount = await RefundIdempotency.count({
+        where: { shopId: shop.id, idempotencyKey: testKey }
+      });
+      expect(idempCount).toBe(1);
+    });
+
+    it('Stage 3F.1 - Test 3: Same key with different payload is rejected with 409 IDEMPOTENCY_KEY_REUSED', async () => {
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3F1-DIFF-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 300.0,
+        total: 300.0,
+        paymentMethod: 'cash',
+        paymentAmount: 300.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodA.id,
+        quantity: 3,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 300.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        amount: 300.0,
+        paymentMethod: 'cash',
+        paymentReference: sale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const testKey = 'key-3f1-diff-' + Date.now();
+
+      // First call: refund 1 unit
+      const res1 = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': testKey },
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res1);
+      expect(res1.statusCode).toBe(200);
+
+      // Second call: same key, 2 units -> rejected with 409
+      const res2 = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': testKey },
+        body: { items: [{ productId: prodA.id, quantity: 2, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res2);
+      expect(res2.statusCode).toBe(409);
+      expect(res2.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+      expect(res2.body.error).toMatch(/different refund payload/i);
+    });
+
+    it('Stage 3F.1 - Test 4: Cross-sale protection: reusing key across different sales is rejected with 409', async () => {
+      // Sale 1
+      const sale1 = await Sale.create({
+        invoiceNumber: 'INV-3F1-X1-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 100.0,
+        total: 100.0,
+        paymentMethod: 'cash',
+        paymentAmount: 100.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale1.id,
+        productId: prodA.id,
+        quantity: 1,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale1.id,
+        shopId: shop.id,
+        amount: 100.0,
+        paymentMethod: 'cash',
+        paymentReference: sale1.invoiceNumber,
+        status: 'completed'
+      });
+
+      // Sale 2
+      const sale2 = await Sale.create({
+        invoiceNumber: 'INV-3F1-X2-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 100.0,
+        total: 100.0,
+        paymentMethod: 'cash',
+        paymentAmount: 100.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale2.id,
+        productId: prodA.id,
+        quantity: 1,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale2.id,
+        shopId: shop.id,
+        amount: 100.0,
+        paymentMethod: 'cash',
+        paymentReference: sale2.invoiceNumber,
+        status: 'completed'
+      });
+
+      const sharedKey = 'key-3f1-shared-' + Date.now();
+
+      // Refund sale 1 with sharedKey
+      const res1 = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale1.id) },
+        headers: { 'idempotency-key': sharedKey },
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res1);
+      expect(res1.statusCode).toBe(200);
+
+      // Attempt to refund sale 2 with the SAME sharedKey
+      const res2 = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale2.id) },
+        headers: { 'idempotency-key': sharedKey },
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res2);
+
+      expect(res2.statusCode).toBe(409);
+      expect(res2.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+      expect(res2.body.error).toMatch(/different sale/i);
+
+      // Verify sale2 had NO refunds processed
+      const sale2Refunds = await SaleRefund.count({ where: { saleId: sale2.id } });
+      expect(sale2Refunds).toBe(0);
+    });
+
+    it('Stage 3F.1 - Test 5: Helper isRefundIdempotencyUniqueError accurately identifies refund idempotency index collisions', () => {
+      // 1. Exact match on unique index name
+      const errWithIndexName = new Error('Duplicate entry for key \'unique_refund_idempotency_shop_key\'');
+      errWithIndexName.name = 'SequelizeUniqueConstraintError';
+      expect(isRefundIdempotencyUniqueError(errWithIndexName)).toBe(true);
+
+      // 2. ER_DUP_ENTRY parent code with field
+      const errWithParent = {
+        name: 'SequelizeUniqueConstraintError',
+        parent: { code: 'ER_DUP_ENTRY', message: 'Duplicate entry \'1-test-key\' for key \'unique_refund_idempotency_shop_key\'' }
+      };
+      expect(isRefundIdempotencyUniqueError(errWithParent)).toBe(true);
+
+      // 3. Sales unique constraint should return FALSE
+      const errSaleKey = {
+        name: 'SequelizeUniqueConstraintError',
+        parent: { code: 'ER_DUP_ENTRY', message: 'Duplicate entry for key \'unique_sales_shop_idempotency_key\'' },
+        message: 'unique_sales_shop_idempotency_key'
+      };
+      expect(isRefundIdempotencyUniqueError(errSaleKey)).toBe(false);
+
+      // 4. Non-unique error returns false
+      const errGeneric = new Error('Connection timeout');
+      expect(isRefundIdempotencyUniqueError(errGeneric)).toBe(false);
+    });
+
+    it('Stage 3F.1 - Test 6: Aborted transaction cleanly rolls back and permits subsequent retry with the same key', async () => {
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3F1-ABORT-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 100.0,
+        total: 100.0,
+        paymentMethod: 'cash',
+        paymentAmount: 100.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodA.id,
+        quantity: 1,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        amount: 100.0,
+        paymentMethod: 'cash',
+        paymentReference: sale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const retryKey = 'key-3f1-abort-' + Date.now();
+
+      // Call refund requesting 99 units (exceeds purchased quantity of 1) -> fails in validation
+      const resFail = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': retryKey },
+        body: { items: [{ productId: prodA.id, quantity: 99, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, resFail);
+
+      expect(resFail.statusCode).toBe(400);
+
+      // Confirm NO row exists in RefundIdempotencies
+      const orphanedRecord = await RefundIdempotency.findOne({
+        where: { shopId: shop.id, idempotencyKey: retryKey }
+      });
+      expect(orphanedRecord).toBeNull();
+
+      // Now retry with valid quantity 1 using the SAME retryKey -> succeeds
+      const resSuccess = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': retryKey },
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, resSuccess);
+
+      expect(resSuccess.statusCode).toBe(200);
+      expect(resSuccess.body.isDuplicate).toBeFalsy();
+
+      // Confirm row NOW exists in RefundIdempotencies
+      const savedRecord = await RefundIdempotency.findOne({
+        where: { shopId: shop.id, idempotencyKey: retryKey }
+      });
+      expect(savedRecord).not.toBeNull();
+      expect(Number(savedRecord.saleId)).toBe(sale.id);
+    });
+
+    it('Stage 3F.1 - Test 7: Backward compatibility: unkeyed refund succeeds without inserting into RefundIdempotencies', async () => {
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3F1-UNKEYED-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 100.0,
+        total: 100.0,
+        paymentMethod: 'cash',
+        paymentAmount: 100.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodA.id,
+        quantity: 1,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        amount: 100.0,
+        paymentMethod: 'cash',
+        paymentReference: sale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const res = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        // No idempotency-key header or body
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res);
+
+      expect(res.statusCode).toBe(200);
+
+      // Verify no row in RefundIdempotencies
+      const count = await RefundIdempotency.count({ where: { saleId: sale.id } });
+      expect(count).toBe(0);
+
+      // Verify refund record exists
+      const refundCount = await SaleRefund.count({ where: { saleId: sale.id } });
+      expect(refundCount).toBe(1);
+    });
+
+    it('Stage 3F.1 - Test 8: Backward compatibility: fallback to historical Sale.metadata.refundIdempotency when table record does not exist', async () => {
+      const legacyKey = 'key-3f1-legacy-' + Date.now();
+      const refundItems = [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }];
+
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3F1-LEGACY-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 100.0,
+        total: 100.0,
+        paymentMethod: 'cash',
+        paymentAmount: 100.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodA.id,
+        quantity: 1,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+
+      // Create a pre-existing refund row representing historical refund
+      const legacyRefund = await SaleRefund.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        productId: prodA.id,
+        quantity: 1,
+        amount: 100.0,
+        refundAmount: 100.0,
+        refundMethod: 'cash',
+        reason: 'Historical return',
+        disposition: 'restock',
+        reasonCode: 'OTHER',
+        refundedBy: testUser2.id,
+        refundedAt: new Date()
+      });
+
+      const legacyFingerprint = generateRefundFingerprint(sale.id, shop.id, refundItems);
+
+      // Update sale metadata simulating pre-Stage 3F refund record
+      await sale.update({
+        metadata: {
+          refundIdempotency: {
+            [legacyKey]: {
+              fingerprint: legacyFingerprint,
+              refundIds: [legacyRefund.id],
+              saleStatus: 'refunded',
+              totalRefundAmount: 100.0,
+              totalTaxRefunded: 0
+            }
+          }
+        }
+      });
+
+      // Assert no row exists in RefundIdempotencies table
+      const tableRecord = await RefundIdempotency.findOne({
+        where: { shopId: shop.id, idempotencyKey: legacyKey }
+      });
+      expect(tableRecord).toBeNull();
+
+      // Submit refund with legacyKey -> should replay from Sale.metadata
+      const res = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': legacyKey },
+        body: { items: refundItems },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.isDuplicate).toBe(true);
+      expect(res.body.totalRefundAmount).toBe(100.0);
+      expect(res.body.refunds.length).toBe(1);
+      expect(res.body.refunds[0].id).toBe(legacyRefund.id);
     });
   });
 });

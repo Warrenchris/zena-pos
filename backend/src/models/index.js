@@ -38,6 +38,7 @@ const Subscription = require('./Subscription');
 const SubscriptionInvoice = require('./SubscriptionInvoice');
 const StockTransfer = require('./StockTransfer');
 const BillingNotificationLog = require('./BillingNotificationLog');
+const RefundIdempotency = require('./RefundIdempotency');
 const { DataTypes } = require('sequelize');
 const Brand = require('./brand')(sequelize, DataTypes);
 const Unit = require('./unit')(sequelize, DataTypes);
@@ -110,6 +111,13 @@ SaleRefund.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 SaleRefund.belongsTo(Shop, { foreignKey: 'shopId' });
 Sale.hasMany(SaleRefund, { foreignKey: 'saleId', as: 'refunds' });
 Shop.hasMany(SaleRefund, { foreignKey: 'shopId' });
+
+// RefundIdempotency associations
+if (typeof RefundIdempotency.associate === 'function') {
+  RefundIdempotency.associate({ Shop, Sale });
+}
+Sale.hasMany(RefundIdempotency, { foreignKey: 'saleId', as: 'refundIdempotencies' });
+Shop.hasMany(RefundIdempotency, { foreignKey: 'shopId' });
 
 // HeldCart associations
 HeldCart.belongsTo(Shop, { foreignKey: 'shopId' });
@@ -266,6 +274,7 @@ module.exports = {
   InvoiceItem,
   PendingPayment,
   SaleRefund,
+  RefundIdempotency,
   HeldCart,
   SalePayment,
   Coupon,
