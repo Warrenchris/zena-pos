@@ -872,4 +872,948 @@ describe('Phase 2B: Inventory Demand Data Integrity & Net Sales Calculation', ()
       await Shop.destroy({ where: { id: forecastShop.id } });
     }
   });
+
+  it('16. F-3 Concurrency: Two simultaneous partial refunds on the same sale serialize under row lock and prevent over-refunding', async () => {
+    const concProd = await Product.create({
+      name: 'Concurrent Refund Product',
+      sku: 'CONC-REF-' + Date.now(),
+      price: 100.0,
+      cost: 50.0,
+      shopId: shop1.id,
+      organizationId: org.id,
+      active: true
+    });
+
+    await Inventory.create({
+      productId: concProd.id,
+      shopId: shop1.id,
+      stockQuantity: 20
+    });
+
+    const sale = await Sale.create({
+      invoiceNumber: 'INV-CONC-' + Date.now(),
+      shopId: shop1.id,
+      userId: testUser.id,
+      subtotal: 400.0,
+      total: 400.0,
+      paymentMethod: 'cash',
+      paymentAmount: 400.0,
+      saleStatus: 'completed',
+      status: 'completed'
+    });
+
+    await SaleItem.create({
+      saleId: sale.id,
+      productId: concProd.id,
+      quantity: 4,
+      price: 100.0,
+      unitPrice: 100.0,
+      subtotal: 400.0,
+      shopId: shop1.id
+    });
+
+    const makeReq = (key) => ({
+      params: { saleId: String(sale.id) },
+      headers: { 'idempotency-key': key },
+      body: {
+        items: [{ productId: concProd.id, quantity: 3, disposition: 'restock', reasonCode: 'DEFECTIVE' }]
+      },
+      user: { id: testUser.id, role: 'admin', shopId: shop1.id, organizationId: org.id },
+      shopId: shop1.id,
+      organizationId: org.id
+    });
+
+    const makeRes = () => {
+      const res = { statusCode: 200, body: null };
+      res.status = jest.fn((code) => {
+        res.statusCode = code;
+        return res;
+      });
+      res.json = jest.fn((payload) => {
+        res.body = payload;
+        return res;
+      });
+      return res;
+    };
+
+    const resA = makeRes();
+    const resB = makeRes();
+
+    // Launch both 3-unit refund requests concurrently against a 4-unit sale
+    await Promise.all([
+      saleController.processRefund(makeReq('conc-key-A-' + Date.now()), resA),
+      saleController.processRefund(makeReq('conc-key-B-' + Date.now()), resB)
+    ]);
+
+    const statusCodes = [resA.statusCode, resB.statusCode].sort();
+    // Exactly one must succeed (200) and the other must be rejected (400)
+    expect(statusCodes).toEqual([200, 400]);
+
+    const refundsInDb = await SaleRefund.findAll({ where: { saleId: sale.id, status: 'processed' } });
+    expect(refundsInDb).toHaveLength(1);
+    expect(Number(refundsInDb[0].quantity)).toBe(3);
+
+    const updatedInv = await Inventory.findOne({ where: { productId: concProd.id, shopId: shop1.id } });
+    // Initial 20 + 3 restocked = 23 (never 26!)
+    expect(Number(updatedInv.stockQuantity)).toBe(23);
+  });
+
+  it('17. F-3 Concurrency: Concurrent refund and sale cancellation serialize cleanly without double-restoring stock or payments', async () => {
+    const raceProd = await Product.create({
+      name: 'Race Cancel Refund Product',
+      sku: 'RACE-CR-' + Date.now(),
+      price: 100.0,
+      cost: 50.0,
+      shopId: shop1.id,
+      organizationId: org.id,
+      active: true
+    });
+
+    await Inventory.create({
+      productId: raceProd.id,
+      shopId: shop1.id,
+      stockQuantity: 10
+    });
+
+    const raceSale = await Sale.create({
+      invoiceNumber: 'INV-RACE-' + Date.now(),
+      shopId: shop1.id,
+      userId: testUser.id,
+      subtotal: 500.0,
+      total: 500.0,
+      paymentMethod: 'cash',
+      paymentAmount: 500.0,
+      saleStatus: 'completed',
+      status: 'completed'
+    });
+
+    await SaleItem.create({
+      saleId: raceSale.id,
+      productId: raceProd.id,
+      quantity: 5,
+      price: 100.0,
+      unitPrice: 100.0,
+      subtotal: 500.0,
+      shopId: shop1.id
+    });
+
+    const reqRefund = {
+      params: { saleId: String(raceSale.id) },
+      headers: { 'idempotency-key': 'race-refund-' + Date.now() },
+      body: {
+        items: [{ productId: raceProd.id, quantity: 2, disposition: 'restock', reasonCode: 'OTHER' }]
+      },
+      user: { id: testUser.id, role: 'admin', shopId: shop1.id, organizationId: org.id },
+      shopId: shop1.id,
+      organizationId: org.id
+    };
+    const resRefund = {
+      statusCode: 200,
+      status: jest.fn(function (c) { this.statusCode = c; return this; }),
+      json: jest.fn(function (b) { this.body = b; return this; })
+    };
+
+    const reqCancel = {
+      params: { id: String(raceSale.id) },
+      body: { status: 'cancelled', notes: 'Concurrent cancellation' },
+      user: { id: testUser.id, role: 'admin', shopId: shop1.id, organizationId: org.id },
+      shopId: shop1.id,
+      organizationId: org.id
+    };
+    const resCancel = {
+      statusCode: 200,
+      status: jest.fn(function (c) { this.statusCode = c; return this; }),
+      json: jest.fn(function (b) { this.body = b; return this; })
+    };
+
+    await Promise.all([
+      saleController.processRefund(reqRefund, resRefund),
+      saleController.updateSale(reqCancel, resCancel)
+    ]);
+
+    // Regardless of which lock acquired first:
+    // - If refund ran first: +2 restocked from refund, +3 restored from cancel = +5 total -> stock = 15
+    // - If cancel ran first: +5 restored from cancel, refund rejected with 400 -> stock = 15
+    const finalInv = await Inventory.findOne({ where: { productId: raceProd.id, shopId: shop1.id } });
+    expect(Number(finalInv.stockQuantity)).toBe(15);
+
+    const reversalPayments = await SalePayment.findAll({ where: { saleId: raceSale.id, shopId: shop1.id } });
+    const totalReversed = reversalPayments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+    expect(totalReversed).toBe(-500);
+  });
+
+  it('18. F-3 Idempotency & Rollback: Duplicate Idempotency-Key returns 200 without re-executing, payload mismatch returns 409, and mid-transaction error rolls back completely', async () => {
+    const idemProd = await Product.create({
+      name: 'Idempotency Refund Product',
+      sku: 'IDEM-REF-' + Date.now(),
+      price: 150.0,
+      cost: 75.0,
+      shopId: shop1.id,
+      organizationId: org.id,
+      active: true
+    });
+
+    await Inventory.create({
+      productId: idemProd.id,
+      shopId: shop1.id,
+      stockQuantity: 30
+    });
+
+    const idemSale = await Sale.create({
+      invoiceNumber: 'INV-IDEM-' + Date.now(),
+      shopId: shop1.id,
+      userId: testUser.id,
+      subtotal: 450.0,
+      total: 450.0,
+      paymentMethod: 'cash',
+      paymentAmount: 450.0,
+      saleStatus: 'completed',
+      status: 'completed'
+    });
+
+    await SaleItem.create({
+      saleId: idemSale.id,
+      productId: idemProd.id,
+      quantity: 3,
+      price: 150.0,
+      unitPrice: 150.0,
+      subtotal: 450.0,
+      shopId: shop1.id
+    });
+
+    const idemKey = `idem-refund-key-${Date.now()}`;
+    const buildReq = (qty, key = idemKey) => ({
+      params: { saleId: String(idemSale.id) },
+      headers: { 'idempotency-key': key },
+      body: {
+        items: [{ productId: idemProd.id, quantity: qty, disposition: 'restock', reasonCode: 'DEFECTIVE' }]
+      },
+      user: { id: testUser.id, role: 'admin', shopId: shop1.id, organizationId: org.id },
+      shopId: shop1.id,
+      organizationId: org.id
+    });
+    const buildRes = () => ({
+      statusCode: 200,
+      body: null,
+      status: jest.fn(function (c) { this.statusCode = c; return this; }),
+      json: jest.fn(function (b) { this.body = b; return this; })
+    });
+
+    // 1. First request with idemKey (1 unit)
+    const res1 = buildRes();
+    await saleController.processRefund(buildReq(1), res1);
+    expect(res1.statusCode).toBe(200);
+    expect(res1.body.totalRefundAmount).toBe(150);
+
+    // 2. Duplicate retry with same idemKey and same payload (1 unit) -> 200 with isDuplicate: true, stock stays 31
+    const res2 = buildRes();
+    await saleController.processRefund(buildReq(1), res2);
+    expect(res2.statusCode).toBe(200);
+    expect(res2.body.isDuplicate).toBe(true);
+    expect(res2.body.totalRefundAmount).toBe(150);
+
+    const invAfterRetry = await Inventory.findOne({ where: { productId: idemProd.id, shopId: shop1.id } });
+    expect(Number(invAfterRetry.stockQuantity)).toBe(31);
+    const refundCountAfterRetry = await SaleRefund.count({ where: { saleId: idemSale.id } });
+    expect(refundCountAfterRetry).toBe(1);
+
+    // 3. Reuse same idemKey with DIFFERENT payload (quantity: 2) -> 409 IDEMPOTENCY_KEY_REUSED
+    const resConflict = buildRes();
+    await saleController.processRefund(buildReq(2), resConflict);
+    expect(resConflict.statusCode).toBe(409);
+    expect(resConflict.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+
+    // 4. Simulated mid-transaction failure during SalePayment.create rolls back SaleRefund and Inventory
+    const createPaymentSpy = jest.spyOn(SalePayment, 'create').mockRejectedValueOnce(new Error('Simulated DB write failure'));
+    try {
+      const resFail = buildRes();
+      await saleController.processRefund(buildReq(1, `new-key-fail-${Date.now()}`), resFail);
+      expect(resFail.statusCode).toBe(500);
+    } finally {
+      createPaymentSpy.mockRestore();
+    }
+
+    const invAfterRollback = await Inventory.findOne({ where: { productId: idemProd.id, shopId: shop1.id } });
+    expect(Number(invAfterRollback.stockQuantity)).toBe(31);
+    const refundCountAfterRollback = await SaleRefund.count({ where: { saleId: idemSale.id } });
+    expect(refundCountAfterRollback).toBe(1);
+  });
+
+  it('19. F-4 Cancellation Financial & Customer Reversal: Cancelling a partially refunded customer-linked sale reverses only remaining unrefunded payment, totalPurchases, and loyaltyPoints idempotently', async () => {
+    const { Customer } = require('../src/models');
+    const cust = await Customer.create({
+      name: 'Loyalty Customer',
+      email: `loyalty-${Date.now()}@test.com`,
+      phone: '0712345678',
+      shopId: shop1.id,
+      organizationId: org.id,
+      totalPurchases: 1000.0,
+      loyaltyPoints: 1000
+    });
+
+    const finProd = await Product.create({
+      name: 'Financial Reversal Product',
+      sku: 'FIN-REV-' + Date.now(),
+      price: 200.0,
+      cost: 100.0,
+      shopId: shop1.id,
+      organizationId: org.id,
+      active: true
+    });
+
+    await Inventory.create({
+      productId: finProd.id,
+      shopId: shop1.id,
+      stockQuantity: 10
+    });
+
+    const custSale = await Sale.create({
+      invoiceNumber: 'INV-FIN-' + Date.now(),
+      shopId: shop1.id,
+      userId: testUser.id,
+      customerId: cust.id,
+      subtotal: 1000.0,
+      total: 1000.0,
+      paymentMethod: 'cash',
+      paymentAmount: 1000.0,
+      saleStatus: 'completed',
+      status: 'completed'
+    });
+
+    await SaleItem.create({
+      saleId: custSale.id,
+      productId: finProd.id,
+      quantity: 5,
+      price: 200.0,
+      unitPrice: 200.0,
+      subtotal: 1000.0,
+      shopId: shop1.id
+    });
+
+    await SalePayment.create({
+      saleId: custSale.id,
+      shopId: shop1.id,
+      amount: 1000.0,
+      paymentMethod: 'cash',
+      paymentReference: custSale.invoiceNumber,
+      status: 'completed'
+    });
+
+    try {
+      // Step 1: Partial refund of 2 units (400 KSh)
+      const reqRef = {
+        params: { saleId: String(custSale.id) },
+        body: {
+          items: [{ productId: finProd.id, quantity: 2, disposition: 'restock', reasonCode: 'OTHER' }]
+        },
+        user: { id: testUser.id, role: 'admin', shopId: shop1.id, organizationId: org.id },
+        shopId: shop1.id,
+        organizationId: org.id
+      };
+      const resRef = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+      await saleController.processRefund(reqRef, resRef);
+
+      const custAfterPartial = await Customer.findByPk(cust.id);
+      expect(Number(custAfterPartial.totalPurchases)).toBe(600);
+      expect(Number(custAfterPartial.loyaltyPoints)).toBe(600);
+
+      // Step 2: Cancel the partially refunded sale -> reverses remaining 600 KSh and 3 units
+      const reqCancel = {
+        params: { id: String(custSale.id) },
+        body: { status: 'cancelled', notes: 'Cancel remainder' },
+        user: { id: testUser.id, role: 'admin', shopId: shop1.id, organizationId: org.id },
+        shopId: shop1.id,
+        organizationId: org.id
+      };
+      const resCancel = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+      await saleController.updateSale(reqCancel, resCancel);
+
+      const custAfterCancel = await Customer.findByPk(cust.id);
+      expect(Number(custAfterCancel.totalPurchases)).toBe(0);
+      expect(Number(custAfterCancel.loyaltyPoints)).toBe(0);
+
+      const paymentsAfterCancel = await SalePayment.findAll({ where: { saleId: custSale.id, shopId: shop1.id } });
+      const netPayments = paymentsAfterCancel.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+      // +1000 initial - 400 partial refund - 600 cancel reversal = 0
+      expect(netPayments).toBe(0);
+
+      const cancelReversals = paymentsAfterCancel.filter(p => p.metadata?.isCancelReversal === true);
+      expect(cancelReversals).toHaveLength(1);
+      expect(Number(cancelReversals[0].amount)).toBe(-600);
+
+      // Step 3: Calling updateSale(cancelled) or deleteSale again is idempotent
+      const resCancelRetry = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+      await saleController.updateSale(reqCancel, resCancelRetry);
+      const paymentsAfterRetry = await SalePayment.findAll({ where: { saleId: custSale.id, shopId: shop1.id } });
+      expect(paymentsAfterRetry.filter(p => p.metadata?.isCancelReversal === true)).toHaveLength(1);
+    } finally {
+      await Sale.update({ customerId: null }, { where: { customerId: cust.id } });
+      await Customer.destroy({ where: { id: cust.id } });
+    }
+  });
+
+  it('20. F-5 & F-9: Direct status transition to refunded via updateSale is rejected with 400, and cross-shop refund is rejected with 404', async () => {
+    const guardSale = await Sale.create({
+      invoiceNumber: 'INV-GUARD-' + Date.now(),
+      shopId: shop1.id,
+      userId: testUser.id,
+      subtotal: 100.0,
+      total: 100.0,
+      paymentMethod: 'cash',
+      paymentAmount: 100.0,
+      saleStatus: 'completed',
+      status: 'completed'
+    });
+
+    // Attempt direct status='refunded' via updateSale -> 400
+    const reqDirectRefund = {
+      params: { id: String(guardSale.id) },
+      body: { status: 'refunded' },
+      user: { id: testUser.id, role: 'admin', shopId: shop1.id, organizationId: org.id },
+      shopId: shop1.id,
+      organizationId: org.id
+    };
+    const resDirectRefund = { statusCode: 200, status: jest.fn(function (c) { this.statusCode = c; return this; }), json: jest.fn() };
+    await saleController.updateSale(reqDirectRefund, resDirectRefund);
+    expect(resDirectRefund.statusCode).toBe(400);
+
+    const unchangedSale = await Sale.findByPk(guardSale.id);
+    expect(unchangedSale.saleStatus).toBe('completed');
+    expect(unchangedSale.status).toBe('completed');
+
+    // Attempt cross-shop refund from shop2 on shop1's sale -> 404
+    const reqCrossShopRefund = {
+      params: { saleId: String(guardSale.id) },
+      body: { items: [{ productId: product1.id, quantity: 1 }] },
+      user: { id: testUser.id, role: 'admin', shopId: shop2.id, organizationId: org.id },
+      shopId: shop2.id,
+      organizationId: org.id
+    };
+    const resCrossShopRefund = { statusCode: 200, status: jest.fn(function (c) { this.statusCode = c; return this; }), json: jest.fn() };
+    await saleController.processRefund(reqCrossShopRefund, resCrossShopRefund);
+    expect(resCrossShopRefund.statusCode).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H-03 Regression: Two distinct partial refunds with different keys but
+//   identical item quantities must both be processed (not over-deduplicated).
+// H-01 Regression: Ascending productId sort in createSaleInternal preserves
+//   all item field data (quantity, price, discount) after the sort.
+// ---------------------------------------------------------------------------
+describe('H-01 & H-03 Regressions: lock-order sort and refund idempotency contract', () => {
+  let org2, shop, testUser2, prodA, prodB;
+
+  beforeAll(async () => {
+    await sequelize.authenticate();
+    org2 = await Organization.create({
+      name: 'Lock Order Org ' + Date.now(),
+      slug: 'lock-order-' + Date.now(),
+      currency: 'KES',
+      status: 'active'
+    });
+    shop = await Shop.create({
+      name: 'Lock Order Shop',
+      organizationId: org2.id,
+      currency: 'KES',
+      status: 'active'
+    });
+    testUser2 = await User.create({
+      name: 'Lock Order User',
+      email: `lock-order-${Date.now()}@test.com`,
+      password: 'hashedPassword123',
+      role: 'admin',
+      organizationId: org2.id,
+      shopId: shop.id
+    });
+    // prodA has a HIGHER productId so it sorts last in ascending order
+    // prodB has a LOWER productId so it sorts first in ascending order
+    // We create B first so its auto-increment id is lower than A's.
+    prodB = await Product.create({
+      name: 'Product B (lower id)',
+      sku: 'LOCK-B-' + Date.now(),
+      price: 50.0,
+      cost: 25.0,
+      shopId: shop.id,
+      organizationId: org2.id,
+      active: true
+    });
+    prodA = await Product.create({
+      name: 'Product A (higher id)',
+      sku: 'LOCK-A-' + Date.now(),
+      price: 100.0,
+      cost: 50.0,
+      shopId: shop.id,
+      organizationId: org2.id,
+      active: true
+    });
+    await Inventory.create({ productId: prodA.id, shopId: shop.id, stockQuantity: 20 });
+    await Inventory.create({ productId: prodB.id, shopId: shop.id, stockQuantity: 20 });
+  });
+
+  afterAll(async () => {
+    try {
+      if (shop) await SaleRefund.destroy({ where: { shopId: shop.id } });
+      if (shop) await SaleItem.destroy({ where: { shopId: shop.id } });
+      if (shop) await SalePayment.destroy({ where: { shopId: shop.id } });
+      if (shop) await StockMovement.destroy({ where: { shopId: shop.id } });
+      if (shop) await Sale.destroy({ where: { shopId: shop.id } });
+      if (shop) await Inventory.destroy({ where: { shopId: shop.id } });
+      if (prodA && prodB) await Product.destroy({ where: { id: [prodA.id, prodB.id] } });
+      if (shop) await ActivityLog.destroy({ where: { shopId: shop.id } });
+      if (testUser2) await ActivityLog.destroy({ where: { userId: testUser2.id } });
+      if (testUser2) await User.destroy({ where: { id: testUser2.id } });
+      if (shop) await Shop.destroy({ where: { id: shop.id } });
+      if (org2) await Organization.destroy({ where: { id: org2.id } });
+    } catch (e) {
+      console.warn('Cleanup error in H01/H03 block:', e.message);
+    }
+  });
+
+  it('H-03: Two sequential partial refunds with different idempotency keys and identical item quantities are both processed independently', async () => {
+    // Sale with 4 units of prodA
+    const sale = await Sale.create({
+      invoiceNumber: 'INV-H03-' + Date.now(),
+      shopId: shop.id,
+      userId: testUser2.id,
+      subtotal: 400.0,
+      total: 400.0,
+      paymentMethod: 'cash',
+      paymentAmount: 400.0,
+      saleStatus: 'completed',
+      status: 'completed'
+    });
+    await SaleItem.create({
+      saleId: sale.id,
+      productId: prodA.id,
+      quantity: 4,
+      price: 100.0,
+      unitPrice: 100.0,
+      subtotal: 400.0,
+      shopId: shop.id
+    });
+    await SalePayment.create({
+      saleId: sale.id,
+      shopId: shop.id,
+      amount: 400.0,
+      paymentMethod: 'cash',
+      paymentReference: sale.invoiceNumber,
+      status: 'completed'
+    });
+    await Inventory.update({ stockQuantity: 10 }, { where: { productId: prodA.id, shopId: shop.id } });
+
+    const buildRefundReq = (qty, key) => ({
+      params: { saleId: String(sale.id) },
+      headers: { 'idempotency-key': key },
+      body: { items: [{ productId: prodA.id, quantity: qty, disposition: 'restock', reasonCode: 'OTHER' }] },
+      user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+      shopId: shop.id,
+      organizationId: org2.id
+    });
+    const buildRes = () => ({
+      statusCode: 200,
+      body: null,
+      status: jest.fn(function (c) { this.statusCode = c; return this; }),
+      json: jest.fn(function (b) { this.body = b; return this; })
+    });
+
+    // First partial refund: 2 units, key-alpha
+    const res1 = buildRes();
+    await saleController.processRefund(buildRefundReq(2, 'key-alpha-' + Date.now()), res1);
+    expect(res1.statusCode).toBe(200);
+    expect(res1.body.isDuplicate).toBeFalsy();
+    expect(res1.body.totalRefundAmount).toBe(200);
+
+    const invAfterFirst = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+    expect(Number(invAfterFirst.stockQuantity)).toBe(12); // 10 + 2 restocked
+
+    // Second partial refund: same 2 units, DIFFERENT key (key-beta)
+    // Must be processed independently, NOT rejected as duplicate.
+    const res2 = buildRes();
+    await saleController.processRefund(buildRefundReq(2, 'key-beta-' + Date.now()), res2);
+    expect(res2.statusCode).toBe(200);
+    expect(res2.body.isDuplicate).toBeFalsy();
+    expect(res2.body.totalRefundAmount).toBe(200);
+
+    const invAfterSecond = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+    expect(Number(invAfterSecond.stockQuantity)).toBe(14); // 12 + 2 restocked
+
+    // Two distinct SaleRefund rows must exist
+    const refundCount = await SaleRefund.count({ where: { saleId: sale.id } });
+    expect(refundCount).toBe(2);
+  });
+
+  it('H-01: Ascending productId sort in createSaleInternal preserves item quantities, prices and discounts', async () => {
+    // Submit items in REVERSE productId order (higher id first) to exercise the sort.
+    // If the sort corrupts item data, quantities or prices will be wrong.
+    //
+    // Call createSaleInternal directly (it is exported) to avoid express-validator
+    // context and the payment-method-enabled system-settings check in createSale.
+    const salePayload = {
+      // prodA has a higher id than prodB; submit them in REVERSE order to trigger the sort
+      items: [
+        { productId: prodA.id, quantity: 3, discount: 0 }, // 3 × 100 = 300
+        { productId: prodB.id, quantity: 5, discount: 0 }  // 5 × 50  = 250
+      ],
+      paymentMethod: 'cash',
+      paymentAmount: 550
+    };
+    const mockUser = { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id };
+
+    // Read current inventory levels (affected by prior H-03 test)
+    const invABefore = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+    const invBBefore = await Inventory.findOne({ where: { productId: prodB.id, shopId: shop.id } });
+    const stockABefore = Number(invABefore.stockQuantity);
+    const stockBBefore = Number(invBBefore.stockQuantity);
+
+    const result = await saleController.createSaleInternal(salePayload, shop.id, mockUser, org2.id);
+    expect(result).toBeTruthy();
+
+    const saleId = result.id || result.sale?.id;
+    expect(saleId).toBeTruthy();
+
+    // Verify SaleItems: each product must retain its own quantity and subtotal — not swapped
+    const saleItems = await SaleItem.findAll({ where: { saleId } });
+    const itemA = saleItems.find(si => Number(si.productId) === prodA.id);
+    const itemB = saleItems.find(si => Number(si.productId) === prodB.id);
+
+    expect(itemA).toBeTruthy();
+    expect(Number(itemA.quantity)).toBe(3);
+    // gross subtotal = quantity × product.price = 3 × 100 = 300
+    expect(Number(itemA.subtotal)).toBeCloseTo(300, 0);
+
+    expect(itemB).toBeTruthy();
+    expect(Number(itemB.quantity)).toBe(5);
+    // gross subtotal = 5 × 50 = 250
+    expect(Number(itemB.subtotal)).toBeCloseTo(250, 0);
+
+    // Inventory must be decremented by the correct amount per product
+    const invAAfter = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+    const invBAfter = await Inventory.findOne({ where: { productId: prodB.id, shopId: shop.id } });
+    expect(Number(invAAfter.stockQuantity)).toBe(stockABefore - 3);
+    expect(Number(invBAfter.stockQuantity)).toBe(stockBBefore - 5);
+  });
+
+  describe('Stage 3D.3 Refund Idempotency Verification Gate', () => {
+    const { Op } = require('sequelize');
+    const buildRes = () => ({
+      statusCode: 200,
+      body: null,
+      status: jest.fn(function (c) { this.statusCode = c; return this; }),
+      json: jest.fn(function (b) { this.body = b; return this; })
+    });
+
+    it('Stage 3D.3 - Requirement 1: Missing idempotency key is accepted with safe alternative (pessimistic lock & cumulative quantity validation)', async () => {
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3D3-NOKEY-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 200.0,
+        total: 200.0,
+        paymentMethod: 'cash',
+        paymentAmount: 200.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodB.id,
+        quantity: 2,
+        price: 50.0,
+        unitPrice: 50.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        amount: 200.0,
+        paymentMethod: 'cash',
+        paymentReference: sale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const invBefore = await Inventory.findOne({ where: { productId: prodB.id, shopId: shop.id } });
+      const initialStock = Number(invBefore.stockQuantity);
+
+      // Refund without idempotency key
+      const req1 = {
+        params: { saleId: String(sale.id) },
+        headers: {}, // No idempotency key
+        body: { items: [{ productId: prodB.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      };
+      const res1 = buildRes();
+      await saleController.processRefund(req1, res1);
+
+      expect(res1.statusCode).toBe(200);
+      expect(res1.body.isDuplicate).toBeFalsy();
+      expect(res1.body.totalRefundAmount).toBe(50);
+
+      const invAfter1 = await Inventory.findOne({ where: { productId: prodB.id, shopId: shop.id } });
+      expect(Number(invAfter1.stockQuantity)).toBe(initialStock + 1);
+
+      // Attempting to refund 2 more units (only 1 remaining) must be rejected with 400
+      const req2 = {
+        params: { saleId: String(sale.id) },
+        headers: {},
+        body: { items: [{ productId: prodB.id, quantity: 2, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      };
+      const res2 = buildRes();
+      await saleController.processRefund(req2, res2);
+
+      expect(res2.statusCode).toBe(400);
+      expect(res2.body.error).toMatch(/Only 1 units available for refund/i);
+    });
+
+    it('Stage 3D.3 - Requirement 2: Identical key and identical payload deduplicate without side effects', async () => {
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3D3-DEDUP-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 300.0,
+        total: 300.0,
+        paymentMethod: 'cash',
+        paymentAmount: 300.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodA.id,
+        quantity: 3,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 300.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        amount: 300.0,
+        paymentMethod: 'cash',
+        paymentReference: sale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const invBefore = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+      const initialStock = Number(invBefore.stockQuantity);
+      const testKey = 'key-3d3-dedup-' + Date.now();
+
+      const makeReq = () => ({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': testKey },
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      });
+
+      // First call
+      const res1 = buildRes();
+      await saleController.processRefund(makeReq(), res1);
+      expect(res1.statusCode).toBe(200);
+      expect(res1.body.isDuplicate).toBeFalsy();
+
+      const invAfter1 = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+      expect(Number(invAfter1.stockQuantity)).toBe(initialStock + 1);
+
+      const refundCount1 = await SaleRefund.count({ where: { saleId: sale.id } });
+      expect(refundCount1).toBe(1);
+
+      const reversalCount1 = await SalePayment.count({
+        where: { saleId: sale.id, amount: { [Op.lt]: 0 } }
+      });
+      expect(reversalCount1).toBe(1);
+
+      // Second call (retry with SAME key and SAME payload)
+      const res2 = buildRes();
+      await saleController.processRefund(makeReq(), res2);
+      expect(res2.statusCode).toBe(200);
+      expect(res2.body.isDuplicate).toBe(true);
+
+      // Verify ZERO additional side effects:
+      const invAfter2 = await Inventory.findOne({ where: { productId: prodA.id, shopId: shop.id } });
+      expect(Number(invAfter2.stockQuantity)).toBe(initialStock + 1); // No double restock
+
+      const refundCount2 = await SaleRefund.count({ where: { saleId: sale.id } });
+      expect(refundCount2).toBe(1); // No double record
+
+      const reversalCount2 = await SalePayment.count({
+        where: { saleId: sale.id, amount: { [Op.lt]: 0 } }
+      });
+      expect(reversalCount2).toBe(1); // No double payment reversal
+    });
+
+    it('Stage 3D.3 - Requirement 3: Same key with different payload is rejected with 409 IDEMPOTENCY_KEY_REUSED', async () => {
+      const sale = await Sale.create({
+        invoiceNumber: 'INV-3D3-MISMATCH-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 400.0,
+        total: 400.0,
+        paymentMethod: 'cash',
+        paymentAmount: 400.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: sale.id,
+        productId: prodA.id,
+        quantity: 4,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 400.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: sale.id,
+        shopId: shop.id,
+        amount: 400.0,
+        paymentMethod: 'cash',
+        paymentReference: sale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const testKey = 'key-3d3-mismatch-' + Date.now();
+
+      // First call: refund 1 unit
+      const res1 = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': testKey },
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res1);
+      expect(res1.statusCode).toBe(200);
+
+      // Second call: SAME key, DIFFERENT quantity (2 units)
+      const res2 = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(sale.id) },
+        headers: { 'idempotency-key': testKey },
+        body: { items: [{ productId: prodA.id, quantity: 2, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res2);
+
+      expect(res2.statusCode).toBe(409);
+      expect(res2.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+    });
+
+    it('Stage 3D.3 - Requirement 4: Invalid idempotency key format returns 400 Bad Request', async () => {
+      const res = buildRes();
+      await saleController.processRefund({
+        params: { saleId: '999999' },
+        body: {
+          idempotencyKey: { invalid: 'must be string' },
+          items: [{ productId: prodA.id, quantity: 1 }]
+        },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, res);
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toMatch(/Invalid Idempotency-Key format/i);
+    });
+
+    it('Stage 3D.3 - Requirement 5: Aborted transaction cleanly rolls back and permits subsequent retry with the same key', async () => {
+      // 1. Create a cancelled sale
+      const cancelledSale = await Sale.create({
+        invoiceNumber: 'INV-3D3-CANCELLED-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 100.0,
+        total: 100.0,
+        paymentMethod: 'cash',
+        paymentAmount: 100.0,
+        saleStatus: 'cancelled',
+        status: 'cancelled'
+      });
+      await SaleItem.create({
+        saleId: cancelledSale.id,
+        productId: prodA.id,
+        quantity: 1,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+
+      const retryKey = 'key-3d3-retry-' + Date.now();
+
+      // Call refund on cancelled sale: must fail inside transaction and rollback
+      const resFail = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(cancelledSale.id) },
+        headers: { 'idempotency-key': retryKey },
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, resFail);
+
+      expect(resFail.statusCode).toBe(400);
+      expect(resFail.body.error).toMatch(/Cannot process refund for a cancelled or deleted sale/i);
+
+      // Verify that cancelledSale metadata does NOT store the key
+      const reloadedCancelledSale = await Sale.findByPk(cancelledSale.id);
+      expect(reloadedCancelledSale.metadata?.refundIdempotency?.[retryKey]).toBeUndefined();
+
+      // 2. Now use the SAME retryKey on a valid completed sale: must succeed
+      const validSale = await Sale.create({
+        invoiceNumber: 'INV-3D3-VALID-' + Date.now(),
+        shopId: shop.id,
+        userId: testUser2.id,
+        subtotal: 100.0,
+        total: 100.0,
+        paymentMethod: 'cash',
+        paymentAmount: 100.0,
+        saleStatus: 'completed',
+        status: 'completed'
+      });
+      await SaleItem.create({
+        saleId: validSale.id,
+        productId: prodA.id,
+        quantity: 1,
+        price: 100.0,
+        unitPrice: 100.0,
+        subtotal: 100.0,
+        shopId: shop.id
+      });
+      await SalePayment.create({
+        saleId: validSale.id,
+        shopId: shop.id,
+        amount: 100.0,
+        paymentMethod: 'cash',
+        paymentReference: validSale.invoiceNumber,
+        status: 'completed'
+      });
+
+      const resSuccess = buildRes();
+      await saleController.processRefund({
+        params: { saleId: String(validSale.id) },
+        headers: { 'idempotency-key': retryKey },
+        body: { items: [{ productId: prodA.id, quantity: 1, disposition: 'restock', reasonCode: 'OTHER' }] },
+        user: { id: testUser2.id, role: 'admin', shopId: shop.id, organizationId: org2.id },
+        shopId: shop.id,
+        organizationId: org2.id
+      }, resSuccess);
+
+      expect(resSuccess.statusCode).toBe(200);
+      expect(resSuccess.body.isDuplicate).toBeFalsy();
+
+      const reloadedValidSale = await Sale.findByPk(validSale.id);
+      expect(reloadedValidSale.metadata?.refundIdempotency?.[retryKey]).toBeDefined();
+    });
+  });
 });

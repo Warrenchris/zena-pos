@@ -2,7 +2,11 @@ const { Op, Sequelize } = require('sequelize');
 const { Sale, Customer, ActivityLog, SaleItem, Product } = require('../models');
 const sequelize = require('../config/database');
 const { getCachedAnalytics, setCachedAnalytics } = require('../utils/analyticsCache');
-const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
+const {
+  REALIZED_SALE_FILTER,
+  buildRealizedSaleSqlCondition,
+  withSaleFilter
+} = require('../constants/saleFilters');
 
 // Offset in milliseconds for Africa/Nairobi (UTC+3)
 const NAIROBI_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -167,7 +171,27 @@ function calculateGrowth(currentTotal, previousTotal) {
 }
 
 const getAuthorizedShopId = (req) => {
-  return req.query?.shopId ? parseInt(req.query.shopId, 10) : (req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId);
+  const defaultShopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
+  if (req.query?.shopId !== undefined && req.query?.shopId !== null && req.query?.shopId !== '') {
+    const requestedShopId = parseInt(req.query.shopId, 10);
+    if (Number.isFinite(requestedShopId) && requestedShopId > 0) {
+      if (typeof req.authz?.scope?.hasShopAccess === 'function') {
+        if (!req.authz.scope.hasShopAccess(requestedShopId)) {
+          const err = new Error('Forbidden: Access to the requested shop is denied.');
+          err.statusCode = 403;
+          throw err;
+        }
+        return requestedShopId;
+      }
+      if (req.user?.role === 'super_admin' || Number(defaultShopId) === requestedShopId) {
+        return requestedShopId;
+      }
+      const err = new Error('Forbidden: Access to the requested shop is denied.');
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+  return defaultShopId;
 };
 
 const analyticsController = {
@@ -208,7 +232,7 @@ const analyticsController = {
           COUNT(CASE WHEN createdAt >= ? AND createdAt <= ? THEN 1 END) as current_visitors,
           COUNT(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 END) as previous_visitors
         FROM Sales
-        WHERE shopId = ? AND createdAt >= ? AND createdAt <= ? AND saleStatus != 'cancelled'${empCondition}
+        WHERE shopId = ? AND createdAt >= ? AND createdAt <= ? AND ${buildRealizedSaleSqlCondition('Sales')}${empCondition}
         GROUP BY DATE(CONVERT_TZ(createdAt, '+00:00', '+03:00')), HOUR(CONVERT_TZ(createdAt, '+00:00', '+03:00'))
         ORDER BY DATE(CONVERT_TZ(createdAt, '+00:00', '+03:00')) ASC, HOUR(CONVERT_TZ(createdAt, '+00:00', '+03:00')) ASC
       `, {
@@ -260,8 +284,8 @@ const analyticsController = {
       res.json(response);
     } catch (error) {
       console.error('Error fetching visitor statistics:', error);
-      res.status(500).json({ 
-        error: 'Failed to fetch visitor statistics',
+      res.status(error.statusCode || 500).json({
+        error: error.statusCode ? error.message : 'Failed to fetch visitor statistics',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined 
       });
     }
@@ -302,11 +326,11 @@ const analyticsController = {
           DATE(CONVERT_TZ(s.createdAt, '+00:00', '+03:00')) as date,
           HOUR(CONVERT_TZ(s.createdAt, '+00:00', '+03:00')) as hour,
           COUNT(CASE WHEN s.createdAt >= ? AND s.createdAt <= ? THEN 1 END) as current_count,
-          SUM(CASE WHEN s.createdAt >= ? AND s.createdAt <= ? THEN (s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as current_revenue,
+          SUM(CASE WHEN s.createdAt >= ? AND s.createdAt <= ? THEN GREATEST(0, s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as current_revenue,
           COUNT(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN 1 END) as previous_count,
-          SUM(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN (s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as previous_revenue
+          SUM(CASE WHEN s.createdAt >= ? AND s.createdAt < ? THEN GREATEST(0, s.total - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = s.id AND sr.status = 'processed'), 0)) ELSE 0 END) as previous_revenue
         FROM Sales s
-        WHERE s.shopId = ? AND s.createdAt >= ? AND s.createdAt <= ? AND s.saleStatus != 'cancelled'${empCondition}
+        WHERE s.shopId = ? AND s.createdAt >= ? AND s.createdAt <= ? AND ${buildRealizedSaleSqlCondition('s')}${empCondition}
         GROUP BY DATE(CONVERT_TZ(s.createdAt, '+00:00', '+03:00')), HOUR(CONVERT_TZ(s.createdAt, '+00:00', '+03:00'))
         ORDER BY DATE(CONVERT_TZ(s.createdAt, '+00:00', '+03:00')), HOUR(CONVERT_TZ(s.createdAt, '+00:00', '+03:00'))
       `, {
@@ -368,8 +392,8 @@ const analyticsController = {
       res.json(response);
     } catch (error) {
       console.error('Error fetching order statistics:', error);
-      res.status(500).json({ 
-        error: 'Failed to fetch order statistics',
+      res.status(error.statusCode || 500).json({
+        error: error.statusCode ? error.message : 'Failed to fetch order statistics',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined 
       });
     }
@@ -396,24 +420,45 @@ const analyticsController = {
         }
       }
 
-      // Use raw SQL query for top products
+      // Use raw SQL query for top products, aggregating duplicate SaleItem lines and subtracting processed refunds
       const topProducts = await sequelize.query(`
         SELECT 
           p.id,
           p.name,
           p.price,
           p.sku,
-          SUM(si.quantity) as quantity,
-          SUM(si.quantity * COALESCE(NULLIF(si.price, 0), si.unitPrice, p.price)) as revenue
-        FROM SaleItems si
-        INNER JOIN Sales s ON si.saleId = s.id
-        INNER JOIN Products p ON si.productId = p.id
+          SUM(GREATEST(0, agg_si.sold_qty - COALESCE(sr_agg.refunded_qty, 0))) as quantity,
+          SUM(
+            CASE
+              WHEN agg_si.sold_qty > 0 THEN
+                GREATEST(0, COALESCE(agg_si.item_rev, agg_si.sold_qty * p.price) * (GREATEST(0, agg_si.sold_qty - COALESCE(sr_agg.refunded_qty, 0)) / agg_si.sold_qty))
+              ELSE 0
+            END
+          ) as revenue
+        FROM (
+          SELECT
+            si.saleId,
+            si.productId,
+            SUM(si.quantity) AS sold_qty,
+            SUM(si.quantity * COALESCE(NULLIF(si.price, 0), si.unitPrice)) AS item_rev
+          FROM SaleItems si
+          GROUP BY si.saleId, si.productId
+        ) agg_si
+        INNER JOIN Sales s ON agg_si.saleId = s.id
+        INNER JOIN Products p ON agg_si.productId = p.id
+        LEFT JOIN (
+          SELECT saleId, productId, SUM(quantity) AS refunded_qty
+          FROM SaleRefunds
+          WHERE status = 'processed'
+          GROUP BY saleId, productId
+        ) sr_agg ON sr_agg.saleId = agg_si.saleId AND sr_agg.productId = agg_si.productId
         WHERE s.shopId = :shopId
-          AND s.saleStatus != 'cancelled'
+          AND ${buildRealizedSaleSqlCondition('s')}
           AND s.createdAt BETWEEN :startDate AND :endDate
           AND p.shopId = :shopId
           ${employeeCondition}
         GROUP BY p.id, p.name, p.price, p.sku
+        HAVING quantity > 0
         ORDER BY revenue DESC
         LIMIT :limit
       `, {
@@ -428,11 +473,21 @@ const analyticsController = {
 
       // Get previous period for comparison
       const [previousProducts] = await sequelize.query(`
-        SELECT SUM(si.quantity) as totalQuantity
-        FROM SaleItems si
-        INNER JOIN Sales s ON si.saleId = s.id
+        SELECT SUM(GREATEST(0, agg_si.sold_qty - COALESCE(sr_agg.refunded_qty, 0))) as totalQuantity
+        FROM (
+          SELECT saleId, productId, SUM(quantity) AS sold_qty
+          FROM SaleItems
+          GROUP BY saleId, productId
+        ) agg_si
+        INNER JOIN Sales s ON agg_si.saleId = s.id
+        LEFT JOIN (
+          SELECT saleId, productId, SUM(quantity) AS refunded_qty
+          FROM SaleRefunds
+          WHERE status = 'processed'
+          GROUP BY saleId, productId
+        ) sr_agg ON sr_agg.saleId = agg_si.saleId AND sr_agg.productId = agg_si.productId
         WHERE s.shopId = :shopId
-          AND s.saleStatus != 'cancelled'
+          AND ${buildRealizedSaleSqlCondition('s')}
           AND s.createdAt BETWEEN :previousStartDate AND :startDate
           ${employeeCondition}
       `, {
@@ -461,8 +516,8 @@ const analyticsController = {
       });
     } catch (error) {
       console.error('Error fetching top products:', error);
-      res.status(500).json({ 
-        error: 'Failed to fetch top products',
+      res.status(error.statusCode || 500).json({
+        error: error.statusCode ? error.message : 'Failed to fetch top products',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined 
       });
     }
@@ -477,33 +532,34 @@ const analyticsController = {
 
       const isUuid = employeeId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId) : false;
 
-      const saleWhere = {
+      const baseSaleWhere = {
         shopId,
-        ...NON_CANCELLED_SALE_FILTER,
         createdAt: { [Op.between]: [startDate, endDate] }
       };
-      const prevWhere = {
+      const basePrevWhere = {
         shopId,
-        ...NON_CANCELLED_SALE_FILTER,
         createdAt: { [Op.between]: [previousStartDate, startDate] }
       };
 
       if (employeeId) {
         if (isUuid) {
-          saleWhere.employeeId = employeeId;
-          prevWhere.employeeId = employeeId;
+          baseSaleWhere.employeeId = employeeId;
+          basePrevWhere.employeeId = employeeId;
         } else {
-          saleWhere.userId = parseInt(employeeId, 10);
-          prevWhere.userId = parseInt(employeeId, 10);
+          baseSaleWhere.userId = parseInt(employeeId, 10);
+          basePrevWhere.userId = parseInt(employeeId, 10);
         }
       }
+
+      const saleWhere = withSaleFilter(baseSaleWhere, REALIZED_SALE_FILTER);
+      const prevWhere = withSaleFilter(basePrevWhere, REALIZED_SALE_FILTER);
 
       const channels = await Sale.findAll({
         where: saleWhere,
         attributes: [
           'paymentMethod',
           [sequelize.fn('COUNT', sequelize.col('id')), 'totalSales'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'totalRevenue']
+          [sequelize.literal("SUM(GREATEST(0, total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0)))"), 'totalRevenue']
         ],
         group: ['paymentMethod'],
         raw: true
@@ -537,8 +593,8 @@ const analyticsController = {
       });
     } catch (error) {
       console.error('Error fetching sales channels:', error);
-      res.status(500).json({ 
-        error: 'Failed to fetch sales channels',
+      res.status(error.statusCode || 500).json({
+        error: error.statusCode ? error.message : 'Failed to fetch sales channels',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined 
       });
     }
@@ -567,12 +623,11 @@ const analyticsController = {
       if (employeeId) {
         const empFilter = isUuid ? { employeeId } : { userId: parseInt(employeeId, 10) };
         const matchingCustomerIds = await Sale.findAll({
-          where: {
+          where: withSaleFilter({
             shopId,
-            ...NON_CANCELLED_SALE_FILTER,
             ...empFilter,
             customerId: { [Op.ne]: null }
-          },
+          }, REALIZED_SALE_FILTER),
           attributes: [[sequelize.fn('DISTINCT', sequelize.col('customerId')), 'customerId']],
           raw: true
         });
@@ -622,8 +677,8 @@ const analyticsController = {
       });
     } catch (error) {
       console.error('Error fetching customer locations:', error);
-      res.status(500).json({ 
-        error: 'Failed to fetch customer locations',
+      res.status(error.statusCode || 500).json({
+        error: error.statusCode ? error.message : 'Failed to fetch customer locations',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined 
       });
     }

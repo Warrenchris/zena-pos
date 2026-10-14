@@ -332,7 +332,17 @@ router.put('/:id',
       antiOracle: true
     }
   }),
-  body('status').optional().isIn(['completed', 'cancelled', 'refunded']),
+  (req, res, next) => {
+    const requested = [req.body?.status, req.body?.saleStatus];
+    if (requested.some(s => ['refunded', 'partially_refunded', 'partial_refund'].includes(s))) {
+      return res.status(400).json({
+        error: 'Direct status transition to refunded is not permitted. Use POST /api/sales/:saleId/refund to process itemized refunds.'
+      });
+    }
+    next();
+  },
+  body('status').optional().isIn(['pending', 'completed', 'cancelled']),
+  body('saleStatus').optional().isIn(['pending', 'confirmed', 'processing', 'completed', 'cancelled']),
   body('notes').optional().isString(),
   validateRequest,
   saleController.updateSale
