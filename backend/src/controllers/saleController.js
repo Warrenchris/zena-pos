@@ -1501,8 +1501,62 @@ exports.getAllSalesForAdmin = async (req, res) => {
       } : null
     });
 
+    const normalizedRows = sales.rows.map((row) => {
+      const sale = row.get ? row.get({ plain: true }) : row;
+
+      const saleItems = Array.isArray(sale.SaleItems) ? sale.SaleItems : [];
+      const products = saleItems.map((si) => ({
+        id: si.Product?.id ?? si.productId ?? null,
+        name: si.Product?.name ?? 'Unknown',
+        quantity: si.quantity ?? 0,
+        priceAtSale: parseFloat(
+          (si.price ?? si.unitPrice ?? si.originalPrice ?? 0)
+        ),
+        Product: si.Product
+      }));
+
+      const itemsText = saleItems.map(item =>
+        `${item.quantity}x ${item.Product?.name || 'Unknown Product'}`
+      ).join(', ');
+
+      const employeeName = sale.Employee
+        ? `${sale.Employee.firstName || ''} ${sale.Employee.lastName || ''}`.trim()
+        : (sale.User?.name || null);
+
+      return {
+        ...sale,
+        products,
+        SaleItems: saleItems,
+        items: saleItems.length > 0 ? itemsText : '0 items',
+        itemCount: `${saleItems.length} items`,
+        employee: employeeName,
+        cashierName: employeeName || 'Walk-in Cashier',
+        customer: sale.Customer ? {
+          id: sale.Customer.id,
+          name: sale.Customer.name,
+          email: sale.Customer.email,
+          phone: sale.Customer.phone
+        } : null,
+        Customer: sale.Customer,
+        subtotal: parseFloat(sale.subtotal ?? (products.reduce((acc, p) => acc + (p.priceAtSale * p.quantity), 0))),
+        discount: parseFloat(sale.discount ?? 0),
+        discountType: sale.discountType || null,
+        discountValue: sale.discountValue ? parseFloat(sale.discountValue) : null,
+        tax: parseFloat(sale.tax ?? 0),
+        taxRate: parseFloat(sale.taxRate ?? 0),
+        totalAmount: parseFloat(sale.total ?? 0),
+        total: parseFloat(sale.total ?? 0),
+        paymentAmount: sale.paymentAmount ? parseFloat(sale.paymentAmount) : null,
+        change: sale.change ? parseFloat(sale.change) : null,
+        paymentMethod: (sale.paymentMethod || 'cash').toUpperCase(),
+        status: (sale.saleStatus || 'completed').toUpperCase(),
+        saleStatus: sale.saleStatus || 'completed',
+        metadata: sale.metadata || {}
+      };
+    });
+
     res.json({
-      sales: sales.rows,
+      sales: normalizedRows,
       total: sales.count,
       totalPages: Math.ceil(sales.count / limit),
       currentPage: page
