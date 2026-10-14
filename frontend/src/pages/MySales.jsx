@@ -170,19 +170,35 @@ const MySales = () => {
       // Keep original sale data for modal, add normalized fields for display
       const normalized = rows.map((s) => {
         const customer = s.customer || s.Customer || null;
-        // Backend already provides products array, use it directly
-        const products = Array.isArray(s.products) ? s.products : [];
+        // Support products, SaleItems, and items arrays robustly
+        const rawProducts = (Array.isArray(s.products) && s.products.length > 0)
+          ? s.products
+          : (Array.isArray(s.SaleItems) && s.SaleItems.length > 0
+            ? s.SaleItems.map((si) => ({
+                id: si.Product?.id ?? si.productId ?? si.id,
+                name: si.Product?.name ?? si.name ?? 'Unknown',
+                quantity: Number(si.quantity) || 0,
+                priceAtSale: parseFloat(si.price ?? si.unitPrice ?? si.priceAtSale ?? 0),
+                Product: si.Product
+              }))
+            : (Array.isArray(s.items) ? s.items : []));
+
+        const employeeName = s.employee
+          || (s.Employee ? `${s.Employee.firstName || ''} ${s.Employee.lastName || ''}`.trim() : null)
+          || s.User?.name
+          || null;
+
         return {
           ...s, // Keep all original fields for modal
           // Normalized fields for display in table
           customer,
-          products,
+          products: rawProducts,
           totalAmount: parseFloat(s.totalAmount ?? s.total ?? 0),
           subtotal: parseFloat(s.subtotal ?? 0),
           discount: parseFloat(s.discount ?? 0),
           paymentMethod: (s.paymentMethod || 'CASH').toUpperCase(),
           status: (s.status || 'COMPLETED').toUpperCase(),
-          employee: s.Employee ? `${s.Employee.firstName || ''} ${s.Employee.lastName || ''}`.trim() : null
+          employee: employeeName
         };
       });
 
@@ -306,7 +322,10 @@ const MySales = () => {
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-text-muted">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-2 text-text-secondary border border-border-default">
-                          {(Array.isArray(sale.products) ? sale.products.length : 0)} items
+                          {(() => {
+                            const count = Array.isArray(sale.products) ? sale.products.length : (Array.isArray(sale.SaleItems) ? sale.SaleItems.length : 0);
+                            return `${count} ${count === 1 ? 'item' : 'items'}`;
+                          })()}
                         </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-text-primary text-right">
