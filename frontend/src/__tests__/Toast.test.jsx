@@ -31,6 +31,27 @@ const TestComponent = () => {
       >
         Trigger Success
       </button>
+      <button
+        onClick={() =>
+          showToast('This product is out of stock', 'error')
+        }
+      >
+        Trigger Message First
+      </button>
+      <button
+        onClick={() =>
+          showToast('success', 'Return processed successfully!')
+        }
+      >
+        Trigger Type First
+      </button>
+      <button
+        onClick={() =>
+          showToast('success', 'Employee profile updated', 'Staff Created')
+        }
+      >
+        Trigger Type Message Title
+      </button>
     </div>
   );
 };
@@ -60,6 +81,40 @@ describe('Toast notification system', () => {
     expect(
       screen.getByText('Coca-Cola Soda 1.25L is running low. Current stock: 2 (Reorder at: 10)')
     ).toBeInTheDocument();
+  });
+
+  it('handles positional arguments (message, type) cleanly without blank text', () => {
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByText('Trigger Message First'));
+    expect(screen.getByText('This product is out of stock')).toBeInTheDocument();
+  });
+
+  it('handles positional arguments (type, message) cleanly', () => {
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByText('Trigger Type First'));
+    expect(screen.getByText('Return processed successfully!')).toBeInTheDocument();
+  });
+
+  it('handles positional arguments (type, message, title) with both title and message', () => {
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByText('Trigger Type Message Title'));
+    expect(screen.getByText('Staff Created')).toBeInTheDocument();
+    expect(screen.getByText('Employee profile updated')).toBeInTheDocument();
   });
 
   it('prevents duplicate toasts with the same ID', () => {
