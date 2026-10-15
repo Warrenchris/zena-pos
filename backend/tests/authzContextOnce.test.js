@@ -212,7 +212,7 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
   });
 
   describe('1. Query-Count Verification via Sequelize afterQuery Hook', () => {
-    test('Warm GET /api/sales/statistics runs authzContext SQL queries ONCE (8 total queries instead of 12)', async () => {
+    test('Warm GET /api/sales/statistics runs authzContext SQL queries ONCE (7 total queries instead of 12)', async () => {
       // Warm up Redis caches (user status, org status, authzVersion, subscription status, permissions)
       const warmupRes = await request(app)
         .get('/api/sales/statistics')
@@ -257,8 +257,8 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
       expect(orgQueries).toHaveLength(1);
       expect(ownerShopQueries).toHaveLength(1);
 
-      // Total warm queries = 4 pre-handler (authzContext once) + 4 handler (getSalesStatistics) = 8
-      expect(recordedSql).toHaveLength(8);
+      // Total warm queries = 4 pre-handler (authzContext once) + 3 handler (getSalesStatistics) = 7
+      expect(recordedSql).toHaveLength(7);
     });
   });
 
