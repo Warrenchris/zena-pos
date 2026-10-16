@@ -26,10 +26,51 @@ exports.getMine = async (req, res) => {
 exports.updateMine = async (req, res) => {
   const shop = await Shop.findByPk(req.user.shopId);
   if (!shop) return res.status(404).json({ error: 'Shop not found' });
-  const { name, address, phone } = req.body;
+
+  const { name, address, phone, kraPin, registrationNumber } = req.body;
+
+  let validatedKraPin;
+  let hasKraPin = false;
+  if (kraPin !== undefined) {
+    if (kraPin === null) {
+      validatedKraPin = null;
+      hasKraPin = true;
+    } else if (typeof kraPin === 'string') {
+      const trimmed = kraPin.trim();
+      if (trimmed.length > 255) {
+        return res.status(400).json({ error: 'kraPin is too long (maximum 255 characters)' });
+      }
+      validatedKraPin = trimmed.length === 0 ? null : trimmed;
+      hasKraPin = true;
+    } else {
+      return res.status(400).json({ error: 'kraPin must be a string or null' });
+    }
+  }
+
+  let validatedRegNum;
+  let hasRegNum = false;
+  if (registrationNumber !== undefined) {
+    if (registrationNumber === null) {
+      validatedRegNum = null;
+      hasRegNum = true;
+    } else if (typeof registrationNumber === 'string') {
+      const trimmed = registrationNumber.trim();
+      if (trimmed.length > 255) {
+        return res.status(400).json({ error: 'registrationNumber is too long (maximum 255 characters)' });
+      }
+      validatedRegNum = trimmed.length === 0 ? null : trimmed;
+      hasRegNum = true;
+    } else {
+      return res.status(400).json({ error: 'registrationNumber must be a string or null' });
+    }
+  }
+
   if (name !== undefined) shop.name = name;
   if (address !== undefined) shop.address = address;
   if (phone !== undefined) shop.phone = phone;
+  if (hasKraPin) shop.kraPin = validatedKraPin;
+  if (hasRegNum) shop.registrationNumber = validatedRegNum;
+
   await shop.save();
   res.json(shop);
 };
