@@ -3,6 +3,7 @@
 const logger = require('../utils/logger');
 const tokenRevocationService = require('../services/tokenRevocationService');
 const permissionCache = require('../services/permissionCache');
+const authzContextCacheService = require('../services/authzContextCacheService');
 const { getRequestActor } = require('../utils/requestAuthState');
 const {
   Organization,
@@ -57,6 +58,252 @@ async function authzContext(req, res, next) {
         error: 'Authorization epoch stale. Session has been invalidated.',
         code: 'AUTHZ_VERSION_STALE'
       });
+    }
+
+    // 1b. Check Actor Context Cache (Stage C2)
+    const cacheKey = authzContextCacheService.getCacheKey({
+      tokenRole,
+      tokenOrgId,
+      id,
+      isEmployee: !!isEmployee,
+      currentVersion
+    });
+
+    let cached = await authzContextCacheService.getCachedActorContext(cacheKey);
+    if (cached && !authzContextCacheService.validateCachedPayload(cached, {
+      id,
+      isEmployee: !!isEmployee,
+      currentVersion,
+      tokenOrgId,
+      tokenRole
+    })) {
+      cached = null; // Malformed, schema mismatch, or version mismatch -> treat as miss
+    }
+
+    if (cached) {
+      if (tokenRole === 'super_admin' && !isEmployee) {
+        const superAdminContext = {
+          identity: Object.freeze({
+            id: cached.identity.id,
+            userId: cached.identity.userId,
+            employeeId: null,
+            isEmployee: false,
+            email: cached.identity.email,
+            name: cached.identity.name || 'Platform Super Admin'
+          }),
+          session: Object.freeze({
+            authzVersion: currentVersion,
+            iat: iat || Math.floor(Date.now() / 1000),
+            exp: exp || Math.floor(Date.now() / 1000) + 7200,
+            jti: jti || null
+          }),
+          tenant: null,
+          role: Object.freeze({
+            rawRole: cached.role.rawRole,
+            effectiveRole: cached.role.effectiveRole
+          }),
+          scope: Object.freeze({
+            activeShopId: null,
+            homeShopId: null,
+            accessibleShopIds: [],
+            hasShopAccess: () => true
+          }),
+          permissions: Object.freeze({
+            granted: new Set(['*']),
+            has: () => true,
+            hasAny: () => true,
+            hasAll: () => true
+          }),
+          ownership: Object.freeze({
+            isOwnerOf: () => true,
+            canManage: () => true
+          })
+        };
+
+        req.authz = Object.freeze(superAdminContext);
+        req.user = {
+          ...req.user,
+          role: 'super_admin',
+          authzVersion: currentVersion
+        };
+        completedAuthzRequests.add(req);
+        return next();
+      }
+
+      // Tenant actor path from cache
+      if (cached.membership && cached.membership.status !== 'active') {
+        return res.status(403).json({
+          error: 'Organization membership is suspended.',
+          code: 'MEMBERSHIP_SUSPENDED'
+        });
+      }
+
+      // Cross-tenant mismatch verification
+      const targetOrgId = req.organizationId || tokenOrgId;
+      if (targetOrgId && Number(targetOrgId) !== Number(cached.tenant.organizationId)) {
+        return res.status(403).json({
+          error: 'Cross-tenant access forbidden.',
+          code: 'TENANT_MISMATCH'
+        });
+      }
+
+      // Live check organization status (never cached)
+      const orgStatus = await tokenRevocationService.getOrgStatus(cached.tenant.organizationId, req);
+      if (orgStatus === 'deleted') {
+        return res.status(403).json({
+          error: 'Organization has been deactivated or deleted.',
+          code: 'ORGANIZATION_DELETED',
+          isDeleted: true
+        });
+      }
+      if ((orgStatus === 'suspended' || orgStatus === 'canceled') && cached.tenant.orgRole !== 'owner') {
+        return res.status(403).json({
+          error: 'Organization subscription is suspended. Contact the organization owner for renewal.',
+          code: 'ORGANIZATION_SUSPENDED',
+          isSuspended: true
+        });
+      }
+
+      // Resolve roles
+      const orgRole = cached.tenant.orgRole;
+      let effectiveRole = cached.role.effectiveRole;
+      if (tokenRole === 'customer') {
+        effectiveRole = 'customer';
+      }
+
+      // Resolve shop access & scope
+      const activeShopId = req.shopId || tokenShopId || null;
+      let accessibleShopIds = [];
+
+      if (orgRole === 'owner') {
+        // Owner Shop.findAll STAYS as a DB query (that is C3)
+        const orgShops = await Shop.findAll({
+          where: { organizationId: cached.tenant.organizationId, active: true },
+          attributes: ['id']
+        });
+        accessibleShopIds = orgShops.map(s => s.id);
+      } else {
+        accessibleShopIds = Array.isArray(cached.scope.memberAccessibleShopIds)
+          ? [...cached.scope.memberAccessibleShopIds]
+          : [];
+      }
+
+      const hasShopAccess = (targetShopId) => {
+        if (targetShopId === null || targetShopId === undefined) return false;
+        const numId = Number(targetShopId);
+        return accessibleShopIds.includes(numId);
+      };
+
+      // Resolve permissions
+      let permissionList = [];
+      if (effectiveRole === 'admin' || orgRole === 'owner') {
+        permissionList = ['all'];
+      } else if (effectiveRole === 'billing_admin') {
+        permissionList = ['view_invoices', 'manage_billing'];
+      } else {
+        try {
+          permissionList = await permissionCache.getRolePermissions(effectiveRole, cached.tenant.organizationId);
+        } catch (err) {
+          logger.warn(`[AUTHZ] Error getting permissions for ${effectiveRole}:`, err.message);
+        }
+        if (!permissionList || permissionList.length === 0) {
+          const { ROLE_PERMISSIONS } = require('./rolePermissions');
+          permissionList = ROLE_PERMISSIONS[effectiveRole] || [];
+        }
+      }
+
+      const grantedSet = new Set(permissionList);
+      const hasPermission = (p) => {
+        if (!p) return false;
+        return grantedSet.has('all') || grantedSet.has('*') || grantedSet.has(p);
+      };
+
+      const permissionsHelper = {
+        granted: grantedSet,
+        has: hasPermission,
+        hasAny: (...perms) => {
+          if (grantedSet.has('all') || grantedSet.has('*')) return true;
+          return perms.some(p => grantedSet.has(p));
+        },
+        hasAll: (...perms) => {
+          if (grantedSet.has('all') || grantedSet.has('*')) return true;
+          return perms.every(p => grantedSet.has(p));
+        }
+      };
+
+      // Ownership & manager override helper
+      const identityId = cached.identity.id;
+      const ownershipHelper = {
+        isOwnerOf: (resourceOwnerId) => {
+          if (resourceOwnerId === null || resourceOwnerId === undefined) return false;
+          return String(resourceOwnerId) === String(identityId);
+        },
+        canManage: (resourceOwnerId, managerPermission = 'manage_sales') => {
+          if (ownershipHelper.isOwnerOf(resourceOwnerId)) return true;
+          if (orgRole === 'owner' || effectiveRole === 'admin') return true;
+          if (effectiveRole === 'manager' || effectiveRole === 'org_admin') return true;
+          return permissionsHelper.has(managerPermission);
+        }
+      };
+
+      const authz = {
+        identity: Object.freeze({
+          id: cached.identity.id,
+          userId: cached.identity.userId,
+          employeeId: cached.identity.employeeId,
+          isEmployee: cached.identity.isEmployee,
+          email: cached.identity.email,
+          name: cached.identity.name
+        }),
+        session: Object.freeze({
+          authzVersion: currentVersion,
+          iat: iat || Math.floor(Date.now() / 1000),
+          exp: exp || null,
+          jti: jti || null
+        }),
+        tenant: Object.freeze({
+          organizationId: cached.tenant.organizationId,
+          organizationName: cached.tenant.organizationName,
+          organizationStatus: orgStatus,
+          membershipId: cached.tenant.membershipId,
+          orgRole,
+          membershipStatus: cached.tenant.membershipStatus,
+          isOwner: cached.tenant.isOwner,
+          isOrgAdmin: cached.tenant.isOrgAdmin
+        }),
+        role: Object.freeze({
+          rawRole: cached.role.rawRole,
+          effectiveRole
+        }),
+        scope: Object.freeze({
+          activeShopId,
+          homeShopId: cached.scope.homeShopId,
+          accessibleShopIds,
+          hasShopAccess
+        }),
+        permissions: Object.freeze(permissionsHelper),
+        ownership: Object.freeze(ownershipHelper)
+      };
+
+      req.authz = Object.freeze(authz);
+      req.user = {
+        ...req.user,
+        id: identityId,
+        email: cached.identity.email,
+        name: cached.identity.name,
+        role: effectiveRole,
+        orgRole,
+        shopId: activeShopId,
+        organizationId: cached.tenant.organizationId,
+        isEmployee: Boolean(isEmployee),
+        authzVersion: currentVersion
+      };
+      req.shopId = activeShopId;
+      req.organizationId = cached.tenant.organizationId;
+      req.membership = cached.membership;
+
+      completedAuthzRequests.add(req);
+      return next();
     }
 
     // 2. Platform super_admin special case (out of tenant scope)
@@ -129,6 +376,16 @@ async function authzContext(req, res, next) {
         role: 'super_admin',
         authzVersion: currentVersion
       };
+
+      if (cacheKey && authzContextCacheService.isCacheEnabled()) {
+        const payload = authzContextCacheService.buildSuperAdminPayload({
+          id,
+          currentVersion,
+          superAdminUser
+        });
+        await authzContextCacheService.setCachedActorContext(cacheKey, payload);
+      }
+
       completedAuthzRequests.add(req);
       return next();
     }
@@ -438,6 +695,25 @@ async function authzContext(req, res, next) {
     req.shopId = activeShopId;
     req.organizationId = organization.id;
     req.membership = membership;
+
+    if (cacheKey && authzContextCacheService.isCacheEnabled()) {
+      const payload = authzContextCacheService.buildActorPayload({
+        id,
+        isEmployee: Boolean(isEmployee),
+        currentVersion,
+        entityUser,
+        entityEmployee,
+        rawRole,
+        effectiveRole,
+        organization,
+        membership,
+        homeShopId,
+        accessibleShopIds,
+        email,
+        name
+      });
+      await authzContextCacheService.setCachedActorContext(cacheKey, payload);
+    }
 
     completedAuthzRequests.add(req);
     next();

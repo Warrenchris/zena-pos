@@ -13,6 +13,7 @@ const {
   HeldCart
 } = require('../models');
 const entitlementService = require('./entitlementService');
+const tokenRevocationService = require('./tokenRevocationService');
 const logger = require('../utils/logger');
 
 /**
@@ -84,6 +85,7 @@ async function purgeExpiredOrganizations(asOfDate = new Date()) {
             },
             { transaction: t }
           );
+          await tokenRevocationService.incrementAuthzVersion(emp.id, true, t);
         }
       }
 
@@ -124,6 +126,7 @@ async function purgeExpiredOrganizations(asOfDate = new Date()) {
               },
               { transaction: t }
             );
+            await tokenRevocationService.incrementAuthzVersion(u.id, false, t);
           }
         }
       }
@@ -133,6 +136,13 @@ async function purgeExpiredOrganizations(asOfDate = new Date()) {
         { status: 'suspended' },
         { where: { organizationId: org.id }, transaction: t, validate: false }
       );
+      for (const m of memberships) {
+        if (m.userId) {
+          await tokenRevocationService.incrementAuthzVersion(m.userId, false, t);
+        } else if (m.employeeId) {
+          await tokenRevocationService.incrementAuthzVersion(m.employeeId, true, t);
+        }
+      }
 
       // 5. Delete ephemeral held carts
       if (shopIds.length && HeldCart) {
