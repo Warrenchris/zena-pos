@@ -48,6 +48,9 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
   let managerToken;
   let cashierToken;
   let superAdminToken;
+  let employeeUser;
+  let employeeMembership;
+  let employeeToken;
   let managerMembership;
   let cashierMembership;
 
@@ -62,6 +65,12 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
       await tokenRevocationService.clearAuthzVersion(u.id, false);
       await tokenRevocationService.clearUserStatus(u.id, false);
       await tokenRevocationService.clearUserTokenCutoff(u.id, false);
+    }
+    if (employeeUser) {
+      await tokenRevocationService.clearAuthzVersion(employeeUser.id, true);
+      await tokenRevocationService.clearUserStatus(employeeUser.id, true);
+      await tokenRevocationService.clearUserTokenCutoff(employeeUser.id, true);
+      await Employee.update({ position: 'cashier', authzVersion: 1, shopId: shop.id }, { where: { id: employeeUser.id }, validate: false });
     }
     if (managerUser) {
       await User.update({ role: 'manager', authzVersion: 1, shopId: shop.id }, { where: { id: managerUser.id }, validate: false });
@@ -259,6 +268,41 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
       id: superAdminUser.id,
       role: 'super_admin',
       isEmployee: false,
+      authzVersion: 1
+    });
+
+    employeeUser = await Employee.create({
+      shopId: shop.id,
+      firstName: 'Stage C2',
+      lastName: 'Employee',
+      email: `employee_${suffix}@zenapos-c2.co.ke`,
+      position: 'cashier',
+      status: 'active',
+      password: 'Password123!',
+      salary: 25000,
+      authzVersion: 1
+    });
+
+    employeeMembership = await OrganizationMembership.create({
+      organizationId: org.id,
+      employeeId: employeeUser.id,
+      orgRole: 'member',
+      status: 'active'
+    });
+
+    await ShopAccess.create({
+      membershipId: employeeMembership.id,
+      shopId: shop.id,
+      isDefault: true
+    });
+
+    employeeToken = signToken({
+      id: employeeUser.id,
+      role: 'cashier',
+      orgRole: 'member',
+      shopId: shop.id,
+      organizationId: org.id,
+      isEmployee: true,
       authzVersion: 1
     });
   });
@@ -622,6 +666,7 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
     expect(resVer.body.user.id).toBe(managerUser.id);
   });
 
+  // Asserts the end-to-end 403 HTTP rejection and that the validator's tenant rule is directly verified by the unit test.
   test('e. org A actor cannot be served from org B key, poison test rejects with 403', async () => {
     process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'true';
 
@@ -698,7 +743,7 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
     expect(warmSql).toHaveLength(6);
   });
 
-  test('parity test: cache ON vs OFF for owner, manager, super_admin', async () => {
+  test('parity test: cache ON vs OFF for owner, manager, super_admin, employee', async () => {
     const fixedPermissions = [
       'create_sales',
       'view_reports',
@@ -746,6 +791,19 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
           isEmployee: false,
           authzVersion: 1
         }
+      },
+      {
+        name: 'employee',
+        user: employeeUser,
+        tokenPayload: {
+          id: employeeUser.id,
+          role: 'cashier',
+          orgRole: 'member',
+          shopId: shop.id,
+          organizationId: org.id,
+          isEmployee: true,
+          authzVersion: 1
+        }
       }
     ];
 
@@ -762,6 +820,10 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
       expect(offNextCalled).toBe(true);
 
       const offContext = {
+        identity: {
+          isEmployee: offReq.authz.identity.isEmployee,
+          employeeId: offReq.authz.identity.employeeId
+        },
         userFields: {
           id: offReq.user.id,
           role: offReq.user.role,
@@ -799,6 +861,10 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
       expect(warmNextCalled).toBe(true);
 
       const warmContext = {
+        identity: {
+          isEmployee: warmReq.authz.identity.isEmployee,
+          employeeId: warmReq.authz.identity.employeeId
+        },
         userFields: {
           id: warmReq.user.id,
           role: warmReq.user.role,
@@ -818,6 +884,7 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
       }
 
       // Assert complete parity
+      expect(warmContext.identity).toEqual(offContext.identity);
       expect(warmContext.role).toBe(offContext.role);
       expect(warmContext.rawRole).toBe(offContext.rawRole);
       expect(warmContext.orgRole).toBe(offContext.orgRole);
@@ -825,6 +892,144 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
       expect(warmContext.userFields).toEqual(offContext.userFields);
       expect(warmContext.permissions).toEqual(offContext.permissions);
     }
+  });
+
+  describe('authzContextCacheService.validateCachedPayload unit tests', () => {
+    const baseValidUserPayload = {
+      schemaVersion: 1,
+      actorKind: 'u',
+      actorId: 101,
+      authzVersion: 1,
+      identity: { id: 101, userId: 101, employeeId: null, isEmployee: false, email: 'u101@test.local' },
+      role: { rawRole: 'manager', effectiveRole: 'manager' },
+      tenant: { organizationId: 50, orgRole: 'member', membershipStatus: 'active' },
+      membership: { id: 'mem-101', organizationId: 50, userId: 101, status: 'active' },
+      scope: { homeShopId: 10, memberAccessibleShopIds: [10] }
+    };
+
+    const baseValidParams = {
+      id: 101,
+      isEmployee: false,
+      currentVersion: 1,
+      tokenOrgId: 50,
+      tokenRole: 'manager'
+    };
+
+    test('returns true for a valid payload', () => {
+      // Valid user payload
+      expect(authzContextCacheService.validateCachedPayload(baseValidUserPayload, baseValidParams)).toBe(true);
+
+      // Valid employee payload
+      const validEmpPayload = {
+        schemaVersion: 1,
+        actorKind: 'e',
+        actorId: 'emp-uuid-55',
+        authzVersion: 2,
+        identity: { id: 'emp-uuid-55', userId: null, employeeId: 'emp-uuid-55', isEmployee: true },
+        role: { rawRole: 'cashier', effectiveRole: 'cashier' },
+        tenant: { organizationId: 50, orgRole: 'member', membershipStatus: 'active' },
+        membership: { id: 'mem-emp-55', organizationId: 50, employeeId: 'emp-uuid-55', status: 'active' },
+        scope: { homeShopId: 10, memberAccessibleShopIds: [10] }
+      };
+      const empParams = {
+        id: 'emp-uuid-55',
+        isEmployee: true,
+        currentVersion: 2,
+        tokenOrgId: 50,
+        tokenRole: 'cashier'
+      };
+      expect(authzContextCacheService.validateCachedPayload(validEmpPayload, empParams)).toBe(true);
+    });
+
+    test('returns false for tenant-org mismatch', () => {
+      // Token orgId differs from cached tenant.organizationId
+      expect(authzContextCacheService.validateCachedPayload(baseValidUserPayload, {
+        ...baseValidParams,
+        tokenOrgId: 99
+      })).toBe(false);
+
+      // Cached tenant.organizationId differs
+      const mismatchedPayload = {
+        ...baseValidUserPayload,
+        tenant: { ...baseValidUserPayload.tenant, organizationId: 99 }
+      };
+      expect(authzContextCacheService.validateCachedPayload(mismatchedPayload, baseValidParams)).toBe(false);
+    });
+
+    test('returns false for wrong schemaVersion', () => {
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        schemaVersion: 2
+      }, baseValidParams)).toBe(false);
+
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        schemaVersion: 0
+      }, baseValidParams)).toBe(false);
+
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        schemaVersion: undefined
+      }, baseValidParams)).toBe(false);
+    });
+
+    test('returns false for wrong actorId', () => {
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        actorId: 999
+      }, baseValidParams)).toBe(false);
+
+      expect(authzContextCacheService.validateCachedPayload(baseValidUserPayload, {
+        ...baseValidParams,
+        id: 999
+      })).toBe(false);
+    });
+
+    test('returns false for wrong actorKind', () => {
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        actorKind: 'e'
+      }, baseValidParams)).toBe(false);
+
+      expect(authzContextCacheService.validateCachedPayload(baseValidUserPayload, {
+        ...baseValidParams,
+        isEmployee: true
+      })).toBe(false);
+    });
+
+    test('returns false for wrong authzVersion', () => {
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        authzVersion: 2
+      }, baseValidParams)).toBe(false);
+
+      expect(authzContextCacheService.validateCachedPayload(baseValidUserPayload, {
+        ...baseValidParams,
+        currentVersion: 2
+      })).toBe(false);
+    });
+
+    test('returns false for missing tenant', () => {
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        tenant: null
+      }, baseValidParams)).toBe(false);
+
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        tenant: undefined
+      }, baseValidParams)).toBe(false);
+
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        tenant: { ...baseValidUserPayload.tenant, organizationId: null }
+      }, baseValidParams)).toBe(false);
+
+      expect(authzContextCacheService.validateCachedPayload({
+        ...baseValidUserPayload,
+        tenant: { ...baseValidUserPayload.tenant, organizationId: undefined }
+      }, baseValidParams)).toBe(false);
+    });
   });
 
   test('g. purge scheduler bump test: purging expired org bumps authzVersion for employees and members', async () => {
