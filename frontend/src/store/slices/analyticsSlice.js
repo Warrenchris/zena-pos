@@ -22,6 +22,20 @@ export const fetchOrderStats = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch order statistics');
     }
+  },
+  {
+    condition: (params, { getState }) => {
+      const { orderStats } = getState().analytics;
+      if (orderStats.loading) {
+        const currentKey = JSON.stringify(orderStats.currentParams ?? null);
+        const nextKey = JSON.stringify(params ?? null);
+        if (currentKey === nextKey) {
+          // Collapse duplicate in-flight dispatch with identical parameters
+          return false;
+        }
+      }
+      return true;
+    }
   }
 );
 
@@ -76,7 +90,9 @@ const initialState = {
     totalOrders: 0,
     totalRevenue: 0,
     loading: false,
-    error: null
+    error: null,
+    currentParams: null,
+    currentRequestId: null
   },
   topProducts: {
     products: [],
@@ -124,11 +140,17 @@ const analyticsSlice = createSlice({
         state.visitorStats.error = action.payload;
       })
       // Order stats cases
-      .addCase(fetchOrderStats.pending, (state) => {
+      .addCase(fetchOrderStats.pending, (state, action) => {
         state.orderStats.loading = true;
         state.orderStats.error = null;
+        state.orderStats.currentParams = action.meta.arg;
+        state.orderStats.currentRequestId = action.meta.requestId;
       })
       .addCase(fetchOrderStats.fulfilled, (state, action) => {
+        // Prevent an older, slower response from overwriting a newer request after params/period change
+        if (action.meta.requestId !== state.orderStats.currentRequestId) {
+          return;
+        }
         state.orderStats.loading = false;
         state.orderStats.orderData = action.payload.orderData;
         state.orderStats.orderPercentageChange = action.payload.orderPercentageChange;
@@ -137,6 +159,12 @@ const analyticsSlice = createSlice({
         state.orderStats.totalRevenue = action.payload.totalRevenue;
       })
       .addCase(fetchOrderStats.rejected, (state, action) => {
+        if (action.meta?.condition) {
+          return;
+        }
+        if (action.meta.requestId !== state.orderStats.currentRequestId) {
+          return;
+        }
         state.orderStats.loading = false;
         state.orderStats.error = action.payload;
       })
