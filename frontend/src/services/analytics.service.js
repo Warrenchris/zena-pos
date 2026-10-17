@@ -5,6 +5,9 @@ const normalizeParams = (params) => {
   return params || {};
 };
 
+// In-flight request deduplication map for order statistics (key -> Promise)
+const inFlightOrderStats = new Map();
+
 const analyticsService = {
   async getVisitorStats(params = {}) {
     try {
@@ -22,21 +25,34 @@ const analyticsService = {
   },
 
   async getOrderStats(params = {}) {
-    try {
-      const response = await api.get('/api/analytics/orders', { params: normalizeParams(params) });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching order statistics:', error);
-      // Return empty data structure on error
-      return {
-        orderData: [],
-        revenueData: [],
-        totalOrders: 0,
-        totalRevenue: 0,
-        orderPercentageChange: 0,
-        revenuePercentageChange: 0
-      };
+    const norm = normalizeParams(params);
+    const key = JSON.stringify(norm);
+    if (inFlightOrderStats.has(key)) {
+      return inFlightOrderStats.get(key);
     }
+
+    const promise = (async () => {
+      try {
+        const response = await api.get('/api/analytics/orders', { params: norm });
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching order statistics:', error);
+        // Return empty data structure on error
+        return {
+          orderData: [],
+          revenueData: [],
+          totalOrders: 0,
+          totalRevenue: 0,
+          orderPercentageChange: 0,
+          revenuePercentageChange: 0
+        };
+      } finally {
+        inFlightOrderStats.delete(key);
+      }
+    })();
+
+    inFlightOrderStats.set(key, promise);
+    return promise;
   },
 
   async getTopProducts(params = {}, limit = 5) {
