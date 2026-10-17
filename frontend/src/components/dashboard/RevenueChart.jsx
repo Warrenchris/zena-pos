@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   AreaChart,
   Area,
@@ -9,35 +10,26 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import useCurrency from '../../hooks/useCurrency';
-import analyticsService from '../../services/analytics.service';
+import { fetchOrderStats } from '../../store/slices/analyticsSlice';
 import Card from '../ui/Card';
 
-const RevenueChart = ({ filter = { period: 'week' } }) => {
+const DEFAULT_FILTER = Object.freeze({ period: 'week' });
+
+const RevenueChart = ({ filter = DEFAULT_FILTER }) => {
+  const dispatch = useDispatch();
   const { format } = useCurrency();
-  const [revenueData, setRevenueData] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { orderData = [], loading, error } = useSelector((state) => state.analytics.orderStats);
 
   useEffect(() => {
-    const fetchRevenueData = async () => {
-      try {
-        setLoading(true);
-        const response = await analyticsService.getOrderStats(filter);
-        const data = response.orderData || response.revenueData || [];
+    dispatch(fetchOrderStats(filter));
+  }, [dispatch, filter]);
 
-        setRevenueData(data.map(item => ({
-          date: item.date,
-          revenue: parseFloat(item.revenue || 0)
-        })));
-      } catch (error) {
-        console.error('Error fetching revenue data:', error);
-        setRevenueData([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRevenueData();
-  }, [filter]);
+  const revenueData = useMemo(() => {
+    return (orderData || []).map((item) => ({
+      date: item.date,
+      revenue: parseFloat(item.revenue || 0)
+    }));
+  }, [orderData]);
 
   const formatAxisDate = (d) => {
     if (!d) return '';
@@ -93,6 +85,17 @@ const RevenueChart = ({ filter = { period: 'week' } }) => {
         </div>
         <div className="h-[320px] rounded-xl bg-surface-2/40 animate-pulse flex items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card variant="default" className="p-6 border-danger/20 bg-danger/5">
+        <div className="flex h-[320px] flex-col items-center justify-center text-center">
+          <p className="text-danger font-semibold text-body mb-1">Unable to load revenue data</p>
+          <p className="text-text-muted text-caption">{error}</p>
         </div>
       </Card>
     );
