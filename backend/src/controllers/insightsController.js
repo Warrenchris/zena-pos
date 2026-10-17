@@ -12,6 +12,24 @@ const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
 const aiClient = require('../utils/aiClient');
 const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER, NET_SALE_REVENUE_SQL } = require('../constants/saleFilters');
+const { getInsightsCache, setInsightsCache } = require('../services/insightsCacheService');
+
+/**
+ * Concurrency limiter that guarantees no more than `limit` async tasks
+ * execute concurrently against the database.
+ */
+async function runWithConcurrencyLimit(tasks, limit = 4) {
+  const results = new Array(tasks.length);
+  let nextIdx = 0;
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
+    while (nextIdx < tasks.length) {
+      const idx = nextIdx++;
+      results[idx] = await tasks[idx]();
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
@@ -456,27 +474,207 @@ const getInsights = async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const [trends, recommendations, alerts] = await Promise.all([
-      calculateTrends(shopId),
-      generateRecommendations(shopId),
-      generateAlerts(shopId, req.user)
-    ]);
+    const orgId = req.user?.organizationId || req.authz?.scope?.organizationId || 'no-org';
 
-    // Smart dashboard insights (heuristics)
-    const smartRecommendations = [];
+    // Step B: Redis cache lookup (enabled when INSIGHTS_CACHE_ENABLED=true)
+    const cached = await getInsightsCache(orgId, shopId);
+    if (cached) {
+      return res.json(cached);
+    }
 
-    // 1) Week-over-week sales change
+    const concurrencyCap = 4;
+
+    // Step A: Parallel database execution with concurrency cap of 4
     const now = new Date();
+    const lastMonth = new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const startThisWeek = new Date(now);
     startThisWeek.setDate(now.getDate() - 6);
-    startThisWeek.setHours(0,0,0,0);
+    startThisWeek.setHours(0, 0, 0, 0);
     const startPrevWeek = new Date(startThisWeek);
     startPrevWeek.setDate(startPrevWeek.getDate() - 7);
 
-    const [thisWeekRevenue, prevWeekRevenue] = await Promise.all([
-      Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: startThisWeek } } }),
-      Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime()-1)] } } }),
-    ]);
+    // 12 independent database tasks executed with concurrency cap of 4:
+    // Q5 is removed (filtered in-memory from Q3 inventoryRows)
+    // Q16 is merged into Q14 (distinctCustomers selected in salesByMonth)
+    const dbTasks = [
+      // 0: Q1 - Sales trends (last month)
+      () => Sale.findAll({
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: lastMonth } },
+        attributes: [
+          [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
+          [sequelize.cast(sequelize.fn('SUM', sequelize.col('total')), 'DECIMAL(10,2)'), 'totalSales']
+        ],
+        group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
+        order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']]
+      }),
+      // 1: Q2 - System settings (lowStockThreshold)
+      () => SystemSettings.findOne({ where: { shopId } }),
+      // 2: Q3 - Inventory rows with active products (used for both low stock recommendations and critical stock alerts)
+      () => Inventory.findAll({
+        where: { shopId },
+        include: [{
+          model: Product,
+          attributes: ['id', 'name', 'active'],
+          where: { active: true },
+          required: false
+        }]
+      }),
+      // 3: Q4 - Monthly expenses grouped by category
+      () => Expense.findAll({
+        where: { shopId, createdAt: { [Op.gte]: lastMonth } },
+        attributes: ['category', [sequelize.fn('SUM', sequelize.col('amount')), 'total']],
+        group: ['category']
+      }),
+      // 4: Q6 - 90-day daily sales for smart anomaly detection
+      () => Sale.findAll({
+        where: { shopId, ...REALIZED_SALE_FILTER, createdAt: { [Op.gte]: ninetyDaysAgo } },
+        attributes: [
+          [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
+          [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue'],
+          [sequelize.fn('COUNT', sequelize.col('id')), 'transaction_count'],
+          [sequelize.literal(`AVG(${NET_SALE_REVENUE_SQL})`), 'avg_transaction_value'],
+        ],
+        group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
+        order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']],
+        raw: true
+      }),
+      // 5: Q8 - This week sales sum
+      () => Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: startThisWeek } } }),
+      // 6: Q9 - Prev week sales sum
+      () => Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime() - 1)] } } }),
+      // 7: Q10 - Most profitable product
+      () => SaleItem.findAll({
+        where: { shopId },
+        attributes: [
+          'ProductId',
+          [sequelize.fn('SUM', sequelize.literal('(SaleItem.unitPrice - Product.cost - SaleItem.discount) * SaleItem.quantity')), 'profit']
+        ],
+        include: [
+          { model: Sale, required: true, attributes: [], where: { shopId, ...REALIZED_SALE_FILTER } },
+          { model: Product, attributes: ['id', 'name', 'cost'], required: true }
+        ],
+        group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.cost'],
+        order: [[sequelize.literal('profit'), 'DESC']],
+        limit: 1,
+      }),
+      // 8: Q11 - Active products for stock depletion
+      () => Product.findAll({
+        where: { active: true },
+        attributes: ['id', 'name'],
+        include: [{
+          model: Inventory,
+          attributes: ['stockQuantity'],
+          where: { shopId },
+          required: true
+        }]
+      }),
+      // 9: Q12 - 90-day net demand for stock depletion
+      () => SaleItem.findAll(buildNetDemandQuery(shopId, ninetyDaysAgo, true)),
+      // 10: Q14 + Q16 (Merged) - 6-month sales and distinct customers
+      () => Sale.findAll({
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
+        attributes: [
+          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
+          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
+          [sequelize.fn('SUM', sequelize.col('total')), 'sumTotal'],
+          [sequelize.fn('COUNT', sequelize.col('id')), 'countSales'],
+          [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('CustomerId'))), 'distinctCustomers'],
+        ],
+        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
+      }),
+      // 11: Q15 - 6-month expenses
+      () => Expense.findAll({
+        where: { shopId },
+        attributes: [
+          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
+          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
+          [sequelize.fn('SUM', sequelize.col('amount')), 'sumAmount'],
+        ],
+        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
+      })
+    ];
+
+    const [
+      salesTrends,
+      settings,
+      inventoryRows,
+      monthlyExpenses,
+      dailySales,
+      thisWeekRevenue,
+      prevWeekRevenue,
+      profitRows,
+      depletionProducts,
+      depletionDailyRows,
+      salesAndCustByMonth,
+      expenseByMonth
+    ] = await runWithConcurrencyLimit(dbTasks, concurrencyCap);
+
+    // 1. Process trends
+    const trends = (salesTrends || []).map(trend => ({
+      date: trend.get('date'),
+      totalSales: parseFloat(trend.get('totalSales') || 0)
+    }));
+
+    // 2. Process recommendations (low stock)
+    const recommendations = [];
+    const defaultLowStock = settings?.lowStockThreshold !== undefined ? settings.lowStockThreshold : 10;
+    const lowStockProducts = (inventoryRows || []).filter(inv => {
+      const threshold = (inv.reorderPoint !== null && inv.reorderPoint !== undefined) ? inv.reorderPoint : defaultLowStock;
+      return parseFloat(inv.stockQuantity || 0) <= threshold;
+    });
+
+    if (lowStockProducts.length > 0) {
+      recommendations.push({
+        type: 'INVENTORY',
+        priority: 'HIGH',
+        message: `${lowStockProducts.length} products need restocking`,
+        details: lowStockProducts.map(inv => ({
+          id: inv.Product ? inv.Product.id : inv.productId,
+          name: inv.Product ? inv.Product.name : 'Unknown Product',
+          currentStock: parseFloat(inv.stockQuantity || 0),
+          reorderPoint: (inv.reorderPoint !== null && inv.reorderPoint !== undefined) ? inv.reorderPoint : defaultLowStock
+        }))
+      });
+    }
+
+    const highExpenseCategories = (monthlyExpenses || [])
+      .filter(exp => exp.getDataValue('total') > insightsConfig.HIGH_EXPENSE_THRESHOLD)
+      .map(exp => ({
+        category: exp.category,
+        amount: exp.getDataValue('total')
+      }));
+
+    if (highExpenseCategories.length > 0) {
+      recommendations.push({
+        type: 'FINANCIAL',
+        priority: 'MEDIUM',
+        message: 'High expenses detected in certain categories',
+        details: highExpenseCategories
+      });
+    }
+
+    // 3. Process critical stock alerts in memory (Q5 removed)
+    const alerts = [];
+    const criticalInventories = (inventoryRows || []).filter(inv =>
+      parseFloat(inv.stockQuantity || 0) <= insightsConfig.CRITICAL_STOCK_UNITS
+    );
+    if (criticalInventories.length > 0) {
+      alerts.push({
+        type: 'INVENTORY',
+        severity: 'HIGH',
+        message: 'Critical stock levels detected',
+        details: criticalInventories.map(inv => ({
+          id: inv.Product ? inv.Product.id : inv.productId,
+          name: inv.Product ? inv.Product.name : 'Unknown Product',
+          currentStock: parseFloat(inv.stockQuantity || 0)
+        }))
+      });
+    }
+
+    // 4. Smart recommendations heuristics
+    const smartRecommendations = [];
     if (thisWeekRevenue != null && prevWeekRevenue) {
       const change = prevWeekRevenue === 0 ? 0 : ((thisWeekRevenue - prevWeekRevenue) / prevWeekRevenue);
       if (change < -insightsConfig.REVENUE_DECLINE_THRESHOLD) {
@@ -489,21 +687,6 @@ const getInsights = async (req, res) => {
       }
     }
 
-    // 2) Most profitable product (approx)
-    const profitRows = await SaleItem.findAll({
-      where: { shopId },
-      attributes: [
-        'ProductId',
-        [sequelize.fn('SUM', sequelize.literal('(SaleItem.unitPrice - Product.cost - SaleItem.discount) * SaleItem.quantity')), 'profit']
-      ],
-      include: [
-        { model: Sale, required: true, attributes: [], where: { shopId, ...REALIZED_SALE_FILTER } },
-        { model: Product, attributes: ['id', 'name', 'cost'], required: true }
-      ],
-      group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.cost'],
-      order: [[sequelize.literal('profit'), 'DESC']],
-      limit: 1,
-    });
     if (profitRows && profitRows.length > 0) {
       const pr = profitRows[0];
       const name = pr.Product?.name || pr.ProductId;
@@ -516,109 +699,122 @@ const getInsights = async (req, res) => {
       });
     }
 
-    // 3) Stock depletion forecast (Prophet via AI service)
-    const soonOut = await getStockDepletionForecast(shopId, req.user);
-    if (soonOut.length) {
-      smartRecommendations.push({
-        type: 'FORECAST',
-        priority: 'HIGH',
-        message: 'Stock depletion forecast',
-        details: soonOut
-      });
-    }
-
-    // 4) Decision support suggestions (simple rules)
-    if (profitRows && profitRows.length > 0) {
-      smartRecommendations.push({
-        type: 'DECISION',
-        priority: 'LOW',
-        message: 'Based on margins, a small price increase (e.g., 5%) on top performers may not impact sales.',
-        details: []
-      });
-    }
-
-    // 5) Policy & market alerts (prototype placeholder)
-    const marketAlerts = [];
-    if (process.env.MARKET_ALERTS_ENABLED === 'true') {
+    // Tier 2: Concurrent AI service calls
+    const smartAlertsPromise = (async () => {
+      if (!dailySales || dailySales.length < 14) {
+        return generateRuleBasedAlerts(shopId);
+      }
       try {
-        const resp = await fetch(process.env.MARKET_ALERTS_URL, { method: 'GET' });
-        if (resp.ok) {
-          const data = await resp.json();
-          for (const a of (Array.isArray(data)?data:[])) {
-            marketAlerts.push({ type: 'MARKET', severity: 'LOW', message: a.title || 'Market advisory', details: a });
+        const aiResponse = await aiClient.post(
+          `/api/insights/anomalies`,
+          { daily_data: dailySales, contamination: 0.05 },
+          { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId: req.user?.id, user: req.user }
+        );
+        return (aiResponse.data.anomalies || []).slice(0, 3).map((anomaly) => ({
+          type: 'sales_anomaly',
+          severity: anomaly.severity,
+          title: `Unusual sales pattern detected on ${anomaly.date}`,
+          description: `Revenue was ${formatCurrency(anomaly.revenue)} with ${anomaly.transaction_count} transactions — statistically unusual for this day of week.`,
+          recommendation: 'Review what happened on this date. Compare with external events, promotions, or operational issues.',
+          date: anomaly.date,
+          anomaly_score: anomaly.anomaly_score
+        }));
+      } catch (error) {
+        console.error('[generateSmartAlerts] AI service unavailable, using rule-based fallback:', error.message);
+        return generateRuleBasedAlerts(shopId);
+      }
+    })();
+
+    const depletionPromise = (async () => {
+      if (!depletionProducts || !depletionProducts.length) return [];
+      const salesByProduct = {};
+      for (const row of (depletionDailyRows || [])) {
+        const pid = row.productId;
+        const qty = parseFloat(row.quantity || 0);
+        if (qty <= 0) continue;
+        if (!salesByProduct[pid]) salesByProduct[pid] = [];
+        salesByProduct[pid].push({ date: row.date, quantity: qty });
+      }
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const payload = {
+        products: depletionProducts.map((p) => ({
+          product_id: String(p.id),
+          product_name: p.name,
+          current_stock: parseFloat(p.Inventories?.[0]?.stockQuantity || 0),
+          daily_sales: salesByProduct[p.id] || [],
+          lookback_days: 90,
+          reference_date: todayIso
+        })),
+        alert_threshold_days: insightsConfig.STOCK_DEPLETION_DAYS,
+        lookback_days: 90,
+        reference_date: todayIso
+      };
+      try {
+        const aiResponse = await aiClient.post(
+          `/api/forecasting/stock-depletion`,
+          payload,
+          { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId: req.user?.id, user: req.user }
+        );
+        return (aiResponse.data.alerts || []).map((item) => ({
+          id: item.product_id,
+          name: item.product_name,
+          daysToDeplete: item.days_until_depletion,
+          algorithm: item.algorithm,
+          confidence: item.confidence
+        }));
+      } catch (error) {
+        console.error('[getStockDepletionForecast] AI service unavailable, using linear fallback:', error.message);
+        const lookbackDays = insightsConfig.SALES_VELOCITY_LOOKBACK_DAYS;
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - lookbackDays);
+        const salesByProductAgg = await SaleItem.findAll(buildNetDemandQuery(shopId, twoWeeksAgo, false));
+        const soldMap = new Map(salesByProductAgg.map(r => [r.productId, Number(r.qty || 0)]));
+        const soonOut = [];
+        for (const prod of depletionProducts) {
+          const invStock = parseFloat(prod.Inventories?.[0]?.stockQuantity || 0);
+          if (invStock <= 0) {
+            soonOut.push({ id: prod.id, name: prod.name, daysToDeplete: 0 });
+            continue;
+          }
+          const sold = soldMap.get(prod.id) || 0;
+          const daily = sold / lookbackDays;
+          if (daily > 0) {
+            const days = invStock / daily;
+            if (days > 0 && days <= insightsConfig.STOCK_DEPLETION_DAYS) {
+              soonOut.push({ id: prod.id, name: prod.name, daysToDeplete: Math.ceil(days) });
+            }
           }
         }
-      } catch (err) {
-        console.error('[InsightsController] Market alerts fetch failed:', err.message);
+        return soonOut;
       }
-    }
+    })();
 
-    // Try augmenting with AI-driven insights
-    let aiRecs = [];
-    try {
-      // Build simple monthly aggregates for the last 6 months
+    const aiAnalyzePromise = (async () => {
       const months = [];
-      const now = new Date();
+      const nowMonth = new Date();
       for (let i = 5; i >= 0; i -= 1) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const d = new Date(nowMonth.getFullYear(), nowMonth.getMonth() - i, 1);
         months.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
       }
 
-      // Revenue and transactions from Sales
-      const salesByMonth = await Sale.findAll({
-        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
-        attributes: [
-          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
-          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'sumTotal'],
-          [sequelize.fn('COUNT', sequelize.col('id')), 'countSales'],
-        ],
-        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
-      });
-
       const salesMap = new Map();
-      for (const row of salesByMonth) {
+      const custMap = new Map();
+      for (const row of (salesAndCustByMonth || [])) {
         const y = row.getDataValue('y');
         const m = row.getDataValue('m');
-        salesMap.set(`${y}-${m}`, {
+        const key = `${y}-${m}`;
+        salesMap.set(key, {
           revenue: parseFloat(row.getDataValue('sumTotal') || 0),
           tx: parseInt(row.getDataValue('countSales') || 0, 10),
         });
+        custMap.set(key, parseInt(row.getDataValue('distinctCustomers') || 0, 10));
       }
 
-      // Costs from Expenses
-      const expenseByMonth = await Expense.findAll({
-        where: { shopId },
-        attributes: [
-          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
-          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
-          [sequelize.fn('SUM', sequelize.col('amount')), 'sumAmount'],
-        ],
-        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
-      });
-
       const expMap = new Map();
-      for (const row of expenseByMonth) {
+      for (const row of (expenseByMonth || [])) {
         const y = row.getDataValue('y');
         const m = row.getDataValue('m');
         expMap.set(`${y}-${m}`, parseFloat(row.getDataValue('sumAmount') || 0));
-      }
-
-      // Customers per month (distinct)
-      const custByMonth = await Sale.findAll({
-        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
-        attributes: [
-          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
-          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
-          [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('CustomerId'))), 'distinctCustomers'],
-        ],
-        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
-      });
-      const custMap = new Map();
-      for (const row of custByMonth) {
-        const y = row.getDataValue('y');
-        const m = row.getDataValue('m');
-        custMap.set(`${y}-${m}`, parseInt(row.getDataValue('distinctCustomers') || 0, 10));
       }
 
       const revenue = [];
@@ -626,7 +822,6 @@ const getInsights = async (req, res) => {
       const customer_count = [];
       const transaction_count = [];
       const average_transaction_value = [];
-
       for (const { year, month } of months) {
         const key = `${year}-${month}`;
         const s = salesMap.get(key) || { revenue: 0, tx: 0 };
@@ -639,36 +834,86 @@ const getInsights = async (req, res) => {
         average_transaction_value.push(s.tx > 0 ? s.revenue / s.tx : 0);
       }
 
-      const aiResponse = await aiClient.post(
-        '/api/insights/analyze',
-        { revenue, costs, customer_count, transaction_count, average_transaction_value },
-        {
-          timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS,
-          shopId,
-          userId: req.user?.id,
-          user: req.user,
-          authz: req.authz
+      try {
+        const aiResponse = await aiClient.post(
+          '/api/insights/analyze',
+          { revenue, costs, customer_count, transaction_count, average_transaction_value },
+          {
+            timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS,
+            shopId,
+            userId: req.user?.id,
+            user: req.user,
+            authz: req.authz
+          }
+        );
+        const ai = aiResponse?.data;
+        if (Array.isArray(ai)) {
+          return ai.map((x) => ({
+            type: x.insight_type || 'AI',
+            priority: 'MEDIUM',
+            message: x.description || 'AI insight',
+            details: x.recommendations || [],
+          }));
         }
-      );
-
-      const ai = aiResponse?.data;
-      if (Array.isArray(ai)) {
-        aiRecs = ai.map((x) => ({
-          type: x.insight_type || 'AI',
-          priority: 'MEDIUM',
-          message: x.description || 'AI insight',
-          details: x.recommendations || [],
-        }));
+      } catch (e) {
+        console.error('[InsightsController] AI service call failed:', e.message);
       }
-    } catch (e) {
-      console.error('[InsightsController] AI service call failed:', e.message);
+      return [];
+    })();
+
+    const marketAlertsPromise = (async () => {
+      const marketAlerts = [];
+      if (process.env.MARKET_ALERTS_ENABLED === 'true') {
+        try {
+          const resp = await fetch(process.env.MARKET_ALERTS_URL, { method: 'GET' });
+          if (resp.ok) {
+            const data = await resp.json();
+            for (const a of (Array.isArray(data) ? data : [])) {
+              marketAlerts.push({ type: 'MARKET', severity: 'LOW', message: a.title || 'Market advisory', details: a });
+            }
+          }
+        } catch (err) {
+          console.error('[InsightsController] Market alerts fetch failed:', err.message);
+        }
+      }
+      return marketAlerts;
+    })();
+
+    const [salesAlerts, soonOut, aiRecs, marketAlerts] = await Promise.all([
+      smartAlertsPromise,
+      depletionPromise,
+      aiAnalyzePromise,
+      marketAlertsPromise
+    ]);
+
+    if (soonOut && soonOut.length) {
+      smartRecommendations.push({
+        type: 'FORECAST',
+        priority: 'HIGH',
+        message: 'Stock depletion forecast',
+        details: soonOut
+      });
     }
 
-    res.json({
+    if (profitRows && profitRows.length > 0) {
+      smartRecommendations.push({
+        type: 'DECISION',
+        priority: 'LOW',
+        message: 'Based on margins, a small price increase (e.g., 5%) on top performers may not impact sales.',
+        details: []
+      });
+    }
+
+    const payload = {
       trends,
-      recommendations: [...smartRecommendations, ...recommendations, ...aiRecs],
-      alerts: [...alerts, ...marketAlerts],
-    });
+      recommendations: [...smartRecommendations, ...recommendations, ...(aiRecs || [])],
+      alerts: [...alerts, ...(salesAlerts || []), ...(marketAlerts || [])],
+    };
+
+    // Step B: Cache whole payload in Redis for 60 seconds (enabled when INSIGHTS_CACHE_ENABLED=true)
+    await setInsightsCache(orgId, shopId, payload, 60);
+
+    res.json(payload);
   } catch (error) {
     console.error('Error generating insights:', error);
     res.status(500).json({ error: 'Failed to generate insights' });

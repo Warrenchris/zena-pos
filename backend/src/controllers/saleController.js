@@ -23,6 +23,7 @@ const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
 const { invalidateShopProductCache } = require('../services/productCache');
+const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 const {
   normalizeIdempotencyKey,
   generateSaleFingerprint,
@@ -492,6 +493,7 @@ exports.updateSale = async (req, res) => {
     invalidateAnalyticsCache(sale.shopId || shopId);
     if (isCancelling) {
       await invalidateShopProductCache(sale.shopId || shopId);
+      await invalidateShopInsightsCache(sale.organizationId, sale.shopId || shopId);
     }
 
     res.json(updatedSale);
@@ -559,6 +561,7 @@ exports.deleteSale = async (req, res) => {
     await t.commit();
     invalidateAnalyticsCache(sale.shopId || shopId);
     await invalidateShopProductCache(sale.shopId || shopId);
+    await invalidateShopInsightsCache(sale.organizationId, sale.shopId || shopId);
     res.json({ message: 'Sale deleted successfully' });
   } catch (error) {
     await t.rollback();
@@ -1149,6 +1152,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
   // Invalidate analytics and dashboard cache so new sale reflects immediately
   invalidateAnalyticsCache(shopId);
   await invalidateShopProductCache(shopId);
+  await invalidateShopInsightsCache(organizationId, shopId);
 
   try {
     await logActivity({
@@ -2369,6 +2373,7 @@ exports.processRefund = async (req, res) => {
       await t.commit();
       invalidateAnalyticsCache(shopId);
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId || req.user?.organizationId, shopId);
 
       res.json(responsePayload);
     } catch (error) {
