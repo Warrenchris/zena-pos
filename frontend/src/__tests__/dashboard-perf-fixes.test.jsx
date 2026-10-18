@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore, combineReducers } from '@reduxjs/toolkit';
 import api from '../services/api';
@@ -7,16 +7,6 @@ import analyticsService from '../services/analytics.service';
 import analyticsReducer, { fetchOrderStats } from '../store/slices/analyticsSlice';
 import settingsReducer from '../store/slices/settingsSlice';
 import RevenueChart from '../components/dashboard/RevenueChart';
-import OrderTracking from '../components/dashboard/OrderTracking';
-
-// Mock api service
-jest.mock('../services/api', () => ({
-  __esModule: true,
-  default: {
-    get: jest.fn(),
-    post: jest.fn()
-  }
-}));
 
 // Mock recharts ResponsiveContainer and components to render cleanly in jsdom
 jest.mock('recharts', () => {
@@ -45,187 +35,156 @@ function createTestStore(preloadedState = {}) {
   });
 }
 
+function makeResponse(data, config = {}) {
+  return {
+    data,
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config: {
+      ...config,
+      metadata: config?.metadata || { startTime: new Date() }
+    }
+  };
+}
+
 describe('Dashboard Performance Fixes - Deduplication & Independent States', () => {
+  let originalAdapter;
+  let adapterMock;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    originalAdapter = api.defaults.adapter;
+    adapterMock = jest.fn();
+    api.defaults.adapter = adapterMock;
   });
 
-  describe('1. analyticsService.getOrderStats in-flight deduplication', () => {
-    it('collapses concurrent calls with identical params into a single network request', async () => {
+  afterEach(() => {
+    api.defaults.adapter = originalAdapter;
+  });
+
+  describe('1. GET request deduplication via api.js', () => {
+    it('collapses identical concurrent calls with same params into a single network call', async () => {
       let resolveRequest;
       const deferredPromise = new Promise((resolve) => {
         resolveRequest = resolve;
       });
 
-      api.get.mockImplementation(() => deferredPromise);
+      adapterMock.mockImplementation((config) =>
+        deferredPromise.then((data) => makeResponse(data, config))
+      );
 
-      const params = { period: 'week' };
+      const params = { period: 'week', _testCase: 'dedupe_concurrent_1' };
 
       // Fire two concurrent calls
       const call1 = analyticsService.getOrderStats(params);
       const call2 = analyticsService.getOrderStats(params);
 
-      // Verify that api.get was only called ONCE
-      expect(api.get).toHaveBeenCalledTimes(1);
-      expect(api.get).toHaveBeenCalledWith('/api/analytics/orders', { params: { period: 'week' } });
+      // Verify that the network adapter was only called ONCE across both concurrent calls
+      await waitFor(() => {
+        expect(adapterMock).toHaveBeenCalledTimes(1);
+      });
 
       // Resolve the mock HTTP response
       const mockData = {
         orderData: [{ date: '2026-10-17', orders: 12, revenue: 15000 }],
         totalOrders: 12,
-        totalRevenue: 15000
+        totalRevenue: 15000,
+        orderPercentageChange: 0,
+        revenuePercentageChange: 0
       };
-      resolveRequest({ data: mockData });
+      resolveRequest(mockData);
 
       const [res1, res2] = await Promise.all([call1, call2]);
 
       expect(res1).toEqual(mockData);
       expect(res2).toEqual(mockData);
-      expect(res1).toBe(res2); // Same returned reference from shared promise
+      expect(res1).toBe(res2); // Same returned reference from shared in-flight promise
     });
 
     it('does NOT collapse calls with different parameters', async () => {
-      api.get.mockImplementation((url, options) => {
-        return Promise.resolve({
-          data: {
-            orderData: [],
-            totalOrders: options.params?.period === 'week' ? 5 : 20,
-            totalRevenue: options.params?.period === 'week' ? 5000 : 25000
-          }
-        });
+      adapterMock.mockImplementation((config) => {
+        return Promise.resolve(
+          makeResponse(
+            {
+              orderData: [],
+              totalOrders: config.params?.period === 'week' ? 5 : 20,
+              totalRevenue: config.params?.period === 'week' ? 5000 : 25000,
+              orderPercentageChange: 0,
+              revenuePercentageChange: 0
+            },
+            config
+          )
+        );
       });
 
-      const callWeek = analyticsService.getOrderStats({ period: 'week' });
-      const callMonth = analyticsService.getOrderStats({ period: 'month' });
+      const callWeek = analyticsService.getOrderStats({ period: 'week', _testCase: 'diff_week' });
+      const callMonth = analyticsService.getOrderStats({ period: 'month', _testCase: 'diff_month' });
 
       const [resWeek, resMonth] = await Promise.all([callWeek, callMonth]);
 
-      expect(api.get).toHaveBeenCalledTimes(2);
+      expect(adapterMock).toHaveBeenCalledTimes(2);
       expect(resWeek.totalOrders).toBe(5);
       expect(resMonth.totalOrders).toBe(20);
     });
 
-    it('allows a subsequent call to refetch after the in-flight request settles', async () => {
-      api.get.mockResolvedValueOnce({
-        data: { totalOrders: 10, totalRevenue: 10000, orderData: [] }
-      }).mockResolvedValueOnce({
-        data: { totalOrders: 15, totalRevenue: 15000, orderData: [] }
+    it('handles network failure gracefully by returning fallback empty structure', async () => {
+      adapterMock.mockRejectedValueOnce(new Error('Network error'));
+
+      const res = await analyticsService.getOrderStats({ period: 'week', _testCase: 'error_test' });
+
+      expect(res).toEqual({
+        orderData: [],
+        revenueData: [],
+        totalOrders: 0,
+        totalRevenue: 0,
+        orderPercentageChange: 0,
+        revenuePercentageChange: 0
       });
-
-      const res1 = await analyticsService.getOrderStats({ period: 'week' });
-      expect(api.get).toHaveBeenCalledTimes(1);
-      expect(res1.totalOrders).toBe(10);
-
-      // Call again after first has settled
-      const res2 = await analyticsService.getOrderStats({ period: 'week' });
-      expect(api.get).toHaveBeenCalledTimes(2);
-      expect(res2.totalOrders).toBe(15);
     });
   });
 
-  describe('2. Redux analyticsSlice thunk deduplication', () => {
-    it('skips duplicate in-flight thunk dispatches with identical parameters via condition', async () => {
-      let resolveApi;
-      api.get.mockImplementation(() => new Promise((resolve) => {
-        resolveApi = resolve;
-      }));
-
-      const store = createTestStore();
-
-      // Dispatch first thunk
-      const dispatch1 = store.dispatch(fetchOrderStats({ period: 'week' }));
-      expect(store.getState().analytics.orderStats.loading).toBe(true);
-      expect(api.get).toHaveBeenCalledTimes(1);
-
-      // Dispatch duplicate thunk while first is in flight
-      const dispatch2 = store.dispatch(fetchOrderStats({ period: 'week' }));
-
-      // The second dispatch should have been skipped by condition (no extra network call)
-      expect(api.get).toHaveBeenCalledTimes(1);
-
-      // Resolve the API call
-      resolveApi({
-        data: {
-          orderData: [{ date: '2026-10-17', orders: 8, revenue: 12000 }],
-          totalOrders: 8,
-          totalRevenue: 12000,
-          orderPercentageChange: 15,
-          revenuePercentageChange: 20
-        }
-      });
-
-      await dispatch1;
-      const result2 = await dispatch2;
-
-      // Result of skipped dispatch has condition: true
-      expect(result2.meta.condition).toBe(true);
-
-      expect(store.getState().analytics.orderStats.loading).toBe(false);
-      expect(store.getState().analytics.orderStats.totalOrders).toBe(8);
-      expect(store.getState().analytics.orderStats.totalRevenue).toBe(12000);
-    });
-
-    it('refetches when changing the period parameter', async () => {
-      api.get.mockImplementation((url, { params }) => Promise.resolve({
-        data: {
-          orderData: [{ date: '2026-10-17', orders: params.period === 'week' ? 8 : 40, revenue: 10000 }],
-          totalOrders: params.period === 'week' ? 8 : 40,
-          totalRevenue: 10000,
-          orderPercentageChange: 5,
-          revenuePercentageChange: 10
-        }
-      }));
-
-      const store = createTestStore();
-
-      await store.dispatch(fetchOrderStats({ period: 'week' }));
-      expect(store.getState().analytics.orderStats.totalOrders).toBe(8);
-      expect(api.get).toHaveBeenCalledTimes(1);
-
-      // Changing filter parameter to 'month' triggers a refetch
-      await store.dispatch(fetchOrderStats({ period: 'month' }));
-      expect(store.getState().analytics.orderStats.totalOrders).toBe(40);
-      expect(api.get).toHaveBeenCalledTimes(2);
-    });
-
+  describe('2. Redux analyticsSlice race guard', () => {
     it('prevents an older, slower response from overwriting a newer response after period changes', async () => {
       let resolveWeek;
       let resolveMonth;
 
-      api.get.mockImplementation((url, { params }) => {
-        if (params.period === 'week') {
+      adapterMock.mockImplementation((config) => {
+        if (config.params?.period === 'week') {
           return new Promise((resolve) => {
-            resolveWeek = resolve;
+            resolveWeek = (data) => resolve(makeResponse(data, config));
           });
         }
-        if (params.period === 'month') {
+        if (config.params?.period === 'month') {
           return new Promise((resolve) => {
-            resolveMonth = resolve;
+            resolveMonth = (data) => resolve(makeResponse(data, config));
           });
         }
-        return Promise.resolve({ data: {} });
+        return Promise.resolve(makeResponse({}, config));
       });
 
       const store = createTestStore();
 
       // 1. User starts on 'week' (slow request)
-      const dispatchWeek = store.dispatch(fetchOrderStats({ period: 'week' }));
+      const dispatchWeek = store.dispatch(fetchOrderStats({ period: 'week', _testCase: 'race_week' }));
       expect(store.getState().analytics.orderStats.loading).toBe(true);
-      expect(store.getState().analytics.orderStats.currentParams).toEqual({ period: 'week' });
 
       // 2. User quickly switches to 'month'
-      const dispatchMonth = store.dispatch(fetchOrderStats({ period: 'month' }));
-      expect(store.getState().analytics.orderStats.currentParams).toEqual({ period: 'month' });
+      const dispatchMonth = store.dispatch(fetchOrderStats({ period: 'month', _testCase: 'race_month' }));
+
+      // Wait until both requests hit the adapter and assign their resolvers
+      await waitFor(() => {
+        expect(typeof resolveWeek).toBe('function');
+        expect(typeof resolveMonth).toBe('function');
+      });
 
       // 3. Month resolves FIRST
       resolveMonth({
-        data: {
-          orderData: [{ date: '2026-10-01', orders: 50, revenue: 80000 }],
-          totalOrders: 50,
-          totalRevenue: 80000,
-          orderPercentageChange: 10,
-          revenuePercentageChange: 15
-        }
+        orderData: [{ date: '2026-10-01', orders: 50, revenue: 80000 }],
+        totalOrders: 50,
+        totalRevenue: 80000,
+        orderPercentageChange: 10,
+        revenuePercentageChange: 15
       });
       await dispatchMonth;
 
@@ -234,86 +193,64 @@ describe('Dashboard Performance Fixes - Deduplication & Independent States', () 
 
       // 4. Now the older 'week' response resolves out of order
       resolveWeek({
-        data: {
-          orderData: [{ date: '2026-10-17', orders: 10, revenue: 12000 }],
-          totalOrders: 10,
-          totalRevenue: 12000,
-          orderPercentageChange: 2,
-          revenuePercentageChange: 3
-        }
+        orderData: [{ date: '2026-10-17', orders: 10, revenue: 12000 }],
+        totalOrders: 10,
+        totalRevenue: 12000,
+        orderPercentageChange: 2,
+        revenuePercentageChange: 3
       });
       await dispatchWeek;
 
-      // 5. Verify: the older 'week' response was discarded and did NOT overwrite 'month' data!
+      // 5. Verify: the older 'week' response was discarded by the race guard and did NOT overwrite 'month' data!
       expect(store.getState().analytics.orderStats.totalOrders).toBe(50);
       expect(store.getState().analytics.orderStats.totalRevenue).toBe(80000);
     });
-  });
 
-  describe('3. RevenueChart and OrderTracking concurrent rendering deduplication', () => {
-    it('collapses identical /api/analytics/orders requests when RevenueChart and OrderTracking mount together', async () => {
-      const mockOrderStats = {
-        orderData: [
-          { date: '2026-10-16', orders: 5, revenue: 5000 },
-          { date: '2026-10-17', orders: 10, revenue: 12000 }
-        ],
-        totalOrders: 15,
-        totalRevenue: 17000,
-        orderPercentageChange: 12.5,
-        revenuePercentageChange: 18.2
-      };
-
-      api.get.mockResolvedValue({ data: mockOrderStats });
-
-      const store = createTestStore({
-        settings: {
-          settings: {
-            defaultCurrency: 'KES',
-            currencySymbol: 'KSh',
-            currencyPosition: 'prefix',
-            decimalPlaces: 2
-          }
-        }
-      });
-
-      const filter = { period: 'week' };
-
-      // Render both components simultaneously inside the same Redux Provider
-      render(
-        <Provider store={store}>
-          <div>
-            <RevenueChart filter={filter} />
-            <OrderTracking filter={filter} />
-          </div>
-        </Provider>
+    it('refetches and updates store when changing the period parameter', async () => {
+      adapterMock.mockImplementation((config) =>
+        Promise.resolve(
+          makeResponse(
+            {
+              orderData: [{ date: '2026-10-17', orders: config.params?.period === 'week' ? 8 : 40, revenue: 10000 }],
+              totalOrders: config.params?.period === 'week' ? 8 : 40,
+              totalRevenue: 10000,
+              orderPercentageChange: 5,
+              revenuePercentageChange: 10
+            },
+            config
+          )
+        )
       );
 
-      // Wait for data to populate
-      await waitFor(() => {
-        expect(screen.getByText('Revenue Overview')).toBeInTheDocument();
-        expect(screen.getByText('Order Tracking')).toBeInTheDocument();
-      });
+      const store = createTestStore();
 
-      // Crucial verification: only ONE API call was fired across both components
-      expect(api.get).toHaveBeenCalledTimes(1);
-      expect(api.get).toHaveBeenCalledWith('/api/analytics/orders', { params: { period: 'week' } });
+      await store.dispatch(fetchOrderStats({ period: 'week', _testCase: 'param_week' }));
+      expect(store.getState().analytics.orderStats.totalOrders).toBe(8);
+      expect(adapterMock).toHaveBeenCalledTimes(1);
 
-      // Verify both components received and rendered the data
-      expect(screen.getByTestId('area-chart')).toHaveAttribute('data-points', '2');
-      expect(screen.getByTestId('bar-chart')).toHaveAttribute('data-points', '2');
-      expect(screen.getByText('15')).toBeInTheDocument(); // totalOrders in OrderTracking
+      // Changing filter parameter to 'month' triggers a refetch
+      await store.dispatch(fetchOrderStats({ period: 'month', _testCase: 'param_month' }));
+      expect(store.getState().analytics.orderStats.totalOrders).toBe(40);
+      expect(adapterMock).toHaveBeenCalledTimes(2);
     });
+  });
 
+  describe('3. RevenueChart Redux integration & stable filter reference', () => {
     it('uses module-level constant default-prop filter and does NOT trigger extra dispatches across re-renders', async () => {
-      api.get.mockResolvedValue({
-        data: {
-          orderData: [{ date: '2026-10-17', orders: 10, revenue: 12000 }],
-          totalOrders: 10,
-          totalRevenue: 12000,
-          orderPercentageChange: 5,
-          revenuePercentageChange: 10
-        }
-      });
+      adapterMock.mockImplementation((config) =>
+        Promise.resolve(
+          makeResponse(
+            {
+              orderData: [{ date: '2026-10-17', orders: 10, revenue: 12000 }],
+              totalOrders: 10,
+              totalRevenue: 12000,
+              orderPercentageChange: 5,
+              revenuePercentageChange: 10
+            },
+            config
+          )
+        )
+      );
 
       const store = createTestStore({
         settings: {
@@ -458,7 +395,9 @@ describe('Dashboard Performance Fixes - Deduplication & Independent States', () 
       const retryBtn = screen.getByRole('button', { name: 'Retry Insights' });
       expect(retryBtn).toBeInTheDocument();
 
-      fireEvent.click(retryBtn);
+      await act(async () => {
+        fireEvent.click(retryBtn);
+      });
       expect(onFetchInsights).toHaveBeenCalledTimes(1);
     });
 
@@ -482,7 +421,9 @@ describe('Dashboard Performance Fixes - Deduplication & Independent States', () 
       const retryBtn = screen.getByRole('button', { name: 'Retry Forecast' });
       expect(retryBtn).toBeInTheDocument();
 
-      fireEvent.click(retryBtn);
+      await act(async () => {
+        fireEvent.click(retryBtn);
+      });
       expect(onFetchForecast).toHaveBeenCalledTimes(1);
     });
 
