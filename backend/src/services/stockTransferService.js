@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { sequelize, Product, Inventory, Shop, StockMovement, User, Employee, StockTransfer } = require('../models');
 const { invalidateShopProductCache } = require('./productCache');
+const { invalidateShopInsightsCache } = require('./insightsCacheService');
 const logger = require('../utils/logger');
 
 /**
@@ -302,10 +303,12 @@ async function executeStockTransfer({
   try {
     await Promise.all([
       invalidateShopProductCache(srcId),
-      invalidateShopProductCache(dstId)
+      invalidateShopProductCache(dstId),
+      invalidateShopInsightsCache(null, srcId),
+      invalidateShopInsightsCache(null, dstId)
     ]);
   } catch (cacheErr) {
-    logger.warn(`[stockTransferService] Failed to invalidate product cache after transfer: ${cacheErr.message}`);
+    logger.warn(`[stockTransferService] Failed to invalidate product/insights cache after transfer: ${cacheErr.message}`);
   }
 
   return transferResult;

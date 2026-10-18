@@ -1,7 +1,6 @@
 const redisClient = require('../config/redis');
 const logger = require('../utils/logger');
 const { invalidateShopForecastCache, invalidateOrgForecastCache } = require('./aiCacheService');
-const { invalidateShopInsightsCache } = require('./insightsCacheService');
 
 /**
  * Invalidates the cached product catalogue and AI forecast cache for a specific shop.
@@ -23,17 +22,11 @@ async function invalidateShopProductCache(shopId) {
     logger.warn(`Redis error invalidating product cache for shop ${shopId}:`, error);
   }
 
-  // Also invalidate distributed AI forecast cache and insights cache for this shop post-mutation
+  // Also invalidate distributed AI forecast cache for this shop post-mutation
   try {
     await invalidateShopForecastCache(null, shopId);
   } catch (err) {
     logger.warn(`Failed to invalidate AI forecast cache for shop ${shopId}:`, err.message);
-  }
-
-  try {
-    await invalidateShopInsightsCache(null, shopId);
-  } catch (err) {
-    logger.warn(`Failed to invalidate insights cache for shop ${shopId}:`, err.message);
   }
 }
 
@@ -52,7 +45,6 @@ async function invalidateOrgProductCaches(organizationId) {
     });
     for (const shop of shops) {
       await invalidateShopProductCache(shop.id);
-      await invalidateShopInsightsCache(organizationId, shop.id);
     }
     // Also invalidate organization-level AI forecast cache
     await invalidateOrgForecastCache(organizationId);

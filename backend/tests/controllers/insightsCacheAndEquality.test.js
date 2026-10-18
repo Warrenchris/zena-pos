@@ -168,27 +168,27 @@ describe('Insights Caching, Invalidation & Optimization Tests', () => {
       scanSpy.mockRestore();
     });
 
-    it('should invalidate insights cache when invalidateShopProductCache is called', async () => {
+    it('should NOT invalidate insights cache when invalidateShopProductCache is called (sale decoupling)', async () => {
       const { invalidateShopProductCache } = require('../../src/services/productCache');
       const dummyPayload = { trends: [], recommendations: [{ type: 'PROD_TEST' }], alerts: [] };
       await setInsightsCache(testOrgId, testShopId, dummyPayload, 60);
 
       expect(await getInsightsCache(testOrgId, testShopId)).toEqual(dummyPayload);
 
-      // Trigger product cache invalidation (which covers inventory/stock mutations)
+      // Trigger product cache invalidation (which runs on every regular sale)
       await invalidateShopProductCache(testShopId);
 
-      expect(await getInsightsCache(testOrgId, testShopId)).toBeNull();
+      // Must remain cached because sale-triggered product invalidation is decoupled
+      expect(await getInsightsCache(testOrgId, testShopId)).toEqual(dummyPayload);
     });
 
-    it('should invalidate insights cache when invalidateOrgProductCaches is called', async () => {
-      const { invalidateOrgProductCaches } = require('../../src/services/productCache');
-      const dummyPayload = { trends: [], recommendations: [{ type: 'ORG_TEST' }], alerts: [] };
+    it('should invalidate insights cache when explicit inventory mutation triggers invalidateShopInsightsCache', async () => {
+      const dummyPayload = { trends: [], recommendations: [{ type: 'MUTATION_TEST' }], alerts: [] };
       await setInsightsCache(testOrgId, testShopId, dummyPayload, 60);
 
       expect(await getInsightsCache(testOrgId, testShopId)).toEqual(dummyPayload);
 
-      await invalidateOrgProductCaches(testOrgId);
+      await invalidateShopInsightsCache(testOrgId, testShopId);
 
       expect(await getInsightsCache(testOrgId, testShopId)).toBeNull();
     });
