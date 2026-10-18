@@ -493,7 +493,6 @@ exports.updateSale = async (req, res) => {
     invalidateAnalyticsCache(sale.shopId || shopId);
     if (isCancelling) {
       await invalidateShopProductCache(sale.shopId || shopId);
-      await invalidateShopInsightsCache(sale.organizationId, sale.shopId || shopId);
     }
 
     res.json(updatedSale);
@@ -561,7 +560,6 @@ exports.deleteSale = async (req, res) => {
     await t.commit();
     invalidateAnalyticsCache(sale.shopId || shopId);
     await invalidateShopProductCache(sale.shopId || shopId);
-    await invalidateShopInsightsCache(sale.organizationId, sale.shopId || shopId);
     res.json({ message: 'Sale deleted successfully' });
   } catch (error) {
     await t.rollback();
@@ -1152,7 +1150,6 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
   // Invalidate analytics and dashboard cache so new sale reflects immediately
   invalidateAnalyticsCache(shopId);
   await invalidateShopProductCache(shopId);
-  await invalidateShopInsightsCache(organizationId, shopId);
 
   try {
     await logActivity({
