@@ -22,20 +22,6 @@ export const fetchOrderStats = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch order statistics');
     }
-  },
-  {
-    condition: (params, { getState }) => {
-      const { orderStats } = getState().analytics;
-      if (orderStats.loading) {
-        const currentKey = JSON.stringify(orderStats.currentParams ?? null);
-        const nextKey = JSON.stringify(params ?? null);
-        if (currentKey === nextKey) {
-          // Collapse duplicate in-flight dispatch with identical parameters
-          return false;
-        }
-      }
-      return true;
-    }
   }
 );
 
@@ -159,9 +145,6 @@ const analyticsSlice = createSlice({
         state.orderStats.totalRevenue = action.payload.totalRevenue;
       })
       .addCase(fetchOrderStats.rejected, (state, action) => {
-        if (action.meta?.condition) {
-          return;
-        }
         if (action.meta.requestId !== state.orderStats.currentRequestId) {
           return;
         }
