@@ -9,6 +9,19 @@ import TopNavBar from './navigation/TopNavBar';
 import SubscriptionBanner from './SubscriptionBanner';
 import EmailVerificationBanner from './EmailVerificationBanner';
 
+const Shell = ({ children }) => (
+  <div className="min-h-screen bg-app text-text-primary font-sans antialiased selection:bg-primary/10 selection:text-primary transition-colors duration-200">
+    {/* Accessibility Skip Link */}
+    <a
+      href="#main-content"
+      className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:font-semibold focus:rounded-xl focus:shadow-floating focus:outline-none"
+    >
+      Skip to main content
+    </a>
+    {children}
+  </div>
+);
+
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
@@ -64,19 +77,6 @@ export default function Layout() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  const Shell = ({ children }) => (
-    <div className="min-h-screen bg-app text-text-primary font-sans antialiased selection:bg-primary/10 selection:text-primary transition-colors duration-200">
-      {/* Accessibility Skip Link */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:font-semibold focus:rounded-xl focus:shadow-floating focus:outline-none"
-      >
-        Skip to main content
-      </a>
-      {children}
-    </div>
-  );
 
   // If login or signup page, render minimal canvas shell
   if (isLoginPage) {
