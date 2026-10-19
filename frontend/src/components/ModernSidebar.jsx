@@ -180,18 +180,26 @@ const ModernSidebar = ({
       newExpandedSections[sidebarSections[0].title] = true;
     }
     setExpandedSections(newExpandedSections);
-  }, [location.pathname]);
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setHoveredTooltip(null);
+  }, [location.pathname, isCollapsed]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleResize = () => {
       setIsDesktop(window.innerWidth >= 1024);
+      setHoveredTooltip(null);
     };
 
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && isOpen) {
-        onClose?.();
+      if (event.key === 'Escape') {
+        setHoveredTooltip(null);
+        if (isOpen) {
+          onClose?.();
+        }
       }
     };
 
@@ -204,17 +212,38 @@ const ModernSidebar = ({
     };
   }, [isOpen, onClose]);
 
-  const renderNavItem = (item) => {
+  const handleItemHover = (e, item, sectionTitle) => {
+    if (!isCollapsed || !isDesktop) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoveredTooltip({
+      name: item.name,
+      category: sectionTitle,
+      top: rect.top + rect.height / 2,
+      left: Math.max(rect.right + 12, 104),
+    });
+  };
+
+  const handleItemLeave = () => {
+    setHoveredTooltip(null);
+  };
+
+  const renderNavItem = (item, sectionTitle) => {
     const active = isActive(item.path);
 
     if (isCollapsed && isDesktop) {
+      const isItemHovered = hoveredTooltip?.name === item.name;
       return (
-        <div key={item.path} className="relative group/tooltip flex justify-center my-1">
+        <div key={item.path} className="flex justify-center my-1">
           <Link
             to={item.path}
             aria-current={active ? 'page' : undefined}
-            onMouseEnter={() => setHoveredTooltip(item.name)}
-            onMouseLeave={() => setHoveredTooltip(null)}
+            aria-label={item.name}
+            title={item.name}
+            aria-describedby={isItemHovered ? 'sidebar-collapsed-tooltip' : undefined}
+            onMouseEnter={(e) => handleItemHover(e, item, sectionTitle)}
+            onMouseLeave={handleItemLeave}
+            onFocus={(e) => handleItemHover(e, item, sectionTitle)}
+            onBlur={handleItemLeave}
             className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
               active
                 ? 'bg-primary text-white shadow-md'
@@ -223,13 +252,6 @@ const ModernSidebar = ({
           >
             <item.icon className="h-5 w-5 shrink-0" />
           </Link>
-
-          {/* Floating Hover Tooltip for Collapsed Mode */}
-          <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 pointer-events-none opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-150">
-            <div className="bg-text-primary text-surface text-caption font-semibold px-3 py-1.5 rounded-lg shadow-floating whitespace-nowrap flex items-center gap-1.5">
-              <span>{item.name}</span>
-            </div>
-          </div>
         </div>
       );
     }
@@ -264,7 +286,7 @@ const ModernSidebar = ({
       return (
         <div key={section.title} className="py-2 border-b border-border-default/50 last:border-b-0">
           <div className="space-y-1">
-            {section.items.map(item => renderNavItem(item))}
+            {section.items.map(item => renderNavItem(item, section.title))}
           </div>
         </div>
       );
@@ -297,7 +319,7 @@ const ModernSidebar = ({
           aria-hidden={!isExpanded}
         >
           <div className="space-y-0.5 pl-1">
-            {section.items.map(item => renderNavItem(item))}
+            {section.items.map(item => renderNavItem(item, section.title))}
           </div>
         </div>
       </div>
@@ -377,7 +399,10 @@ const ModernSidebar = ({
         )}
 
         {/* Navigation Groups Container */}
-        <div className={`flex-1 overflow-y-auto scrollbar-thin space-y-2 ${isCollapsed && isDesktop ? 'px-2 py-3' : 'px-3 py-3'}`}>
+        <div
+          onScroll={handleItemLeave}
+          className={`flex-1 overflow-y-auto scrollbar-thin space-y-2 ${isCollapsed && isDesktop ? 'px-2 py-3' : 'px-3 py-3'}`}
+        >
           <nav aria-label="Primary navigation">
             {sidebarSections.map(renderSection)}
           </nav>
@@ -387,7 +412,10 @@ const ModernSidebar = ({
         <div className={`border-t border-border-default bg-surface-2/40 ${isCollapsed && isDesktop ? 'p-2.5 flex justify-center' : 'p-3.5'}`}>
           <div className="flex items-center gap-2.5">
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-xl bg-primary text-white font-bold text-caption flex items-center justify-center shadow-2xs">
+              <div
+                title={isCollapsed && isDesktop ? (user?.name || 'User Profile') : undefined}
+                className="w-8 h-8 rounded-xl bg-primary text-white font-bold text-caption flex items-center justify-center shadow-2xs"
+              >
                 {user?.name?.[0]?.toUpperCase() || 'U'}
               </div>
             </div>
@@ -400,6 +428,29 @@ const ModernSidebar = ({
           </div>
         </div>
       </div>
+
+      {/* Floating Hover Tooltip for Collapsed Mode (Rendered outside overflow-hidden sidebar shell) */}
+      {isCollapsed && isDesktop && hoveredTooltip && (
+        <div
+          role="tooltip"
+          id="sidebar-collapsed-tooltip"
+          style={{
+            top: `${hoveredTooltip.top}px`,
+            left: `${hoveredTooltip.left}px`,
+          }}
+          className="fixed z-50 -translate-y-1/2 pointer-events-none transition-all duration-150 ease-out flex items-center"
+        >
+          <div className="w-1.5 h-1.5 bg-text-primary rotate-45 -mr-0.5 shrink-0" />
+          <div className="bg-text-primary text-surface text-caption font-semibold px-3 py-1.5 rounded-xl shadow-floating whitespace-nowrap flex items-center gap-1.5 border border-border-default/20">
+            <span>{hoveredTooltip.name}</span>
+            {hoveredTooltip.category && (
+              <span className="text-[10px] opacity-75 font-normal tracking-wide">
+                • {hoveredTooltip.category}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 };
