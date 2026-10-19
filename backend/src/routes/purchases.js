@@ -12,6 +12,7 @@ const {
   recordPaymentExpense,
   invalidateShopProductCache
 } = require('../services/purchaseService');
+const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 
 // All routes require authentication, canonical authorization context, and active subscription
 router.use(auth);
@@ -331,6 +332,7 @@ router.post('/',
         organizationId
       }, transaction);
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     }
 
     // If payment was made, record in financial ledger (Expenses)
@@ -485,6 +487,7 @@ router.patch('/:id/receive',
     await purchase.save({ transaction });
 
     await invalidateShopProductCache(shopId);
+    await invalidateShopInsightsCache(organizationId, shopId);
 
     await logActivity({
       shopId,
@@ -656,6 +659,7 @@ router.patch('/:id/cancel',
       }, transaction);
 
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     }
 
     purchase.status = 'CANCELLED';
@@ -731,6 +735,7 @@ router.delete('/:id',
       }, transaction);
 
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     }
 
     await logActivity({

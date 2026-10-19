@@ -10,6 +10,7 @@ const {
   applyStockReceipt,
   invalidateShopProductCache
 } = require('../services/purchaseService');
+const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 
 // All routes require authentication, canonical authorization context, and active subscription
 router.use(auth);
@@ -623,6 +624,7 @@ async function handleReceiveOperation(req, res) {
     }, transaction);
 
     await invalidateShopProductCache(shopId);
+    await invalidateShopInsightsCache(organizationId, shopId);
 
     // Auto-create a linked Purchase record representing this receiving batch
     const purchaseRef = `PUR-${po.poNumber.replace('PO-', '')}-${Date.now().toString().slice(-4)}`;
