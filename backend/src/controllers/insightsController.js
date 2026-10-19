@@ -12,6 +12,7 @@ const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
 const aiClient = require('../utils/aiClient');
 const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER, NET_SALE_REVENUE_SQL } = require('../constants/saleFilters');
+const { getInsightsCache, setInsightsCache } = require('../services/insightsCacheService');
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
@@ -194,7 +195,7 @@ const generateRuleBasedAlerts = async (shopId) => {
 /**
  * AI-powered sales anomaly detection using Isolation Forest
  */
-const generateSmartAlerts = async (shopId, userOrId) => {
+const generateSmartAlerts = async (shopId, userOrId, aiTracker) => {
   const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : null;
   const userId = user?.id || (typeof userOrId === 'number' || typeof userOrId === 'string' ? userOrId : null);
   const ninetyDaysAgo = new Date();
@@ -239,6 +240,7 @@ const generateSmartAlerts = async (shopId, userOrId) => {
     }));
   } catch (error) {
     console.error('[generateSmartAlerts] AI service unavailable, using rule-based fallback:', error.message);
+    if (aiTracker) aiTracker.failed = true;
     return generateRuleBasedAlerts(shopId);
   }
 };
@@ -317,7 +319,7 @@ const buildNetDemandQuery = (shopId, sinceDate, groupByDate = true) => {
 /**
  * Prophet-based stock depletion forecast via AI service
  */
-const getStockDepletionForecast = async (shopId, userOrId) => {
+const getStockDepletionForecast = async (shopId, userOrId, aiTracker) => {
   const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : null;
   const userId = user?.id || (typeof userOrId === 'number' || typeof userOrId === 'string' ? userOrId : null);
   const ninetyDaysAgo = new Date();
@@ -378,6 +380,7 @@ const getStockDepletionForecast = async (shopId, userOrId) => {
     }));
   } catch (error) {
     console.error('[getStockDepletionForecast] AI service unavailable, using linear fallback:', error.message);
+    if (aiTracker) aiTracker.failed = true;
 
     const lookbackDays = insightsConfig.SALES_VELOCITY_LOOKBACK_DAYS;
     const twoWeeksAgo = new Date();
@@ -409,7 +412,7 @@ const getStockDepletionForecast = async (shopId, userOrId) => {
 /**
  * Generate business alerts based on critical metrics
  */
-const generateAlerts = async (shopId, userOrId) => {
+const generateAlerts = async (shopId, userOrId, aiTracker) => {
   const alerts = [];
 
   const criticalInventories = await Inventory.findAll({
@@ -440,7 +443,7 @@ const generateAlerts = async (shopId, userOrId) => {
     });
   }
 
-  const salesAlerts = await generateSmartAlerts(shopId, userOrId);
+  const salesAlerts = await generateSmartAlerts(shopId, userOrId, aiTracker);
   alerts.push(...salesAlerts);
 
   return alerts;
@@ -456,10 +459,17 @@ const getInsights = async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    const cached = await getInsightsCache(req, shopId);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const aiTracker = { failed: false };
+
     const [trends, recommendations, alerts] = await Promise.all([
       calculateTrends(shopId),
       generateRecommendations(shopId),
-      generateAlerts(shopId, req.user)
+      generateAlerts(shopId, req.user, aiTracker)
     ]);
 
     // Smart dashboard insights (heuristics)
@@ -517,7 +527,7 @@ const getInsights = async (req, res) => {
     }
 
     // 3) Stock depletion forecast (Prophet via AI service)
-    const soonOut = await getStockDepletionForecast(shopId, req.user);
+    const soonOut = await getStockDepletionForecast(shopId, req.user, aiTracker);
     if (soonOut.length) {
       smartRecommendations.push({
         type: 'FORECAST',
@@ -659,16 +669,25 @@ const getInsights = async (req, res) => {
           message: x.description || 'AI insight',
           details: x.recommendations || [],
         }));
+      } else {
+        aiTracker.failed = true;
       }
     } catch (e) {
       console.error('[InsightsController] AI service call failed:', e.message);
+      aiTracker.failed = true;
     }
 
-    res.json({
+    const payload = {
       trends,
       recommendations: [...smartRecommendations, ...recommendations, ...aiRecs],
       alerts: [...alerts, ...marketAlerts],
-    });
+    };
+
+    if (!aiTracker.failed) {
+      await setInsightsCache(req, shopId, payload);
+    }
+
+    res.json(payload);
   } catch (error) {
     console.error('Error generating insights:', error);
     res.status(500).json({ error: 'Failed to generate insights' });
