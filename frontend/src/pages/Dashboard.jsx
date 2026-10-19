@@ -143,6 +143,7 @@ export default function Dashboard() {
 
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(true);
+  const [insightsError, setInsightsError] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [forecastError, setForecastError] = useState(null);
   const [forecastLoading, setForecastLoading] = useState(false);
@@ -170,10 +171,12 @@ export default function Dashboard() {
   const fetchInsights = useCallback(async () => {
     try {
       setInsightsLoading(true);
+      setInsightsError(null);
       const response = await api.get('/api/insights');
       setInsights(response?.data || null);
     } catch (error) {
       console.error('Error fetching insights:', error);
+      setInsightsError(error?.response?.data?.error || error?.message || 'Failed to fetch insights');
       setInsights(null);
     } finally {
       setInsightsLoading(false);
@@ -181,7 +184,10 @@ export default function Dashboard() {
   }, []);
 
   const fetchForecast = useCallback(async (currentStats) => {
-    const statsToUse = currentStats || statisticsRef.current;
+    // If currentStats is an event object (e.g. from onClick retry), fall back to statisticsRef
+    const statsToUse = (currentStats && typeof currentStats === 'object' && 'totalRevenue' in currentStats)
+      ? currentStats
+      : statisticsRef.current;
 
     try {
       setForecastLoading(true);
@@ -236,16 +242,31 @@ export default function Dashboard() {
     }
 
     try {
-      const [statsResult] = await Promise.all([
-        dispatch(fetchSalesStatistics()).unwrap(),
-        dispatch(fetchSales({ limit: 5 })),
-        dispatch(fetchCustomers({ limit: 5 })),
-        dispatch(fetchProducts({ limit: 5 }))
-      ]);
+      // 1. Start fetchInsights at t=0 concurrently with core calls
+      const insightsPromise = fetchInsights();
 
-      // Only fetch insights and forecast after main data is loaded
-      await fetchInsights();
-      await fetchForecast(statsResult);
+      // 2. Dispatch stats at t=0; chain fetchForecast immediately upon stats resolution without waiting for sales/customers/products
+      const statsAndForecastPromise = dispatch(fetchSalesStatistics())
+        .unwrap()
+        .then((statsResult) => fetchForecast(statsResult))
+        .catch((err) => {
+          console.error('Error fetching sales statistics for forecast:', err);
+          return fetchForecast(null);
+        });
+
+      // 3. Dispatch other core dashboard metrics concurrently at t=0
+      const salesPromise = dispatch(fetchSales({ limit: 5 }));
+      const customersPromise = dispatch(fetchCustomers({ limit: 5 }));
+      const productsPromise = dispatch(fetchProducts({ limit: 5 }));
+
+      // Await all operations so callers (e.g. handleRefresh) know when the full dashboard load completes
+      await Promise.allSettled([
+        insightsPromise,
+        statsAndForecastPromise,
+        salesPromise,
+        customersPromise,
+        productsPromise
+      ]);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
@@ -815,6 +836,19 @@ export default function Dashboard() {
           {insightsLoading ? (
             <div className="flex justify-center items-center h-32" role="status">
               <Spinner size="lg" label="Loading insights..." />
+            </div>
+          ) : insightsError ? (
+            <div role="alert" className="p-4 rounded-lg border border-danger/30 bg-surface-2">
+              <div className="text-small text-danger font-medium">Error loading insights</div>
+              <div className="text-danger/80 text-caption mt-1">{insightsError}</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchInsights}
+                className="mt-2 text-danger hover:text-danger/80"
+              >
+                Retry
+              </Button>
             </div>
           ) : (
             <BusinessInsights insights={insights} />
