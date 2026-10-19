@@ -538,6 +538,10 @@ export default function Dashboard() {
             setEndDate(formatLocalDate(end || start));
           }
         }}
+        insights={insights}
+        insightsLoading={insightsLoading}
+        insightsError={insightsError}
+        onRetryInsights={fetchInsights}
       />
 
       {/* Revenue and Visitors Section */}
