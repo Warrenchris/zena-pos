@@ -42,10 +42,6 @@ import { notifyLowStock } from '../utils/notifications';
 const notifiedStockConditions = new Set();
 
 export default function Dashboard() {
-  useEffect(() => {
-    console.log('MOUNT');
-  }, []);
-
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useSelector((state) => state.auth);
