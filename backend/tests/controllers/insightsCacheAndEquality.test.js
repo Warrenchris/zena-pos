@@ -3,9 +3,14 @@ const app = require('../../src/app');
 const { Sale, Product, Inventory, Expense, Shop, User, SystemSettings } = require('../../src/models');
 const sequelize = require('../../src/config/database');
 const redisClient = require('../../src/config/redis');
+const aiClient = require('../../src/utils/aiClient');
+const insightsController = require('../../src/controllers/insightsController');
 const {
   isInsightsCacheEnabled,
   buildInsightsCacheKey,
+  resolveOrgId,
+  resolveOrganizationId,
+  clearOrgCache,
   getInsightsCache,
   setInsightsCache,
   invalidateShopInsightsCache
@@ -58,8 +63,9 @@ describe('Insights Caching, Invalidation & Optimization Tests', () => {
     // Clear Redis cache
     if (redisClient && redisClient.status === 'ready') {
       const key = buildInsightsCacheKey(testOrgId, testShopId);
-      await redisClient.del(key);
+      if (key) await redisClient.del(key);
     }
+    clearOrgCache();
   });
 
   describe('Redis Cache Hit, Miss and Invalidation', () => {
@@ -191,6 +197,125 @@ describe('Insights Caching, Invalidation & Optimization Tests', () => {
       await invalidateShopInsightsCache(testOrgId, testShopId);
 
       expect(await getInsightsCache(testOrgId, testShopId)).toBeNull();
+    });
+
+    it('does NOT cache response when AI service call fails, returns fallback response, and recomputes on next request', async () => {
+      const product = await Product.create({
+        name: 'AI Test Product',
+        sku: 'AITEST01',
+        price: 200,
+        cost: 100,
+        shopId: testShopId,
+        organizationId: testOrgId
+      });
+
+      await Inventory.create({
+        productId: product.id,
+        shopId: testShopId,
+        stockQuantity: 15,
+        reorderPoint: 5
+      });
+
+      const key = buildInsightsCacheKey(testOrgId, testShopId);
+      const setexSpy = jest.spyOn(redisClient, 'setex');
+      const aiSpy = jest.spyOn(aiClient, 'post').mockRejectedValue(new Error('AI Service Offline'));
+
+      // 1. First request: AI rejects -> returns 200 with fallback, setex NOT called, cache empty
+      const res1 = await request(app)
+        .get('/api/insights')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res1.status).toBe(200);
+      expect(res1.body).toHaveProperty('trends');
+      expect(res1.body).toHaveProperty('recommendations');
+      expect(res1.body).toHaveProperty('alerts');
+
+      expect(setexSpy).not.toHaveBeenCalled();
+      const cachedAfterFail = await redisClient.get(key);
+      expect(cachedAfterFail).toBeNull();
+
+      // 2. Next request: AI succeeds -> recomputes, setex called, cache populated
+      aiSpy.mockRestore();
+
+      const res2 = await request(app)
+        .get('/api/insights')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res2.status).toBe(200);
+      expect(res2.body).toHaveProperty('trends');
+      expect(res2.body).toHaveProperty('recommendations');
+      expect(res2.body).toHaveProperty('alerts');
+      expect(setexSpy).toHaveBeenCalled();
+
+      const cachedAfterSuccess = await redisClient.get(key);
+      expect(cachedAfterSuccess).not.toBeNull();
+      expect(JSON.parse(cachedAfterSuccess).recommendations.length).toBe(res2.body.recommendations.length);
+
+      setexSpy.mockRestore();
+    });
+
+    it('invalidates the key that a read just wrote, for a request where req.user.organizationId is missing but req.authz has it', async () => {
+      const key = buildInsightsCacheKey(testOrgId, testShopId);
+
+      // Read request where req.user.organizationId is undefined but req.authz has it
+      const readReq = {
+        shopId: testShopId,
+        user: { id: 105, role: 'admin', shopId: testShopId },
+        authz: {
+          scope: { organizationId: testOrgId, activeShopId: testShopId },
+          tenant: { organizationId: testOrgId }
+        }
+      };
+
+      let responsePayload = null;
+      const readRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockImplementation((payload) => {
+          responsePayload = payload;
+        })
+      };
+
+      await insightsController.getInsights(readReq, readRes);
+
+      expect(readRes.json).toHaveBeenCalled();
+      expect(responsePayload).toHaveProperty('trends');
+
+      // Key must be written in Redis under the resolved orgId from req.authz
+      const cached = await redisClient.get(key);
+      expect(cached).not.toBeNull();
+      expect(JSON.parse(cached)).toEqual(responsePayload);
+
+      // Mutation invalidates cache via resolveOrgId from Shop (no org passed)
+      const delSpy = jest.spyOn(redisClient, 'del');
+      await invalidateShopInsightsCache(null, testShopId);
+
+      expect(delSpy).toHaveBeenCalledWith(key);
+      const afterMutation = await redisClient.get(key);
+      expect(afterMutation).toBeNull();
+
+      delSpy.mockRestore();
+    });
+
+    it('skips caching entirely and creates no no-org key when orgId cannot be resolved', async () => {
+      const unresolvableShopId = 999999;
+      const unresolvableReq = {
+        shopId: unresolvableShopId,
+        user: { id: 999 },
+        authz: { scope: {}, tenant: {} }
+      };
+
+      const resolved = await resolveOrganizationId(unresolvableReq, unresolvableShopId);
+      expect(resolved).toBeNull();
+
+      const getRes = await getInsightsCache(unresolvableReq, unresolvableShopId);
+      expect(getRes).toBeNull();
+
+      const setRes = await setInsightsCache(unresolvableReq, unresolvableShopId, { test: 1 });
+      expect(setRes).toBe(false);
+
+      const noOrgKey = 'insights:org:no-org:shop:999999';
+      const exists = await redisClient.get(noOrgKey);
+      expect(exists).toBeNull();
     });
   });
 
