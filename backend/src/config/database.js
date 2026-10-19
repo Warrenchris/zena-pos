@@ -1,4 +1,4 @@
-const { Sequelize } = require('sequelize');
+const { Sequelize, Op } = require('sequelize');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 require('dotenv').config();
@@ -52,10 +52,18 @@ async function testConnection(maxRetries = 1, retryDelay = 2000) {
   }
 }
 
+// Lazily load and cache dateUtils once to prevent circular dependency issues
+let dateUtils = null;
+const getDateUtils = () => {
+  if (!dateUtils) {
+    dateUtils = require('../utils/dateUtils');
+  }
+  return dateUtils;
+};
+
 // Query-level safeguard hook to assert both bounds of Op.between dates are valid
 const validateWhereDates = (where) => {
   if (!where || typeof where !== 'object') return;
-  const { Op } = require('sequelize');
   const keys = [
     ...Object.keys(where),
     ...Object.getOwnPropertySymbols(where)
@@ -64,8 +72,7 @@ const validateWhereDates = (where) => {
   for (const key of keys) {
     const value = where[key];
     if (key === Op.between && Array.isArray(value)) {
-      const { assertValidBounds } = require('../utils/dateUtils');
-      assertValidBounds(value);
+      getDateUtils().assertValidBounds(value);
     } else if (value && typeof value === 'object') {
       validateWhereDates(value);
     }
