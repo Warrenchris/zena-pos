@@ -69,12 +69,38 @@ describe('Insights Caching, Invalidation & Optimization Tests', () => {
   });
 
   describe('Redis Cache Hit, Miss and Invalidation', () => {
+    let aiPostSpy;
+
     beforeEach(() => {
       process.env.INSIGHTS_CACHE_ENABLED = 'true';
+      aiPostSpy = jest.spyOn(aiClient, 'post').mockImplementation(async (url) => {
+        if (url.includes('/api/insights/analyze')) {
+          return {
+            data: [
+              {
+                insight_type: 'AI_REVENUE_GROWTH',
+                description: 'Positive growth detected by AI',
+                score: 0.95,
+                recommendations: ['Maintain inventory']
+              }
+            ]
+          };
+        }
+        if (url.includes('/api/forecasting/stock-depletion')) {
+          return { data: { alerts: [] } };
+        }
+        if (url.includes('/api/insights/anomalies')) {
+          return { data: { anomalies: [] } };
+        }
+        return { data: [] };
+      });
     });
 
     afterEach(() => {
       delete process.env.INSIGHTS_CACHE_ENABLED;
+      if (aiPostSpy) {
+        aiPostSpy.mockRestore();
+      }
     });
 
     it('should verify cache miss, populate cache on miss, and serve cache hit', async () => {
@@ -218,7 +244,9 @@ describe('Insights Caching, Invalidation & Optimization Tests', () => {
 
       const key = buildInsightsCacheKey(testOrgId, testShopId);
       const setexSpy = jest.spyOn(redisClient, 'setex');
-      const aiSpy = jest.spyOn(aiClient, 'post').mockRejectedValue(new Error('AI Service Offline'));
+      aiPostSpy.mockImplementation(async () => {
+        throw new Error('AI Service Offline');
+      });
 
       // 1. First request: AI rejects -> returns 200 with fallback, setex NOT called, cache empty
       const res1 = await request(app)
@@ -235,7 +263,24 @@ describe('Insights Caching, Invalidation & Optimization Tests', () => {
       expect(cachedAfterFail).toBeNull();
 
       // 2. Next request: AI succeeds -> recomputes, setex called, cache populated
-      aiSpy.mockRestore();
+      aiPostSpy.mockImplementation(async (url) => {
+        if (url.includes('/api/insights/analyze')) {
+          return {
+            data: [
+              {
+                insight_type: 'AI_REVENUE_GROWTH',
+                description: 'Positive growth detected by AI',
+                score: 0.95,
+                recommendations: ['Maintain inventory']
+              }
+            ]
+          };
+        }
+        if (url.includes('/api/forecasting/stock-depletion')) {
+          return { data: { alerts: [] } };
+        }
+        return { data: [] };
+      });
 
       const res2 = await request(app)
         .get('/api/insights')
