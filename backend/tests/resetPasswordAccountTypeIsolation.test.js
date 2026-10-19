@@ -100,4 +100,26 @@ describe('password reset account type isolation', () => {
     await employee.reload();
     expect(await employee.validatePassword('OriginalPassword123!')).toBe(true);
   });
+
+  test('a user reset token with a UUID starting with the user id cannot reset the user account', async () => {
+    const maliciousToken = resetTokenFor({ id: `${user.id}abc-0000-0000-0000-000000000000`, isEmployee: false });
+    const response = await request(app)
+      .post('/api/auth/reset-password')
+      .send({ token: maliciousToken, password: 'ChangedPassword123!' })
+      .expect(400);
+
+    expect(response.body.error).toMatch(/invalid token/i);
+    await user.reload();
+    expect(await user.validatePassword('OriginalPassword123!')).toBe(true);
+  });
+
+  test('an employee reset token with a non-UUID id returns 400', async () => {
+    const invalidEmployeeToken = resetTokenFor({ id: 12345, isEmployee: true });
+    const response = await request(app)
+      .post('/api/auth/reset-password')
+      .send({ token: invalidEmployeeToken, password: 'ChangedPassword123!' })
+      .expect(400);
+
+    expect(response.body.error).toMatch(/invalid token/i);
+  });
 });
