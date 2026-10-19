@@ -6,6 +6,7 @@ const Employee = require('../models/Employee');
 const sequelize = require('../config/database');
 const { parseDate } = require('../utils/dateUtils');
 const { logActivity } = require('../middleware/logger');
+const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 
 // Canonical authz context resolution helper
 const getAuthContext = (req) => {
@@ -174,6 +175,8 @@ exports.createExpense = async (req, res) => {
       ]
     });
 
+    await invalidateShopInsightsCache(organizationId, shopId);
+
     res.status(201).json(expenseWithUser);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create expense' });
@@ -245,6 +248,8 @@ exports.updateExpense = async (req, res) => {
       ]
     });
 
+    await invalidateShopInsightsCache(organizationId, expense.shopId || shopId);
+
     res.json(updatedExpense);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update expense' });
@@ -275,6 +280,7 @@ exports.deleteExpense = async (req, res) => {
     });
 
     await expense.destroy();
+    await invalidateShopInsightsCache(organizationId, expense.shopId || shopId);
     res.json({ message: 'Expense deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete expense' });

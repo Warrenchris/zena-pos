@@ -12,6 +12,7 @@ const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
 const aiClient = require('../utils/aiClient');
 const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER, NET_SALE_REVENUE_SQL } = require('../constants/saleFilters');
+const { getInsightsCache, setInsightsCache } = require('../services/insightsCacheService');
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
@@ -456,6 +457,12 @@ const getInsights = async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    const orgId = req.user?.organizationId || req.authz?.scope?.organizationId || 'no-org';
+    const cached = await getInsightsCache(orgId, shopId);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const [trends, recommendations, alerts] = await Promise.all([
       calculateTrends(shopId),
       generateRecommendations(shopId),
@@ -664,11 +671,15 @@ const getInsights = async (req, res) => {
       console.error('[InsightsController] AI service call failed:', e.message);
     }
 
-    res.json({
+    const payload = {
       trends,
       recommendations: [...smartRecommendations, ...recommendations, ...aiRecs],
       alerts: [...alerts, ...marketAlerts],
-    });
+    };
+
+    await setInsightsCache(orgId, shopId, payload);
+
+    res.json(payload);
   } catch (error) {
     console.error('Error generating insights:', error);
     res.status(500).json({ error: 'Failed to generate insights' });
