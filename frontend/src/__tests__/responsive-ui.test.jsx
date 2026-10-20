@@ -88,5 +88,99 @@ describe('Responsive navigation primitives', () => {
     fireEvent.click(menuButton);
     expect(handleMenuClick).toHaveBeenCalledTimes(1);
   });
+
+  it('renders floating tooltip when collapsed sidebar nav item is hovered and cleans up on leave', () => {
+    window.innerWidth = 1280;
+
+    render(
+      <MemoryRouter>
+        <ModernSidebar
+          isOpen
+          isCollapsed
+          user={{ name: 'Ada Lovelace', email: 'ada@example.com' }}
+          variant="admin"
+        />
+      </MemoryRouter>
+    );
+
+    const posLink = screen.getByRole('link', { name: 'POS Terminal' });
+    expect(posLink).toBeInTheDocument();
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(posLink);
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toBeInTheDocument();
+    expect(tooltip).toHaveTextContent('POS Terminal');
+    expect(tooltip).toHaveTextContent('• Sales & Orders');
+    expect(posLink).toHaveAttribute('aria-describedby', 'sidebar-collapsed-tooltip');
+
+    fireEvent.mouseLeave(posLink);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('supports keyboard navigation with focus and blur for collapsed sidebar tooltips', () => {
+    window.innerWidth = 1280;
+
+    render(
+      <MemoryRouter>
+        <ModernSidebar
+          isOpen
+          isCollapsed
+          user={{ name: 'Ada Lovelace', email: 'ada@example.com' }}
+          variant="admin"
+        />
+      </MemoryRouter>
+    );
+
+    const dashboardLink = screen.getByRole('link', { name: 'Dashboard' });
+
+    fireEvent.focus(dashboardLink);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Dashboard');
+
+    fireEvent.blur(dashboardLink);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('dismisses collapsed tooltip on Escape key', () => {
+    window.innerWidth = 1280;
+
+    render(
+      <MemoryRouter>
+        <ModernSidebar
+          isOpen
+          isCollapsed
+          user={{ name: 'Ada Lovelace', email: 'ada@example.com' }}
+          variant="admin"
+        />
+      </MemoryRouter>
+    );
+
+    const dashboardLink = screen.getByRole('link', { name: 'Dashboard' });
+    fireEvent.mouseEnter(dashboardLink);
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('does not display floating tooltip when sidebar is expanded', () => {
+    window.innerWidth = 1280;
+
+    render(
+      <MemoryRouter>
+        <ModernSidebar
+          isOpen
+          isCollapsed={false}
+          user={{ name: 'Ada Lovelace', email: 'ada@example.com' }}
+          variant="admin"
+        />
+      </MemoryRouter>
+    );
+
+    const dashboardLink = screen.getByRole('link', { name: 'Dashboard' });
+    fireEvent.mouseEnter(dashboardLink);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
 });
 
