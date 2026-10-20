@@ -573,9 +573,22 @@ async function authzContext(req, res, next) {
         where: { membershipId: membership.id },
         attributes: ['shopId']
       });
-      accessibleShopIds = accesses.map(a => a.shopId).filter(Boolean);
-      if (homeShopId && !accessibleShopIds.includes(homeShopId)) {
-        accessibleShopIds.push(homeShopId);
+      const candidateShopIds = accesses.map(a => a.shopId).filter(Boolean);
+      if (homeShopId && !candidateShopIds.includes(homeShopId)) {
+        candidateShopIds.push(homeShopId);
+      }
+      if (candidateShopIds.length > 0) {
+        const activeShops = await Shop.findAll({
+          where: {
+            id: candidateShopIds,
+            organizationId: organization.id,
+            active: true
+          },
+          attributes: ['id']
+        });
+        accessibleShopIds = activeShops.map(s => s.id);
+      } else {
+        accessibleShopIds = [];
       }
     }
 

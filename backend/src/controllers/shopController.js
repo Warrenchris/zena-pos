@@ -15,6 +15,7 @@ const {
 const { logActivity } = require('../middleware/logger');
 const { validationResult } = require('express-validator');
 const entitlementService = require('../services/entitlementService');
+const authzContextCacheService = require('../services/authzContextCacheService');
 const { sendUpgradePrompt } = require('../utils/upgradePrompt');
 const tokenRevocationService = require('../services/tokenRevocationService');
 
@@ -418,6 +419,7 @@ exports.deactivateShop = async (req, res) => {
     });
 
     await entitlementService.invalidateOrgEntitlements(orgId);
+    await authzContextCacheService.invalidateOrgActorContexts(orgId);
 
     return res.json({
       message: 'Shop deactivated successfully',
@@ -509,6 +511,7 @@ exports.activateShop = async (req, res) => {
     });
 
     await entitlementService.invalidateOrgEntitlements(orgId);
+    await authzContextCacheService.invalidateOrgActorContexts(orgId);
 
     return res.json({
       message: 'Shop activated successfully',

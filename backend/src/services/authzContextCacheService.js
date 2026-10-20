@@ -166,6 +166,30 @@ function buildSuperAdminPayload({ id, currentVersion, superAdminUser }) {
   };
 }
 
+async function invalidateOrgActorContexts(organizationId) {
+  if (!organizationId) return 0;
+  if (!redisClient || redisClient.status !== 'ready') return 0;
+
+  const pattern = `authz_ctx:org:${organizationId}:*`;
+  let cursor = '0';
+  let totalDeleted = 0;
+
+  try {
+    do {
+      const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = nextCursor;
+      if (Array.isArray(keys) && keys.length > 0) {
+        await redisClient.del(...keys);
+        totalDeleted += keys.length;
+      }
+    } while (cursor !== '0');
+  } catch (err) {
+    logger.warn(`[AUTHZ-CACHE] Redis scanAndDelete failed for ${pattern}:`, err.message);
+  }
+
+  return totalDeleted;
+}
+
 module.exports = {
   isCacheEnabled,
   getCacheTtl,
@@ -174,5 +198,7 @@ module.exports = {
   setCachedActorContext,
   validateCachedPayload,
   buildActorPayload,
-  buildSuperAdminPayload
+  buildSuperAdminPayload,
+  invalidateOrgActorContexts
 };
+
