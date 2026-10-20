@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('../utils/logger');
+const { Shop } = require('../models');
 
 /**
  * Evaluates an authorization decision against req.authz.
@@ -165,6 +166,27 @@ async function evaluateAuthorization(req, options = {}) {
     if (targetShopId !== null && targetShopId !== undefined) {
       const hasAccess = authz.scope.hasShopAccess(targetShopId);
       if (!hasAccess) {
+        if (!authz.tenant?.isOwner) {
+          try {
+            const targetShop = await Shop.findOne({
+              where: {
+                id: targetShopId,
+                organizationId: authz.tenant?.organizationId
+              },
+              attributes: ['id', 'active']
+            });
+            if (targetShop && !targetShop.active) {
+              return {
+                allowed: false,
+                status: 403,
+                code: 'SHOP_INACTIVE',
+                message: 'Shop is inactive.'
+              };
+            }
+          } catch (err) {
+            logger.warn('[AUTHZ] Error checking shop active status:', err);
+          }
+        }
         if (options.antiOracle || options.ownership?.antiOracle) {
           return {
             allowed: false,
@@ -187,6 +209,27 @@ async function evaluateAuthorization(req, options = {}) {
     if (queryShopId !== undefined && queryShopId !== null && queryShopId !== '') {
       const parsedQueryShopId = parseInt(queryShopId, 10);
       if (!authz.scope.hasShopAccess(parsedQueryShopId)) {
+        if (!authz.tenant?.isOwner) {
+          try {
+            const targetShop = await Shop.findOne({
+              where: {
+                id: parsedQueryShopId,
+                organizationId: authz.tenant?.organizationId
+              },
+              attributes: ['id', 'active']
+            });
+            if (targetShop && !targetShop.active) {
+              return {
+                allowed: false,
+                status: 403,
+                code: 'SHOP_INACTIVE',
+                message: 'Shop is inactive.'
+              };
+            }
+          } catch (err) {
+            logger.warn('[AUTHZ] Error checking shop active status:', err);
+          }
+        }
         return {
           allowed: false,
           status: 403,
