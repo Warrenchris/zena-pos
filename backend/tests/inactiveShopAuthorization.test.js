@@ -34,6 +34,8 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
   let orgB;
   let shopA1;
   let shopA2;
+  let shopA3;
+  let shopA4;
   let shopB1;
   let productA1;
   let productA2;
@@ -50,6 +52,7 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
   let employeeAToken;
   let deactivatedClaimToken;
   let cashierBToken;
+  let cashierShopA1Token;
 
   const originalCacheEnv = process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
 
@@ -80,6 +83,22 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
       phone: '+254700000002',
       organizationId: orgA.id,
       active: true
+    });
+
+    shopA3 = await Shop.create({
+      name: `Shop A3 Active NoAccess ${suffix}`,
+      address: '103 Street',
+      phone: '+254700000004',
+      organizationId: orgA.id,
+      active: true
+    });
+
+    shopA4 = await Shop.create({
+      name: `Shop A4 Inactive NoAccess ${suffix}`,
+      address: '104 Street',
+      phone: '+254700000005',
+      organizationId: orgA.id,
+      active: false
     });
 
     productA1 = await Product.create({
@@ -310,6 +329,16 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
       isEmployee: false,
       authzVersion: 1
     });
+
+    cashierShopA1Token = signToken({
+      id: cashierA.id,
+      role: 'cashier',
+      orgRole: 'member',
+      shopId: shopA1.id,
+      organizationId: orgA.id,
+      isEmployee: false,
+      authzVersion: 1
+    });
   });
 
   afterAll(async () => {
@@ -522,7 +551,8 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
         authz: {
           tenant: { isOwner: false },
           scope: {
-            hasShopAccess: (id) => Number(id) !== Number(shopA2.id)
+            hasShopAccess: (id) => Number(id) !== Number(shopA2.id),
+            isInactiveAccessibleShop: (id) => Number(id) === Number(shopA2.id)
           }
         }
       };
@@ -588,5 +618,77 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
       scanSpy.mockRestore();
     });
   });
-});
+  describe('Strict SHOP_INACTIVE vs SHOP_ACCESS_DENIED scoping', () => {
+    beforeEach(async () => {
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'false';
+      if (redisClient && redisClient.status === 'ready') {
+        await authzContextCacheService.invalidateOrgActorContexts(orgA.id);
+      }
+    });
 
+    afterAll(async () => {
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = originalCacheEnv;
+      await Shop.update({ active: true }, { where: { id: shopA2.id } });
+      if (redisClient && redisClient.status === 'ready') {
+        await authzContextCacheService.invalidateOrgActorContexts(orgA.id);
+      }
+    });
+
+    it('returns 403 SHOP_INACTIVE when user has access to shop but shop is inactive', async () => {
+      await Shop.update({ active: false }, { where: { id: shopA2.id } });
+      const res = await request(app)
+        .get(`/api/products?shopId=${shopA2.id}`)
+        .set('Authorization', cashierShopA1Token);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('SHOP_INACTIVE');
+    });
+
+    it('returns 403 SHOP_ACCESS_DENIED when user has no access to an active shop in the same org', async () => {
+      const res = await request(app)
+        .get(`/api/products?shopId=${shopA3.id}`)
+        .set('Authorization', cashierShopA1Token);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('SHOP_ACCESS_DENIED');
+    });
+
+    it('returns 403 SHOP_ACCESS_DENIED (not SHOP_INACTIVE) when user has no access to an inactive shop', async () => {
+      const res = await request(app)
+        .get(`/api/products?shopId=${shopA4.id}`)
+        .set('Authorization', cashierShopA1Token);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('SHOP_ACCESS_DENIED');
+    });
+
+    it('preserves same scoping behavior with actor context caching enabled', async () => {
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'true';
+      try {
+        if (redisClient && redisClient.status === 'ready') {
+          await authzContextCacheService.invalidateOrgActorContexts(orgA.id);
+        }
+
+        // Accessing inactive accessible shop -> SHOP_INACTIVE
+        const inactiveRes = await request(app)
+          .get(`/api/products?shopId=${shopA2.id}`)
+          .set('Authorization', cashierShopA1Token);
+        expect(inactiveRes.status).toBe(403);
+        expect(inactiveRes.body.code).toBe('SHOP_INACTIVE');
+
+        // Accessing active inaccessible shop -> SHOP_ACCESS_DENIED
+        const activeNoAccessRes = await request(app)
+          .get(`/api/products?shopId=${shopA3.id}`)
+          .set('Authorization', cashierShopA1Token);
+        expect(activeNoAccessRes.status).toBe(403);
+        expect(activeNoAccessRes.body.code).toBe('SHOP_ACCESS_DENIED');
+
+        // Accessing inactive inaccessible shop -> SHOP_ACCESS_DENIED (no leak)
+        const inactiveNoAccessRes = await request(app)
+          .get(`/api/products?shopId=${shopA4.id}`)
+          .set('Authorization', cashierShopA1Token);
+        expect(inactiveNoAccessRes.status).toBe(403);
+        expect(inactiveNoAccessRes.body.code).toBe('SHOP_ACCESS_DENIED');
+      } finally {
+        process.env.AUTHZ_CONTEXT_CACHE_ENABLED = originalCacheEnv;
+      }
+    });
+  });
+});

@@ -27,6 +27,7 @@ describe('classifyError', () => {
     expect(classifyError(networkError()).kind).toBe('offline');
     expect(classifyError(httpError(401)).kind).toBe('auth');
     expect(classifyError(httpError(403)).kind).toBe('blocked');
+    expect(classifyError(httpError(403, { code: 'SHOP_INACTIVE' })).kind).toBe('inactive_shop');
     expect(classifyError(httpError(402)).kind).toBe('blocked');
     [408, 425, 429].forEach((s) => expect(classifyError(httpError(s)).kind).toBe('busy'));
     [500, 502, 503].forEach((s) => expect(classifyError(httpError(s)).kind).toBe('server'));
@@ -146,6 +147,21 @@ describe('flushSales', () => {
 
     expect(summary.failed).toBe(1);
     expect(await statusOf(entry.id)).toMatchObject({ status: 'failed', attempts: MAX_SERVER_ERROR_ATTEMPTS });
+  });
+
+  it('marks a 403 SHOP_INACTIVE sale as failed without dropping it and notes owner attention needed', async () => {
+    const [entry] = await queue(1);
+    const api = apiWith(async () => {
+      throw httpError(403, { code: 'SHOP_INACTIVE', error: 'Shop is inactive' });
+    });
+
+    const summary = await flushSales({ cashierId: 7, api });
+
+    expect(summary.failed).toBe(1);
+    const saved = await statusOf(entry.id);
+    expect(saved).toBeDefined();
+    expect(saved.status).toBe('failed');
+    expect(saved.lastError).toContain('needs owner attention');
   });
 
   it('leaves failed sales alone (they wait for a person) and only sends pending ones', async () => {

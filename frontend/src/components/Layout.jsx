@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { usePermissions } from '../hooks/usePermissions';
-import { logout } from '../store/slices/authSlice';
+
 import { isManagerTier } from '../utils/roles';
 import ModernSidebar from './ModernSidebar';
 import TopNavBar from './navigation/TopNavBar';
 import SubscriptionBanner from './SubscriptionBanner';
 import EmailVerificationBanner from './EmailVerificationBanner';
+import InactiveShopModal from './InactiveShopModal';
 
 const Shell = ({ children }) => (
   <div className="min-h-screen bg-app text-text-primary font-sans antialiased selection:bg-primary/10 selection:text-primary transition-colors duration-200">
@@ -35,7 +36,7 @@ export default function Layout() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const dispatch = useDispatch();
+
   const { user } = useSelector((state) => state.auth);
   const { getRoutesByRole } = usePermissions();
   const isLoginPage = location.pathname === '/login' || location.pathname === '/signup';
@@ -111,6 +112,7 @@ export default function Layout() {
       <div className={`${paddingLeftClass} flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out`}>
         <SubscriptionBanner />
         <EmailVerificationBanner />
+        <InactiveShopModal />
         <TopNavBar
           onMenuClick={() => setSidebarOpen(true)}
           isSidebarOpen={sidebarOpen}

@@ -14,7 +14,10 @@ const shopAuth = async (req, res, next) => {
   if (!isOwner) {
     if (req.authz?.scope?.hasShopAccess) {
       if (!req.authz.scope.hasShopAccess(shopId)) {
-        return res.status(403).json({ error: 'Shop is inactive', code: 'SHOP_INACTIVE' });
+        if (req.authz.scope.isInactiveAccessibleShop && req.authz.scope.isInactiveAccessibleShop(shopId)) {
+          return res.status(403).json({ error: 'Shop is inactive', code: 'SHOP_INACTIVE' });
+        }
+        return res.status(403).json({ error: 'Access denied: You do not have access to this branch.', code: 'SHOP_ACCESS_DENIED' });
       }
     } else {
       try {
@@ -32,4 +35,3 @@ const shopAuth = async (req, res, next) => {
 };
 
 module.exports = shopAuth;
-
