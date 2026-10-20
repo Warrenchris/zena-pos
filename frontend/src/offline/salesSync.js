@@ -18,9 +18,16 @@ export const MAX_SERVER_ERROR_ATTEMPTS = 10;
 export function classifyError(error) {
   const status = error?.response?.status;
   if (!status) return { kind: 'offline', status: null, message: 'No connection' };
-  const data = error.response.data;
+  const data = error.response?.data;
   const message = data?.message || data?.error || `The server answered ${status}`;
   if (status === 401) return { kind: 'auth', status, message };
+  if (status === 403 && data?.code === 'SHOP_INACTIVE') {
+    return {
+      kind: 'inactive_shop',
+      status,
+      message: 'Shop is inactive — needs owner attention to reactivate branch'
+    };
+  }
   if (status === 402 || status === 403) return { kind: 'blocked', status, message };
   if (status === 408 || status === 425 || status === 429) return { kind: 'busy', status, message };
   if (status >= 500) return { kind: 'server', status, message };

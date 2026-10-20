@@ -92,6 +92,7 @@ function buildActorPayload({
   membership,
   homeShopId,
   accessibleShopIds,
+  inactiveAccessibleShopIds = [],
   email,
   name
 }) {
@@ -132,7 +133,8 @@ function buildActorPayload({
     },
     scope: {
       homeShopId,
-      memberAccessibleShopIds: isOwner ? null : accessibleShopIds
+      memberAccessibleShopIds: isOwner ? null : accessibleShopIds,
+      memberInactiveAccessibleShopIds: isOwner ? null : inactiveAccessibleShopIds
     },
     isSuperAdmin: false
   };
@@ -160,7 +162,8 @@ function buildSuperAdminPayload({ id, currentVersion, superAdminUser }) {
     membership: null,
     scope: {
       homeShopId: null,
-      memberAccessibleShopIds: null
+      memberAccessibleShopIds: null,
+      memberInactiveAccessibleShopIds: null
     },
     isSuperAdmin: true
   };
@@ -201,4 +204,3 @@ module.exports = {
   buildSuperAdminPayload,
   invalidateOrgActorContexts
 };
-
