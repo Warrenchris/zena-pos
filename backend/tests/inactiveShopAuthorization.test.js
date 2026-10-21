@@ -41,6 +41,7 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
   let productA2;
   let ownerA;
   let cashierA;
+  let cashierAMem;
   let managerA;
   let employeeA;
   let ownerB;
@@ -159,7 +160,7 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
       authzVersion: 1
     });
 
-    const cashierAMem = await OrganizationMembership.create({
+    cashierAMem = await OrganizationMembership.create({
       organizationId: orgA.id,
       userId: cashierA.id,
       orgRole: 'member',
@@ -689,6 +690,102 @@ describe('Inactive Shop Authorization and Cache Invalidation', () => {
       } finally {
         process.env.AUTHZ_CONTEXT_CACHE_ENABLED = originalCacheEnv;
       }
+    });
+  });
+
+  describe('authz context cache schemaVersion migration from 1 to 2', () => {
+    beforeEach(async () => {
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'true';
+      if (redisClient && redisClient.status === 'ready') {
+        await authzContextCacheService.invalidateOrgActorContexts(orgA.id);
+      }
+    });
+
+    afterAll(async () => {
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = originalCacheEnv;
+      await Shop.update({ active: true }, { where: { id: shopA2.id } });
+      if (redisClient && redisClient.status === 'ready') {
+        await authzContextCacheService.invalidateOrgActorContexts(orgA.id);
+      }
+    });
+
+    it('rejects a cached payload with schemaVersion 1, rebuilds it, and excludes inactive shops from memberAccessibleShopIds', async () => {
+      // 1. Ensure shopA2 is inactive in DB
+      await Shop.update({ active: false }, { where: { id: shopA2.id } });
+
+      const cashierKey = authzContextCacheService.getCacheKey({
+        tokenRole: 'cashier',
+        tokenOrgId: orgA.id,
+        id: cashierA.id,
+        isEmployee: false,
+        currentVersion: cashierA.authzVersion || 1
+      });
+
+      // 2. Pre-seed Redis cache with a legacy schemaVersion 1 payload that improperly contains inactive shopA2 in memberAccessibleShopIds
+      const legacyPayload = {
+        schemaVersion: 1,
+        actorKind: 'u',
+        actorId: cashierA.id,
+        authzVersion: cashierA.authzVersion || 1,
+        identity: {
+          id: cashierA.id,
+          userId: cashierA.id,
+          employeeId: null,
+          isEmployee: false,
+          email: cashierA.email,
+          name: cashierA.name
+        },
+        tenant: {
+          organizationId: orgA.id,
+          organizationName: orgA.name,
+          organizationStatus: 'active',
+          membershipId: cashierAMem.id,
+          orgRole: 'member',
+          membershipStatus: 'active',
+          isOwner: false,
+          isOrgAdmin: false
+        },
+        role: {
+          rawRole: 'cashier',
+          effectiveRole: 'cashier'
+        },
+        scope: {
+          homeShopId: shopA1.id,
+          memberAccessibleShopIds: [shopA1.id, shopA2.id],
+          memberInactiveAccessibleShopIds: []
+        }
+      };
+
+      await redisClient.setex(cashierKey, 60, JSON.stringify(legacyPayload));
+
+      // Assert legacy cache is in Redis
+      const stored = await authzContextCacheService.getCachedActorContext(cashierKey);
+      expect(stored).not.toBeNull();
+      expect(stored.schemaVersion).toBe(1);
+      expect(stored.scope.memberAccessibleShopIds).toContain(shopA2.id);
+
+      // 3. Make request for inactive shopA2 using cashierShopA1Token
+      const resInactive = await request(app)
+        .get(`/api/products?shopId=${shopA2.id}`)
+        .set('Authorization', cashierShopA1Token);
+
+      // validateCachedPayload rejects schemaVersion 1 -> rebuilds from DB -> shopA2 is inactive -> 403 SHOP_INACTIVE
+      expect(resInactive.status).toBe(403);
+      expect(resInactive.body.code).toBe('SHOP_INACTIVE');
+
+      // 4. Assert rebuilt cache in Redis has schemaVersion 2 and excludes inactive shop from memberAccessibleShopIds
+      const rebuiltPayload = await authzContextCacheService.getCachedActorContext(cashierKey);
+      expect(rebuiltPayload).not.toBeNull();
+      expect(rebuiltPayload.schemaVersion).toBe(2);
+      expect(rebuiltPayload.scope.memberAccessibleShopIds).toContain(shopA1.id);
+      expect(rebuiltPayload.scope.memberAccessibleShopIds).not.toContain(shopA2.id);
+      expect(rebuiltPayload.scope.memberInactiveAccessibleShopIds).toContain(shopA2.id);
+
+      // 5. Subsequent request for active shop succeeds
+      const resActive = await request(app)
+        .get(`/api/products?shopId=${shopA1.id}`)
+        .set('Authorization', cashierShopA1Token);
+      expect(resActive.status).toBe(200);
     });
   });
 });

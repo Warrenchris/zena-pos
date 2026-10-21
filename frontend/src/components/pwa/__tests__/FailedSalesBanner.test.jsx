@@ -129,4 +129,20 @@ describe('FailedSalesBanner', () => {
     expect(await screen.findByText('Product no longer exists')).toBeInTheDocument();
     expect(await listQueue(7)).toHaveLength(1);
   });
+
+  it('retries a sale failed with "Shop is inactive" after reactivation, and clears when accepted', async () => {
+    await failedEntry(1, 'Shop is inactive — needs owner attention to reactivate branch');
+    api.post.mockResolvedValue({ data: { id: 'sale-123', status: 'completed' } });
+    renderBanner();
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Shop is inactive — needs owner attention to reactivate branch')).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    await waitFor(async () => expect(await listQueue(7)).toEqual([]));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
 });

@@ -608,9 +608,9 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
       currentVersion: 1
     });
 
-    // 1. Wrong schemaVersion (schemaVersion: 2)
+    // 1. Wrong schemaVersion (schemaVersion: 1)
     await redisClient.setex(managerKey, 45, JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 1,
       actorId: managerUser.id,
       actorKind: 'u',
       authzVersion: 1,
@@ -629,7 +629,7 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
 
     // 2. Wrong actorId (e.g. 999999)
     await redisClient.setex(managerKey, 45, JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       actorId: 999999,
       actorKind: 'u',
       authzVersion: 1,
@@ -648,7 +648,7 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
 
     // 3. Wrong authzVersion in cached payload (e.g. 999)
     await redisClient.setex(managerKey, 45, JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       actorId: managerUser.id,
       actorKind: 'u',
       authzVersion: 999,
@@ -896,7 +896,7 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
 
   describe('authzContextCacheService.validateCachedPayload unit tests', () => {
     const baseValidUserPayload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       actorKind: 'u',
       actorId: 101,
       authzVersion: 1,
@@ -921,7 +921,7 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
 
       // Valid employee payload
       const validEmpPayload = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         actorKind: 'e',
         actorId: 'emp-uuid-55',
         authzVersion: 2,
@@ -959,7 +959,7 @@ describe('Stage C2: Actor Context Cache & Epoch Invalidation (perf/actor-context
     test('returns false for wrong schemaVersion', () => {
       expect(authzContextCacheService.validateCachedPayload({
         ...baseValidUserPayload,
-        schemaVersion: 2
+        schemaVersion: 1
       }, baseValidParams)).toBe(false);
 
       expect(authzContextCacheService.validateCachedPayload({
