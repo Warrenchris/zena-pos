@@ -483,10 +483,20 @@ const getInsights = async (req, res) => {
     const startPrevWeek = new Date(startThisWeek);
     startPrevWeek.setDate(startPrevWeek.getDate() - 7);
 
-    const [thisWeekRevenue, prevWeekRevenue] = await Promise.all([
-      Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: startThisWeek } } }),
-      Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime()-1)] } } }),
+    const [thisWeekRevenueRow, prevWeekRevenueRow] = await Promise.all([
+      Sale.findOne({
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: startThisWeek } },
+        attributes: [[sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue']],
+        raw: true
+      }),
+      Sale.findOne({
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime()-1)] } },
+        attributes: [[sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue']],
+        raw: true
+      }),
     ]);
+    const thisWeekRevenue = parseFloat(thisWeekRevenueRow?.revenue || 0);
+    const prevWeekRevenue = parseFloat(prevWeekRevenueRow?.revenue || 0);
     if (thisWeekRevenue != null && prevWeekRevenue) {
       const daysThisWeek = Math.max(1, (now.getTime() - startThisWeek.getTime()) / (24 * 60 * 60 * 1000));
       const avgDailyThisWeek = (thisWeekRevenue || 0) / daysThisWeek;
@@ -583,7 +593,7 @@ const getInsights = async (req, res) => {
         attributes: [
           [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
           [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'sumTotal'],
+          [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'sumTotal'],
           [sequelize.fn('COUNT', sequelize.col('id')), 'countSales'],
         ],
         group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
@@ -784,8 +794,7 @@ const getMonthlyRevenue = async (req, res) => {
       where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: twelveMonthsAgo } },
       attributes: [
         [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m-01'), 'month'],
-        // Subtract processed refunds so monthly revenue chart matches P&L net figures
-        [sequelize.literal(`SUM(\	otal\ - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = Sale.id AND sr.status = 'processed'), 0))`), 'revenue'],
+        [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue'],
       ],
       group: [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m-01')],
       order: [[sequelize.literal('month'), 'ASC']],
@@ -892,11 +901,36 @@ const getStockDepletion = async (req, res) => {
 
     res.json(aiResponse.data);
   } catch (error) {
-    console.error('[getStockDepletion] Error:', error.message);
-    if (error.status === 503) {
-      return res.status(503).json({ error: error.message });
+    console.warn('[getStockDepletion] AI service unavailable, generating local linear fallback:', error.message);
+    try {
+      const fallbackResults = products.map((p) => {
+        const invStock = parseFloat(p.Inventories?.[0]?.stockQuantity || 0);
+        const sales = salesByProduct[p.id] || [];
+        const totalSold = sales.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
+        const dailyVelocity = totalSold / 90;
+        let daysUntilDepletion = 999;
+        if (invStock <= 0) {
+          daysUntilDepletion = 0;
+        } else if (dailyVelocity > 0) {
+          daysUntilDepletion = Math.ceil(invStock / dailyVelocity);
+        }
+        return {
+          product_id: String(p.id),
+          product_name: p.name,
+          current_stock: invStock,
+          days_until_depletion: daysUntilDepletion,
+          alert: daysUntilDepletion <= insightsConfig.STOCK_DEPLETION_DAYS,
+          algorithm: 'linear_fallback',
+          confidence: totalSold > 0 ? 'medium' : 'low',
+          data_points: sales.length,
+          warning: 'AI service offline; using linear velocity estimate.'
+        };
+      });
+      return res.json(fallbackResults);
+    } catch (fallbackErr) {
+      console.error('[getStockDepletion] Linear fallback failed:', fallbackErr.message);
+      return res.status(500).json({ error: 'Failed to generate stock depletion forecast' });
     }
-    res.status(500).json({ error: 'Failed to generate stock depletion forecast' });
   }
 };
 

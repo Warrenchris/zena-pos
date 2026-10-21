@@ -230,6 +230,18 @@ export default function FinancialAnalysis() {
                     value={metrics.debt_to_equity != null ? metrics.debt_to_equity.toFixed(2) : "N/A"}
                     hint={metrics.debt_to_equity != null ? "Financial leverage ratio" : (metrics.data_quality_warnings?.find(w => w.includes('debt_to_equity')) || "No balance sheet data")}
                   />
+                  <MetricCard
+                    label="Operating Expense Ratio"
+                    value={metrics.operating_expense_ratio != null ? `${metrics.operating_expense_ratio.toFixed(1)}%` : "N/A"}
+                    hint={metrics.operating_expense_ratio_note || "Operating expenses / net revenue"}
+                  />
+                  {metrics.return_on_assets != null && (
+                    <MetricCard
+                      label="Return on Assets (ROA)"
+                      value={`${metrics.return_on_assets.toFixed(1)}%`}
+                      hint="Net profit / total assets"
+                    />
+                  )}
                   {metrics.cash_conversion_cycle != null && (
                     <MetricCard
                       label="Cash Conversion Cycle"
