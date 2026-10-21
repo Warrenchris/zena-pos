@@ -55,7 +55,7 @@ async function setCachedActorContext(key, payload, ttl = getCacheTtl()) {
 
 function validateCachedPayload(cached, { id, isEmployee, currentVersion, tokenOrgId, tokenRole }) {
   if (!cached || typeof cached !== 'object') return false;
-  if (cached.schemaVersion !== 1) return false;
+  if (cached.schemaVersion !== 2) return false;
   if (Number(cached.authzVersion) !== Number(currentVersion)) return false;
   if (String(cached.actorId) !== String(id)) return false;
 
@@ -98,7 +98,7 @@ function buildActorPayload({
 }) {
   const isOwner = membership.orgRole === 'owner';
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     actorKind: isEmployee ? 'e' : 'u',
     actorId: id,
     authzVersion: currentVersion,
@@ -142,7 +142,7 @@ function buildActorPayload({
 
 function buildSuperAdminPayload({ id, currentVersion, superAdminUser }) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     actorKind: 'u',
     actorId: id,
     authzVersion: currentVersion,
