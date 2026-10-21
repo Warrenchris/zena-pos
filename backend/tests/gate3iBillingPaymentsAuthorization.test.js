@@ -863,6 +863,7 @@ describe('Gate 3I: Billing, Subscriptions & Payments Authorization Verification'
 
       // Deactivate user
       await deactivatedOwner.update({ active: false });
+      await tokenRevocationService.incrementAuthzVersion(deactivatedOwner.id, false);
 
       // Immediate rejection
       res = await request(app)

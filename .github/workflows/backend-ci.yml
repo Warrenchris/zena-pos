@@ -254,3 +254,61 @@ jobs:
             docker logs zana-backend-smoke
             exit 1
           fi
+
+  backend-authz-cache-ci:
+    name: Backend Test (Authz Cache Enabled)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: zana_pos_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot" --health-interval=10s --health-timeout=5s --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backend tests (AUTHZ_CONTEXT_CACHE_ENABLED=true)
+        env:
+          NODE_ENV: test
+          AUTHZ_CONTEXT_CACHE_ENABLED: "true"
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+          REDIS_DB: 1
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_PASS: root
+          TEST_DB_NAME: zana_pos_test
+          JWT_PRIVATE_KEY: "test-private-key"
+          JWT_PUBLIC_KEY: "test-public-key"
+          ENCRYPTION_SECRET: "e7b4198c61fa2d75a02482310bf8b975e5330e2fbd08544c4897f1f415ef414a"
+        run: npm test
