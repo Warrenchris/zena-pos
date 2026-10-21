@@ -58,11 +58,8 @@ describe('Gate 3I: Billing, Subscriptions & Payments Authorization Verification'
   let subA, subB;
   let invoiceA1, invoiceA2, invoiceB1;
   let pendingMpesaA1, pendingCardA1;
-  let originalAuthzCacheFlag;
 
   beforeAll(async () => {
-    originalAuthzCacheFlag = process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
-    process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'false';
     await sequelize.authenticate();
 
     // Use seeded plans so we do not pollute public plan catalog
@@ -866,6 +863,7 @@ describe('Gate 3I: Billing, Subscriptions & Payments Authorization Verification'
 
       // Deactivate user
       await deactivatedOwner.update({ active: false });
+      await tokenRevocationService.incrementAuthzVersion(deactivatedOwner.id, false);
 
       // Immediate rejection
       res = await request(app)
@@ -961,13 +959,5 @@ describe('Gate 3I: Billing, Subscriptions & Payments Authorization Verification'
       expect(res.status).toBe(403);
       expect(res.body.code).toBe('ORGANIZATION_DELETED');
     });
-  });
-
-  afterAll(async () => {
-    if (originalAuthzCacheFlag === undefined) {
-      delete process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
-    } else {
-      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = originalAuthzCacheFlag;
-    }
   });
 });
