@@ -223,14 +223,14 @@ describe('Security: PUT /api/shops/me must not toggle shop.active', () => {
     expect(Boolean(reloaded.active)).toBe(true);
   });
 
-  test('d. manager PUT /api/shops/me {"active":true} on an inactive shop => stays inactive', async () => {
+  test('d. manager PUT /api/shops/me {"active":true} on an inactive shop => rejected 403 SHOP_INACTIVE and stays inactive', async () => {
     const res = await request(app)
       .put('/api/shops/me')
       .set('Authorization', inactiveShopManagerToken)
       .send({ active: true });
 
-    expect(res.status).toBe(200);
-    expect(res.body.active).toBe(false);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('SHOP_INACTIVE');
 
     const reloaded = await Shop.findByPk(inactiveShop.id);
     expect(Boolean(reloaded.active)).toBe(false);
