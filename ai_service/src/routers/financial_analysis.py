@@ -28,6 +28,7 @@ class FinancialData(BaseModel):
     expenses: float = Field(ge=0)
     assets: float = Field(ge=0)
     liabilities: float = Field(ge=0)
+    inventory_value: Optional[float] = None
     date: datetime
 
 @router.post("/analyze", response_model=FinancialMetrics)
@@ -72,16 +73,27 @@ async def analyze_financials(
         quick_ratio_note = "Requires current assets breakdown (cash + receivables). Not enough data provided."
 
         inventory_turnover = None
-        inventory_turnover_note = "Requires direct inventory value. Not enough data provided."
+        inventory_turnover_note = None
+        if data.inventory_value is not None and data.inventory_value > 0:
+            inventory_turnover = round(costs / data.inventory_value, 2)
+            inventory_turnover_note = f"Turnover ratio based on KSh {data.inventory_value:,.0f} current stock valuation"
+        elif costs > 0:
+            inventory_turnover_note = "Requires direct inventory value. Not enough data provided."
 
         cash_conversion_cycle = None
         cash_conversion_cycle_note = "Requires days payable outstanding and days sales outstanding. Not enough data provided."
 
-        data_quality_warnings = [
-            f"quick_ratio: {quick_ratio_note}",
-            f"inventory_turnover: {inventory_turnover_note}",
-            f"cash_conversion_cycle: {cash_conversion_cycle_note}"
-        ]
+        data_quality_warnings = []
+
+        # Only warn about quick_ratio if assets/liabilities aren't provided (not on every call)
+        if assets == 0 and liabilities == 0:
+            data_quality_warnings.append(f"quick_ratio: {quick_ratio_note}")
+
+        if cash_conversion_cycle is None:
+            data_quality_warnings.append(f"cash_conversion_cycle: {cash_conversion_cycle_note}")
+
+        if inventory_turnover_note and inventory_turnover is None:
+            data_quality_warnings.append(f"inventory_turnover: {inventory_turnover_note}")
 
         if liabilities == 0:
             data_quality_warnings.append("current_ratio: Cannot compute because liabilities are zero.")

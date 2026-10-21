@@ -94,6 +94,7 @@ export default function FinancialAnalysis() {
           expenses: finalExpenses,
           assets: shopResp?.assets || 0,
           liabilities: shopResp?.liabilities || 0,
+          inventory_value: pnlResp?.inventoryValue || 0,
           date: new Date().toISOString(),
         };
         setIsUsingDemoData(false);
@@ -185,7 +186,7 @@ export default function FinancialAnalysis() {
               <MetricCard label="Revenue (tracked)" value={formatCurrency(shopSummary.totalRevenue)} />
               <MetricCard
                 label="Data window"
-                value={`${shopSummary.monthsTracked} months`}
+                value={`${shopSummary.monthsTracked} ${shopSummary.monthsTracked === 1 ? 'month' : 'months'}`}
                 hint="Based on dashboard history"
               />
             </div>
@@ -201,24 +202,49 @@ export default function FinancialAnalysis() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <MetricCard
                     label="Gross Profit Margin"
-                    value={metrics.gross_profit_margin != null ? formatPercent(metrics.gross_profit_margin) : "N/A"}
+                    value={metrics.gross_profit_margin != null ? `${metrics.gross_profit_margin.toFixed(1)}%` : "N/A"}
                     hint={metrics.gross_profit_margin != null ? "Gross margin ratio" : "No sales recorded yet"}
                   />
                   <MetricCard
                     label="Net Profit Margin"
-                    value={metrics.net_profit_margin != null ? formatPercent(metrics.net_profit_margin) : "N/A"}
-                    hint={metrics.net_profit_margin != null ? "Net margin ratio" : "No sales recorded yet"}
+                    value={metrics.net_profit_margin != null ? `${metrics.net_profit_margin.toFixed(2)}%` : "N/A"}
+                    hint={metrics.net_profit_margin != null ? "Net margin after operating expenses" : "No sales recorded yet"}
                   />
                   <MetricCard
                     label="Current Ratio"
                     value={metrics.current_ratio != null ? metrics.current_ratio.toFixed(2) : "N/A"}
-                    hint={metrics.current_ratio != null ? "Liquidity" : "No liabilities or assets details"}
+                    hint={metrics.current_ratio != null ? "Liquidity (assets / liabilities)" : (metrics.data_quality_warnings?.find(w => w.includes('current_ratio')) || "No liabilities or assets details")}
                   />
                   <MetricCard
                     label="Inventory Turnover"
-                    value={metrics.inventory_turnover != null ? metrics.inventory_turnover.toFixed(2) : "N/A"}
+                    value={metrics.inventory_turnover != null ? `${metrics.inventory_turnover.toFixed(2)}x` : "N/A"}
                     hint={metrics.inventory_turnover_note || "Requires direct inventory value"}
                   />
+                  <MetricCard
+                    label="Quick Ratio"
+                    value={metrics.quick_ratio != null ? metrics.quick_ratio.toFixed(2) : "N/A"}
+                    hint={metrics.quick_ratio_note || "Cash + receivables / liabilities"}
+                  />
+                  <MetricCard
+                    label="Debt to Equity"
+                    value={metrics.debt_to_equity != null ? metrics.debt_to_equity.toFixed(2) : "N/A"}
+                    hint={metrics.debt_to_equity != null ? "Financial leverage ratio" : (metrics.data_quality_warnings?.find(w => w.includes('debt_to_equity')) || "No balance sheet data")}
+                  />
+                  {metrics.cash_conversion_cycle != null && (
+                    <MetricCard
+                      label="Cash Conversion Cycle"
+                      value={`${metrics.cash_conversion_cycle.toFixed(0)} days`}
+                      hint={metrics.cash_conversion_cycle_note || "Days to convert inventory to cash"}
+                    />
+                  )}
+                  {metrics.data_quality_warnings?.length > 0 && (
+                    <div className="sm:col-span-2 bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+                      <p className="text-xs font-semibold text-yellow-700 mb-1">Data quality notes</p>
+                      <ul className="text-xs text-yellow-600 space-y-0.5 list-disc list-inside">
+                        {metrics.data_quality_warnings.map((w, i) => <li key={i}>{w}</li>)}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -248,8 +274,8 @@ export default function FinancialAnalysis() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {insights.map((ins, idx) => (
                   <div key={idx} className="bg-surface-2 border border-border-default rounded-xl p-4 text-text-primary">
-                    <p className="font-semibold text-primary">{ins?.insight_type || ins?.type || 'Insight'}</p>
-                    <p className="text-sm text-text-secondary mt-1">{ins?.description || ins?.message || ''}</p>
+                    <p className="font-semibold text-primary">{ins?.type || 'Insight'}</p>
+                    <p className="text-sm text-text-secondary mt-1">{ins?.message || ''}</p>
                     {ins?.recommendations?.length > 0 && (
                       <ul className="text-xs text-text-secondary mt-2 list-disc list-inside space-y-1">
                         {ins.recommendations.map((r, i) => <li key={i}>{r}</li>)}
