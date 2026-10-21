@@ -50,7 +50,6 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
   let cashierToken;
   let superAdminToken;
   let employeeToken;
-  let originalAuthzCacheFlag;
 
   async function resetCachesForUsers() {
     if (redisClient && redisClient.status === 'ready') {
@@ -80,8 +79,6 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
   }
 
   beforeAll(async () => {
-    originalAuthzCacheFlag = process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
-    process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'false';
     await sequelize.authenticate();
 
     const suffix = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -320,6 +317,7 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
     const origSmtpHost = process.env.SMTP_HOST;
     const origSmtpPort = process.env.SMTP_PORT;
     const origNodeEnv = process.env.NODE_ENV;
+    const origAuthzCache = process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
 
     beforeEach(() => {
       // Enable SMTP env flags and development mode so emailVerification7DayGate and generalLimiter
@@ -327,6 +325,7 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
       process.env.SMTP_HOST = '127.0.0.1';
       process.env.SMTP_PORT = '2525';
       process.env.NODE_ENV = 'development';
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'false';
     });
 
     afterEach(() => {
@@ -338,6 +337,8 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
 
       if (origNodeEnv === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = origNodeEnv;
+      if (origAuthzCache === undefined) delete process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+      else process.env.AUTHZ_CONTEXT_CACHE_ENABLED = origAuthzCache;
 
       jest.restoreAllMocks();
     });
@@ -548,6 +549,8 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
 
   describe('2. Employee & Super Admin Request-Scoped Sharing', () => {
     test('Employee token: cold Employees reads = 1 (down from 3), warm Redis = 7 on /api/sales/statistics', async () => {
+      const origEmpCache = process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'false';
       await resetCachesForUsers();
 
       const coldSql = [];
@@ -588,7 +591,12 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
       } finally {
         sendCmdSpy.mockRestore();
       }
-      expect(warmRedis).toHaveLength(7);
+      try {
+        expect(warmRedis).toHaveLength(7);
+      } finally {
+        if (origEmpCache === undefined) delete process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+        else process.env.AUTHZ_CONTEXT_CACHE_ENABLED = origEmpCache;
+      }
     });
 
     test('Super admin token: cold Users reads = 1 (down from 3) and bypasses tenant scoping cleanly', async () => {
@@ -933,13 +941,5 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
       expect(managerQuerySpoofRes.status).toBe(403);
       expect(managerQuerySpoofRes.body.code).toBe('SHOP_ACCESS_DENIED');
     });
-  });
-
-  afterAll(async () => {
-    if (originalAuthzCacheFlag === undefined) {
-      delete process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
-    } else {
-      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = originalAuthzCacheFlag;
-    }
   });
 });
