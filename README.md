@@ -252,13 +252,13 @@ Pair a Bluetooth Classic printer on the phone, allow **Nearby devices**, then **
 ## 📚 Detailed Documentation
 
 For specific implementation details, refer to the following guides in the repository:
-* 📄 [API Documentation](API_DOCUMENTATION.md)
-* 🐳 [Docker Setup Guide](DOCKER_SETUP.md)
-* 🔑 [Inter-Service Authentication](INTER_SERVICE_AUTHENTICATION.md)
-* 🔐 [JWT RS256 Migration Guide](JWT_RS256_MIGRATION_GUIDE.md)
-* ⚡ [RBAC Caching Implementation](RBAC_CACHING_IMPLEMENTATION.md)
-* ⚙️ [Settings Feature Documentation](SETTINGS_FEATURE_README.md)
-* 📊 [Chart Standardization Guide](CHART_LIBRARY_STANDARDIZATION.md)
+* 📄 [API Documentation](docs/api/API_DOCUMENTATION.md)
+* 🐳 [Docker Setup Guide](docs/operations/DOCKER_SETUP.md)
+* 🔑 [Inter-Service Authentication](docs/security/INTER_SERVICE_AUTHENTICATION.md)
+* 🔐 [JWT RS256 Migration Guide](docs/security/JWT_RS256_MIGRATION_GUIDE.md)
+* ⚡ [RBAC Caching Implementation](docs/perf/RBAC_CACHING_IMPLEMENTATION.md)
+* ⚙️ [Settings Feature Documentation](docs/architecture/SETTINGS_FEATURE_README.md)
+* 📊 [Chart Standardization Guide](docs/architecture/CHART_LIBRARY_STANDARDIZATION.md)
 * 📱 [Android app (Capacitor + Bluetooth printing)](mobile/README.md)
 
 ---

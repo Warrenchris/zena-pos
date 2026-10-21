@@ -21,7 +21,7 @@ Authorization: Bearer <jwt_token>
 2. Token is returned in the response
 3. Include token in all subsequent requests
 
-See [Inter-Service Authentication Flow](./INTER_SERVICE_AUTHENTICATION.md) for detailed authentication flow.
+See [Inter-Service Authentication Flow](../security/INTER_SERVICE_AUTHENTICATION.md) for detailed authentication flow.
 
 ---
 
@@ -1319,7 +1319,7 @@ All endpoints automatically filter data by `shopId` from the JWT token. Users ca
 
 ## Related Documentation
 
-- [Inter-Service Authentication Flow](./INTER_SERVICE_AUTHENTICATION.md) - Detailed authentication flow
-- [JWT Setup Guide](./JWT_SETUP_GUIDE.md) - JWT configuration
-- [Docker Setup](./DOCKER_SETUP.md) - Development environment setup
+- [Inter-Service Authentication Flow](../security/INTER_SERVICE_AUTHENTICATION.md) - Detailed authentication flow
+- [JWT Setup Guide](../security/JWT_SETUP_GUIDE.md) - JWT configuration
+- [Docker Setup](../operations/DOCKER_SETUP.md) - Development environment setup
 
