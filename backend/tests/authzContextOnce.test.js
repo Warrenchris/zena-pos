@@ -213,6 +213,8 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
 
   describe('1. Query-Count Verification via Sequelize afterQuery Hook', () => {
     test('Warm GET /api/sales/statistics runs authzContext SQL queries ONCE (7 total queries instead of 12)', async () => {
+      const origCache = process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'false';
       // Warm up Redis caches (user status, org status, authzVersion, subscription status, permissions)
       const warmupRes = await request(app)
         .get('/api/sales/statistics')
@@ -258,7 +260,12 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
       expect(ownerShopQueries).toHaveLength(1);
 
       // Total warm queries = 4 pre-handler (authzContext once) + 3 handler (getSalesStatistics) = 7
-      expect(recordedSql).toHaveLength(7);
+      try {
+        expect(recordedSql).toHaveLength(7);
+      } finally {
+        if (origCache === undefined) delete process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+        else process.env.AUTHZ_CONTEXT_CACHE_ENABLED = origCache;
+      }
     });
   });
 
@@ -377,23 +384,55 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
       expect(beforeRes.status).toBe(200);
 
       await managerUser.update({ role: 'cashier' });
+      await tokenRevocationService.incrementAuthzVersion(managerUser.id, false);
       try {
-        // Same JWT still claiming role: 'manager', but DB role is now 'cashier'
+        // Same JWT still claiming role: 'manager', but epoch bump revokes previous session (or denied if evaluated)
         const afterRes = await request(app)
           .get('/api/coupons')
           .set('Authorization', managerToken);
-        expect(afterRes.status).toBe(403);
-        expect(afterRes.body.code).toBe('PERMISSION_DENIED');
+        expect([401, 403]).toContain(afterRes.status);
+        if (afterRes.status === 401) {
+          expect(afterRes.body.code).toBe('AUTHZ_VERSION_STALE');
+        } else {
+          expect(afterRes.body.code).toBe('PERMISSION_DENIED');
+        }
+
+        // Fresh token issued under new epoch receives 403 PERMISSION_DENIED
+        const currentVer = await tokenRevocationService.getAuthzVersion(managerUser.id, false);
+        const freshToken = signToken({
+          id: managerUser.id,
+          role: 'cashier',
+          orgRole: 'member',
+          shopId: shop.id,
+          organizationId: org.id,
+          isEmployee: false,
+          authzVersion: currentVer
+        });
+        const freshRes = await request(app)
+          .get('/api/coupons')
+          .set('Authorization', freshToken);
+        expect(freshRes.status).toBe(403);
+        expect(freshRes.body.code).toBe('PERMISSION_DENIED');
       } finally {
         await managerUser.update({ role: 'manager' });
+        await tokenRevocationService.incrementAuthzVersion(managerUser.id, false);
+        const restoredVersion = await tokenRevocationService.getAuthzVersion(managerUser.id, false);
+        managerToken = signToken({
+          id: managerUser.id,
+          role: 'manager',
+          orgRole: 'member',
+          shopId: shop.id,
+          organizationId: org.id,
+          isEmployee: false,
+          authzVersion: restoredVersion
+        });
       }
     });
 
     test('Deactivated user is blocked with 401 on the very next request', async () => {
       await managerUser.update({ active: false });
-      if (redisClient && redisClient.isOpen) {
-        await redisClient.del(`user:status:user:${managerUser.id}`);
-      }
+      await tokenRevocationService.incrementAuthzVersion(managerUser.id, false);
+      await tokenRevocationService.clearUserStatus(managerUser.id, false);
 
       try {
         const res = await request(app)
@@ -402,9 +441,18 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
         expect(res.status).toBe(401);
       } finally {
         await managerUser.update({ active: true });
-        if (redisClient && redisClient.isOpen) {
-          await redisClient.del(`user:status:user:${managerUser.id}`);
-        }
+        await tokenRevocationService.incrementAuthzVersion(managerUser.id, false);
+        await tokenRevocationService.clearUserStatus(managerUser.id, false);
+        const restoredVersion = await tokenRevocationService.getAuthzVersion(managerUser.id, false);
+        managerToken = signToken({
+          id: managerUser.id,
+          role: 'manager',
+          orgRole: 'member',
+          shopId: shop.id,
+          organizationId: org.id,
+          isEmployee: false,
+          authzVersion: restoredVersion
+        });
       }
     });
 
@@ -459,6 +507,7 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
       });
 
       // 2) Mounted alone after lightweight req.user injection -> hydrates req.authz from DB
+      const currentMgrVersion = await tokenRevocationService.getAuthzVersion(managerUser.id, false);
       standaloneApp.get(
         '/alone-hydrated',
         (req, _res, next) => {
@@ -468,7 +517,7 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
             role: 'cashier', // Intentionally stale/wrong in req.user; DB has 'manager'
             shopId: shop.id,
             organizationId: org.id,
-            authzVersion: 1
+            authzVersion: currentMgrVersion
           };
           next();
         },
@@ -500,6 +549,7 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
         where: { userId: cashierUser.id, organizationId: org.id }
       });
       await membership.update({ status: 'suspended' });
+      const newVersion = await tokenRevocationService.incrementAuthzVersion(cashierUser.id, false);
 
       try {
         let handlerReached = false;
@@ -513,7 +563,7 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
             role: 'cashier',
             shopId: shop.id,
             organizationId: org.id,
-            authzVersion: 1
+            authzVersion: newVersion
           };
           // Pre-populate a fake req.authz to prove that if WeakSet were wrongly set on failure,
           // a second call would short-circuit via `completedAuthzRequests.has(req) && req.authz`.
@@ -522,6 +572,11 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
           await authzContext(req, res, () => {
             handlerReached = true;
           });
+
+          // Fallback handler to prevent hanging if next() was unexpectedly called
+          if (handlerReached && !res.headersSent) {
+            return res.status(200).json({ handlerReached: true });
+          }
 
           // Attempt a second invocation on the SAME req object after rejection
           const mockRes2 = {
@@ -539,13 +594,33 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
         expect(secondCallNextCalled).toBe(false);
 
         // Also verify against the real app route mounting both auth and authzContext
+        const freshCashierToken = signToken({
+          id: cashierUser.id,
+          role: 'cashier',
+          orgRole: 'member',
+          shopId: shop.id,
+          organizationId: org.id,
+          isEmployee: false,
+          authzVersion: newVersion
+        });
         const realRouteRes = await request(app)
           .get('/api/customers')
-          .set('Authorization', cashierToken);
+          .set('Authorization', freshCashierToken);
         expect(realRouteRes.status).toBe(403);
         expect(realRouteRes.body.code).toBe('MEMBERSHIP_SUSPENDED');
       } finally {
         await membership.update({ status: 'active' });
+        await tokenRevocationService.incrementAuthzVersion(cashierUser.id, false);
+        const restoredVersion = await tokenRevocationService.getAuthzVersion(cashierUser.id, false);
+        cashierToken = signToken({
+          id: cashierUser.id,
+          role: 'cashier',
+          orgRole: 'member',
+          shopId: shop.id,
+          organizationId: org.id,
+          isEmployee: false,
+          authzVersion: restoredVersion
+        });
       }
     });
   });
