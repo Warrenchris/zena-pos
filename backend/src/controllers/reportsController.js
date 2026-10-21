@@ -230,13 +230,77 @@ exports.getSalesSummary = async (req, res) => {
       productRows = []
     }
 
+    // Refund stats for KPI metrics
+    let refundCount = 0;
+    let refundAmount = 0;
+    try {
+      const refWhere = { shopId, status: 'processed' };
+      if (where.createdAt) {
+        refWhere.createdAt = where.createdAt;
+      }
+      const refStats = await SaleRefund.findOne({
+        where: refWhere,
+        attributes: [
+          [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+          [sequelize.fn('SUM', sequelize.col('amount')), 'amount']
+        ],
+        raw: true
+      });
+      refundCount = Number(refStats?.count || 0);
+      refundAmount = Number(refStats?.amount || 0);
+    } catch (refErr) {
+      console.warn('Refund stats query failed:', refErr?.message);
+    }
+
+    // Top employees/performers
+    let topEmployees = [];
+    try {
+      const perfRows = await Sale.findAll({
+        where,
+        attributes: [
+          [sequelize.literal('COALESCE(CAST(userId AS CHAR), employeeId)'), 'performerId'],
+          [sequelize.fn('COUNT', sequelize.col('Sale.id')), 'totalSales'],
+          [sequelize.literal(`SUM(total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`), 'totalRevenue']
+        ],
+        group: [sequelize.literal('COALESCE(CAST(userId AS CHAR), employeeId)')],
+        order: [[sequelize.literal('totalRevenue'), 'DESC']],
+        limit: 5,
+        raw: true
+      });
+      const uIds = perfRows.map(r => r.performerId).filter(pid => pid && /^[0-9]+$/.test(pid)).map(Number);
+      const eIds = perfRows.map(r => r.performerId).filter(pid => pid && !/^[0-9]+$/.test(pid));
+      const [uList, eList] = await Promise.all([
+        uIds.length ? User.findAll({ where: { id: uIds }, attributes: ['id', 'name'] }) : [],
+        eIds.length ? Employee.findAll({ where: { id: eIds }, attributes: ['id', 'firstName', 'lastName'] }) : []
+      ]);
+      const uMap = new Map(uList.map(u => [String(u.id), u.name]));
+      const eMap = new Map(eList.map(e => [String(e.id), `${e.firstName} ${e.lastName}`.trim()]));
+      topEmployees = perfRows.map(r => ({
+        performerId: r.performerId,
+        name: uMap.get(r.performerId) || eMap.get(r.performerId) || 'Staff',
+        sales: Number(r.totalSales || 0),
+        revenue: Number(r.totalRevenue || 0)
+      }));
+    } catch (empErr) {
+      console.warn('topEmployees query failed:', empErr?.message);
+    }
+
     // Format response
+    const totRevenue = Number(totalStats?.getDataValue('totalRevenue') || 0);
+    const totSales = Number(totalStats?.getDataValue('totalSales') || 0);
+    const avgOrderValue = totSales > 0 ? Math.round(((totRevenue / totSales) + Number.EPSILON) * 100) / 100 : 0;
+    const refRate = totSales > 0 ? Math.round(((refundCount / totSales * 100) + Number.EPSILON) * 100) / 100 : 0;
+
     const response = {
       kpis: {
-        totalRevenue: Number(totalStats?.getDataValue('totalRevenue') || 0),
-        totalSales: Number(totalStats?.getDataValue('totalSales') || 0),
+        totalRevenue: totRevenue,
+        totalSales: totSales,
         activeCustomers: activeCustomers || 0,
-        topProduct: productRows?.[0]?.Product?.name || '-'
+        topProduct: productRows?.[0]?.Product?.name || '-',
+        averageOrderValue: avgOrderValue,
+        refundCount,
+        refundAmount,
+        refundRate
       },
       salesTrend: (salesTrend || []).map(row => {
         const get = (r, k) => (r && typeof r.getDataValue === 'function' ? r.getDataValue(k) : r && r[k]);
@@ -253,13 +317,13 @@ exports.getSalesSummary = async (req, res) => {
         value: Number(r.getDataValue('count') || 0),
         revenue: Number(r.getDataValue('total') || 0)
       })),
-      topEmployees: [], // We'll add this feature later
+      topEmployees,
       productPerformance: productRows.map(r => ({
         product: r.Product?.name || 'Product',
         sold: Number(r.getDataValue('quantity') || 0),
         revenue: Number(r.getDataValue('revenue') || 0)
       })),
-      customerSegments: [] // We'll add this feature later
+      customerSegments: []
     };
 
     console.log('Response:', JSON.stringify(response, null, 2));
@@ -268,7 +332,7 @@ exports.getSalesSummary = async (req, res) => {
     // Log detailed error for debugging (temporarily include stack in response)
     console.error('getSalesSummary error:', e?.message || e);
     console.error(e?.stack || e);
-    res.status(500).json({ error: 'Failed to compute sales summary', message: e?.message, stack: e?.stack });
+    res.status(500).json({ error: 'Failed to compute sales summary', message: e?.message });
   }
 };
 

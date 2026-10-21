@@ -199,6 +199,65 @@ async def analyze_business(
                     ]
                 ))
 
+        # 3. Cost & Operating Expense Health Analysis
+        active_costs = [float(c) for c in data.costs]
+        if first_rev_idx is not None and first_rev_idx > 0 and len(active_costs) >= first_rev_idx:
+            active_costs = active_costs[first_rev_idx:]
+
+        if active_revenues and active_costs and sum(active_revenues) > 0 and sum(active_costs) > 0:
+            total_rev = sum(active_revenues)
+            total_cost = sum(active_costs)
+            cost_ratio = (total_cost / total_rev) if total_rev > 0 else 0
+            if cost_ratio > 0.85:
+                insights.append(BusinessInsight(
+                    insight_type="High Cost Ratio",
+                    description=f"Operating costs and expenses represent {cost_ratio:.1%} of revenue.",
+                    score=min(cost_ratio, 1.0),
+                    recommendations=[
+                        "Audit top expense categories to identify reduction targets",
+                        "Renegotiate supplier costs or wholesale bulk pricing",
+                        "Review store utility and overhead commitments"
+                    ]
+                ))
+            elif cost_ratio < 0.60 and total_rev > 50000:
+                insights.append(BusinessInsight(
+                    insight_type="Strong Operating Efficiency",
+                    description=f"Operating cost ratio is lean at {cost_ratio:.1%} of revenue.",
+                    score=0.9,
+                    recommendations=[
+                        "Maintain current operational cost discipline",
+                        "Reinvest healthy cash flows into inventory expansion",
+                        "Explore strategic growth channels"
+                    ]
+                ))
+
+        # 4. Average Transaction Value (Basket Size) Analysis
+        active_atv = [float(v) for v in data.average_transaction_value if v > 0]
+        if len(active_atv) >= 2:
+            atv_prev = active_atv[-2]
+            atv_latest = active_atv[-1]
+            atv_change = (atv_latest - atv_prev) / atv_prev if atv_prev > 0 else 0
+            if atv_change > 0.05:
+                insights.append(BusinessInsight(
+                    insight_type="Basket Size Expansion",
+                    description=f"Average transaction value grew by {atv_change:+.1%} month-over-month (now KSh {atv_latest:,.0f}).",
+                    score=min(atv_change, 1.0),
+                    recommendations=[
+                        "Continue promoting bundled products and cross-sells",
+                        "Feature top complementary items near checkout"
+                    ]
+                ))
+            elif atv_change < -0.05:
+                insights.append(BusinessInsight(
+                    insight_type="Basket Size Contraction",
+                    description=f"Average transaction value fell by {abs(atv_change):.1%} month-over-month (now KSh {atv_latest:,.0f}).",
+                    score=max(atv_change, -1.0),
+                    recommendations=[
+                        "Train staff on suggestive selling and upselling techniques",
+                        "Introduce minimum-spend promotions (e.g., discounts on purchases over target spend)"
+                    ]
+                ))
+
         return insights
 
     except Exception as e:
@@ -275,8 +334,10 @@ async def analyze_returns(
 
         high_return_products = prod_summary.head(5).to_dict(orient='records')
 
-        # Staff refund volume
-        staff_summary = df.groupby(['staff_id', 'staff_name']).agg(
+        # Staff refund volume (safeguarded against null staff_id)
+        df['staff_id'] = df['staff_id'].fillna('unassigned')
+        df['staff_name'] = df['staff_name'].fillna('Unassigned / Guest')
+        staff_summary = df.groupby(['staff_id', 'staff_name'], dropna=False).agg(
             refund_count=('quantity', 'count'),
             total_amount=('amount', 'sum')
         ).reset_index().sort_values(by='total_amount', ascending=False)

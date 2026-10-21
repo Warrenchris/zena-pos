@@ -20,6 +20,10 @@ class FinancialMetrics(BaseModel):
     inventory_turnover_note: Optional[str] = None
     cash_conversion_cycle: Optional[float] = None
     cash_conversion_cycle_note: Optional[str] = None
+    operating_expense_ratio: Optional[float] = None
+    operating_expense_ratio_note: Optional[str] = None
+    return_on_assets: Optional[float] = None
+    return_on_equity: Optional[float] = None
     data_quality_warnings: List[str] = []
 
 class FinancialData(BaseModel):
@@ -57,16 +61,32 @@ async def analyze_financials(
         gross_profit_margin = ((revenue - costs) / revenue) * 100
         net_profit_margin = ((revenue - costs - expenses) / revenue) * 100
 
+        # Calculate operating expense ratio
+        operating_expense_ratio = None
+        operating_expense_ratio_note = None
+        if revenue > 0:
+            operating_expense_ratio = round((expenses / revenue) * 100, 2)
+            operating_expense_ratio_note = f"Operating expenses account for {operating_expense_ratio:.1f}% of net revenue"
+
         # Calculate current ratio
         current_ratio = None
         if liabilities > 0:
             current_ratio = assets / liabilities
 
-        # Calculate debt to equity
+        # Calculate debt to equity and ROE
         equity = assets - liabilities
         debt_to_equity = None
         if equity > 0:
             debt_to_equity = liabilities / equity
+
+        # Calculate Return on Assets (ROA) & Return on Equity (ROE)
+        return_on_assets = None
+        if assets > 0:
+            return_on_assets = round(((revenue - costs - expenses) / assets) * 100, 2)
+
+        return_on_equity = None
+        if equity > 0:
+            return_on_equity = round(((revenue - costs - expenses) / equity) * 100, 2)
 
         # Prepare uncomputable metrics notes & warnings
         quick_ratio = None
@@ -112,6 +132,10 @@ async def analyze_financials(
             inventory_turnover_note=inventory_turnover_note,
             cash_conversion_cycle=cash_conversion_cycle,
             cash_conversion_cycle_note=cash_conversion_cycle_note,
+            operating_expense_ratio=operating_expense_ratio,
+            operating_expense_ratio_note=operating_expense_ratio_note,
+            return_on_assets=return_on_assets,
+            return_on_equity=return_on_equity,
             data_quality_warnings=data_quality_warnings
         )
         return metrics
