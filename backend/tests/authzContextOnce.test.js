@@ -42,8 +42,11 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
   let ownerToken;
   let managerToken;
   let cashierToken;
+  let originalAuthzCacheFlag;
 
   beforeAll(async () => {
+    originalAuthzCacheFlag = process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+    process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'false';
     await sequelize.authenticate();
 
     const suffix = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -585,5 +588,13 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
       const seqConfigValid = require('../src/config/sequelize');
       expect(seqConfigValid.production.pool.max).toBe(12);
     });
+  });
+
+  afterAll(async () => {
+    if (originalAuthzCacheFlag === undefined) {
+      delete process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+    } else {
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = originalAuthzCacheFlag;
+    }
   });
 });
