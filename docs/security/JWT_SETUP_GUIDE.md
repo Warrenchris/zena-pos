@@ -197,7 +197,7 @@ curl http://localhost:8000/openapi.json
 - `ai_service/src/middleware/auth.py`
 - `JWT_SECURITY_ANALYSIS.md`
 - `JWT_RS256_MIGRATION_GUIDE.md`
-- `JWT_IMPLEMENTATION_SUMMARY.md`
+- `../archive/JWT_IMPLEMENTATION_SUMMARY.md`
 - `JWT_SETUP_GUIDE.md` (this file)
 
 ### Modified Files:

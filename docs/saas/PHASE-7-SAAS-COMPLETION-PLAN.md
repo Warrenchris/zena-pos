@@ -133,7 +133,7 @@ Items marked Missing are from my static review of the code. Test results are the
 ---
 
 ### 7C — Tax integrity and eTIMS groundwork
-**Goal:** Fix what is fixable without KRA credentials; prepare the rest. Source: `Zana-POS-KRA-eTIMS-Compliance-Scoping.md`.
+**Goal:** Fix what is fixable without KRA credentials; prepare the rest. Source: `docs/compliance/Zana-POS-KRA-eTIMS-Compliance-Scoping.md`.
 
 **Step 1 (no credentials needed, do now):**
 - Recompute `tax` server-side from the shop's configured rate in `saleController`; reject or correct client mismatch.
