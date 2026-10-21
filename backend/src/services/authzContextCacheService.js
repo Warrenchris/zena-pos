@@ -55,7 +55,7 @@ async function setCachedActorContext(key, payload, ttl = getCacheTtl()) {
 
 function validateCachedPayload(cached, { id, isEmployee, currentVersion, tokenOrgId, tokenRole }) {
   if (!cached || typeof cached !== 'object') return false;
-  if (cached.schemaVersion !== 1) return false;
+  if (cached.schemaVersion !== 2) return false;
   if (Number(cached.authzVersion) !== Number(currentVersion)) return false;
   if (String(cached.actorId) !== String(id)) return false;
 
@@ -92,12 +92,13 @@ function buildActorPayload({
   membership,
   homeShopId,
   accessibleShopIds,
+  inactiveAccessibleShopIds = [],
   email,
   name
 }) {
   const isOwner = membership.orgRole === 'owner';
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     actorKind: isEmployee ? 'e' : 'u',
     actorId: id,
     authzVersion: currentVersion,
@@ -132,7 +133,8 @@ function buildActorPayload({
     },
     scope: {
       homeShopId,
-      memberAccessibleShopIds: isOwner ? null : accessibleShopIds
+      memberAccessibleShopIds: isOwner ? null : accessibleShopIds,
+      memberInactiveAccessibleShopIds: isOwner ? null : inactiveAccessibleShopIds
     },
     isSuperAdmin: false
   };
@@ -140,7 +142,7 @@ function buildActorPayload({
 
 function buildSuperAdminPayload({ id, currentVersion, superAdminUser }) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     actorKind: 'u',
     actorId: id,
     authzVersion: currentVersion,
@@ -160,10 +162,35 @@ function buildSuperAdminPayload({ id, currentVersion, superAdminUser }) {
     membership: null,
     scope: {
       homeShopId: null,
-      memberAccessibleShopIds: null
+      memberAccessibleShopIds: null,
+      memberInactiveAccessibleShopIds: null
     },
     isSuperAdmin: true
   };
+}
+
+async function invalidateOrgActorContexts(organizationId) {
+  if (!organizationId) return 0;
+  if (!redisClient || redisClient.status !== 'ready') return 0;
+
+  const pattern = `authz_ctx:org:${organizationId}:*`;
+  let cursor = '0';
+  let totalDeleted = 0;
+
+  try {
+    do {
+      const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = nextCursor;
+      if (Array.isArray(keys) && keys.length > 0) {
+        await redisClient.del(...keys);
+        totalDeleted += keys.length;
+      }
+    } while (cursor !== '0');
+  } catch (err) {
+    logger.warn(`[AUTHZ-CACHE] Redis scanAndDelete failed for ${pattern}:`, err.message);
+  }
+
+  return totalDeleted;
 }
 
 module.exports = {
@@ -174,5 +201,6 @@ module.exports = {
   setCachedActorContext,
   validateCachedPayload,
   buildActorPayload,
-  buildSuperAdminPayload
+  buildSuperAdminPayload,
+  invalidateOrgActorContexts
 };
