@@ -50,6 +50,7 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
   let cashierToken;
   let superAdminToken;
   let employeeToken;
+  let originalAuthzCacheFlag;
 
   async function resetCachesForUsers() {
     if (redisClient && redisClient.status === 'ready') {
@@ -79,6 +80,8 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
   }
 
   beforeAll(async () => {
+    originalAuthzCacheFlag = process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+    process.env.AUTHZ_CONTEXT_CACHE_ENABLED = 'false';
     await sequelize.authenticate();
 
     const suffix = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -930,5 +933,13 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
       expect(managerQuerySpoofRes.status).toBe(403);
       expect(managerQuerySpoofRes.body.code).toBe('SHOP_ACCESS_DENIED');
     });
+  });
+
+  afterAll(async () => {
+    if (originalAuthzCacheFlag === undefined) {
+      delete process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
+    } else {
+      process.env.AUTHZ_CONTEXT_CACHE_ENABLED = originalAuthzCacheFlag;
+    }
   });
 });
