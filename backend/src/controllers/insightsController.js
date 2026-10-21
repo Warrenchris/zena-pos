@@ -45,8 +45,8 @@ const getAuthorizedShopId = (req) => {
  * Calculate trends from sales and inventory data
  */
 const calculateTrends = async (shopId) => {
-  const currentDate = new Date();
-  const lastMonth = new Date(currentDate.setMonth(currentDate.getMonth() - 1));
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
 
   // Get sales trends
   const salesTrends = await Sale.findAll({
@@ -488,12 +488,15 @@ const getInsights = async (req, res) => {
       Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime()-1)] } } }),
     ]);
     if (thisWeekRevenue != null && prevWeekRevenue) {
-      const change = prevWeekRevenue === 0 ? 0 : ((thisWeekRevenue - prevWeekRevenue) / prevWeekRevenue);
+      const daysThisWeek = Math.max(1, (now.getTime() - startThisWeek.getTime()) / (24 * 60 * 60 * 1000));
+      const avgDailyThisWeek = (thisWeekRevenue || 0) / daysThisWeek;
+      const avgDailyPrevWeek = prevWeekRevenue / 7;
+      const change = avgDailyPrevWeek === 0 ? 0 : ((avgDailyThisWeek - avgDailyPrevWeek) / avgDailyPrevWeek);
       if (change < -insightsConfig.REVENUE_DECLINE_THRESHOLD) {
         smartRecommendations.push({
           type: 'INSIGHT',
           priority: 'MEDIUM',
-          message: `You sold ${(Math.abs(change)*100).toFixed(0)}% less this week. Consider restocking fast movers.`,
+          message: `Daily sales velocity is ${(Math.abs(change)*100).toFixed(0)}% lower this week. Consider restocking fast movers.`,
           details: []
         });
       }
@@ -649,9 +652,41 @@ const getInsights = async (req, res) => {
         average_transaction_value.push(s.tx > 0 ? s.revenue / s.tx : 0);
       }
 
+      // Customer repeat and retention metrics
+      const uniqueCustomerSales = await Sale.findAll({
+        where: {
+          shopId,
+          ...NON_CANCELLED_SALE_FILTER,
+          customerId: { [Op.ne]: null }
+        },
+        attributes: [
+          'customerId',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'orderCount'],
+          [sequelize.fn('MAX', sequelize.col('createdAt')), 'lastVisit']
+        ],
+        group: ['customerId'],
+        raw: true
+      });
+      const totalUniqueCustomers = uniqueCustomerSales.length;
+      const repeatCustomers = uniqueCustomerSales.filter(c => Number(c.orderCount) > 1).length;
+      const repeatCustomerRate = totalUniqueCustomers > 0 ? (repeatCustomers / totalUniqueCustomers) : 0;
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const activeCustomersCount = uniqueCustomerSales.filter(c => new Date(c.lastVisit) >= thirtyDaysAgo).length;
+      const activeRetentionRate = totalUniqueCustomers > 0 ? (activeCustomersCount / totalUniqueCustomers) : 0;
+
       const aiResponse = await aiClient.post(
         '/api/insights/analyze',
-        { revenue, costs, customer_count, transaction_count, average_transaction_value },
+        {
+          revenue,
+          costs,
+          customer_count,
+          transaction_count,
+          average_transaction_value,
+          repeat_customer_rate: repeatCustomerRate,
+          retention_rate: activeRetentionRate,
+          total_customers: totalUniqueCustomers,
+          repeat_customers: repeatCustomers,
+        },
         {
           timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS,
           shopId,
@@ -749,7 +784,8 @@ const getMonthlyRevenue = async (req, res) => {
       where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: twelveMonthsAgo } },
       attributes: [
         [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m-01'), 'month'],
-        [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+        // Subtract processed refunds so monthly revenue chart matches P&L net figures
+        [sequelize.literal(`SUM(\	otal\ - COALESCE((SELECT SUM(sr.amount) FROM SaleRefunds sr WHERE sr.saleId = Sale.id AND sr.status = 'processed'), 0))`), 'revenue'],
       ],
       group: [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m-01')],
       order: [[sequelize.literal('month'), 'ASC']],

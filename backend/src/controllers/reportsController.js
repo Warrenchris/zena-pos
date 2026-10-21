@@ -9,6 +9,7 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const SystemSettings = require('../models/SystemSettings');
 const SaleRefund = require('../models/SaleRefund');
+const Inventory = require('../models/Inventory');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
 
 // GET /api/reports/sales-summary?range=daily|monthly&startDate=&endDate=
@@ -341,7 +342,7 @@ exports.getProfitAndLoss = async (req, res) => {
 
     const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
     const nonCancelledParentWhere = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
-    const expenseWhere = { shopId: targetShopId };
+    const expenseWhere = { shopId: targetShopId, category: { [Op.ne]: 'inventory' } };
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
       const e = endDate ? new Date(endDate) : new Date();
@@ -431,8 +432,28 @@ exports.getProfitAndLoss = async (req, res) => {
     const returnedCogs = round2(Number(refundCogsRow?.returnedCogs || 0));
     const cogs = round2(Math.max(0, grossCogs - returnedCogs));
 
-    // Operating expenses
+    // Operating expenses (excluding capitalized wholesale inventory purchases which are expensed via COGS)
     const operatingExpenses = round2(Number(await Expense.sum('amount', { where: expenseWhere }) || 0));
+
+    // Inventory cost valuation from current active stock
+    let inventoryValue = 0;
+    try {
+      const inventoryValRow = await Inventory.findOne({
+        where: { shopId: targetShopId },
+        include: [{
+          model: Product,
+          required: true,
+          attributes: []
+        }],
+        attributes: [
+          [sequelize.literal('SUM(Inventory.stockQuantity * COALESCE(Product.cost, 0))'), 'totalInventoryCost']
+        ],
+        raw: true
+      });
+      inventoryValue = round2(Number(inventoryValRow?.totalInventoryCost || 0));
+    } catch (invErr) {
+      console.warn('[getProfitAndLoss] Warning calculating inventory valuation:', invErr.message);
+    }
 
     const grossProfit = round2(revenue - cogs);
     const profit = round2(grossProfit - operatingExpenses);
@@ -451,6 +472,7 @@ exports.getProfitAndLoss = async (req, res) => {
       grossProfit,
       operatingExpenses,
       profit,
+      inventoryValue,
       totalRefunds,
       grossRefunds,
       refundedTax,
