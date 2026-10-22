@@ -17,8 +17,8 @@
 - ✅ Only authenticated users can access AI service through proxy
 
 ### 3. Documentation
-- ✅ Created `JWT_SECURITY_ANALYSIS.md` - Security analysis
-- ✅ Created `JWT_RS256_MIGRATION_GUIDE.md` - Future RS256 migration guide
+- ✅ Created `../security/JWT_SECURITY_ANALYSIS.md` - Security analysis
+- ✅ Created `../security/JWT_RS256_MIGRATION_GUIDE.md` - Future RS256 migration guide
 
 ## 🔧 Configuration Required
 
@@ -47,7 +47,7 @@ JWT_ALGORITHM=HS256
 - ⚠️ **Tradeoff**: Shared secret increases attack surface
 
 ### Recommended Future (RS256)
-- 📋 See `JWT_RS256_MIGRATION_GUIDE.md` for migration steps
+- 📋 See `../security/JWT_RS256_MIGRATION_GUIDE.md` for migration steps
 - 🔑 Private key stays in backend (never shared)
 - 🔓 Public key in AI service (can't forge tokens)
 - ✅ Better security isolation
@@ -57,8 +57,8 @@ JWT_ALGORITHM=HS256
 ### New Files:
 1. `ai_service/src/middleware/__init__.py`
 2. `ai_service/src/middleware/auth.py`
-3. `JWT_SECURITY_ANALYSIS.md`
-4. `JWT_RS256_MIGRATION_GUIDE.md`
+3. `../security/JWT_SECURITY_ANALYSIS.md`
+4. `../security/JWT_RS256_MIGRATION_GUIDE.md`
 5. `JWT_IMPLEMENTATION_SUMMARY.md`
 
 ### Modified Files:

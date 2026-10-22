@@ -464,6 +464,6 @@ curl -X POST http://localhost:8000/api/finance/analyze \
 
 - [JWT Setup Guide](./JWT_SETUP_GUIDE.md) - Detailed setup instructions
 - [JWT RS256 Migration Guide](./JWT_RS256_MIGRATION_GUIDE.md) - Migration from HS256
-- [Docker Setup](./DOCKER_SETUP.md) - Docker environment configuration
-- [API Documentation](./API_DOCUMENTATION.md) - Complete API reference
+- [Docker Setup](../operations/DOCKER_SETUP.md) - Docker environment configuration
+- [API Documentation](../api/API_DOCUMENTATION.md) - Complete API reference
 

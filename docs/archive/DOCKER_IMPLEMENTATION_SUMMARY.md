@@ -40,8 +40,8 @@ The development environment has been fully containerized with Docker Compose.
     - And more (see package.json)
 
 ### Documentation
-12. **`DOCKER_SETUP.md`** - Comprehensive setup guide
-13. **`README_DOCKER.md`** - Quick start guide
+12. **`../operations/DOCKER_SETUP.md`** - Comprehensive setup guide
+13. **`../operations/README_DOCKER.md`** - Quick start guide
 14. **`ai_service/requirements.txt`** - Python dependencies for Docker
 
 ## 🚀 Quick Start
@@ -179,8 +179,8 @@ If ports are already in use, modify `docker-compose.yml` to use different ports.
 
 ## 📖 Documentation
 
-- **Quick Start**: See `README_DOCKER.md`
-- **Detailed Guide**: See `DOCKER_SETUP.md`
+- **Quick Start**: See `../operations/README_DOCKER.md`
+- **Detailed Guide**: See `../operations/DOCKER_SETUP.md`
 - **Makefile Help**: Run `make help`
 
 ## ✨ Next Steps

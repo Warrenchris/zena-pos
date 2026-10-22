@@ -369,7 +369,7 @@ This will install:
 - [Tailwind CSS Content Configuration](https://tailwindcss.com/docs/content-configuration)
 - [Vite CSS Code Splitting](https://vitejs.dev/guide/features.html#css-code-splitting)
 - [PurgeCSS Documentation](https://purgecss.com/)
-- [Bundle Analysis Guide](./CHART_LIBRARY_STANDARDIZATION.md)
+- [Bundle Analysis Guide](../architecture/CHART_LIBRARY_STANDARDIZATION.md)
 
 ## Summary
 
