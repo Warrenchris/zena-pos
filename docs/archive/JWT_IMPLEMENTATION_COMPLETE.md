@@ -38,10 +38,10 @@ All JWT authentication has been successfully implemented across the system.
   - Setup guide created with examples
 
 ### 4. Documentation
-- ✅ **Security Analysis**: `JWT_SECURITY_ANALYSIS.md`
-- ✅ **RS256 Migration Guide**: `JWT_RS256_MIGRATION_GUIDE.md`
+- ✅ **Security Analysis**: `../security/JWT_SECURITY_ANALYSIS.md`
+- ✅ **RS256 Migration Guide**: `../security/JWT_RS256_MIGRATION_GUIDE.md`
 - ✅ **Implementation Summary**: `JWT_IMPLEMENTATION_SUMMARY.md`
-- ✅ **Setup Guide**: `JWT_SETUP_GUIDE.md`
+- ✅ **Setup Guide**: `../security/JWT_SETUP_GUIDE.md`
 - ✅ **Completion Verification**: This document
 
 ## Security Features
@@ -103,10 +103,10 @@ JWT_ALGORITHM=HS256
 ### New Files (6)
 1. `ai_service/src/middleware/__init__.py`
 2. `ai_service/src/middleware/auth.py`
-3. `JWT_SECURITY_ANALYSIS.md`
-4. `JWT_RS256_MIGRATION_GUIDE.md`
+3. `../security/JWT_SECURITY_ANALYSIS.md`
+4. `../security/JWT_RS256_MIGRATION_GUIDE.md`
 5. `JWT_IMPLEMENTATION_SUMMARY.md`
-6. `JWT_SETUP_GUIDE.md`
+6. `../security/JWT_SETUP_GUIDE.md`
 
 ### Modified Files (6)
 1. `ai_service/src/main.py` - Health check endpoints
@@ -125,9 +125,9 @@ JWT_ALGORITHM=HS256
 
 ## Support
 
-- Setup: See `JWT_SETUP_GUIDE.md`
-- Security: See `JWT_SECURITY_ANALYSIS.md`
-- Migration: See `JWT_RS256_MIGRATION_GUIDE.md`
+- Setup: See `../security/JWT_SETUP_GUIDE.md`
+- Security: See `../security/JWT_SECURITY_ANALYSIS.md`
+- Migration: See `../security/JWT_RS256_MIGRATION_GUIDE.md`
 - Summary: See `JWT_IMPLEMENTATION_SUMMARY.md`
 
 ---
