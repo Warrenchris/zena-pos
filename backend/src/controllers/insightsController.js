@@ -854,11 +854,14 @@ const getStockDepletion = async (req, res) => {
   const shopId = getAuthorizedShopId(req);
   if (!shopId) return res.status(401).json({ error: 'Unauthorized' });
 
+  let products = null;
+  let salesByProduct = null;
+
   try {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const products = await Product.findAll({
+    products = await Product.findAll({
       where: { active: true },
       attributes: ['id', 'name'],
       include: [{
@@ -871,7 +874,7 @@ const getStockDepletion = async (req, res) => {
 
     const dailySalesRows = await SaleItem.findAll(buildNetDemandQuery(shopId, ninetyDaysAgo, true));
 
-    const salesByProduct = {};
+    salesByProduct = {};
     for (const row of dailySalesRows) {
       const pid = row.productId;
       const qty = parseFloat(row.quantity || 0);
@@ -901,6 +904,11 @@ const getStockDepletion = async (req, res) => {
 
     res.json(aiResponse.data);
   } catch (error) {
+    if (products === null || salesByProduct === null) {
+      console.error('[getStockDepletion] Database query failed before AI call:', error.message);
+      return res.status(500).json({ error: 'Failed to generate stock depletion forecast' });
+    }
+
     console.warn('[getStockDepletion] AI service unavailable, generating local linear fallback:', error.message);
     try {
       const fallbackResults = products.map((p) => {

@@ -289,7 +289,7 @@ exports.getSalesSummary = async (req, res) => {
     const totRevenue = Number(totalStats?.getDataValue('totalRevenue') || 0);
     const totSales = Number(totalStats?.getDataValue('totalSales') || 0);
     const avgOrderValue = totSales > 0 ? Math.round(((totRevenue / totSales) + Number.EPSILON) * 100) / 100 : 0;
-    const refRate = totSales > 0 ? Math.round(((refundCount / totSales * 100) + Number.EPSILON) * 100) / 100 : 0;
+    const refundRate = totSales > 0 ? Math.round(((refundCount / totSales * 100) + Number.EPSILON) * 100) / 100 : 0;
 
     const response = {
       kpis: {
