@@ -855,7 +855,7 @@ const getStockDepletion = async (req, res) => {
   if (!shopId) return res.status(401).json({ error: 'Unauthorized' });
 
   let products = null;
-  let salesByProduct = {};
+  let salesByProduct = null;
 
   try {
     const ninetyDaysAgo = new Date();
@@ -904,7 +904,7 @@ const getStockDepletion = async (req, res) => {
 
     res.json(aiResponse.data);
   } catch (error) {
-    if (products === null) {
+    if (products === null || salesByProduct === null) {
       console.error('[getStockDepletion] Database query failed before AI call:', error.message);
       return res.status(500).json({ error: 'Failed to generate stock depletion forecast' });
     }
