@@ -1,6 +1,8 @@
 export { buildReceipt } from './receiptModel';
 export { layoutReceipt } from './layout';
+export { renderReceiptHtml } from './htmlReceipt';
 export { printReceipt, printTestReceipt, createPrintJob } from './printService';
+export { printStoredSale } from './printStoredSale';
 export {
   loadProfile,
   saveProfile,

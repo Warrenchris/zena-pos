@@ -523,21 +523,73 @@ const Settings = () => {
 
   const renderNotificationSettings = () => (
     <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-small font-semibold text-text-primary mb-1.5">
+            Branch / Location
+          </label>
+          <input
+            type="text"
+            value={formData.branch || ''}
+            onChange={(e) => handleInputChange('branch', e.target.value)}
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+            placeholder="e.g. Main Branch, Nairobi CBD"
+          />
+          <p className="text-caption text-text-muted mt-1">
+            Printed below store name on receipts.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-small font-semibold text-text-primary mb-1.5">
+            Receipt Tagline
+          </label>
+          <input
+            type="text"
+            value={formData.tagline || ''}
+            onChange={(e) => handleInputChange('tagline', e.target.value)}
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border-default bg-surface text-small text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+            placeholder="e.g. Better Products · Brighter Together"
+          />
+          <p className="text-caption text-text-muted mt-1">
+            Printed in the receipt footer.
+          </p>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>
-          <h4 className="text-small font-semibold text-text-primary">Enable Notifications</h4>
-          <p className="text-caption text-text-muted mt-0.5">Show system notifications</p>
+          <h4 className="text-small font-semibold text-text-primary">Show Business Logo on Receipt</h4>
+          <p className="text-caption text-text-muted mt-0.5">Display uploaded shop logo at the top of receipts</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
-            checked={formData.enableNotifications || false}
-            onChange={(e) => handleInputChange('enableNotifications', e.target.checked)}
+            checked={formData.showLogoOnReceipt !== false}
+            onChange={(e) => handleInputChange('showLogoOnReceipt', e.target.checked)}
             className="sr-only peer"
           />
           <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
         </label>
       </div>
+
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
+        <div>
+          <h4 className="text-small font-semibold text-text-primary">Show "Powered by Zana POS"</h4>
+          <p className="text-caption text-text-muted mt-0.5">Display Zana POS branding and wordmark in header and footer</p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.showPoweredBy !== false}
+            onChange={(e) => handleInputChange('showPoweredBy', e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+        </label>
+      </div>
+
+{/* Enable Receipt QR Code toggle hidden until Phase 5 */}
 
       <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>

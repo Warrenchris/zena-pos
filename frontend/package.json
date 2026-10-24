@@ -16,7 +16,9 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "analyze:bundle": "npm run build:analyze && echo 'Bundle analysis complete. Check dist/stats.html'",
-    "analyze:css": "node scripts/analyze-css.js"
+    "analyze:css": "node scripts/analyze-css.js",
+    "test:printing": "jest src/printing/__tests__ --runInBand --env=node --setupFilesAfterEnv=\"<rootDir>/src/printing/setupPrinting.cjs\" --forceExit",
+    "receipt:preview": "node scripts/generateReceiptPreview.js"
   },
   "dependencies": {
     "@chakra-ui/system": "^2.6.2",

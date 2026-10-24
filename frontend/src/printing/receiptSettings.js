@@ -33,5 +33,9 @@ export function buildReceiptSettings(settings, apiBaseUrl = '') {
     footer: typeof s.receiptFooter === 'string' ? s.receiptFooter : '',
     showLogo: s.showLogoOnReceipt !== false,
     logoUrl: resolveLogoUrl(s.businessLogo, apiBaseUrl),
+    branch: typeof s.branch === 'string' ? s.branch : '',
+    tagline: typeof s.tagline === 'string' ? s.tagline : '',
+    showPoweredBy: s.showPoweredBy !== undefined ? Boolean(s.showPoweredBy) : true,
+    qrEnabled: s.qrEnabled !== undefined ? Boolean(s.qrEnabled) : false,
   };
 }

@@ -22,6 +22,10 @@ import useReceiptSettings from '../hooks/useReceiptSettings';
  *   onNewSale      – () => void  (resets to idle)
  *   onClose        – () => void  (same as onNewSale, for backdrop click)
  */
+// Email receipts are currently disabled pending backend implementation of invoice email delivery.
+// Backend endpoint POST /api/invoices/:id/email returns HTTP 501 Not Implemented.
+const EMAIL_RECEIPTS_ENABLED = false;
+
 export default function SaleCompleteModal({ completedSale, onNewSale, onClose }) {
   const { format: formatCurrency } = useCurrency();
   const shop = useSelector((state) => state.shop?.shop);
@@ -186,7 +190,7 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
             >
               Print Receipt
             </Button>
-            {customerEmail && (
+            {EMAIL_RECEIPTS_ENABLED && customerEmail && (
               <Button
                 type="button"
                 variant="outline"

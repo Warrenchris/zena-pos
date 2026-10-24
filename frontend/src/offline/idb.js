@@ -8,11 +8,13 @@
  */
 
 export const DB_NAME = 'zana-pos-offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORES = {
   pendingSales: 'pendingSales',
   catalog: 'catalog',
+  counters: 'counters',
+  syncMappings: 'syncMappings',
 };
 
 let dbPromise = null;
@@ -43,6 +45,12 @@ export function openDb() {
       }
       if (!db.objectStoreNames.contains(STORES.catalog)) {
         db.createObjectStore(STORES.catalog, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(STORES.counters)) {
+        db.createObjectStore(STORES.counters, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(STORES.syncMappings)) {
+        db.createObjectStore(STORES.syncMappings, { keyPath: 'receiptNumber' });
       }
     };
     request.onsuccess = () => {

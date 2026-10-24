@@ -19,11 +19,16 @@ import { selectSettings } from '../store/slices/settingsSlice';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
+import { printStoredSale } from '../printing';
+import useReceiptSettings from '../hooks/useReceiptSettings';
+import { useToast } from './Toast';
 
 const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => {
   const settings = useSelector(selectSettings);
   const { format: formatCurrency } = useCurrency();
   const { hasPermission } = usePermissions();
+  const receiptSettings = useReceiptSettings();
+  const { showToast } = useToast();
 
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [previousRefunds, setPreviousRefunds] = useState([]);
@@ -56,10 +61,17 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
 
   if (!isOpen || !sale) return null;
 
-  const handlePrint = () => {
-    if (onPrint) {
+  const handlePrint = async () => {
+    if (typeof onPrint === 'function') {
       onPrint(sale);
+      return;
     }
+    await printStoredSale(sale, {
+      business: shop || { name: shopName },
+      receiptSettings,
+      showToast,
+      formatMoney: formatCurrency,
+    });
   };
 
   const customerName = sale.Customer?.name || sale.customer?.name || sale.customerName || WALK_IN_CUSTOMER_NAME;

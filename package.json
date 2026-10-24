@@ -24,7 +24,8 @@
     "install:backend": "cd backend && npm install",
     "install:frontend": "cd frontend && npm install",
     "install:ai": "cd ai_service && poetry install",
-    "health": "node -e \"const http = require('http'); ['http://localhost:3000/api/system-health', 'http://localhost:5173', 'http://localhost:8000/'].forEach(url => { http.get(url, (r) => console.log(url + ':', r.statusCode === 200 ? 'OK' : r.statusCode)).on('error', () => console.log(url + ': DOWN')); });\""
+    "health": "node -e \"const http = require('http'); ['http://localhost:3000/api/system-health', 'http://localhost:5173', 'http://localhost:8000/'].forEach(url => { http.get(url, (r) => console.log(url + ':', r.statusCode === 200 ? 'OK' : r.statusCode)).on('error', () => console.log(url + ': DOWN')); });\"",
+    "receipt:preview": "npm --prefix frontend run receipt:preview"
   },
   "keywords": [
     "zana",

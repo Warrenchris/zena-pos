@@ -13,6 +13,9 @@ import { fetchCustomers } from '../store/slices/customersSlice';
 import { employeesAPI } from '../services/api';
 import POSModal from '../components/POSModal';
 import SaleDetailModal from '../components/SaleDetailModal';
+import { printStoredSale } from '../printing';
+import useReceiptSettings from '../hooks/useReceiptSettings';
+import { useToast } from '../components/Toast';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import { useCurrency } from '../hooks/useCurrency';
 import Card from '../components/ui/Card';
@@ -29,6 +32,8 @@ export default function Sales() {
   const { customers } = useSelector((state) => state.customers);
   const { user } = useSelector((state) => state.auth);
   const { format: formatCurrency } = useCurrency();
+  const receiptSettings = useReceiptSettings();
+  const { showToast } = useToast();
   
   const [currentPage, setCurrentPage] = useState(1);
   const [showPOSModal, setShowPOSModal] = useState(false);
@@ -216,7 +221,12 @@ export default function Sales() {
             <EyeIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={() => window.print()}
+            onClick={() => printStoredSale(row, {
+              business: user?.shop || {},
+              receiptSettings,
+              showToast,
+              formatMoney: formatCurrency,
+            })}
             className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
             title="Print Receipt"
           >
@@ -348,7 +358,8 @@ export default function Sales() {
         sale={selectedSale}
         isOpen={Boolean(selectedSale)}
         onClose={() => setSelectedSale(null)}
-        onPrint={() => window.print()}
+        shopName={user?.shop?.name || 'Zana POS'}
+        shop={user?.shop || {}}
       />
 
       {/* POS Modal */}

@@ -163,14 +163,29 @@ exports.deleteInvoice = async (req, res) => {
 exports.generatePDF = async (req, res) => {
   try {
     const where = req.user?.role === 'super_admin' ? { id: req.params.id } : { id: req.params.id, ...shopWhere(req) };
-    const invoice = await Invoice.findOne({ where });
+    const invoice = await Invoice.findOne({
+      where,
+      include: [
+        { model: Shop, as: 'shop' },
+        { model: InvoiceItem, as: 'items', include: [{ model: Product, as: 'product' }] },
+        { model: Sale, as: 'sale' },
+        { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
+        { model: Employee, as: 'employee', attributes: ['id', 'firstName', 'lastName'] },
+      ]
+    });
 
     if (!invoice) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
+    const shop = invoice.shop || {};
+    const shopName = shop.name || 'Zana POS';
+    const shopAddress = shop.address || '';
+    const shopPhone = shop.phone || '';
+    const shopKraPin = shop.kraPin ? `KRA PIN: ${shop.kraPin}` : '';
+
     // Create PDF document
-    const doc = new PDFDocument();
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
     
     // Set response headers
     res.setHeader('Content-Type', 'application/pdf');
@@ -179,21 +194,98 @@ exports.generatePDF = async (req, res) => {
     // Pipe PDF to response
     doc.pipe(res);
 
-    // Add content to PDF
-    doc
-      .fontSize(25)
-      .text('Invoice', { align: 'center' })
-      .moveDown();
+    // Header: Real Shop branding
+    doc.fontSize(20).font('Helvetica-Bold').text(shopName, { align: 'left' });
+    doc.fontSize(10).font('Helvetica');
+    if (shopAddress) doc.text(shopAddress);
+    if (shopPhone) doc.text(`Tel: ${shopPhone}`);
+    if (shopKraPin) doc.text(shopKraPin);
 
-    doc
-      .fontSize(12)
-      .text('Invoice Number: ' + invoice.invoiceNumber)
-      .text('Date: ' + new Date(invoice.createdAt).toLocaleDateString())
-      .text('Due Date: ' + (invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'))
-      .moveDown();
+    doc.moveDown(1);
+    doc.strokeColor('#cccccc').lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(1);
 
-    // Add more invoice details...
-    
+    // Meta details
+    doc.fontSize(16).font('Helvetica-Bold').text('INVOICE', { align: 'left' });
+    doc.moveDown(0.5);
+
+    doc.fontSize(10).font('Helvetica');
+    const startY = doc.y;
+    doc.text(`Invoice Number: #${invoice.invoiceNumber}`, 50, startY);
+    doc.text(`Date Issued: ${new Date(invoice.createdAt).toLocaleDateString()}`, 50, startY + 15);
+    doc.text(`Status: ${(invoice.status || 'pending').toUpperCase()}`, 50, startY + 30);
+
+    if (invoice.paymentMethod) {
+      doc.text(`Payment Method: ${invoice.paymentMethod.toUpperCase()}`, 350, startY);
+    }
+    const billedTo = invoice.user?.name || (invoice.employee ? `${invoice.employee.firstName} ${invoice.employee.lastName}` : null);
+    if (billedTo) {
+      doc.text(`Issued By: ${billedTo}`, 350, startY + 15);
+    }
+
+    doc.y = startY + 55;
+    doc.strokeColor('#cccccc').lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(1);
+
+    // Table Header
+    const tableTop = doc.y;
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text('Item', 50, tableTop);
+    doc.text('Qty', 280, tableTop, { width: 50, align: 'center' });
+    doc.text('Unit Price', 350, tableTop, { width: 90, align: 'right' });
+    doc.text('Total', 455, tableTop, { width: 90, align: 'right' });
+    doc.strokeColor('#e5e7eb').lineWidth(1).moveTo(50, tableTop + 15).lineTo(545, tableTop + 15).stroke();
+
+    // Table Rows
+    let currentY = tableTop + 25;
+    doc.font('Helvetica').fontSize(10);
+    const items = Array.isArray(invoice.items) ? invoice.items : [];
+    items.forEach((item) => {
+      const name = item.product?.name || item.name || `Item #${item.productId || ''}`;
+      const qty = item.quantity || 1;
+      const price = Number(item.price || 0);
+      const total = Number(item.total || (price * qty));
+
+      doc.text(name, 50, currentY, { width: 220 });
+      doc.text(String(qty), 280, currentY, { width: 50, align: 'center' });
+      doc.text(formatCurrency(price), 350, currentY, { width: 90, align: 'right' });
+      doc.text(formatCurrency(total), 455, currentY, { width: 90, align: 'right' });
+      currentY += 20;
+    });
+
+    doc.strokeColor('#cccccc').lineWidth(1).moveTo(50, currentY + 5).lineTo(545, currentY + 5).stroke();
+    currentY += 15;
+
+    // Totals
+    const subtotal = Number(invoice.subtotal || invoice.total || 0);
+    const tax = Number(invoice.tax || 0);
+    const discount = Number(invoice.discount || 0);
+    const total = Number(invoice.total || subtotal);
+
+    doc.font('Helvetica').text('Subtotal:', 350, currentY, { width: 90, align: 'right' });
+    doc.text(formatCurrency(subtotal), 455, currentY, { width: 90, align: 'right' });
+    currentY += 15;
+
+    if (discount > 0) {
+      doc.text('Discount:', 350, currentY, { width: 90, align: 'right' });
+      doc.text(`-${formatCurrency(discount)}`, 455, currentY, { width: 90, align: 'right' });
+      currentY += 15;
+    }
+
+    if (tax > 0) {
+      doc.text('Tax / VAT:', 350, currentY, { width: 90, align: 'right' });
+      doc.text(formatCurrency(tax), 455, currentY, { width: 90, align: 'right' });
+      currentY += 15;
+    }
+
+    doc.font('Helvetica-Bold').fontSize(12);
+    doc.text('TOTAL:', 350, currentY, { width: 90, align: 'right' });
+    doc.text(formatCurrency(total), 455, currentY, { width: 90, align: 'right' });
+
+    // Footer
+    doc.fontSize(9).font('Helvetica').fillColor('#6b7280');
+    doc.text('Thank you for your business! Powered by Zana POS.', 50, 750, { align: 'center', width: 495 });
+
     doc.end();
   } catch (error) {
     console.error('Error generating PDF:', error);

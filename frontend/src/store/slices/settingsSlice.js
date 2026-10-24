@@ -57,6 +57,12 @@ const initialState = {
   maxUnapprovedRefundAmount: 5000,
   returnWindowDays: 30,
 
+  // Receipt customization additions (Phase 2)
+  branch: '',
+  tagline: '',
+  showPoweredBy: true,
+  qrEnabled: false,
+
   // Additional Settings
   additionalSettings: {},
 
@@ -148,6 +154,10 @@ export const SETTINGS_ALLOWED_FIELDS = [
   'aiDigestFrequency',
   'maxUnapprovedRefundAmount',
   'returnWindowDays',
+  'branch',
+  'tagline',
+  'showPoweredBy',
+  'qrEnabled',
 ];
 
 // Helper to clean settings data before sending to API
@@ -438,9 +448,11 @@ export const selectLoading = (state) => state.settings.loading;
 export const selectError = (state) => state.settings.error;
 export const selectLastUpdated = (state) => state.settings.lastUpdated;
 
-// Currency formatting utility
-export const formatCurrency = (amount, settings) => {
-  const { currencySymbol, currencyPosition, decimalPlaces } = settings;
+// Currency formatting utility - Single source of truth for currency formatting
+export const formatCurrency = (amount, settings = {}) => {
+  const currencySymbol = settings?.currencySymbol || 'KSh';
+  const currencyPosition = settings?.currencyPosition || 'before';
+  const decimalPlaces = settings?.decimalPlaces !== undefined ? settings.decimalPlaces : 2;
 
   // Use Intl.NumberFormat for proper formatting with commas
   const formatter = new Intl.NumberFormat('en-US', {
@@ -448,7 +460,8 @@ export const formatCurrency = (amount, settings) => {
     maximumFractionDigits: decimalPlaces,
   });
 
-  const formattedAmount = formatter.format(parseFloat(amount) || 0);
+  const parsed = parseFloat(amount);
+  const formattedAmount = formatter.format(Number.isFinite(parsed) ? parsed : 0);
 
   if (currencyPosition === 'before') {
     return `${currencySymbol} ${formattedAmount}`;

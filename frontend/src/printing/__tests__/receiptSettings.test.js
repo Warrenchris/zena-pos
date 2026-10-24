@@ -31,13 +31,32 @@ describe('buildReceiptSettings', () => {
     expect(buildReceiptSettings({ showLogoOnReceipt: false }).showLogo).toBe(false);
   });
 
+  it('supports branch, tagline, showPoweredBy and qrEnabled (Phase 2)', () => {
+    const s = buildReceiptSettings({
+      branch: 'CBD Branch',
+      tagline: 'Quality always',
+      showPoweredBy: false,
+      qrEnabled: true
+    });
+    expect(s.branch).toBe('CBD Branch');
+    expect(s.tagline).toBe('Quality always');
+    expect(s.showPoweredBy).toBe(false);
+    expect(s.qrEnabled).toBe(true);
+
+    const empty = buildReceiptSettings({});
+    expect(empty.branch).toBe('');
+    expect(empty.tagline).toBe('');
+    expect(empty.showPoweredBy).toBe(true);
+    expect(empty.qrEnabled).toBe(false);
+  });
+
   it('copies header and footer text and tolerates missing settings', () => {
     expect(buildReceiptSettings({ receiptHeader: 'Hello', receiptFooter: 'Bye' })).toMatchObject({
       header: 'Hello',
       footer: 'Bye',
       logoUrl: null,
     });
-    expect(buildReceiptSettings(null)).toEqual({ header: '', footer: '', showLogo: true, logoUrl: null });
+    expect(buildReceiptSettings(null)).toEqual({ header: '', footer: '', showLogo: true, logoUrl: null, branch: '', tagline: '', showPoweredBy: true, qrEnabled: false });
     expect(buildReceiptSettings({ receiptHeader: null, receiptFooter: null }).header).toBe('');
   });
 });

@@ -63,7 +63,7 @@ describe.each([
     expect(text).toContain('INV-1001');
     expect(text).toContain('2026-09-19 11:32');
     expect(text).toContain('Jane');
-    expect(text).toContain('KRA PIN: P000000000X');
+    expect(text).toContain('PIN: P000000000X');
     expect(text).toContain('Discount');
     expect(text).toContain('KSh 350.50');
     expect(text).toContain('Change Due');
@@ -78,7 +78,7 @@ describe('renderPlainText details', () => {
 
   it('flags offline sales as pending sync', () => {
     const text = renderPlainText(buildReceipt(sale({ isOffline: true })), { paperWidth: 58 }, money);
-    expect(text).toContain('pending sync');
+    expect(text).toContain('PENDING SYNC');
   });
 
   it('survives very large amounts by dropping double-size total instead of truncating', () => {
@@ -140,7 +140,7 @@ describe('renderHtml', () => {
     const html = renderHtml(r, {}, money);
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;script&gt;');
-    expect(html).toContain('A &amp; B &lt;Shop&gt;');
+    expect(html).toContain('A &amp; B &lt;SHOP&gt;');
   });
 });
 
@@ -155,7 +155,7 @@ describe('receipt header, footer and logo', () => {
 
   it('prints the header under the shop details and before the RECEIPT title', () => {
     const lines = renderPlainText(build(settings), { paperWidth: 80 }, money).split('\n');
-    const kra = lines.findIndex((l) => l.includes('KRA PIN'));
+    const kra = lines.findIndex((l) => l.includes('PIN:'));
     const welcome = lines.findIndex((l) => l.includes('Welcome to Mama Njeri!'));
     const hours = lines.findIndex((l) => l.includes('Open daily 8am - 8pm'));
     const title = lines.findIndex((l) => l.includes('RECEIPT'));

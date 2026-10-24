@@ -19,6 +19,7 @@ import { generateUUID } from '../utils/uuid';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
+import { calculateChange, roundToTwoDecimals, isCashPaymentValid, hasSubShillingFraction } from '../utils/changeCalculation';
 
 export default function PaymentModal({
   isOpen,

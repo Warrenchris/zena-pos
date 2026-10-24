@@ -18,6 +18,8 @@ const REPLACEMENTS = {
   '\u201D': '"',
   '\u2026': '...',
   '\u00D7': 'x',
+  '\u00B7': '.',
+  '\u2022': '*',
 };
 
 /** Convert any value to single-line printable ASCII. */
