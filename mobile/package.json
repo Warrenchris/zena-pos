@@ -1,0 +1,21 @@
+{
+  "name": "zana-pos-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android app shell (Capacitor) for Zana POS: the same web app, plus native Bluetooth receipt printing",
+  "scripts": {
+    "build:web": "npm --prefix ../frontend run build",
+    "sync": "cap sync android",
+    "prepare:android": "npm run build:web && npm run sync",
+    "open": "cap open android",
+    "run:android": "npm run prepare:android && cap run android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "zana-bluetooth-printer": "file:./plugins/zana-bluetooth-printer"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2"
+  }
+}
