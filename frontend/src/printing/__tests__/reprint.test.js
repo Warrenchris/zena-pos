@@ -115,4 +115,47 @@ describe('Reprint & Duplicate Copy support', () => {
       })
     );
   });
+
+  it('omits QR code and caption cleanly on reprints of sales without a locally stored receiptToken', async () => {
+    let capturedReceipt = null;
+    const mockAdapter = {
+      id: 'mock',
+      isSupported: () => true,
+      print: jest.fn().mockImplementation((job) => {
+        capturedReceipt = job?.receipt || job;
+        return Promise.resolve({ ok: true });
+      }),
+    };
+
+    // Stored sale fetched from server without client token
+    const serverSaleWithoutToken = {
+      id: 99,
+      invoiceNumber: 'INV-2026-99',
+      receiptNumber: 'R-D4E1-000099',
+      // receiptToken is absent / undefined
+      createdAt: '2026-10-24T10:00:00Z',
+      items: [{ name: 'Rice 1kg', price: 150, quantity: 1 }],
+      total: 150,
+      paymentMethod: 'cash',
+    };
+
+    await printStoredSale(serverSaleWithoutToken, {
+      profile: { connection: 'browser' },
+      adapters: { browser: mockAdapter },
+      business: { name: 'Zana Westlands', qrEnabled: true },
+      receiptSettings: { qrEnabled: true },
+      publicAppUrl: 'https://pos.zana.test',
+    });
+
+    expect(capturedReceipt).not.toBeNull();
+    // business.qrPayload must be null because receiptToken is missing
+    expect(capturedReceipt.business.qrPayload).toBeNull();
+    expect(capturedReceipt.meta.receiptToken).toBeNull();
+
+    // Render HTML directly to verify absence of QR wrap and caption
+    const { renderReceiptHtml } = require('../htmlReceipt');
+    const html = renderReceiptHtml(capturedReceipt, { widthMm: 80 });
+    expect(html).not.toContain('class="qr-wrap"');
+    expect(html).not.toContain('Scan to view receipt');
+  });
 });

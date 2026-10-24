@@ -335,4 +335,65 @@ describe('Public Receipt Endpoint & Token Logic (Unit Tests)', () => {
       });
     });
   });
+
+  describe('Public Receipt Rate Limiter In-Memory Fallback (Cleanup Step 7)', () => {
+    const { createDistributedRateLimiter } = require('../src/utils/distributedRateLimiter');
+
+    test('enforces 30 req/min/IP limit locally in memory when Redis is disconnected', async () => {
+      const limiter = createDistributedRateLimiter({
+        namespace: `test-mem-${Date.now()}`,
+        windowMs: 60 * 1000,
+        max: 30,
+        keyGenerator: (req) => req.ip || '127.0.0.1',
+        message: { error: 'Too many requests. Please try again later.' },
+      });
+
+      const ip = `192.0.2.${Math.floor(Math.random() * 200 + 1)}`;
+      const req = { ip };
+      let lastStatus = null;
+      let lastJson = null;
+
+      const createRes = () => ({
+        setHeader: jest.fn(),
+        status: (code) => {
+          lastStatus = code;
+          return {
+            json: (payload) => {
+              lastJson = payload;
+              return payload;
+            },
+          };
+        },
+      });
+
+      // Execute 30 requests - all should succeed via next()
+      for (let i = 1; i <= 30; i++) {
+        let calledNext = false;
+        const res = createRes();
+        await limiter(req, res, () => {
+          calledNext = true;
+        });
+        expect(calledNext).toBe(true);
+      }
+
+      // 31st request from same IP must fail closed with 429 Too Many Requests
+      let calledNextOn31 = false;
+      const res31 = createRes();
+      await limiter(req, res31, () => {
+        calledNextOn31 = true;
+      });
+
+      expect(calledNextOn31).toBe(false);
+      expect(lastStatus).toBe(429);
+      expect(lastJson.error).toContain('Too many requests');
+
+      // Request from another IP should still be allowed
+      let calledNextOtherIp = false;
+      const otherRes = createRes();
+      await limiter({ ip: '198.51.100.77' }, otherRes, () => {
+        calledNextOtherIp = true;
+      });
+      expect(calledNextOtherIp).toBe(true);
+    });
+  });
 });
