@@ -41,7 +41,7 @@ export default function PublicReceiptView() {
         if (isMounted) {
           const status = err.response?.status;
           if (status === 404) {
-            setError('Receipt not found. The link may be incorrect, or the sale is still pending synchronization.');
+            setError('This receipt may not be available yet. If the sale was made offline, please try again in a few minutes.');
           } else if (status === 429) {
             setError('Too many requests. Please wait a minute and try again.');
           } else {
