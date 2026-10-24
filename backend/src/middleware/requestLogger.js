@@ -2,7 +2,7 @@ const logger = require('../utils/logger');
 
 const SENSITIVE_FIELDS = [
   'password', 'confirmPassword', 'currentPassword', 'newPassword',
-  'token', 'resetToken', 'secret', 'privateKey', 'cardNumber', 'cvv', 'pin',
+  'token', 'resetToken', 'receiptToken', 'secret', 'privateKey', 'cardNumber', 'cvv', 'pin',
   'authorization', 'refreshToken', 'accessToken'
 ];
 

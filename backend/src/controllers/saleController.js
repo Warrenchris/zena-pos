@@ -1,4 +1,5 @@
 const { validationResult } = require('express-validator');
+const crypto = require('crypto');
 const { Op } = require('sequelize');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
@@ -735,6 +736,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     paymentNotes,
     idempotencyKey,
     receiptNumber,
+    receiptToken,
     cashierName: clientCashierName
   } = saleData;
 
@@ -778,6 +780,27 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
       const err = new Error("Receipt number '" + receiptNumber + "' already exists for this shop with a different idempotency key.");
       err.statusCode = 409;
       err.code = 'RECEIPT_NUMBER_ALREADY_EXISTS';
+      throw err;
+    }
+  }
+
+  const RECEIPT_TOKEN_REGEX = /^[A-Za-z0-9_-]{22}$/;
+  let receiptTokenHash = null;
+  if (receiptToken) {
+    if (typeof receiptToken !== 'string' || !RECEIPT_TOKEN_REGEX.test(receiptToken)) {
+      const err = new Error("Invalid receiptToken format. Expected 22 base64url characters.");
+      err.statusCode = 400;
+      throw err;
+    }
+    receiptTokenHash = crypto.createHash('sha256').update(receiptToken).digest('hex');
+    const existingByToken = await Sale.findOne({ where: { receiptTokenHash } });
+    if (existingByToken) {
+      if (cleanIdempotencyKey && existingByToken.idempotencyKey === cleanIdempotencyKey) {
+        return existingByToken;
+      }
+      const err = new Error("Receipt token already exists with a different idempotency key.");
+      err.statusCode = 409;
+      err.code = 'RECEIPT_TOKEN_ALREADY_EXISTS';
       throw err;
     }
   }
@@ -976,6 +999,7 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     const sale = await Sale.create({
       invoiceNumber,
       receiptNumber: receiptNumber || null,
+      receiptTokenHash: receiptTokenHash || null,
       cashierName: clientCashierName || (user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null)),
       taxAmount: totalServerTax,
       taxInclusive: isTaxInclusive,

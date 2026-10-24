@@ -18,6 +18,11 @@ const Sale = sequelize.define('Sale', {
     type: DataTypes.STRING(32),
     allowNull: true
   },
+  receiptTokenHash: {
+    type: DataTypes.CHAR(64),
+    allowNull: true,
+    unique: true
+  },
   cashierName: {
     type: DataTypes.STRING(120),
     allowNull: true
@@ -246,6 +251,11 @@ const Sale = sequelize.define('Sale', {
       unique: true,
       fields: ['shopId', 'receiptNumber'],
       name: 'unique_sales_shop_receipt_number'
+    },
+    {
+      unique: true,
+      fields: ['receiptTokenHash'],
+      name: 'sales_receipt_token_hash_unique'
     }
   ]
 });
