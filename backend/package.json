@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "check-deps": "node scripts/check-dependencies.js",
     "test": "jest --runInBand --forceExit --detectOpenHandles",
+    "test:unit": "jest -c jest.unit.config.js",
     "lint": "eslint src/",
     "db:migrate": "sequelize-cli db:migrate",
     "db:create": "mysql -u root -p < database/init.sql",

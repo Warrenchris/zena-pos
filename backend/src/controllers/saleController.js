@@ -32,6 +32,7 @@ const {
 } = require('../utils/idempotencyUtils');
 const { isIntegerId } = require('../utils/idKind');
 const { REALIZED_SALE_FILTER, withSaleFilter } = require('../constants/saleFilters');
+const { generateNextInvoiceNumber } = require('../utils/invoiceSequence');
 
 const round2 = (num) => Math.round((parseFloat(num || 0) + Number.EPSILON) * 100) / 100;
 
@@ -732,7 +733,9 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     paymentReference,
     paymentProvider,
     paymentNotes,
-    idempotencyKey
+    idempotencyKey,
+    receiptNumber,
+    cashierName: clientCashierName
   } = saleData;
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -759,6 +762,25 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
 
   const cleanIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
   const requestHash = generateSaleFingerprint(saleData, shopId);
+
+  const RECEIPT_NUMBER_REGEX = /^R-[A-Za-z0-9]{4}-\d{6}$/;
+  if (receiptNumber) {
+    if (!RECEIPT_NUMBER_REGEX.test(receiptNumber)) {
+      const err = new Error("Invalid receiptNumber format '" + receiptNumber + "'. Expected format: R-XXXX-NNNNNN");
+      err.statusCode = 400;
+      throw err;
+    }
+    const existingByReceipt = await Sale.findOne({ where: { shopId, receiptNumber } });
+    if (existingByReceipt) {
+      if (cleanIdempotencyKey && existingByReceipt.idempotencyKey === cleanIdempotencyKey) {
+        return existingByReceipt;
+      }
+      const err = new Error("Receipt number '" + receiptNumber + "' already exists for this shop with a different idempotency key.");
+      err.statusCode = 409;
+      err.code = 'RECEIPT_NUMBER_ALREADY_EXISTS';
+      throw err;
+    }
+  }
 
   // Idempotency check: if sale with this idempotencyKey already exists, verify fingerprint and return immediately
   if (cleanIdempotencyKey) {
@@ -939,26 +961,10 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     const total = serverTotal;
     const change = paymentAmount ? parseFloat(paymentAmount) - total : 0;
 
-    const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-
-    const [lastSale] = await Sale.findAll({
-      where: {
-        invoiceNumber: { [Op.like]: `${dateStr}-%` },
-        shopId
-      },
-      order: [['invoiceNumber', 'DESC']],
-      limit: 1,
-      lock: t.LOCK.UPDATE,
+    const invoiceNumber = await generateNextInvoiceNumber({
+      shopId,
       transaction: t
     });
-
-    let sequence = '0001';
-    if (lastSale) {
-      const lastSequence = parseInt(lastSale.invoiceNumber.split('-')[1], 10);
-      sequence = String(lastSequence + 1).padStart(4, '0');
-    }
-    const invoiceNumber = `${dateStr}-${sequence}`;
 
     const jwtId = user?.id;
     const resolvedUserId = (typeof jwtId === 'number')
@@ -969,6 +975,11 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
 
     const sale = await Sale.create({
       invoiceNumber,
+      receiptNumber: receiptNumber || null,
+      cashierName: clientCashierName || (user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null)),
+      taxAmount: totalServerTax,
+      taxInclusive: isTaxInclusive,
+      changeAmount: change > 0 ? change : 0,
       idempotencyKey: idempotencyKey || null,
       subtotal: finalSaleSubtotal,
       tax: totalServerTax,

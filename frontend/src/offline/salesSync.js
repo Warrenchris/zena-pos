@@ -1,3 +1,4 @@
+import { saveSyncMapping } from './syncMappings';
 import { listQueue, removeEntry, saveEntry } from './salesQueue';
 
 /**
@@ -8,8 +9,9 @@ import { listQueue, removeEntry, saveEntry } from './salesQueue';
  *   - 401 (session expired)            -> stop; keep; the cashier must sign in again
  *   - 402 / 403 (e.g. subscription)    -> stop; keep; records the reason
  *   - 408 / 425 / 429 (busy)           -> stop; keep; try again later
+ *   - 409 (receipt collision)          -> mark 'conflict', keep printed number, review in pending-sales UI
  *   - 5xx (server trouble)             -> keep and try again; after MAX_SERVER_ERROR_ATTEMPTS mark 'failed'
- *   - any other 4xx (400, 404, 409...) -> the server refused this sale: mark 'failed' and KEEP it for review
+ *   - any other 4xx (400, 404...)      -> the server refused this sale: mark 'failed' and KEEP it for review
  * A sale is only ever removed after the server accepted it (or the person discards it).
  */
 
@@ -23,6 +25,9 @@ export function classifyError(error) {
   if (status === 401) return { kind: 'auth', status, message };
   if (status === 402 || status === 403) return { kind: 'blocked', status, message };
   if (status === 408 || status === 425 || status === 429) return { kind: 'busy', status, message };
+  if (status === 409 && (data?.code === 'RECEIPT_NUMBER_ALREADY_EXISTS' || (typeof message === 'string' && (message.includes('Receipt number') || message.includes('already exists'))))) {
+    return { kind: 'conflict', status, message };
+  }
   if (status >= 500) return { kind: 'server', status, message };
   return { kind: 'rejected', status, message };
 }
@@ -40,12 +45,19 @@ export function registerQueueOwner() {
 export const hasQueueOwner = () => owners > 0;
 
 async function doFlush({ cashierId, api }) {
-  const summary = { synced: 0, failed: 0, remaining: 0, blocked: null, offline: false, syncedResponses: [], joined: false };
+  const summary = { synced: 0, failed: 0, conflicts: 0, remaining: 0, blocked: null, offline: false, syncedResponses: [], joined: false };
   const pending = (await listQueue(cashierId)).filter((entry) => entry.status === 'pending');
 
   for (const entry of pending) {
     try {
       const response = await api.post('/api/sales', entry.saleData);
+      const serverInvoiceNumber = response.data?.invoiceNumber || response.data?.sale?.invoiceNumber;
+      const receiptNumber = entry.saleData?.receiptNumber || entry.receiptNumber;
+
+      if (receiptNumber && serverInvoiceNumber) {
+        await saveSyncMapping(receiptNumber, serverInvoiceNumber);
+      }
+
       await removeEntry(entry);
       summary.synced += 1;
       summary.syncedResponses.push(response.data);
@@ -64,6 +76,14 @@ async function doFlush({ cashierId, api }) {
         await saveEntry({ ...attempt, attempts: entry.attempts + 1 });
         summary.blocked = outcome.kind;
         break;
+      }
+
+      if (outcome.kind === 'conflict') {
+        // Keep original printed number intact, mark status as conflict
+        await saveEntry({ ...attempt, attempts: entry.attempts + 1, status: 'conflict' });
+        summary.conflicts = (summary.conflicts || 0) + 1;
+        summary.failed += 1;
+        continue;
       }
 
       if (outcome.kind === 'server') {
@@ -96,7 +116,7 @@ export function flushSales({ cashierId, api }) {
   return inFlight;
 }
 
-/** Put a failed sale back in the queue so it is sent again. */
+/** Put a failed or conflicted sale back in the queue so it is sent again. */
 export async function requeueEntry(entry) {
   await saveEntry({ ...entry, status: 'pending', attempts: 0, lastError: null });
 }

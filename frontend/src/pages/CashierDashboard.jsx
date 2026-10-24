@@ -48,6 +48,8 @@ import { notifySaleComplete, notifyError as notifyErrorUtil } from '../utils/not
 import { isProductNotFoundError, mapCartItemToSalePayload, normalizeCartItem } from '../utils/cartItems';
 import MetricCard from '../components/pos/MetricCard';
 import { usePersistedCart } from '../hooks/usePersistedCart';
+import { getNextReceiptNumber, bumpAndGetNextReceiptNumber } from '../offline/offlineNumbering';
+import { calculateChange, roundToTwoDecimals, isCashPaymentValid } from '../utils/changeCalculation';
 import { usePendingSales } from '../hooks/usePendingSales';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import Button from '../components/ui/Button';
@@ -60,13 +62,14 @@ export default function CashierDashboard() {
   const dispatch = useDispatch();
 
   const { user, token } = useSelector((state) => state.auth);
+  const shopSettings = useSelector((state) => state.settings);
   const { showToast } = useToast();
   
   // Persisted cart state hook
   const { currentSale, setCurrentSale, pendingCart, setPendingCart, clearPersistedCart } = usePersistedCart(user?.id);
 
   // Offline pending sales queue hook (Fix 7)
-  const { queueSale, pendingCount, isSyncing, flushPendingSales, generateUUID } = usePendingSales(user?.id, {
+  const { queueSale, pendingCount, conflictCount, isSyncing, flushPendingSales, generateUUID } = usePendingSales(user?.id, {
     showToast,
     onSaleSynced: () => {
       fetchCashierStats();
@@ -1040,6 +1043,10 @@ export default function CashierDashboard() {
   };
 
   const handlePayment = async () => {
+    if (currentSale.paymentMethod === 'cash' && !isCashPaymentValid(currentSale.paymentAmount, currentSale.total)) {
+      setPaymentError('Amount received must be greater than or equal to the total.');
+      return;
+    }
     setProcessingPayment(true);
     setPaymentError(null);
 
@@ -1048,19 +1055,35 @@ export default function CashierDashboard() {
       currentSale.idempotencyKey = idempotencyKey;
     }
 
-    // A single manager credential authorizes every discount in this sale —
-    // pulled from whichever discount (cart-level takes priority, else the
-    // first item that needed approval) actually required it. We do not send
-    // a password per line item; one verified approval covers the whole sale.
+    const receiptNumber = currentSale.receiptNumber || (await getNextReceiptNumber({ onFallback: (msg) => showToast(msg, 'warning') }));
+    const cashierName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || user?.username || user?.email || 'Cashier';
+    const changeAmount = calculateChange(currentSale.paymentAmount, currentSale.total);
+
+    const taxRate = typeof shopSettings?.taxRate === 'number' ? shopSettings.taxRate : parseFloat(shopSettings?.taxRate || 0);
+    const taxInclusive = Boolean(shopSettings?.taxInclusive);
+    const computedTax = taxInclusive
+      ? (currentSale.total * (taxRate / (100 + taxRate)))
+      : (currentSale.total * (taxRate / 100));
+    const taxAmount = roundToTwoDecimals(computedTax);
+
+    // A single manager credential authorizes every discount in this sale
     const approvalSource = (cartManualDiscount && cartManualDiscount.managerApprovalId)
       ? cartManualDiscount
       : currentSale.items.find(item => item.managerApprovalId);
     const managerApprovalId = approvalSource ? approvalSource.managerApprovalId : null;
     const managerPassword = approvalSource ? approvalSource.managerPassword : null;
 
-    // Prepare sale data with discount metadata and client idempotency key
+    // Prepare sale data with discount metadata, client idempotency key, receiptNumber and snapshots
     const saleData = {
       idempotencyKey,
+      receiptNumber,
+      cashierName,
+      taxAmount,
+      tax: taxAmount,
+      taxRate,
+      taxInclusive,
+      changeAmount,
+      change: changeAmount,
       managerApprovalId,
       managerPassword,
       items: currentSale.items.map(mapCartItemToSalePayload),
@@ -1071,8 +1094,7 @@ export default function CashierDashboard() {
       discountValue: (cartManualDiscount ? cartManualDiscount.discountValue : (appliedCoupon ? appliedCoupon.discountValue : null)),
       discountReason: (cartManualDiscount ? cartManualDiscount.discountReason : (appliedCoupon ? `Coupon: ${appliedCoupon.code}` : null)),
       paymentMethod: currentSale.paymentMethod,
-      paymentAmount: parseFloat(currentSale.paymentAmount),
-      // Send customer object as expected by the backend
+      paymentAmount: roundToTwoDecimals(currentSale.paymentAmount),
       customer: {
         name: currentSale.customer.name,
         phone: currentSale.customer.phone,
@@ -1083,28 +1105,50 @@ export default function CashierDashboard() {
       notes: currentSale.notes
     };
 
+    let finalReceiptNumber = receiptNumber;
     try {
-      // Call API with Idempotency-Key header
-      const response = await api.post('/api/sales', saleData, {
-        headers: { 'Idempotency-Key': idempotencyKey }
-      });
+      let response;
+      try {
+        // Call API with Idempotency-Key header
+        response = await api.post('/api/sales', saleData, {
+          headers: { 'Idempotency-Key': idempotencyKey }
+        });
+      } catch (postErr) {
+        const isCollision = postErr.response?.status === 409 &&
+          (postErr.response?.data?.code === 'RECEIPT_NUMBER_ALREADY_EXISTS' ||
+           String(postErr.response?.data?.error || postErr.response?.data?.message || '').toLowerCase().includes('receipt number'));
+        if (isCollision) {
+          finalReceiptNumber = await bumpAndGetNextReceiptNumber();
+          const retriedSaleData = { ...saleData, receiptNumber: finalReceiptNumber };
+          response = await api.post('/api/sales', retriedSaleData, {
+            headers: { 'Idempotency-Key': idempotencyKey }
+          });
+        } else {
+          throw postErr;
+        }
+      }
 
       // Success — snapshot sale data for receipt screen before resetting
-      const changeDue = Math.max(0, parseFloat(currentSale.paymentAmount) - currentSale.total);
       setCompletedSale({
         serverData: response.data,
+        receiptNumber: finalReceiptNumber,
+        invoiceNumber: response.data?.invoiceNumber || null,
+        cashierName,
+        tax: { amount: taxAmount, rate: taxRate, inclusive: taxInclusive },
+        taxAmount,
+        taxRate,
+        taxInclusive,
         items: [...currentSale.items],
         customer: { ...currentSale.customer },
         total: currentSale.total,
         paymentMethod: currentSale.paymentMethod,
-        paymentAmount: parseFloat(currentSale.paymentAmount),
-        change: changeDue,
+        paymentAmount: roundToTwoDecimals(currentSale.paymentAmount),
+        change: changeAmount,
         notes: currentSale.notes
       });
       notifySaleComplete(response.data);
       setShowPaymentModal(false);
       fetchCashierStats(); // Refresh stats
-      // NOTE: Do NOT reset salesMode or currentSale here — the SaleCompleteModal handles that via handleCompletedSaleNewSale
 
     } catch (err) {
       console.error('Payment failed:', err);
@@ -1113,18 +1157,30 @@ export default function CashierDashboard() {
       // Offline resilience: queue cash sales locally with idempotency key
       if (currentSale.paymentMethod === 'cash' && isNetworkIssue) {
         queueSale(saleData);
-        const changeDue = Math.max(0, parseFloat(currentSale.paymentAmount) - currentSale.total);
         setCompletedSale({
           serverData: {
             id: `offline-${Date.now()}`,
-            invoiceNumber: `OFFLINE-${Date.now().toString().slice(-4)}`
+            invoiceNumber: null,
+            receiptNumber,
+            cashierName,
+            taxAmount,
+            taxRate,
+            taxInclusive,
+            changeAmount,
           },
+          receiptNumber,
+          invoiceNumber: null,
+          cashierName,
+          tax: { amount: taxAmount, rate: taxRate, inclusive: taxInclusive },
+          taxAmount,
+          taxRate,
+          taxInclusive,
           items: [...currentSale.items],
           customer: { ...currentSale.customer },
           total: currentSale.total,
           paymentMethod: 'cash',
-          paymentAmount: parseFloat(currentSale.paymentAmount),
-          change: changeDue,
+          paymentAmount: roundToTwoDecimals(currentSale.paymentAmount),
+          change: changeAmount,
           notes: currentSale.notes,
           isOffline: true
         });
@@ -1245,6 +1301,22 @@ export default function CashierDashboard() {
         )}
 
         {/* Offline Sales Queue Banner (Fix 7) */}
+        {conflictCount > 0 && (
+          <div className="mb-4 flex items-center justify-between rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+            <div className="flex items-center space-x-3">
+              <ExclamationCircleIcon className="h-6 w-6 text-red-500 flex-shrink-0" />
+              <div>
+                <p className="text-body font-semibold text-text-primary">
+                  {conflictCount} offline sale{conflictCount === 1 ? '' : 's'} had a receipt number conflict
+                </p>
+                <p className="text-caption text-text-secondary">
+                  The original printed receipt numbers have been preserved. Please review them in the sales ledger.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {pendingCount > 0 && (
           <div className="bg-warning/10 border border-warning/30 rounded-2xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slideIn">
             <div className="flex items-center space-x-3">
