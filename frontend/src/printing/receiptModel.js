@@ -52,6 +52,9 @@ const PAYMENT_LABELS = {
   cash: 'Cash',
   card: 'Card',
   mpesa: 'M-Pesa',
+  mobile: 'Mobile Money',
+  mobile_money: 'Mobile Money',
+  store_credit: 'Store Credit',
   split: 'Split Tender',
 };
 
@@ -226,7 +229,7 @@ export function buildReceipt(completedSale, { business = {}, receiptSettings = {
  * @param {object} [options]
  * @returns {ReceiptData}
  */
-export function buildCreditNote(returnRecord, { business = {}, receiptSettings = {}, now = new Date() } = {}) {
+export function buildCreditNote(returnRecord, { business = {}, receiptSettings = {}, isDuplicate = false, now = new Date() } = {}) {
   const customFooter = typeof receiptSettings?.footer === 'string' ? receiptSettings.footer.trim() : '';
   const returnItems = Array.isArray(returnRecord?.items) ? returnRecord.items : [];
 
@@ -234,34 +237,57 @@ export function buildCreditNote(returnRecord, { business = {}, receiptSettings =
     const qty = num(item.quantity) || 1;
     const rawPrice = num(item.price ?? item.unitPrice ?? (item.amount ? num(item.amount) / qty : 0));
     const rawTotal = num(item.amount ?? (rawPrice * qty));
-    return {
+    const lineObj = {
       name: item.productName || item.Product?.name || item.name || 'Returned Item',
       quantity: -Math.abs(qty),
       unitPrice: -Math.abs(rawPrice),
       lineTotal: -Math.abs(rawTotal),
     };
+    if (item.disposition) {
+      lineObj.note = `Disposition: ${item.disposition}`;
+    }
+    return lineObj;
   });
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
-  const totalRefund = returnRecord?.totalRefundAmount !== undefined
+  const totalRefund = returnRecord?.totalRefundAmount !== undefined && returnRecord.totalRefundAmount !== null
     ? -Math.abs(num(returnRecord.totalRefundAmount))
-    : subtotal;
+    : (returnRecord?.amount !== undefined && returnRecord.amount !== null
+      ? -Math.abs(num(returnRecord.amount))
+      : subtotal);
 
-  const creditNoteNum = returnRecord?.creditNoteNumber || `CN-${returnRecord?.originalInvoiceNumber || returnRecord?.saleId || 'N/A'}`;
   const origInv = returnRecord?.originalInvoiceNumber || returnRecord?.sale?.invoiceNumber || null;
+  const creditNoteNum = returnRecord?.creditNoteNumber || `CN-${origInv || returnRecord?.saleId || 'N/A'}`;
   const reason = returnRecord?.reason || returnRecord?.reasonNotes || returnRecord?.items?.[0]?.reasonNotes || returnRecord?.items?.[0]?.reasonCode || 'Return / Refund';
 
   const showPoweredBy = business?.showPoweredBy !== undefined
     ? Boolean(business.showPoweredBy)
     : (receiptSettings?.showPoweredBy !== false);
 
-  const qrEnabled = business?.qrEnabled !== undefined
-    ? Boolean(business.qrEnabled)
-    : Boolean(receiptSettings?.qrEnabled);
+  const rawMethod = returnRecord?.refundMethod || returnRecord?.paymentMethod || 'cash';
+  const methodText = paymentLabel(rawMethod);
+  const refundMethodLabel = methodText.toLowerCase().includes('refund') ? methodText : `${methodText} Refund`;
+
+  const duplicateFlag = Boolean(isDuplicate || returnRecord?.isDuplicate);
+
+  let taxRefundAmount = 0;
+  if (returnRecord?.totalTaxRefunded !== undefined && returnRecord.totalTaxRefunded !== null) {
+    taxRefundAmount = -Math.abs(num(returnRecord.totalTaxRefunded));
+  } else if (returnRecord?.taxRefund !== undefined && returnRecord.taxRefund !== null) {
+    taxRefundAmount = -Math.abs(num(returnRecord.taxRefund));
+  } else {
+    const itemTaxSum = returnItems.reduce((acc, it) => acc + (num(it.taxAmount) || 0), 0);
+    if (itemTaxSum > 0) {
+      taxRefundAmount = -Math.abs(itemTaxSum);
+    }
+  }
+
+  const taxRate = num(returnRecord?.taxRate || returnRecord?.tax?.rate || 0);
+  const taxInclusive = Boolean(returnRecord?.taxInclusive ?? returnRecord?.tax?.inclusive ?? false);
 
   return {
     documentType: 'CREDIT_NOTE',
-    isDuplicate: Boolean(returnRecord?.isDuplicate),
+    isDuplicate: duplicateFlag,
     logoUrl: receiptSettings?.showLogo !== false && receiptSettings?.logoUrl ? receiptSettings.logoUrl : null,
     business: {
       name: business?.name || returnRecord?.shop?.systemName || '',
@@ -271,8 +297,8 @@ export function buildCreditNote(returnRecord, { business = {}, receiptSettings =
       branch: business?.branch || receiptSettings?.branch || '',
       tagline: business?.tagline || receiptSettings?.tagline || '',
       showPoweredBy,
-      qrEnabled,
-      qrPayload: null,
+      qrEnabled: false,
+      qrPayload: null, // Credit notes get no QR in this phase
     },
     meta: {
       receiptNumber: creditNoteNum,
@@ -280,11 +306,11 @@ export function buildCreditNote(returnRecord, { business = {}, receiptSettings =
       originalInvoiceNumber: origInv,
       dateTime: returnRecord?.issuedAt || returnRecord?.refundedAt || returnRecord?.createdAt || now,
       customerName: returnRecord?.customer?.name || returnRecord?.customerName || 'Walk-in Customer',
-      paymentLabel: paymentLabel(returnRecord?.paymentMethod || 'cash'),
-      cashierName: returnRecord?.cashierName || returnRecord?.refundedBy || null,
+      paymentLabel: refundMethodLabel,
+      cashierName: returnRecord?.cashierName || returnRecord?.refundedBy || returnRecord?.refunderName || null,
       pendingSync: false,
       isOffline: false,
-      isDuplicate: Boolean(returnRecord?.isDuplicate),
+      isDuplicate: duplicateFlag,
     },
     lines,
     totals: {
@@ -292,11 +318,11 @@ export function buildCreditNote(returnRecord, { business = {}, receiptSettings =
       discount: 0,
       total: totalRefund,
       tendered: null,
-      change: 0,
+      change: null,
       tax: {
-        amount: returnRecord?.totalTaxRefunded !== undefined ? -Math.abs(num(returnRecord.totalTaxRefunded)) : 0,
-        rate: 0,
-        inclusive: false,
+        amount: taxRefundAmount,
+        rate: taxRate,
+        inclusive: taxInclusive,
       },
     },
     header: typeof receiptSettings?.header === 'string' ? receiptSettings.header.trim() : (returnRecord?.shop?.receiptHeader || ''),

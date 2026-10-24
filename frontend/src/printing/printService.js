@@ -50,7 +50,13 @@ export async function printReceipt(
 
   let job;
   try {
-    job = createPrintJob(buildReceipt(completedSale, { business, receiptSettings }), activeProfile, money);
+    const isPrebuiltModel = completedSale &&
+      (completedSale.documentType === 'CREDIT_NOTE' || completedSale.documentType === 'SALES_RECEIPT') &&
+      Array.isArray(completedSale.lines);
+    const receiptModel = isPrebuiltModel
+      ? completedSale
+      : buildReceipt(completedSale, { business, receiptSettings });
+    job = createPrintJob(receiptModel, activeProfile, money);
   } catch (error) {
     return { ok: false, adapterId: null, fellBack: false, error: messageOf(error) };
   }

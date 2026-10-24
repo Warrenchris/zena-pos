@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Invoice, InvoiceItem, Sale, SaleItem, User, Employee, Shop, Product } = require('../models');
+const { Invoice, InvoiceItem, Sale, SaleItem, User, Employee, Shop, Product, SystemSettings } = require('../models');
 const PDFDocument = require('pdfkit');
 const { formatCurrency } = require('../utils/currency');
 
@@ -160,6 +160,144 @@ exports.deleteInvoice = async (req, res) => {
 };
 
 // Generate PDF
+// Build Invoice PDF Document
+exports.buildInvoicePdfDoc = (invoice, settings = {}) => {
+  const doc = new PDFDocument({ margin: 50, size: 'A4' });
+
+  const shop = invoice.shop || {};
+  const shopName = shop.name || settings.systemName || 'Zana POS';
+  const branch = settings.branch || shop.branch || '';
+  const shopAddress = shop.address || settings.address || '';
+  const shopPhone = shop.phone || settings.contactPhone || '';
+  const shopKraPin = shop.kraPin || settings.kraPin || '';
+
+  // Header: Shop Name & Branch
+  doc.fontSize(18).font('Helvetica-Bold').fillColor('#0f172a').text(shopName.toUpperCase(), { align: 'left' });
+  if (branch) {
+    doc.fontSize(10.5).font('Helvetica-Bold').fillColor('#475569').text(branch.toUpperCase(), { align: 'left' });
+  }
+
+  doc.fontSize(9.5).font('Helvetica').fillColor('#475569');
+  if (shopAddress) doc.text(shopAddress);
+  const contactParts = [];
+  if (shopPhone) contactParts.push(`Tel: ${shopPhone}`);
+  if (shopKraPin) contactParts.push(`PIN: ${shopKraPin}`);
+  if (contactParts.length) doc.text(contactParts.join(' | '));
+
+  doc.moveDown(0.8);
+  doc.strokeColor('#cbd5e1').lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+  doc.moveDown(0.8);
+
+  // Document Title & Meta block
+  doc.fontSize(15).font('Helvetica-Bold').fillColor('#0f172a').text('INVOICE', { align: 'left' });
+  doc.moveDown(0.4);
+
+  const startY = doc.y;
+  doc.fontSize(9.5).font('Helvetica').fillColor('#1e293b');
+
+  const invNum = invoice.invoiceNumber ? `#${invoice.invoiceNumber}` : 'N/A';
+  const dateFormatted = invoice.createdAt
+    ? new Date(invoice.createdAt).toLocaleDateString('en-GB', { timeZone: 'Africa/Nairobi', year: 'numeric', month: 'short', day: 'numeric' })
+    : '-';
+  const statusFormatted = (invoice.status || 'pending').toUpperCase();
+
+  doc.text(`Invoice: ${invNum}`, 50, startY);
+  doc.text(`Date: ${dateFormatted}`, 50, startY + 15);
+  doc.text(`Status: ${statusFormatted}`, 50, startY + 30);
+
+  const customerName = invoice.sale?.Customer?.name || invoice.sale?.customer?.name || invoice.sale?.customerName || invoice.customer?.name || null;
+  const cashierOrIssuer = invoice.sale?.cashierName || invoice.user?.name || (invoice.employee ? `${invoice.employee.firstName || ''} ${invoice.employee.lastName || ''}`.trim() : null);
+  const paymentMethod = invoice.paymentMethod || invoice.sale?.paymentMethod || 'Cash';
+
+  let rightColY = startY;
+  if (customerName && customerName !== 'Walk-in Customer') {
+    doc.text(`Customer: ${customerName}`, 330, rightColY);
+    rightColY += 15;
+  }
+  if (cashierOrIssuer) {
+    doc.text(`Cashier / Issued By: ${cashierOrIssuer}`, 330, rightColY);
+    rightColY += 15;
+  }
+  doc.text(`Payment Method: ${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}`, 330, rightColY);
+
+  const maxY = Math.max(startY + 48, rightColY + 18);
+  doc.y = maxY;
+  doc.strokeColor('#cbd5e1').lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+  doc.moveDown(0.8);
+
+  // Items Table Header
+  const tableTop = doc.y;
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#64748b');
+  doc.text('ITEM', 50, tableTop);
+  doc.text('QTY', 290, tableTop, { width: 45, align: 'center' });
+  doc.text('UNIT PRICE', 345, tableTop, { width: 95, align: 'right' });
+  doc.text('TOTAL', 450, tableTop, { width: 95, align: 'right' });
+
+  doc.strokeColor('#e2e8f0').lineWidth(1).moveTo(50, tableTop + 14).lineTo(545, tableTop + 14).stroke();
+
+  // Items Table Rows
+  let currentY = tableTop + 22;
+  doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a');
+  const items = Array.isArray(invoice.items) ? invoice.items : [];
+  items.forEach((item) => {
+    const name = item.product?.name || item.name || `Item #${item.productId || ''}`;
+    const qty = Number(item.quantity) || 1;
+    const price = Number(item.price || item.unitPrice || 0);
+    const lineTotal = Number(item.total ?? (price * qty));
+
+    doc.text(name, 50, currentY, { width: 235 });
+    doc.text(String(qty), 290, currentY, { width: 45, align: 'center' });
+    doc.text(formatCurrency(price), 345, currentY, { width: 95, align: 'right' });
+    doc.text(formatCurrency(lineTotal), 450, currentY, { width: 95, align: 'right' });
+    currentY += 18;
+  });
+
+  doc.strokeColor('#cbd5e1').lineWidth(1).moveTo(50, currentY + 4).lineTo(545, currentY + 4).stroke();
+  currentY += 14;
+
+  // Totals Section
+  const subtotal = Number(invoice.subtotal ?? (invoice.total || 0));
+  const discount = Number(invoice.discount || 0);
+  const tax = Number(invoice.tax || invoice.sale?.taxAmount || 0);
+  const total = Number(invoice.total || subtotal);
+
+  const taxRate = Number(invoice.sale?.taxRate || settings.taxRate || 0);
+  const taxIncl = invoice.sale?.taxInclusive != null ? Boolean(invoice.sale.taxInclusive) : Boolean(settings.taxInclusive);
+  const taxLabel = taxRate > 0 ? `Tax (${taxRate}%${taxIncl ? ' incl.' : ''}):` : 'Tax:';
+
+  doc.font('Helvetica').fontSize(9.5).fillColor('#334155');
+  doc.text('Subtotal:', 345, currentY, { width: 95, align: 'right' });
+  doc.text(formatCurrency(subtotal), 450, currentY, { width: 95, align: 'right' });
+  currentY += 16;
+
+  if (discount > 0) {
+    doc.text('Discount:', 345, currentY, { width: 95, align: 'right' });
+    doc.text(`-${formatCurrency(discount)}`, 450, currentY, { width: 95, align: 'right' });
+    currentY += 16;
+  }
+
+  if (tax > 0) {
+    doc.text(taxLabel, 345, currentY, { width: 95, align: 'right' });
+    doc.text(formatCurrency(tax), 450, currentY, { width: 95, align: 'right' });
+    currentY += 16;
+  }
+
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#0f172a');
+  doc.text('TOTAL:', 345, currentY, { width: 95, align: 'right' });
+  doc.text(formatCurrency(total), 450, currentY, { width: 95, align: 'right' });
+
+  // Footer: Separator and white-label text
+  doc.strokeColor('#e2e8f0').lineWidth(1).moveTo(50, 740).lineTo(545, 740).stroke();
+  doc.fontSize(8.5).font('Helvetica').fillColor('#64748b');
+  const showPoweredBy = settings.showPoweredBy !== false;
+  const footerText = showPoweredBy
+    ? 'Thank you for your business! · Powered by Zana POS'
+    : 'Thank you for your business!';
+  doc.text(footerText, 50, 750, { align: 'center', width: 495 });
+
+  return doc;
+};
+
 exports.generatePDF = async (req, res) => {
   try {
     const where = req.user?.role === 'super_admin' ? { id: req.params.id } : { id: req.params.id, ...shopWhere(req) };
@@ -178,114 +316,11 @@ exports.generatePDF = async (req, res) => {
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
-    const shop = invoice.shop || {};
-    const shopName = shop.name || 'Zana POS';
-    const shopAddress = shop.address || '';
-    const shopPhone = shop.phone || '';
-    const shopKraPin = shop.kraPin ? `KRA PIN: ${shop.kraPin}` : '';
-
-    // Create PDF document
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
-    
-    // Set response headers
+    const settings = (await SystemSettings.findOne({ where: { shopId: invoice.shopId } })) || {};
+    const doc = exports.buildInvoicePdfDoc(invoice, settings);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename=invoice-' + invoice.invoiceNumber + '.pdf');
-    
-    // Pipe PDF to response
     doc.pipe(res);
-
-    // Header: Real Shop branding
-    doc.fontSize(20).font('Helvetica-Bold').text(shopName, { align: 'left' });
-    doc.fontSize(10).font('Helvetica');
-    if (shopAddress) doc.text(shopAddress);
-    if (shopPhone) doc.text(`Tel: ${shopPhone}`);
-    if (shopKraPin) doc.text(shopKraPin);
-
-    doc.moveDown(1);
-    doc.strokeColor('#cccccc').lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
-    doc.moveDown(1);
-
-    // Meta details
-    doc.fontSize(16).font('Helvetica-Bold').text('INVOICE', { align: 'left' });
-    doc.moveDown(0.5);
-
-    doc.fontSize(10).font('Helvetica');
-    const startY = doc.y;
-    doc.text(`Invoice Number: #${invoice.invoiceNumber}`, 50, startY);
-    doc.text(`Date Issued: ${new Date(invoice.createdAt).toLocaleDateString()}`, 50, startY + 15);
-    doc.text(`Status: ${(invoice.status || 'pending').toUpperCase()}`, 50, startY + 30);
-
-    if (invoice.paymentMethod) {
-      doc.text(`Payment Method: ${invoice.paymentMethod.toUpperCase()}`, 350, startY);
-    }
-    const billedTo = invoice.user?.name || (invoice.employee ? `${invoice.employee.firstName} ${invoice.employee.lastName}` : null);
-    if (billedTo) {
-      doc.text(`Issued By: ${billedTo}`, 350, startY + 15);
-    }
-
-    doc.y = startY + 55;
-    doc.strokeColor('#cccccc').lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
-    doc.moveDown(1);
-
-    // Table Header
-    const tableTop = doc.y;
-    doc.font('Helvetica-Bold').fontSize(10);
-    doc.text('Item', 50, tableTop);
-    doc.text('Qty', 280, tableTop, { width: 50, align: 'center' });
-    doc.text('Unit Price', 350, tableTop, { width: 90, align: 'right' });
-    doc.text('Total', 455, tableTop, { width: 90, align: 'right' });
-    doc.strokeColor('#e5e7eb').lineWidth(1).moveTo(50, tableTop + 15).lineTo(545, tableTop + 15).stroke();
-
-    // Table Rows
-    let currentY = tableTop + 25;
-    doc.font('Helvetica').fontSize(10);
-    const items = Array.isArray(invoice.items) ? invoice.items : [];
-    items.forEach((item) => {
-      const name = item.product?.name || item.name || `Item #${item.productId || ''}`;
-      const qty = item.quantity || 1;
-      const price = Number(item.price || 0);
-      const total = Number(item.total || (price * qty));
-
-      doc.text(name, 50, currentY, { width: 220 });
-      doc.text(String(qty), 280, currentY, { width: 50, align: 'center' });
-      doc.text(formatCurrency(price), 350, currentY, { width: 90, align: 'right' });
-      doc.text(formatCurrency(total), 455, currentY, { width: 90, align: 'right' });
-      currentY += 20;
-    });
-
-    doc.strokeColor('#cccccc').lineWidth(1).moveTo(50, currentY + 5).lineTo(545, currentY + 5).stroke();
-    currentY += 15;
-
-    // Totals
-    const subtotal = Number(invoice.subtotal || invoice.total || 0);
-    const tax = Number(invoice.tax || 0);
-    const discount = Number(invoice.discount || 0);
-    const total = Number(invoice.total || subtotal);
-
-    doc.font('Helvetica').text('Subtotal:', 350, currentY, { width: 90, align: 'right' });
-    doc.text(formatCurrency(subtotal), 455, currentY, { width: 90, align: 'right' });
-    currentY += 15;
-
-    if (discount > 0) {
-      doc.text('Discount:', 350, currentY, { width: 90, align: 'right' });
-      doc.text(`-${formatCurrency(discount)}`, 455, currentY, { width: 90, align: 'right' });
-      currentY += 15;
-    }
-
-    if (tax > 0) {
-      doc.text('Tax / VAT:', 350, currentY, { width: 90, align: 'right' });
-      doc.text(formatCurrency(tax), 455, currentY, { width: 90, align: 'right' });
-      currentY += 15;
-    }
-
-    doc.font('Helvetica-Bold').fontSize(12);
-    doc.text('TOTAL:', 350, currentY, { width: 90, align: 'right' });
-    doc.text(formatCurrency(total), 455, currentY, { width: 90, align: 'right' });
-
-    // Footer
-    doc.fontSize(9).font('Helvetica').fillColor('#6b7280');
-    doc.text('Thank you for your business! Powered by Zana POS.', 50, 750, { align: 'center', width: 495 });
-
     doc.end();
   } catch (error) {
     console.error('Error generating PDF:', error);
