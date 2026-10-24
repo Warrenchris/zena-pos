@@ -443,5 +443,74 @@
     - `frontend/src/printing/__tests__/collisionRetryReceipt.test.js`: Verified that online sales hitting 409 duplicate receipt numbers print with the retried, incremented receipt number.
     - `frontend/src/printing/__tests__/htmlReceipt.test.js`: Verified inline SVG QR presence/absence, styled duplicate badge, and row counts.
 - **Backend Tests**:
-  - `backend/tests/publicReceipt.unit.test.js`: **11 / 11 tests passed**.
+  - `backend/tests/publicReceipt.unit.test.js`: **12 / 12 tests passed**.
   - `backend/tests/publicReceipt.db.test.js`: **4 / 4 tests passed** (live DB & Redis).
+
+---
+
+## Cleanups (between Phase 5 & Phase 6)
+
+1. **`htmlReceipt.test.js` Timing Assertions**:
+   - Confirmed no timing assertions (e.g. `<100ms`) exist in `htmlReceipt.test.js`. Assertions are pinned strictly to structural DOM output, table row counts, and element presence.
+2. **Frontend Date/Currency Formatting Tests**:
+   - Confirmed full passing status across all printing, date, and currency test suites.
+3. **ESC/POS Raster Preview**:
+   - Generated `./receipt-preview/escpos-preview.png` and `frontend/receipt-preview/escpos-preview.png` via `generateEscposRasterPreview.js` demonstrating both 80mm and 58mm layouts with logo rasterization and QR codes.
+4. **Zana Brand Wordmark in HTML Header**:
+   - The "ZANA POS" wordmark in `htmlReceipt.js` is rendered via clean inline CSS text typography rather than an external SVG or font file to guarantee zero external network dependencies and prevent brand confusion with merchant logos.
+5. **SystemSettings Model Integrity**:
+   - Verified that `showLogoOnReceipt` in `backend/src/models/SystemSettings.js` is correctly defined once in the model attributes and once in `getDefaultSettings()`.
+6. **Public Receipt Customer-Facing 404**:
+   - Updated `frontend/src/pages/PublicReceiptView.jsx` error message to: `"This receipt may not be available yet. If the sale was made offline, please try again in a few minutes."`
+7. **Rate Limiter In-Memory Fallback**:
+   - In `backend/src/utils/distributedRateLimiter.js`, verified and tested fail-closed in-memory rate limiting fallback (30 req/min/IP) when Redis is offline or disconnected. Added test in `backend/tests/publicReceipt.unit.test.js`.
+8. **Clean Omission of QR Code on Reprints without Stored Token**:
+   - In `frontend/src/printing/receiptModel.js` and `printStoredSale.js`, verified that reprinting stored sales that lack a `receiptToken` cleanly omits the QR code and caption. Added unit test in `frontend/src/printing/__tests__/reprint.test.js`.
+9. **Deployment Guide (`DEPLOY.md`)**:
+   - Authored `DEPLOY.md` detailing migration execution order, required environment variables (`PUBLIC_APP_URL`), public route accessibility (`/r/*` and `/api/public/receipts/:token`), and rollback procedures.
+
+---
+
+## Phase 6: Credit Notes & Legacy Cleanup
+
+### 1. Credit Note Thermal Printing (`SalesReturns.jsx`)
+- **Files Modified**:
+  - `frontend/src/pages/SalesReturns.jsx`: Replaced raw `window.print()` with `buildCreditNote(returnRecord, settings)` rendered through `printReceipt()`. Added print action to the credit note view modal while preserving on-screen preview.
+  - `frontend/src/printing/receiptModel.js`: Updated `buildCreditNote` to produce standard `ReceiptData` structures:
+    - Title: `"CREDIT NOTE"`
+    - Meta: Links original invoice number, return reason, cashier name, and date.
+    - Items: Negative unit prices (`-Math.abs(price)`) and negative line totals, with disposition notes as item sub-lines.
+    - Totals: Negative total amount, refund method label (`Cash Refund`, `Mobile Money Refund`, etc.), and tax refund calculations.
+    - QR Code: Excluded per design specifications.
+    - Duplicate Flag: Sets `meta.isDuplicate = true` on reprint.
+  - `frontend/src/printing/printService.js`: Added support for pre-built models (`documentType === 'CREDIT_NOTE' || documentType === 'SALES_RECEIPT'`) to bypass redundant re-building.
+  - `frontend/src/printing/index.js`: Exported `buildCreditNote`.
+- **Tests Added**:
+  - `frontend/src/printing/__tests__/creditNote.test.js`: Verified full refunds, partial refunds, tax refunds, legacy return records, 58mm vs 80mm layout rendering, and QR code omission.
+
+### 2. Remaining `window.print()` Audit
+- Conducted codebase audit for any remaining receipt-type `window.print()` calls.
+- **Result**: Zero receipt/credit note `window.print()` calls remain.
+- The only remaining calls are in `PurchaseOrders.jsx`, `Purchases.jsx`, and `Reports.jsx`, which are legitimate full-page A4 administrative documents.
+
+### 3. Dead and Legacy Code Analysis
+- Evaluated candidates for removal:
+  - `printerType`: Used in MySQL schema, backend route validation, and Redux settings. Safe to delete: **NO**.
+  - `POSModal.jsx`: Imported and used across `AdminSales.jsx`, `Pos.jsx`, `Sales.jsx`, and tests. Safe to delete: **NO**.
+  - `currencyFormatters.formatAmount`: Used in `src/utils/formatters.js`. Safe to delete: **NO**.
+  - `currencyUtils.formatCurrencyWithSettings`: Only referenced in tests. Safe to delete: **YES** (kept as non-breaking wrapper per Phase 1 instruction).
+  - `Invoice.js` `Date.now()` numbering: Active in model hooks and controller logic. Safe to delete: **NO**.
+- Zero unused files or exports were deleted, preventing breaking changes.
+
+### 4. Backend A4 Invoice PDF Redesign (`invoiceController.js`)
+- **Files Modified**:
+  - `backend/src/controllers/invoiceController.js`: Extracted and updated `buildInvoicePdfDoc(invoice, settings)` using PDFKit.
+  - Aligned typography, shop header, branch, KRA PIN, invoice metadata, clean itemized table with small-caps header styling, tax line, totals summary, and white-label footer with the new design system.
+  - Handled missing optional fields (branch, PIN, customer details, tax rates) gracefully.
+- **Tests Added**:
+  - `backend/tests/invoicePdf.unit.test.js`: Verified PDF generation for full invoice, minimal invoice without optional fields, and empty line-item scenarios.
+
+### 5. Verification Results
+- **Frontend Printing Tests**: `npm run test:printing` → **26 / 26 test suites passed, 229 / 229 tests passed**.
+- **Backend Unit Tests**: `npm run test:unit` → **4 / 4 test suites passed, 24 / 24 tests passed**.
+
