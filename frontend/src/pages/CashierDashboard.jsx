@@ -49,6 +49,7 @@ import { isProductNotFoundError, mapCartItemToSalePayload, normalizeCartItem } f
 import MetricCard from '../components/pos/MetricCard';
 import { usePersistedCart } from '../hooks/usePersistedCart';
 import { getNextReceiptNumber, bumpAndGetNextReceiptNumber } from '../offline/offlineNumbering';
+import { generateReceiptToken } from '../utils/receiptToken';
 import { calculateChange, roundToTwoDecimals, isCashPaymentValid } from '../utils/changeCalculation';
 import { usePendingSales } from '../hooks/usePendingSales';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
@@ -1056,6 +1057,10 @@ export default function CashierDashboard() {
     }
 
     const receiptNumber = currentSale.receiptNumber || (await getNextReceiptNumber({ onFallback: (msg) => showToast(msg, 'warning') }));
+    const receiptToken = currentSale.receiptToken || generateReceiptToken();
+    if (!currentSale.receiptToken) {
+      currentSale.receiptToken = receiptToken;
+    }
     const cashierName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || user?.username || user?.email || 'Cashier';
     const changeAmount = calculateChange(currentSale.paymentAmount, currentSale.total);
 
@@ -1077,6 +1082,7 @@ export default function CashierDashboard() {
     const saleData = {
       idempotencyKey,
       receiptNumber,
+      receiptToken,
       cashierName,
       taxAmount,
       tax: taxAmount,
@@ -1132,6 +1138,7 @@ export default function CashierDashboard() {
       setCompletedSale({
         serverData: response.data,
         receiptNumber: finalReceiptNumber,
+        receiptToken,
         invoiceNumber: response.data?.invoiceNumber || null,
         cashierName,
         tax: { amount: taxAmount, rate: taxRate, inclusive: taxInclusive },
@@ -1162,6 +1169,7 @@ export default function CashierDashboard() {
             id: `offline-${Date.now()}`,
             invoiceNumber: null,
             receiptNumber,
+      receiptToken,
             cashierName,
             taxAmount,
             taxRate,
@@ -1169,6 +1177,7 @@ export default function CashierDashboard() {
             changeAmount,
           },
           receiptNumber,
+      receiptToken,
           invoiceNumber: null,
           cashierName,
           tax: { amount: taxAmount, rate: taxRate, inclusive: taxInclusive },
@@ -1200,6 +1209,8 @@ export default function CashierDashboard() {
     // Snapshot sale data for receipt screen
     setCompletedSale({
       serverData: completeSale,
+      receiptNumber: completeSale?.receiptNumber || null,
+      receiptToken: completeSale?.receiptToken || null,
       items: [...currentSale.items],
       customer: { ...currentSale.customer },
       total: currentSale.total,

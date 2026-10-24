@@ -67,12 +67,14 @@ export async function printStoredSale(sale, options = {}) {
   const taxInclusive = sale.taxInclusive ?? sale.serverData?.taxInclusive ?? false;
   const paymentAmount = sale.paymentAmount ?? sale.serverData?.paymentAmount ?? sale.paidAmount ?? (sale.totalAmount ?? sale.total ?? 0);
   const change = sale.changeAmount ?? sale.serverData?.changeAmount ?? sale.change ?? sale.serverData?.change ?? 0;
+  const receiptToken = sale.receiptToken ?? sale.serverData?.receiptToken ?? null;
 
   const completedSale = {
     serverData: {
       id: sale.id,
       invoiceNumber: isPending ? (sale.isOffline ? null : 'Pending') : serverInvoiceNumber,
       receiptNumber: effectiveReceiptNumber,
+      receiptToken,
       createdAt: sale.createdAt,
       cashierName,
       taxAmount,
@@ -81,6 +83,7 @@ export async function printStoredSale(sale, options = {}) {
       changeAmount: change,
     },
     receiptNumber: effectiveReceiptNumber,
+    receiptToken,
     invoiceNumber: isPending ? null : serverInvoiceNumber,
     pendingSync,
     cashierName,

@@ -358,6 +358,39 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
           </select>
         </div>
 
+        <div>
+          <label htmlFor="printer-qr-mode" className="block text-caption font-semibold text-text-secondary mb-1">
+            Thermal QR print mode
+          </label>
+          <select
+            id="printer-qr-mode"
+            value={profile.qrMode || 'raster'}
+            onChange={(e) => change({ qrMode: e.target.value })}
+            className={inputClass}
+          >
+            <option value="raster">Raster graphic (recommended — works on all thermal printers)</option>
+            <option value="native">Native printer command (use only if your printer supports it)</option>
+          </select>
+          <p className="text-caption text-text-muted mt-1">
+            Raster mode draws the QR code dot-by-dot. Use native only if your printer supports it.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="printer-qr-align" className="block text-caption font-semibold text-text-secondary mb-1">
+            QR code position
+          </label>
+          <select
+            id="printer-qr-align"
+            value={profile.qrAlign || 'right'}
+            onChange={(e) => change({ qrAlign: e.target.value })}
+            className={inputClass}
+          >
+            <option value="right">Right aligned</option>
+            <option value="center">Centered</option>
+          </select>
+        </div>
+
         <div className="flex items-center justify-between gap-4 pt-1">
           <div>
             <label htmlFor="printer-drawer" className="text-small font-semibold text-text-primary">

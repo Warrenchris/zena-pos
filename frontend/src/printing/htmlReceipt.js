@@ -1,4 +1,5 @@
 import { formatDateTime } from '../utils/dateTime.js';
+import { renderQrSvg } from './qr.js';
 
 /**
  * Escapes HTML characters in user-provided strings to prevent XSS.
@@ -546,9 +547,25 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     margin-top: 1px;
   }
   .receipt-container .footer-right {
-    width: 44px;
-    height: 44px;
+    min-width: 44px;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .receipt-container .qr-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .receipt-container .qr-caption {
+    font-size: 7px;
+    color: #64748b;
+    margin-top: 2px;
+    letter-spacing: 0.2px;
+    text-align: center;
   }
 </style>
 </head>
@@ -643,7 +660,12 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
         ${showPoweredBy ? '<div class="powered-by">Powered by Zana POS</div>' : ''}
       </div>
       <div class="footer-right">
-        <!-- Reserved for Phase 5 QR -->
+        ${(business.qrEnabled && business.qrPayload) ? `
+          <div class="qr-wrap">
+            ${renderQrSvg(business.qrPayload, { sizeMm: is58mm ? 18 : 22 })}
+            <div class="qr-caption">Scan to view receipt</div>
+          </div>
+        ` : ''}
       </div>
     </div>
   </div>
