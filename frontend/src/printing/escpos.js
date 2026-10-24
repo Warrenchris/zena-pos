@@ -1,4 +1,5 @@
 import { toPrinterText } from './text';
+import { buildRasterBytes } from './raster';
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -68,6 +69,22 @@ export class EscPosBuilder {
   }
 
   /** Pulse cash-drawer pin 2 (ESC p 0 25 250). */
+  /** Alignment: 'left', 'center', or 'right' (ESC a n). */
+  align(mode = 'left') {
+    const val = mode === 'center' ? 1 : (mode === 'right' ? 2 : 0);
+    return this.raw(ESC, 0x61, val);
+  }
+
+  /** Emits a monochrome 1-bit bitmap image using ESC/POS GS v 0 raster commands. */
+  raster(bitmap, options) {
+    if (!bitmap) return this;
+    const rasterBytes = buildRasterBytes(bitmap, options);
+    if (rasterBytes && rasterBytes.length > 0) {
+      this.bytes.push(...rasterBytes);
+    }
+    return this;
+  }
+
   openDrawer() {
     return this.raw(ESC, 0x70, 0x00, 0x19, 0xfa);
   }

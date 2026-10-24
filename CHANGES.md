@@ -362,3 +362,86 @@
 - **Backend Concurrency & Live DB Tests**:
   - Command: `npx jest tests/invoiceSequence.concurrency.test.js tests/receiptNumberValidation.db.test.js`
   - Results: **2 / 2 test suites passed, 2 / 2 tests passed**.
+
+---
+
+## Phase 5: Public Receipt QR Code & ESC/POS Raster Rendering
+
+### 1. Decisions & Design Constraints
+- **Public Receipt URL**: QR code encodes `{PUBLIC_APP_URL}/r/{token}`. It is **NOT** a fiscal / KRA / eTIMS code and is never labelled as such (captioned strictly as "Scan to view receipt").
+- **Client-Side Generation**: The token is generated on the client at sale time using `crypto.getRandomValues(new Uint8Array(16))` converted to 22-character base64url. This guarantees offline receipts can be printed immediately with a QR code that becomes valid as soon as the sale synchronizes.
+- **SHA-256 Token Storage**: The backend never stores the raw token; only its SHA-256 hash is persisted in `receiptTokenHash CHAR(64) NULL, UNIQUE`. On token hash collisions, the server responds with 409 `RECEIPT_TOKEN_ALREADY_EXISTS` (handled by bumping and regenerating on client).
+- **Public Endpoint Security & Zero PII**: `GET /api/public/receipts/:token` is unauthenticated and rate-limited to 30 req/min/IP. The response payload matches `ReceiptData` structure while strictly excluding customer details, phone numbers, emails, cashier names, internal database IDs, and `receiptTokenHash`. Response headers enforce `Cache-Control: no-store` and `X-Robots-Tag: noindex`.
+- **Environment Configuration**: When `PUBLIC_APP_URL` is unset or empty, `qrEnabled` has no effect and the Settings UI surfaces an explanatory warning.
+- **Credit Notes**: Credit notes do not encode a QR code in this phase.
+- **ESC/POS Graphics & Banding**: Thermal receipt printers receive raster graphics via `GS v 0` 1-bit monochrome bitmap slices with a maximum band height of 128 rows to protect printer buffer memory. Dithering supports Floyd-Steinberg error diffusion and threshold mode.
+
+---
+
+### 2. Backend Implementation (Committed: `9dbf3c7`)
+- **Database Migration & Models**:
+  - `backend/migrations/20261025000000-add-receipt-token-hash-to-sales.js`: Added `receiptTokenHash CHAR(64) NULL` with unique constraint `sales_receipt_token_hash_unique`.
+  - `backend/src/models/Sale.js`: Added `receiptTokenHash` attribute with unique index.
+  - `backend/src/models/SystemSettings.js`: Updated model attributes for `branch`, `tagline`, `showPoweredBy`, and `qrEnabled`.
+- **Sensitive Field Redaction**:
+  - `backend/src/middleware/requestLogger.js`: Added `'receiptToken'` to `SENSITIVE_FIELDS` to ensure raw tokens are never written to server logs.
+- **Sale Creation (`POST /api/sales`)**:
+  - Validates `receiptToken` format (strictly 22 characters `[A-Za-z0-9_-]`).
+  - Hashes token using SHA-256 and persists `receiptTokenHash`.
+  - Handles duplicate idempotency and token collisions (`RECEIPT_TOKEN_ALREADY_EXISTS`).
+- **Public Receipt Controller & Routes**:
+  - `backend/src/controllers/publicReceiptController.js`: Implemented `getPublicReceipt` returning minimal receipt payload for valid tokens, 404 for unknown/malformed tokens, with security headers.
+  - `backend/src/routes/publicRoutes.js`: Exposed `GET /api/public/receipts/:token` with Redis-backed distributed rate limiter (30 req/min/IP).
+  - `backend/src/app.js`: Mounted public routes at `/api/public`.
+- **Backend Tests**:
+  - `backend/tests/publicReceipt.unit.test.js`: 11 / 11 tests passed (token format validation, controller response headers, minimal payload, strict PII exclusion, collision and idempotency logic).
+  - `backend/tests/publicReceipt.db.test.js`: 4 / 4 tests passed against live MySQL and Redis (valid token retrieval, 404 for invalid/malformed token, unique DB constraint rejection on token collision, 30 req/min rate limit).
+
+---
+
+### 3. Frontend Implementation
+- **Dependencies Installed**:
+  - Pinned `qrcode@1.5.4` (pure JS QR matrix generator).
+  - Installed `jsqr@1.4.0` in `devDependencies` for automated round-trip matrix and SVG decoding tests.
+- **Receipt Token Utility**:
+  - `frontend/src/utils/receiptToken.js`: Implemented `generateReceiptToken()` (16 bytes random values, 22-char base64url) and `isValidReceiptToken(token)`.
+- **Checkout & Cashier Dashboard Wiring**:
+  - `frontend/src/pages/CashierDashboard.jsx`: Generates `receiptToken` at checkout start and includes it in `saleData`, offline queue records, and retries.
+  - `frontend/src/printing/printStoredSale.js`: Carries `receiptToken` on reprint payloads.
+- **Receipt Data Model & Resolution**:
+  - `frontend/src/printing/receiptModel.js`: Added `meta.receiptToken`. If `qrEnabled` and `publicAppUrl` are present, resolves `business.qrPayload = `${publicAppUrl}/r/${receiptToken}`` (omitted for credit notes).
+- **Pure SVG & Matrix QR Generator**:
+  - `frontend/src/printing/qr.js`:
+    - `computeQrMatrix`: Generates module grid with Error Correction Level 'M' and standard 4-module quiet zone.
+    - `renderQrSvg`: Builds inline SVG using `<path>` rectangles with `shape-rendering="crispEdges"` and zero external URL/font dependencies.
+    - `getQrBitmap`: Generates scaled monochrome 1-bit matrix for thermal raster printing.
+- **HTML Receipt Renderer**:
+  - `frontend/src/printing/htmlReceipt.js`: Rendered inline SVG QR (`~22mm` for 80mm rolls, `~18mm` for 58mm rolls) alongside caption "Scan to view receipt" in the bottom-right footer section.
+  - Rendered `DUPLICATE COPY` as a styled badge.
+- **Public Receipt Web View**:
+  - `frontend/src/pages/PublicReceiptView.jsx`: Responsive view component for customer-facing receipt rendering via isolated iframe with print functionality.
+  - `frontend/src/router.config.jsx`: Registered public route `/r/:token`.
+- **ESC/POS Raster & Native Bitmap Printing**:
+  - `frontend/src/printing/raster.js`: Implemented `buildRasterBytes(bitmap, { maxBandRows = 128 })` encoding 1-bit monochrome bitmaps to `GS v 0` packets with 8-dot byte packing (MSB leftmost) and max 128-row banding.
+  - `frontend/src/printing/escpos.js`: Added `align(mode)` and `raster(bitmap, options)` builder methods.
+  - `frontend/src/printing/logoBitmap.js`: Grayscale conversion, Floyd-Steinberg error diffusion dithering, threshold mode, aspect-ratio scaling (max 288x120 for 80mm, 192x120 for 58mm), transparency blending on white, and in-memory bitmap cache.
+  - `frontend/src/printing/profile.js`: Added `qrMode` (`'raster'` default | `'native'`) and `qrAlign` (`'right'` default | `'center'` | `'left'`) to profiles.
+  - `frontend/src/printing/renderers.js`: Updated `renderEscPos` to emit optional header logo raster, text layout lines, and footer QR code (raster or native `GS ( k` Model 2).
+  - `frontend/src/components/printing/PrinterSettingsPanel.jsx`: Added UI controls for `qrMode` and `qrAlign`.
+  - `frontend/src/printing/adapters/browserPrintAdapter.js`: Added `waitForImagesToSettle(doc, timeoutMs)` ensuring all images load or error before executing `window.print()`.
+
+---
+
+### 4. Verification Results
+- **Frontend Printing Test Suite**:
+  - Command: `npm run test:printing`
+  - Results: **25 / 25 test suites passed, 220 / 220 tests passed**.
+  - New test suites:
+    - `frontend/src/printing/__tests__/qr.test.js`: Verified matrix calculation, SVG output, zero external URLs, and verified round-trip decoding via `jsQR` on both 80mm and 58mm dimensions.
+    - `frontend/src/printing/__tests__/raster.test.js`: Verified `GS v 0` command formatting, byte width alignment, 8-dot byte packing (MSB leftmost), and multi-band chunking for bitmaps > 128 rows.
+    - `frontend/src/printing/__tests__/logoBitmap.test.js`: Verified Floyd-Steinberg error diffusion, thresholding, transparent pixel blending, in-memory caching, and error fallback.
+    - `frontend/src/printing/__tests__/collisionRetryReceipt.test.js`: Verified that online sales hitting 409 duplicate receipt numbers print with the retried, incremented receipt number.
+    - `frontend/src/printing/__tests__/htmlReceipt.test.js`: Verified inline SVG QR presence/absence, styled duplicate badge, and row counts.
+- **Backend Tests**:
+  - `backend/tests/publicReceipt.unit.test.js`: **11 / 11 tests passed**.
+  - `backend/tests/publicReceipt.db.test.js`: **4 / 4 tests passed** (live DB & Redis).

@@ -79,7 +79,7 @@ const DEFAULT_FOOTER = 'Thank you for your business!';
  * @param {boolean} [options.isDuplicate=false]
  * @returns {ReceiptData}
  */
-export function buildReceipt(completedSale, { business = {}, receiptSettings = {}, now = new Date(), isDuplicate = false } = {}) {
+export function buildReceipt(completedSale, { business = {}, receiptSettings = {}, now = new Date(), isDuplicate = false, publicAppUrl } = {}) {
   const {
     serverData,
     items = [],
@@ -153,6 +153,18 @@ export function buildReceipt(completedSale, { business = {}, receiptSettings = {
     ? Boolean(business.showPoweredBy)
     : (receiptSettings?.showPoweredBy !== false);
 
+  const resolvedPublicAppUrl = publicAppUrl ||
+    receiptSettings?.publicAppUrl ||
+    business?.publicAppUrl ||
+    (typeof process !== 'undefined' && process.env?.VITE_PUBLIC_APP_URL ? process.env.VITE_PUBLIC_APP_URL : '') ||
+    (typeof window !== 'undefined' && window.__PUBLIC_APP_URL__ ? window.__PUBLIC_APP_URL__ : '') ||
+    '';
+
+  const receiptToken = completedSale?.receiptToken ||
+    serverData?.receiptToken ||
+    completedSale?.meta?.receiptToken ||
+    null;
+
   const qrEnabled = business?.qrEnabled !== undefined
     ? Boolean(business.qrEnabled)
     : Boolean(receiptSettings?.qrEnabled);
@@ -170,10 +182,14 @@ export function buildReceipt(completedSale, { business = {}, receiptSettings = {
       tagline: business?.tagline || receiptSettings?.tagline || '',
       showPoweredBy,
       qrEnabled,
-      qrPayload: null,
+      qrPayload: (qrEnabled && (typeof resolvedPublicAppUrl === 'string' ? resolvedPublicAppUrl.trim().replace(/\/+$/, '') : '') && receiptToken)
+        ? (resolvedPublicAppUrl.trim().replace(/\/+$/, '') + '/r/' + receiptToken)
+        : null,
     },
     meta: {
       receiptNumber,
+      receiptToken,
+
       invoiceNumber,
       pendingSync,
       cashierName,

@@ -426,4 +426,65 @@ describe('htmlReceipt - renderReceiptHtml', () => {
       expect(html).toContain('system-ui');
     });
   });
+
+  describe('Public Receipt QR Code (Phase 5)', () => {
+    it('renders inline SVG QR code and caption when qrEnabled is true and qrPayload is present', () => {
+      const receipt = buildReceipt({
+        ...fullSaleData,
+        receiptToken: 'aB3_dE9-gH1_jK2-mN3_pQ',
+      }, {
+        business: { ...fullBusiness, qrEnabled: true },
+        publicAppUrl: 'https://pos.zana.test',
+      });
+
+      const html = renderReceiptHtml(receipt, { widthMm: 80, formatMoney });
+
+      expect(html).toContain('class="qr-wrap"');
+      expect(html).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
+      expect(html).toContain('shape-rendering="crispEdges"');
+      expect(html).toContain('width="22mm"');
+      expect(html).toContain('Scan to view receipt');
+    });
+
+    it('renders 18mm SVG QR code on 58mm paper', () => {
+      const receipt = buildReceipt({
+        ...fullSaleData,
+        receiptToken: 'aB3_dE9-gH1_jK2-mN3_pQ',
+      }, {
+        business: { ...fullBusiness, qrEnabled: true },
+        publicAppUrl: 'https://pos.zana.test',
+      });
+
+      const html = renderReceiptHtml(receipt, { widthMm: 58, formatMoney });
+
+      expect(html).toContain('width="18mm"');
+      expect(html).toContain('Scan to view receipt');
+    });
+
+    it('renders no QR code when qrEnabled is false', () => {
+      const receipt = buildReceipt({
+        ...fullSaleData,
+        receiptToken: 'aB3_dE9-gH1_jK2-mN3_pQ',
+      }, {
+        business: { ...fullBusiness, qrEnabled: false },
+        publicAppUrl: 'https://pos.zana.test',
+      });
+
+      const html = renderReceiptHtml(receipt, { widthMm: 80, formatMoney });
+
+      expect(html).not.toContain('class="qr-wrap"');
+      expect(html).not.toContain('Scan to view receipt');
+    });
+
+    it('renders no QR code when qrPayload is null (e.g. credit note or missing token)', () => {
+      const receipt = buildReceipt(fullSaleData, {
+        business: { ...fullBusiness, qrEnabled: true },
+      });
+
+      const html = renderReceiptHtml(receipt, { widthMm: 80, formatMoney });
+
+      expect(html).not.toContain('class="qr-wrap"');
+      expect(html).not.toContain('Scan to view receipt');
+    });
+  });
 });

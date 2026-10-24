@@ -18,6 +18,7 @@ const sampleSaleData = {
   id: 1042,
   receiptNumber: 'R-D4E1-000042',
   invoiceNumber: 'INV-2026-0042',
+  receiptToken: 'aB3_dE9-gH1_jK2-mN3_pQ',
   createdAt: '2026-10-24T14:30:00.000Z',
   cashierName: 'Jane Mwangi',
   customer: { name: 'Peter Karanja' },
@@ -47,6 +48,8 @@ const businessData = {
   kraPin: 'P051234567X',
   tagline: 'Better Products · Brighter Together',
   showPoweredBy: true,
+  qrEnabled: true,
+  publicAppUrl: 'https://app.zana.pos',
 };
 
 const receiptSettings = {
@@ -56,6 +59,8 @@ const receiptSettings = {
   showPoweredBy: true,
   showLogo: true,
   logoUrl: null,
+  qrEnabled: true,
+  publicAppUrl: 'https://app.zana.pos',
 };
 
 const receipt = buildReceipt(sampleSaleData, {

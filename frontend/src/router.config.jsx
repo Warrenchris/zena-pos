@@ -58,6 +58,7 @@ const Customers = safeLazy(() => import('./pages/Customers'));
 const Employees = safeLazy(() => import('./pages/Employees'));
 const CompanySettings = safeLazy(() => import('./pages/CompanySettings'));
 const MySales = safeLazy(() => import('./pages/MySales'));
+const PublicReceiptView = safeLazy(() => import('./pages/PublicReceiptView'));
 const TestDatePicker = safeLazy(() => import('./pages/TestDatePicker'));
 const PlaceholderPage = safeLazy(() => import('./components/PlaceholderPage'));
 const AiServices = safeLazy(() => import('./pages/AiServices'));
@@ -120,6 +121,10 @@ export const routes = [
       {
         index: true,
         element: <HomeRoute />
+      },
+      {
+        path: 'r/:token',
+        element: <PublicReceiptView />
       },
       {
         path: 'login',

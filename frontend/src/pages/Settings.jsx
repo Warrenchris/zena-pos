@@ -19,6 +19,7 @@ import {
 import { validateSettings } from '../utils/validation';
 import { settingsAPI, authAPI, shopAPI } from '../services/api';
 import useErrorHandler from '../hooks/useErrorHandler';
+import { PUBLIC_APP_URL } from '../config/config';
 import {
   CogIcon,
   CurrencyDollarIcon,
@@ -589,7 +590,32 @@ const Settings = () => {
         </label>
       </div>
 
-{/* Enable Receipt QR Code toggle hidden until Phase 5 */}
+      {/* Enable Receipt QR Code toggle */}
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
+        <div className="pr-4">
+          <h4 className="text-small font-semibold text-text-primary">
+            Show QR code linking to an online copy of the receipt
+          </h4>
+          <p className="text-caption text-text-muted mt-0.5">
+            The link shows items and totals but no customer details; anyone with the link can view it.
+          </p>
+          {!PUBLIC_APP_URL && (
+            <p className="text-caption text-amber-600 dark:text-amber-400 mt-1 font-medium">
+              Disabled: PUBLIC_APP_URL is not configured for this installation.
+            </p>
+          )}
+        </div>
+        <label className={`relative inline-flex items-center ${!PUBLIC_APP_URL ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+          <input
+            type="checkbox"
+            checked={Boolean(formData.qrEnabled) && Boolean(PUBLIC_APP_URL)}
+            disabled={!PUBLIC_APP_URL}
+            onChange={(e) => handleInputChange('qrEnabled', e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+        </label>
+      </div>
 
       <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
         <div>

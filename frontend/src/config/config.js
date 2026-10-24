@@ -5,6 +5,10 @@ const viteApi = (typeof import.meta !== 'undefined' && import.meta.env && import
 const nodeApi = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL) ? process.env.REACT_APP_API_URL : null;
 export const API_URL = viteApi || nodeApi || 'http://localhost:3001';
 
+const vitePublicAppUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_PUBLIC_APP_URL) ? import.meta.env.VITE_PUBLIC_APP_URL : null;
+const nodePublicAppUrl = (typeof process !== 'undefined' && process.env && process.env.VITE_PUBLIC_APP_URL) ? process.env.VITE_PUBLIC_APP_URL : null;
+export const PUBLIC_APP_URL = vitePublicAppUrl || nodePublicAppUrl || '';
+
 // Other global configuration
 export const APP_NAME = 'Zana POS';
 export const DEFAULT_LANGUAGE = 'en';
