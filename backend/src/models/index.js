@@ -40,6 +40,8 @@ const StockTransfer = require('./StockTransfer');
 const BillingNotificationLog = require('./BillingNotificationLog');
 const RefundIdempotency = require('./RefundIdempotency');
 const InvoiceSequence = require('./InvoiceSequence');
+const CreditNoteSequence = require('./CreditNoteSequence');
+const CreditNote = require('./CreditNote');
 const { DataTypes } = require('sequelize');
 const Brand = require('./brand')(sequelize, DataTypes);
 const Unit = require('./unit')(sequelize, DataTypes);
@@ -55,6 +57,18 @@ if (typeof Unit.associate === 'function') {
 // Define model associations
 InvoiceSequence.belongsTo(Shop, { foreignKey: 'shopId' });
 Shop.hasMany(InvoiceSequence, { foreignKey: 'shopId' });
+
+// CreditNoteSequence associations
+CreditNoteSequence.belongsTo(Shop, { foreignKey: 'shopId' });
+Shop.hasMany(CreditNoteSequence, { foreignKey: 'shopId' });
+
+// CreditNote associations
+CreditNote.belongsTo(Shop, { foreignKey: 'shopId' });
+Shop.hasMany(CreditNote, { foreignKey: 'shopId' });
+CreditNote.belongsTo(Sale, { foreignKey: 'saleId' });
+Sale.hasMany(CreditNote, { foreignKey: 'saleId' });
+CreditNote.hasMany(SaleRefund, { foreignKey: 'creditNoteId', as: 'refunds' });
+SaleRefund.belongsTo(CreditNote, { foreignKey: 'creditNoteId', as: 'creditNote' });
 
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
 Category.hasMany(Product, { foreignKey: 'categoryId' });
@@ -285,6 +299,8 @@ module.exports = {
   SaleRefund,
   RefundIdempotency,
   InvoiceSequence,
+  CreditNoteSequence,
+  CreditNote,
   HeldCart,
   SalePayment,
   Coupon,

@@ -12,6 +12,8 @@ const Employee = require('../models/Employee');
 const UuidHelper = require('../utils/uuidHelper');
 const User = require('../models/User');
 const SaleRefund = require('../models/SaleRefund');
+const CreditNote = require('../models/CreditNote');
+const { generateNextCreditNoteNumber } = require('../utils/creditNoteSequence');
 const SalePayment = require('../models/SalePayment');
 const SystemSettings = require('../models/SystemSettings');
 const Inventory = require('../models/Inventory');
@@ -2179,6 +2181,8 @@ exports.processRefund = async (req, res) => {
         }
       }
 
+      const creditNoteNumber = await generateNextCreditNoteNumber({ shopId, transaction: t });
+
       const createdRefunds = [];
 
       for (const item of itemsWithNetPrice) {
@@ -2211,6 +2215,7 @@ exports.processRefund = async (req, res) => {
           status: 'processed',
           shopId,
           refundedAt: new Date(),
+          creditNoteNumber,
           metadata: {
             disposition,
             isWriteOff: disposition === 'damaged_writeoff',
@@ -2379,7 +2384,37 @@ exports.processRefund = async (req, res) => {
         details: `Processed ${allFullyRefunded ? 'full' : 'partial'} refund for sale ${sale.invoiceNumber} (Total: ${totalRefundAmount} KSh)`
       }, t);
 
+      let creditNoteRecord = null;
+      if (CreditNote) {
+        creditNoteRecord = await CreditNote.create({
+          creditNoteNumber,
+          shopId,
+          saleId: parseInt(saleId, 10),
+          totalRefundAmount,
+          totalTaxRefunded: totalRefundTax,
+          refundMethod,
+          reason: itemsWithNetPrice[0]?.reasonNotes || itemsWithNetPrice[0]?.reason || 'Customer Return',
+          processedBy,
+          refundedBy,
+          status: 'processed',
+          issuedAt: new Date(),
+          metadata: {
+            itemsCount: itemsWithNetPrice.length,
+            ...(cleanIdempotencyKey ? { idempotencyKey: cleanIdempotencyKey } : {})
+          }
+        }, { transaction: t });
+
+        if (creditNoteRecord && createdRefunds.length > 0) {
+          for (const rf of createdRefunds) {
+            rf.creditNoteId = creditNoteRecord.id;
+            await rf.save({ transaction: t });
+          }
+        }
+      }
+
       const responsePayload = {
+        creditNoteNumber,
+        creditNoteId: creditNoteRecord?.id || null,
         refunds: createdRefunds,
         saleStatus,
         totalRefundAmount,
@@ -2655,6 +2690,7 @@ exports.getAllReturns = async (req, res) => {
 exports.getCreditNote = async (req, res) => {
   const { saleId } = req.params;
   const shopId = req.shopId || req.user.shopId;
+  const { creditNoteNumber } = req.query;
 
   try {
     const sale = await Sale.findOne({
@@ -2669,8 +2705,13 @@ exports.getCreditNote = async (req, res) => {
       return res.status(404).json({ error: 'Sale not found' });
     }
 
+    const refundWhere = { saleId, shopId, status: 'processed' };
+    if (creditNoteNumber) {
+      refundWhere.creditNoteNumber = creditNoteNumber;
+    }
+
     const refunds = await SaleRefund.findAll({
-      where: { saleId, shopId, status: 'processed' },
+      where: refundWhere,
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'barcode'] }
       ],
@@ -2681,20 +2722,25 @@ exports.getCreditNote = async (req, res) => {
       return res.status(404).json({ error: 'No processed refunds found for this sale' });
     }
 
+    const activeCreditNoteNumber = refunds[0]?.creditNoteNumber || `CN-${sale.invoiceNumber || sale.id}`;
+    const activeRefunds = refunds[0]?.creditNoteNumber
+      ? refunds.filter(r => r.creditNoteNumber === refunds[0].creditNoteNumber)
+      : refunds;
+
     const settings = await SystemSettings.findOne({ where: { shopId } });
-    const totalRefundedAmount = refunds.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+    const totalRefundedAmount = activeRefunds.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
 
     const creditNote = {
-      creditNoteNumber: `CN-${sale.invoiceNumber || sale.id}`,
+      creditNoteNumber: activeCreditNoteNumber,
       originalInvoiceNumber: sale.invoiceNumber,
       saleId: sale.id,
-      issuedAt: refunds[0]?.refundedAt || refunds[0]?.createdAt || new Date(),
+      issuedAt: activeRefunds[0]?.refundedAt || activeRefunds[0]?.createdAt || new Date(),
       customer: sale.Customer ? {
         name: sale.Customer.name,
         email: sale.Customer.email,
         phone: sale.Customer.phone
       } : { name: sale.customerName || 'Walk-in Customer' },
-      items: refunds.map(r => ({
+      items: activeRefunds.map(r => ({
         refundId: r.id,
         productId: r.productId,
         productName: r.product?.name || 'Unknown Product',
@@ -2708,8 +2754,8 @@ exports.getCreditNote = async (req, res) => {
         reasonNotes: r.reasonNotes || r.reason || ''
       })),
       totalRefundAmount: parseFloat(totalRefundedAmount.toFixed(2)),
-      totalTaxRefunded: parseFloat(refunds.reduce((sum, r) => sum + parseFloat(r.metadata?.taxAmount || 0), 0).toFixed(2)),
-      paymentMethod: refunds[0]?.refundMethod || sale.paymentMethod,
+      totalTaxRefunded: parseFloat(activeRefunds.reduce((sum, r) => sum + parseFloat(r.metadata?.taxAmount || 0), 0).toFixed(2)),
+      paymentMethod: activeRefunds[0]?.refundMethod || sale.paymentMethod,
       shop: {
         systemName: settings?.systemName || 'Zana POS',
         contactEmail: settings?.contactEmail,
