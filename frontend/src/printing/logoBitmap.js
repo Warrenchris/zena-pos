@@ -97,9 +97,21 @@ export async function getLogoBitmap(logoUrl, {
   try {
     const img = await new Promise((resolve, reject) => {
       const image = new Image();
+      const timer = setTimeout(() => {
+        image.onload = null;
+        image.onerror = null;
+        reject(new Error('Image load timed out'));
+      }, 500);
+
       image.crossOrigin = 'Anonymous';
-      image.onload = () => resolve(image);
-      image.onerror = (e) => reject(new Error('Failed to load logo image'));
+      image.onload = () => {
+        clearTimeout(timer);
+        resolve(image);
+      };
+      image.onerror = (e) => {
+        clearTimeout(timer);
+        reject(new Error('Failed to load logo image'));
+      };
       image.src = logoUrl;
     });
 
