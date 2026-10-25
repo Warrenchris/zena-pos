@@ -1168,6 +1168,25 @@ const Settings = () => {
         </label>
       </div>
 
+
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
+        <div>
+          <h4 className="text-small font-semibold text-text-primary">Auto-Print Receipt</h4>
+          <p className="text-caption text-text-muted mt-0.5">
+            Automatically trigger printing immediately upon completing a sale
+          </p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={Boolean(formData.autoPrintReceipt)}
+            onChange={(e) => handleInputChange('autoPrintReceipt', e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+        </label>
+      </div>
+
       <PrinterSettingsPanel />
     </div>
   );
