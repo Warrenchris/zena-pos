@@ -336,7 +336,7 @@ class EnhancedSaleService {
         receiptTokenHash,
         cashierName: cashierNameSnapshot,
         taxAmount: body.taxAmount !== undefined && body.taxAmount !== null ? parseFloat(body.taxAmount) : (parseFloat(tax || 0) || null),
-        taxRate: body.taxRate !== undefined && body.taxRate !== null ? parseFloat(body.taxRate) : null,
+        taxRate: body.taxRate !== undefined && body.taxRate !== null ? parseFloat(body.taxRate) : 0.00,
         taxInclusive: body.taxInclusive !== undefined && body.taxInclusive !== null ? Boolean(body.taxInclusive) : null,
         changeAmount: body.changeAmount !== undefined && body.changeAmount !== null ? parseFloat(body.changeAmount) : (sumPayments > serverTotal ? sumPayments - serverTotal : 0),
         invoiceNumber,
