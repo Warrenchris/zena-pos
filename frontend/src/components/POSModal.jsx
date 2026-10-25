@@ -8,6 +8,9 @@ import Input from './ui/Input';
 import Badge from './ui/Badge';
 import useCurrency from '../hooks/useCurrency';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
+import { prepareSalePayload } from '../sales/prepareSalePayload';
+import { printStoredSale, buildReceiptSettings } from '../printing';
+import { CheckIcon, PrinterIcon } from '@heroicons/react/24/outline';
 
 export default function POSModal({ products = [], customers = [], onClose }) {
   const navigate = useNavigate();
@@ -24,6 +27,9 @@ export default function POSModal({ products = [], customers = [], onClose }) {
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponError, setCouponError] = useState('');
   const [validatingCoupon, setValidatingCoupon] = useState(false);
+  const [completedSale, setCompletedSale] = useState(null);
+  const [printing, setPrinting] = useState(false);
+  const authUser = useSelector((state) => state.auth?.user);
 
   const addToCart = (product) => {
     const existingItem = cart.find(item => item.productId === product.id);
@@ -156,25 +162,95 @@ export default function POSModal({ products = [], customers = [], onClose }) {
     return Math.round((getDiscountedSubtotal() + getTax() + Number.EPSILON) * 100) / 100;
   };
 
+  const handlePrintReceipt = async (saleToPrint) => {
+    try {
+      setPrinting(true);
+      await printStoredSale(saleToPrint, {
+        business: {
+          name: settings.systemName || settings.businessName || 'Zana POS',
+          branch: settings.branch,
+          address: settings.address,
+          phone: settings.contactPhone || settings.phone,
+          kraPin: settings.kraPin,
+          tagline: settings.tagline,
+          logoUrl: settings.businessLogo
+        },
+        receiptSettings: buildReceiptSettings(settings)
+      });
+    } catch (err) {
+      console.error('Failed to print receipt:', err);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
 
     setLoading(true);
     try {
-      const saleData = {
-        items: cart,
-        customerId: selectedCustomer || null,
+      const selectedCustomerObj = customers.find(c => c.id === selectedCustomer);
+      const customer = selectedCustomerObj ? {
+        name: selectedCustomerObj.name,
+        phone: selectedCustomerObj.phone,
+        email: selectedCustomerObj.email,
+        location: selectedCustomerObj.location
+      } : { name: WALK_IN_CUSTOMER_NAME };
+
+      const total = getTotal();
+      const subtotal = getSubtotal();
+      const taxAmount = getTax();
+
+      const { salePayload, meta } = await prepareSalePayload({
+        items: cart.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.unitPrice,
+          name: item.name
+        })),
+        total,
+        subtotal,
         paymentMethod,
+        paymentAmount: total,
+        customer,
+        customerId: selectedCustomer || null,
         discount: couponDiscount,
         couponCode: appliedCoupon?.code || null,
-        tax: getTax(),
-        total: getTotal(),
-        notes: appliedCoupon ? `Applied Coupon: ${appliedCoupon.code}` : ''
+        notes: appliedCoupon ? `Applied Coupon: ${appliedCoupon.code}` : '',
+        taxAmount,
+        user: authUser,
+        shopSettings: settings
+      });
+
+      const response = await dispatch(createSale(salePayload)).unwrap();
+      const fullCompletedSale = {
+        ...(response || {}),
+        receiptNumber: meta.receiptNumber,
+        receiptToken: meta.receiptToken,
+        cashierName: meta.cashierName,
+        taxAmount: meta.taxAmount,
+        taxRate: meta.taxRate,
+        taxInclusive: meta.taxInclusive,
+        changeAmount: meta.changeAmount,
+        items: cart.map(item => ({
+          productId: item.productId,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.unitPrice,
+          unitPrice: item.unitPrice,
+          total: item.subtotal
+        })),
+        customer,
+        total,
+        paymentMethod
       };
 
-      await dispatch(createSale(saleData));
       setCart([]);
-      onClose();
+      setCompletedSale(fullCompletedSale);
+
+      if (settings?.autoPrintReceipt) {
+        handlePrintReceipt(fullCompletedSale);
+      }
     } catch (error) {
       console.error('Error creating sale:', error);
     } finally {
@@ -447,6 +523,43 @@ export default function POSModal({ products = [], customers = [], onClose }) {
             </Button>
           </div>
         </div>
+        {/* Completed Sale & Receipt Print Overlay */}
+        {completedSale && (
+          <div className="absolute inset-0 z-50 bg-surface/95 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+            <div className="w-16 h-16 rounded-full bg-success/10 text-success flex items-center justify-center mb-4">
+              <CheckIcon className="w-8 h-8" />
+            </div>
+            <h3 className="text-h2 font-bold text-text-primary mb-1">Sale Completed!</h3>
+            <p className="text-small text-text-secondary mb-2">
+              Receipt No: <span className="font-mono font-bold text-text-primary">{completedSale.receiptNumber}</span>
+              {completedSale.invoiceNumber && (
+                <> · Invoice: <span className="font-mono font-bold text-text-primary">#{completedSale.invoiceNumber}</span></>
+              )}
+            </p>
+            <p className="text-caption text-text-muted mb-6">
+              Total: <span className="font-semibold text-text-primary">{format(completedSale.total)}</span> ({completedSale.paymentMethod?.toUpperCase()})
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="primary"
+                onClick={() => handlePrintReceipt(completedSale)}
+                loading={printing}
+              >
+                <PrinterIcon className="w-4 h-4 mr-2" />
+                Print Receipt
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCompletedSale(null);
+                  onClose();
+                }}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

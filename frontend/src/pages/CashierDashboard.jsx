@@ -49,6 +49,7 @@ import { isProductNotFoundError, mapCartItemToSalePayload, normalizeCartItem } f
 import MetricCard from '../components/pos/MetricCard';
 import { usePersistedCart } from '../hooks/usePersistedCart';
 import { getNextReceiptNumber, bumpAndGetNextReceiptNumber } from '../offline/offlineNumbering';
+import { prepareSalePayload } from '../sales/prepareSalePayload';
 import { generateReceiptToken } from '../utils/receiptToken';
 import { calculateChange, roundToTwoDecimals, isCashPaymentValid } from '../utils/changeCalculation';
 import { usePendingSales } from '../hooks/usePendingSales';
@@ -1051,26 +1052,6 @@ export default function CashierDashboard() {
     setProcessingPayment(true);
     setPaymentError(null);
 
-    const idempotencyKey = currentSale.idempotencyKey || generateUUID();
-    if (!currentSale.idempotencyKey) {
-      currentSale.idempotencyKey = idempotencyKey;
-    }
-
-    const receiptNumber = currentSale.receiptNumber || (await getNextReceiptNumber({ onFallback: (msg) => showToast(msg, 'warning') }));
-    const receiptToken = currentSale.receiptToken || generateReceiptToken();
-    if (!currentSale.receiptToken) {
-      currentSale.receiptToken = receiptToken;
-    }
-    const cashierName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || user?.username || user?.email || 'Cashier';
-    const changeAmount = calculateChange(currentSale.paymentAmount, currentSale.total);
-
-    const taxRate = typeof shopSettings?.taxRate === 'number' ? shopSettings.taxRate : parseFloat(shopSettings?.taxRate || 0);
-    const taxInclusive = Boolean(shopSettings?.taxInclusive);
-    const computedTax = taxInclusive
-      ? (currentSale.total * (taxRate / (100 + taxRate)))
-      : (currentSale.total * (taxRate / 100));
-    const taxAmount = roundToTwoDecimals(computedTax);
-
     // A single manager credential authorizes every discount in this sale
     const approvalSource = (cartManualDiscount && cartManualDiscount.managerApprovalId)
       ? cartManualDiscount
@@ -1078,38 +1059,40 @@ export default function CashierDashboard() {
     const managerApprovalId = approvalSource ? approvalSource.managerApprovalId : null;
     const managerPassword = approvalSource ? approvalSource.managerPassword : null;
 
-    // Prepare sale data with discount metadata, client idempotency key, receiptNumber and snapshots
-    const saleData = {
-      idempotencyKey,
-      receiptNumber,
-      receiptToken,
-      cashierName,
-      taxAmount,
-      tax: taxAmount,
-      taxRate,
-      taxInclusive,
-      changeAmount,
-      change: changeAmount,
+    const { salePayload: saleData, meta } = await prepareSalePayload({
+      items: currentSale.items,
+      total: currentSale.total,
+      paymentMethod: currentSale.paymentMethod,
+      paymentAmount: currentSale.paymentAmount,
+      customer: currentSale.customer,
+      customerId: currentSale.customerId,
+      discount: cartManualDiscount ? cartManualDiscount.discountAmount : (appliedCoupon ? appliedCoupon.discountAmount : 0),
+      discountType: cartManualDiscount ? cartManualDiscount.discountType : (appliedCoupon ? appliedCoupon.discountType : null),
+      discountValue: cartManualDiscount ? cartManualDiscount.discountValue : (appliedCoupon ? appliedCoupon.discountValue : null),
+      discountReason: cartManualDiscount ? cartManualDiscount.discountReason : (appliedCoupon ? `Coupon: ${appliedCoupon.code}` : null),
+      notes: currentSale.notes,
       managerApprovalId,
       managerPassword,
-      items: currentSale.items.map(mapCartItemToSalePayload),
-      totalAmount: currentSale.total,
-      total: currentSale.total,
-      discount: (cartManualDiscount ? cartManualDiscount.discountAmount : (appliedCoupon ? appliedCoupon.discountAmount : 0)),
-      discountType: (cartManualDiscount ? cartManualDiscount.discountType : (appliedCoupon ? appliedCoupon.discountType : null)),
-      discountValue: (cartManualDiscount ? cartManualDiscount.discountValue : (appliedCoupon ? appliedCoupon.discountValue : null)),
-      discountReason: (cartManualDiscount ? cartManualDiscount.discountReason : (appliedCoupon ? `Coupon: ${appliedCoupon.code}` : null)),
-      paymentMethod: currentSale.paymentMethod,
-      paymentAmount: roundToTwoDecimals(currentSale.paymentAmount),
-      customer: {
-        name: currentSale.customer.name,
-        phone: currentSale.customer.phone,
-        email: currentSale.customer.email,
-        location: currentSale.customer.location
-      },
-      customerId: currentSale.customerId || null,
-      notes: currentSale.notes
-    };
+      user,
+      shopSettings,
+      receiptNumber: currentSale.receiptNumber,
+      receiptToken: currentSale.receiptToken,
+      idempotencyKey: currentSale.idempotencyKey,
+      onFallback: (msg) => showToast(msg, 'warning')
+    });
+
+    const receiptNumber = meta.receiptNumber;
+    const receiptToken = meta.receiptToken;
+    const cashierName = meta.cashierName;
+    const idempotencyKey = meta.idempotencyKey;
+    const taxAmount = meta.taxAmount;
+    const taxRate = meta.taxRate;
+    const taxInclusive = meta.taxInclusive;
+    const changeAmount = meta.changeAmount;
+
+    currentSale.receiptNumber = receiptNumber;
+    currentSale.receiptToken = receiptToken;
+    currentSale.idempotencyKey = idempotencyKey;
 
     let finalReceiptNumber = receiptNumber;
     try {
