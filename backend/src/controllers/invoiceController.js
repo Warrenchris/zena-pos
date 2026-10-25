@@ -189,7 +189,10 @@ exports.buildInvoicePdfDoc = (invoice, settings = {}) => {
   doc.moveDown(0.8);
 
   // Document Title & Meta block
-  doc.fontSize(15).font('Helvetica-Bold').fillColor('#0f172a').text('INVOICE', { align: 'left' });
+  const hasVatPin = Boolean(shopKraPin && String(shopKraPin).trim().length > 0);
+  const isVatRegistered = Boolean(settings.vatRegistered === true || settings.vatRegistered === 'true' || settings.vatRegistered === 1);
+  const docTitle = (hasVatPin && isVatRegistered) ? 'TAX INVOICE' : 'INVOICE';
+  doc.fontSize(15).font('Helvetica-Bold').fillColor('#0f172a').text(docTitle, { align: 'left' });
   doc.moveDown(0.4);
 
   const startY = doc.y;
