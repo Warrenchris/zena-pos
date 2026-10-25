@@ -29,6 +29,7 @@ const EMAIL_RECEIPTS_ENABLED = false;
 export default function SaleCompleteModal({ completedSale, onNewSale, onClose }) {
   const { format: formatCurrency } = useCurrency();
   const shop = useSelector((state) => state.shop?.shop);
+  const settings = useSelector((state) => state.settings);
   const receiptSettings = useReceiptSettings();
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
 
@@ -51,6 +52,12 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
 
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
 
+
+  React.useEffect(() => {
+    if (completedSale && settings?.autoPrintReceipt) {
+      handlePrint();
+    }
+  }, [completedSale, settings?.autoPrintReceipt]);
   const handlePrint = async () => {
     const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop, receiptSettings });
     if (!window.showToast) return;

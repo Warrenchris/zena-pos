@@ -63,6 +63,7 @@ const initialState = {
   showPoweredBy: true,
   qrEnabled: false,
   vatRegistered: false,
+  autoPrintReceipt: false,
 
   // Additional Settings
   additionalSettings: {},
@@ -160,6 +161,7 @@ export const SETTINGS_ALLOWED_FIELDS = [
   'showPoweredBy',
   'qrEnabled',
   'vatRegistered',
+  'autoPrintReceipt',
 ];
 
 // Helper to clean settings data before sending to API
