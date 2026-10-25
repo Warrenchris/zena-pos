@@ -4,6 +4,21 @@ import { calculateChange, roundToTwoDecimals } from '../utils/changeCalculation'
 import { mapCartItemToSalePayload } from '../utils/cartItems';
 
 /**
+ * Generate RFC4122 v4 UUID with fallback if crypto.randomUUID is not supported.
+ * @returns {string} UUID string
+ */
+function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+/**
  * Prepares the canonical sale payload for creation and offline queuing across all sale entry points.
  * Ensures receiptNumber, receiptToken, cashierName, tax snapshot, change snapshot, and idempotencyKey
  * are consistently generated and present.
@@ -54,8 +69,8 @@ export async function prepareSalePayload(params = {}) {
     user.email ||
     'Cashier';
 
-  // 4. Idempotency key
-  const idempotencyKey = params.idempotencyKey || `idem-${receiptNumber}`;
+  // 4. Idempotency key (random UUID, never derived from receiptNumber)
+  const idempotencyKey = params.idempotencyKey || generateUUID();
 
   // 5. Tax snapshots
   const shopSettings = params.shopSettings || {};

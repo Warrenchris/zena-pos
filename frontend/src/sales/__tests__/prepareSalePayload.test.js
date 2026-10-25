@@ -49,8 +49,10 @@ describe('prepareSalePayload', () => {
     expect(salePayload.changeAmount).toBe(420);
     expect(salePayload.change).toBe(420);
 
-    // Idempotency key
-    expect(salePayload.idempotencyKey).toBe(`idem-${salePayload.receiptNumber}`);
+    // Idempotency key must be a random UUID, never derived from receiptNumber
+    expect(salePayload.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(meta.idempotencyKey).toBe(salePayload.idempotencyKey);
+    expect(salePayload.idempotencyKey).not.toContain(salePayload.receiptNumber);
 
     // Items mapped
     expect(salePayload.items).toHaveLength(2);
@@ -133,5 +135,40 @@ describe('prepareSalePayload', () => {
     expect(salePayload.idempotencyKey).toBe('custom-idemp-key-12345');
     expect(salePayload.cashierName).toBe('Overridden Cashier');
     expect(salePayload.taxAmount).toBe(16);
+  });
+
+  test('retrying the same sale reuses the exact same idempotencyKey, while new sales get fresh random UUIDs', async () => {
+    // Sale 1
+    const { salePayload: sale1 } = await prepareSalePayload({
+      items: [{ productId: 1, quantity: 1, price: 50 }],
+      total: 50
+    });
+
+    // Sale 2 (new sale)
+    const { salePayload: sale2 } = await prepareSalePayload({
+      items: [{ productId: 2, quantity: 1, price: 75 }],
+      total: 75
+    });
+
+    // Both are valid UUIDs
+    expect(sale1.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(sale2.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+
+    // Each new sale gets a unique idempotency key
+    expect(sale1.idempotencyKey).not.toBe(sale2.idempotencyKey);
+
+    // Retry sale 1 after a 409 collision or offline resend
+    const { salePayload: sale1Retry } = await prepareSalePayload({
+      items: [{ productId: 1, quantity: 1, price: 50 }],
+      total: 50,
+      idempotencyKey: sale1.idempotencyKey,
+      receiptNumber: 'R-BUMP-000002', // bumped receipt number
+      receiptToken: sale1.receiptToken
+    });
+
+    // Retry preserves the exact same idempotencyKey
+    expect(sale1Retry.idempotencyKey).toBe(sale1.idempotencyKey);
+    // But carries the bumped receipt number
+    expect(sale1Retry.receiptNumber).toBe('R-BUMP-000002');
   });
 });
