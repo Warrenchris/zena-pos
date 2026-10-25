@@ -66,13 +66,25 @@ describe('Receipt Number Validation & Collision Logic (Backend Phase 2)', () => 
       const newSale = {
         id: mockSalesStore.size + 1,
         shopId,
-        receiptNumber,
+        receiptNumber: receiptNumber || null,
         idempotencyKey,
         ...payload
       };
       mockSalesStore.set(newSale.id, newSale);
       return { status: 201, sale: newSale, replayed: false };
     };
+
+    test('accepts sales arriving without receiptNumber (legacy client), storing null', async () => {
+      const res = await simulateSaleSubmission({
+        shopId: 1,
+        receiptNumber: null, // omitted by legacy client
+        idempotencyKey: 'legacy-idemp-1',
+        payload: { total: 1200, invoiceNumber: '20261025-0012' }
+      });
+      expect(res.status).toBe(201);
+      expect(res.sale.receiptNumber).toBeNull();
+      expect(res.sale.invoiceNumber).toBe('20261025-0012');
+    });
 
     test('returns existing sale on idempotent replay with matching idempotencyKey', async () => {
       const res1 = await simulateSaleSubmission({

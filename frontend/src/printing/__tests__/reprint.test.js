@@ -158,4 +158,35 @@ describe('Reprint & Duplicate Copy support', () => {
     expect(html).not.toContain('class="qr-wrap"');
     expect(html).not.toContain('Scan to view receipt');
   });
+
+  it('falls back to invoiceNumber when receiptNumber is null (legacy sales)', async () => {
+    let capturedReceipt = null;
+    const mockAdapter = {
+      id: 'mock',
+      isSupported: () => true,
+      print: jest.fn().mockImplementation((job) => {
+        capturedReceipt = job?.receipt || job;
+        return Promise.resolve({ ok: true });
+      }),
+    };
+
+    const legacySale = {
+      id: 77,
+      invoiceNumber: '20261025-0077',
+      receiptNumber: null,
+      createdAt: '2026-10-25T11:00:00Z',
+      items: [{ name: 'Cooking Oil 1L', price: 320, quantity: 1 }],
+      total: 320,
+      paymentMethod: 'cash',
+    };
+
+    await printStoredSale(legacySale, {
+      profile: { connection: 'browser' },
+      adapters: { browser: mockAdapter },
+    });
+
+    expect(capturedReceipt).not.toBeNull();
+    expect(capturedReceipt.meta.receiptNumber).toBe('20261025-0077');
+    expect(capturedReceipt.meta.invoiceNumber).toBe('20261025-0077');
+  });
 });
