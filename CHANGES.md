@@ -514,3 +514,53 @@
 - **Frontend Printing Tests**: `npm run test:printing` → **26 / 26 test suites passed, 229 / 229 tests passed**.
 - **Backend Unit Tests**: `npm run test:unit` → **4 / 4 test suites passed, 24 / 24 tests passed**.
 
+
+---
+
+## Phase 7: Final Hardening & Verification
+
+### 1. Locked Sequential Credit Note Numbers
+- **Files Modified & Created**:
+  - `backend/src/models/CreditNoteSequence.js`: Created model with composite unique index on `(shopId, date)`.
+  - `backend/src/models/CreditNote.js`: Created model with unique index on `(shopId, creditNoteNumber)`.
+  - `backend/src/models/SaleRefund.js`: Added `creditNoteNumber: DataTypes.STRING(32)` and `creditNoteId: DataTypes.INTEGER` with index on `(shopId, creditNoteNumber)`.
+  - `backend/src/models/index.js`: Registered models and established relationships.
+  - `backend/src/utils/creditNoteSequence.js`: Implemented `generateNextCreditNoteNumber({ shopId, transaction, date, models })` with `SELECT ... FOR UPDATE` row locking, generating `CN-YYYYMMDD-NNNN`.
+  - `backend/src/controllers/saleController.js`:
+    - In `processRefund`: atomically allocates sequential credit note number, creates `CreditNote`, links refund rows, and returns `creditNoteNumber`.
+    - In `getCreditNote`: queries credit note number with seamless legacy fallback (`CN-${sale.invoiceNumber || sale.id}`).
+  - `backend/migrations/20261026120000-create-credit-note-sequences-and-credit-notes.js`: Added and executed migration on dev and test databases.
+- **Tests Added**:
+  - `backend/tests/creditNoteSequence.db.test.js`: Verified two partial refunds on one sale receive different sequential numbers; verified 20 parallel transactions are unique and gapless; verified legacy refunds preserve legacy numbers.
+- **Commit**: `b9e9b8b`
+
+### 2. Random UUID Idempotency Key in `prepareSalePayload`
+- **Files Modified**:
+  - `frontend/src/sales/prepareSalePayload.js`: Updated to generate random UUID via `generateUUID()` (with `crypto.randomUUID` and fallback), never derived from `receiptNumber`.
+  - Preserved idempotency key reuse during 409 conflict retries and offline queue sync resends, while new sales always receive a new UUID.
+- **Tests Updated**:
+  - `frontend/src/sales/__tests__/prepareSalePayload.test.js`: Verified UUID format and retry idempotency key reuse vs new sale uniqueness.
+- **Commit**: `cbb210c`
+
+### 3. `autoPrintReceipt` Setting Integration
+- **Files Modified**:
+  - `backend/migrations/20261026130000-add-auto-print-receipt-to-system-settings.js`: Added `autoPrintReceipt BOOLEAN DEFAULT FALSE` column.
+  - `backend/src/models/SystemSettings.js`: Added `autoPrintReceipt` attribute and default value `false`.
+  - `frontend/src/store/slices/settingsSlice.js`: Added `autoPrintReceipt: false` to `initialState` and `SETTINGS_ALLOWED_FIELDS`.
+  - `frontend/src/pages/Settings.jsx`: Added UI toggle for "Auto-Print Receipt" in receipt settings section.
+  - `frontend/src/components/SaleCompleteModal.jsx`: Added auto-print effect when `settings?.autoPrintReceipt` is enabled.
+- **Tests Added**:
+  - `frontend/src/__tests__/sale-complete-print.test.jsx`: Verified auto-print fires on sale complete if enabled, and does not fire when false.
+- **Commit**: `59ae13e`
+
+### 4. Full Frontend Test Suite Baseline Comparison & Resolutions
+- **Baseline Comparison**:
+  - Created isolated git worktree at commit `b870989` (prior to Phase 1).
+  - Baseline result: **54 / 54 test suites passed (395 / 395 tests passed, 0 failures)**.
+  - Current branch result: **70 / 70 test suites passed (520 / 520 tests passed, 0 failures)**.
+- **Test Issues Resolved**:
+  - `frontend/src/setupTests.ts`: Added jsdom `TextEncoder` and `TextDecoder` polyfills from Node's `util` module.
+  - `frontend/src/config/config.js`: Switched `import.meta` evaluation to safe dynamic reader (`readEnv`) matching `api.js` convention to prevent Babel transform parse errors under Jest.
+  - `frontend/src/printing/logoBitmap.js`: Added 500ms timeout rejection on `Image` loading to prevent headless test runners hanging indefinitely.
+  - `frontend/src/__tests__/printer-settings.test.jsx`: Adjusted store name matchers to case-insensitive regex (`/Mama Njeri/i`) matching the uppercase receipt design.
+- **Commit**: `d714dcf`
