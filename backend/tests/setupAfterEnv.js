@@ -54,6 +54,8 @@ const DELETED_EPHEMERAL_MODELS = new Set([
   'SaleRefund',
   'RefundIdempotency',
   'InvoiceSequence',
+  'CreditNoteSequence',
+  'CreditNote',
   'HeldCart',
   'SalePayment',
   'Coupon',

@@ -82,6 +82,14 @@ const SaleRefund = sequelize.define('SaleRefund', {
   refundedAt: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  creditNoteNumber: {
+    type: DataTypes.STRING(32),
+    allowNull: true
+  },
+  creditNoteId: {
+    type: DataTypes.INTEGER,
+    allowNull: true
   }
 }, {
   timestamps: true,
@@ -101,6 +109,10 @@ const SaleRefund = sequelize.define('SaleRefund', {
     {
       name: 'idx_sale_refunds_product_id',
       fields: ['productId']
+    },
+    {
+      name: 'idx_sale_refunds_shop_credit_note_number',
+      fields: ['shopId', 'creditNoteNumber']
     }
   ]
 });
@@ -115,6 +127,12 @@ SaleRefund.associate = (models) => {
     foreignKey: 'productId',
     as: 'product'
   });
+  if (models.CreditNote) {
+    SaleRefund.belongsTo(models.CreditNote, {
+      foreignKey: 'creditNoteId',
+      as: 'creditNote'
+    });
+  }
 };
 
 module.exports = SaleRefund;
