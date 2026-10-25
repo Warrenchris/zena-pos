@@ -178,6 +178,10 @@ const SystemSettings = sequelize.define('SystemSettings', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
+  vatRegistered: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
   printerType: {
     type: DataTypes.ENUM('browser', 'thermal'),
     defaultValue: 'browser'
@@ -337,6 +341,7 @@ SystemSettings.getDefaultSettings = function() {
     tagline: null,
     showPoweredBy: true,
     qrEnabled: false,
+    vatRegistered: false,
     showLogoOnReceipt: true,
     printerType: 'browser',
     printerIP: null,

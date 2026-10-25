@@ -1061,6 +1061,24 @@ const Settings = () => {
         </label>
       </div>
 
+      <div className="flex items-center justify-between p-3.5 rounded-xl border border-border-default bg-surface-2/40">
+        <div>
+          <h4 className="text-small font-semibold text-text-primary">VAT Registered Business</h4>
+          <p className="text-caption text-text-muted mt-0.5">
+            Designates the business as VAT registered with KRA. When enabled and a KRA PIN is configured, customer invoices are issued with the title "TAX INVOICE" instead of "INVOICE".
+          </p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.vatRegistered || false}
+            onChange={(e) => handleInputChange('vatRegistered', e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-surface-3 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-default after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+        </label>
+      </div>
+
       <div>
         <label className="block text-small font-semibold text-text-primary mb-1.5">
           Max Refund Without Manager Approval ({formData.currencySymbol || 'KSh'})

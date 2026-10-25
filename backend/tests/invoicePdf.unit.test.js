@@ -148,4 +148,48 @@ describe('Backend A4 Invoice PDF Generator (Unit Tests)', () => {
     expect(pdfBuffer.length).toBeGreaterThan(100);
     expect(pdfBuffer.slice(0, 5).toString('ascii')).toBe('%PDF-');
   });
+
+  test('renders "TAX INVOICE" only when shop has a VAT PIN AND vatRegistered is true', async () => {
+    const PDFDocument = require('pdfkit');
+    const textSpy = jest.spyOn(PDFDocument.prototype, 'text');
+
+    const taxInvoice = {
+      invoiceNumber: 'INV-TAX-01',
+      total: 1160,
+      shop: { name: 'KRA Store', kraPin: 'P051234567X' },
+      items: [{ name: 'Item A', quantity: 1, price: 1160, total: 1160 }],
+    };
+
+    // 1. Both PIN and vatRegistered = true -> renders "TAX INVOICE"
+    textSpy.mockClear();
+    const docTax = buildInvoicePdfDoc(taxInvoice, { vatRegistered: true });
+    await drainPdfDoc(docTax);
+    const calledTextsTax = textSpy.mock.calls.map((c) => c[0]);
+    expect(calledTextsTax).toContain('TAX INVOICE');
+    expect(calledTextsTax).not.toContain('INVOICE');
+
+    // 2. Has PIN but vatRegistered = false -> renders "INVOICE"
+    textSpy.mockClear();
+    const docRegular1 = buildInvoicePdfDoc(taxInvoice, { vatRegistered: false });
+    await drainPdfDoc(docRegular1);
+    const calledTextsReg1 = textSpy.mock.calls.map((c) => c[0]);
+    expect(calledTextsReg1).toContain('INVOICE');
+    expect(calledTextsReg1).not.toContain('TAX INVOICE');
+
+    // 3. vatRegistered = true but NO PIN -> renders "INVOICE"
+    textSpy.mockClear();
+    const noPinInvoice = {
+      invoiceNumber: 'INV-NOPIN-02',
+      total: 500,
+      shop: { name: 'No PIN Store', kraPin: '' },
+      items: [{ name: 'Item B', quantity: 1, price: 500, total: 500 }],
+    };
+    const docRegular2 = buildInvoicePdfDoc(noPinInvoice, { vatRegistered: true });
+    await drainPdfDoc(docRegular2);
+    const calledTextsReg2 = textSpy.mock.calls.map((c) => c[0]);
+    expect(calledTextsReg2).toContain('INVOICE');
+    expect(calledTextsReg2).not.toContain('TAX INVOICE');
+
+    textSpy.mockRestore();
+  });
 });
