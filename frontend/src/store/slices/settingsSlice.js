@@ -62,6 +62,7 @@ const initialState = {
   tagline: '',
   showPoweredBy: true,
   qrEnabled: false,
+  vatRegistered: false,
 
   // Additional Settings
   additionalSettings: {},
@@ -158,6 +159,7 @@ export const SETTINGS_ALLOWED_FIELDS = [
   'tagline',
   'showPoweredBy',
   'qrEnabled',
+  'vatRegistered',
 ];
 
 // Helper to clean settings data before sending to API
