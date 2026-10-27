@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import { prepareSalePayload } from '../sales/prepareSalePayload';
 import {
   XMarkIcon,
   BanknotesIcon,
@@ -19,6 +21,7 @@ import { generateUUID } from '../utils/uuid';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
+import { calculateChange, roundToTwoDecimals, isCashPaymentValid, hasSubShillingFraction } from '../utils/changeCalculation';
 
 export default function PaymentModal({
   isOpen,
@@ -31,6 +34,8 @@ export default function PaymentModal({
   paymentError,
   setPaymentError
 }) {
+  const authUser = useSelector((state) => state.auth?.user);
+  const reduxSettings = useSelector((state) => state.settings?.settings || {});
   const { format: formatCurrency, getCode: getMetadata } = useCurrency();
   
   const [paymentStatus, setPaymentStatus] = useState('idle'); // idle, initiating, polling, redirected, failed
@@ -304,12 +309,9 @@ export default function PaymentModal({
         currentSale.idempotencyKey = splitIdempotencyKey;
       }
 
-      const saleData = {
-        idempotencyKey: splitIdempotencyKey,
-        managerApprovalId,
-        managerPassword,
+      const { salePayload, meta } = await prepareSalePayload({
         items: currentSale.items.map(item => ({
-          productId: item.id,
+          productId: item.id || item.productId,
           quantity: item.quantity,
           price: item.price,
           discount: item.discount || 0,
@@ -318,24 +320,46 @@ export default function PaymentModal({
           discountReason: item.discountReason || null
         })),
         total: parseFloat(currentSale.total),
+        paymentMethod: 'split',
+        paymentAmount: parseFloat(currentSale.total),
+        customerId: currentSale.customerId || null,
+        customer: currentSale.customer,
         discount: cartDiscount ? cartDiscount.discountAmount : 0,
         discountType: cartDiscount ? cartDiscount.discountType : null,
         discountValue: cartDiscount ? cartDiscount.discountValue : null,
         discountReason: cartDiscount ? cartDiscount.discountReason : null,
-        customerId: currentSale.customerId || null,
-        customer: currentSale.customer,
         notes: currentSale.notes,
+        managerApprovalId,
+        managerPassword,
         payments: splitLegs.map(leg => ({
           paymentMethod: leg.paymentMethod,
           amount: parseFloat(leg.amount),
           gatewayRef: leg.gatewayRef
-        }))
-      };
-
-      const response = await api.post('/api/sales/split', saleData, {
-        headers: { 'Idempotency-Key': splitIdempotencyKey }
+        })),
+        user: authUser,
+        shopSettings: reduxSettings,
+        receiptNumber: currentSale.receiptNumber,
+        receiptToken: currentSale.receiptToken,
+        idempotencyKey: splitIdempotencyKey
       });
-      onPaymentSuccess(response.data);
+
+      currentSale.receiptNumber = meta.receiptNumber;
+      currentSale.receiptToken = meta.receiptToken;
+
+      const response = await api.post('/api/sales/split', salePayload, {
+        headers: { 'Idempotency-Key': meta.idempotencyKey }
+      });
+
+      onPaymentSuccess({
+        ...response.data,
+        receiptNumber: meta.receiptNumber,
+        receiptToken: meta.receiptToken,
+        cashierName: meta.cashierName,
+        taxAmount: meta.taxAmount,
+        taxRate: meta.taxRate,
+        taxInclusive: meta.taxInclusive,
+        changeAmount: meta.changeAmount
+      });
     } catch (err) {
       console.error('Split sale submission failed:', err);
       setLocalError(err.response?.data?.error || err.message || 'Failed to submit split sale.');

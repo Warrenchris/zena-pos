@@ -14,6 +14,19 @@ const Sale = sequelize.define('Sale', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  receiptNumber: {
+    type: DataTypes.STRING(32),
+    allowNull: true
+  },
+  receiptTokenHash: {
+    type: DataTypes.CHAR(64),
+    allowNull: true,
+    unique: true
+  },
+  cashierName: {
+    type: DataTypes.STRING(120),
+    allowNull: true
+  },
   idempotencyKey: {
     type: DataTypes.STRING(64),
     allowNull: true
@@ -32,6 +45,18 @@ const Sale = sequelize.define('Sale', {
     type: DataTypes.DECIMAL(5, 2),
     allowNull: false,
     defaultValue: 0.00
+  },
+  taxAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true
+  },
+  taxInclusive: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true
+  },
+  changeAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true
   },
   discount: {
     type: DataTypes.DECIMAL(10, 2),
@@ -221,6 +246,16 @@ const Sale = sequelize.define('Sale', {
       unique: true,
       fields: ['shopId', 'idempotencyKey'],
       name: 'unique_sales_shop_idempotency_key'
+    },
+    {
+      unique: true,
+      fields: ['shopId', 'receiptNumber'],
+      name: 'unique_sales_shop_receipt_number'
+    },
+    {
+      unique: true,
+      fields: ['receiptTokenHash'],
+      name: 'sales_receipt_token_hash_unique'
     }
   ]
 });

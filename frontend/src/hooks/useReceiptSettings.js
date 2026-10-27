@@ -9,11 +9,11 @@ import { buildReceiptSettings } from '../printing/receiptSettings';
  * app settings, ready to hand to the printing service.
  */
 export default function useReceiptSettings() {
-  const { receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo } = useSelector(selectSettings);
+  const { receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo, branch, tagline, showPoweredBy, qrEnabled } = useSelector(selectSettings);
   const apiBaseUrl = api?.defaults?.baseURL;
 
   return useMemo(
-    () => buildReceiptSettings({ receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo }, apiBaseUrl),
-    [receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo, apiBaseUrl]
+    () => buildReceiptSettings({ receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo, branch, tagline, showPoweredBy, qrEnabled }, apiBaseUrl),
+    [receiptHeader, receiptFooter, showLogoOnReceipt, businessLogo, branch, tagline, showPoweredBy, qrEnabled, apiBaseUrl]
   );
 }

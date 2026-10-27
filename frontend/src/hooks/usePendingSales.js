@@ -13,8 +13,7 @@ const RETRY_INTERVAL_MS = 60 * 1000;
  * Sales are stored durably on the device (IndexedDB) with an idempotency key, and sent when the
  * connection is back: when the browser reports it is online, on load, and once a minute while
  * anything is waiting (so a server that was briefly down doesn't strand a sale until the next reload).
- * A sale the server refuses is kept as "failed" for a person to review; it is never dropped silently.
- * Sales queued by older versions of the app (localStorage) are moved over automatically.
+ * A sale the server refuses is kept as "failed" or "conflict" for a person to review; it is never dropped silently.
  */
 export function usePendingSales(cashierId, { onSaleSynced, showToast } = {}) {
   const [entries, setEntries] = useState([]);
@@ -76,7 +75,9 @@ export function usePendingSales(cashierId, { onSaleSynced, showToast } = {}) {
         const { onSaleSynced: synced, showToast: toast } = callbacks.current;
         summary.syncedResponses.forEach((data) => synced?.(data));
         if (summary.synced > 0) toast?.(`Synced ${summary.synced} offline sale(s) with the server`, 'success');
-        if (summary.failed > 0) {
+        if (summary.conflicts > 0) {
+          toast?.(`${summary.conflicts} offline sale(s) had a receipt number conflict. Printed numbers preserved.`, 'warning');
+        } else if (summary.failed > 0) {
           toast?.(`${summary.failed} offline sale(s) were refused by the server and need your attention.`, 'error');
         }
         if (summary.blocked === 'auth') toast?.('Sign in again to sync your offline sales.', 'warning');
@@ -90,8 +91,10 @@ export function usePendingSales(cashierId, { onSaleSynced, showToast } = {}) {
   }, [cashierId, refresh]);
 
   const pendingQueue = useMemo(() => entries.filter((e) => e.status === 'pending'), [entries]);
+  const conflictQueue = useMemo(() => entries.filter((e) => e.status === 'conflict'), [entries]);
   const failedQueue = useMemo(() => entries.filter((e) => e.status === 'failed'), [entries]);
   const pendingCount = pendingQueue.length;
+  const conflictCount = conflictQueue.length;
 
   // Auto-flush: on the 'online' event, on mount, and periodically while something is waiting.
   useEffect(() => {
@@ -128,8 +131,10 @@ export function usePendingSales(cashierId, { onSaleSynced, showToast } = {}) {
 
   return {
     pendingQueue,
+    conflictQueue,
     failedQueue,
     pendingCount,
+    conflictCount,
     failedCount: failedQueue.length,
     isSyncing,
     queueSale,

@@ -10,7 +10,34 @@
 import { isNativeAndroid } from './nativeBluetooth';
 
 const LOAD_TIMEOUT_MS = 5000;
+const IMG_TIMEOUT_MS = 3000;
 const CLEANUP_DELAY_MS = 60000;
+
+/**
+ * Waits for all <img> tags inside the iframe document to finish loading or error
+ * before printing, capped at max timeout (default 3s).
+ *
+ * @param {Document} doc
+ * @param {number} [timeoutMs=3000]
+ * @returns {Promise<void>}
+ */
+export function waitForImagesToSettle(doc, timeoutMs = IMG_TIMEOUT_MS) {
+  if (!doc || typeof doc.querySelectorAll !== 'function') return Promise.resolve();
+  const images = Array.from(doc.querySelectorAll('img'));
+  if (images.length === 0) return Promise.resolve();
+
+  const pending = images
+    .filter((img) => !img.complete)
+    .map((img) => new Promise((res) => {
+      img.addEventListener('load', res, { once: true });
+      img.addEventListener('error', res, { once: true });
+    }));
+
+  if (pending.length === 0) return Promise.resolve();
+
+  const timeoutPromise = new Promise((res) => setTimeout(res, timeoutMs));
+  return Promise.race([Promise.all(pending), timeoutPromise]);
+}
 
 function printHtmlInIframe(html) {
   return new Promise((resolve, reject) => {
@@ -27,11 +54,17 @@ function printHtmlInIframe(html) {
       reject(error);
     };
 
-    const attemptPrint = () => {
+    const attemptPrint = async () => {
       if (settled) return;
       clearTimeout(timeout);
       try {
         const win = iframe.contentWindow;
+        if (win?.document) {
+          // Wait for all <img> tags (e.g. business logo) to finish loading (max 3s)
+          await waitForImagesToSettle(win.document, IMG_TIMEOUT_MS);
+        }
+
+        if (settled) return;
         win.focus();
         win.print();
         settled = true;
@@ -48,7 +81,7 @@ function printHtmlInIframe(html) {
       // A slow or unreachable subresource (the shop logo) can delay the load event
       // indefinitely. If the receipt text is already there, print without waiting:
       // a missing logo must never stop a receipt from printing.
-      const body = iframe.contentWindow && iframe.contentWindow.document && iframe.contentWindow.document.body;
+      const body = iframe.contentWindow?.document?.body;
       if (body && body.childElementCount > 0) attemptPrint();
       else fail(new Error('Receipt failed to load for printing'));
     }, LOAD_TIMEOUT_MS);

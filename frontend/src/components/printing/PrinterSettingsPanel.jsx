@@ -22,6 +22,7 @@ import {
   getCharsPerLine,
   layoutReceipt,
   printTestReceipt,
+  renderReceiptHtml,
   sampleSale,
 } from '../../printing';
 
@@ -87,7 +88,13 @@ function ChoiceCard({ name, value, checked, disabled, onChange, title, descripti
   );
 }
 
-function ReceiptPreview({ lines, columns, logoUrl }) {
+function ReceiptPreview({ receipt, profile, columns, formatMoney, lines, logoUrl }) {
+  const paperWidth = profile?.paperWidth || (columns === 48 ? 80 : 58);
+  const html = useMemo(() => {
+    if (!receipt) return null;
+    return renderReceiptHtml(receipt, { widthMm: paperWidth, formatMoney });
+  }, [receipt, paperWidth, formatMoney]);
+
   return (
     <div className="overflow-x-auto rounded-xl border border-border-default bg-surface-2/40 p-4">
       {/* Receipt paper is white with black text in every theme, like the real thing. */}
@@ -96,35 +103,48 @@ function ReceiptPreview({ lines, columns, logoUrl }) {
         aria-label="Receipt preview"
         data-testid="receipt-preview"
         data-columns={columns}
-        className="mx-auto bg-white text-black shadow-sm px-3 py-4"
+        className="mx-auto"
         style={{
-          fontFamily: 'ui-monospace, "Courier New", monospace',
-          fontSize: 12,
-          lineHeight: 1.35,
-          width: `calc(${columns}ch + 24px)`,
+          width: `${paperWidth}mm`,
+          maxWidth: '100%',
           boxSizing: 'border-box',
         }}
       >
-        {logoUrl && (
-          <img
-            src={logoUrl}
-            alt="Business logo"
-            style={{ display: 'block', margin: '0 auto 8px', maxWidth: '100%', maxHeight: 80, filter: 'grayscale(1) contrast(1.5)' }}
-          />
-        )}
-        {lines.map((line, index) => (
+        {html ? (
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        ) : (
           <div
-            key={index}
+            className="bg-white text-black shadow-sm px-3 py-4"
             style={{
-              whiteSpace: 'pre',
-              minHeight: '1.35em',
-              fontWeight: line.bold ? 700 : 400,
-              ...(line.double ? { fontSize: '2em', lineHeight: 1.15 } : {}),
+              fontFamily: 'ui-monospace, "Courier New", monospace',
+              fontSize: 12,
+              lineHeight: 1.35,
+              width: `calc(${columns}ch + 24px)`,
+              boxSizing: 'border-box',
             }}
           >
-            {line.text}
+            {logoUrl && (
+              <img
+                src={logoUrl}
+                alt="Business logo"
+                style={{ display: 'block', margin: '0 auto 8px', maxWidth: '100%', maxHeight: 80, filter: 'grayscale(1) contrast(1.5)' }}
+              />
+            )}
+            {lines && lines.map((line, index) => (
+              <div
+                key={index}
+                style={{
+                  whiteSpace: 'pre',
+                  minHeight: '1.35em',
+                  fontWeight: line.bold ? 700 : 400,
+                  ...(line.double ? { fontSize: '2em', lineHeight: 1.15 } : {}),
+                }}
+              >
+                {line.text}
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
@@ -148,13 +168,17 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
   const usesBrowser = profile.connection === 'browser';
   const selectedStatus = connectionStatus(profile.connection);
 
-  const previewLines = useMemo(() => {
+  const previewReceipt = useMemo(() => {
     const business = shop?.name ? shop : { ...shop, name: 'Your Shop Name' };
-    return layoutReceipt(buildReceipt(sampleSale(), { business, receiptSettings }), {
+    return buildReceipt(sampleSale(), { business, receiptSettings });
+  }, [shop, receiptSettings]);
+
+  const previewLines = useMemo(() => {
+    return layoutReceipt(previewReceipt, {
       charsPerLine: columns,
       formatMoney,
     });
-  }, [shop, receiptSettings, columns, formatMoney]);
+  }, [previewReceipt, columns, formatMoney]);
   const previewLogoUrl = receiptSettings.showLogo ? receiptSettings.logoUrl : null;
 
   const change = (patch) => {
@@ -197,6 +221,24 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
           <h3 id="printer-settings-heading" className="text-h3 font-semibold text-text-primary">
             Printer on this device
           </h3>
+          <p className="text-caption text-text-muted mt-1">
+            Choose how receipts print from this browser, tablet or phone, and match your paper width.
+          </p>
+        </div>
+      )}
+
+      {testState && (
+        <div
+          role="status"
+          className={`flex items-start gap-2.5 p-3.5 rounded-xl border text-caption ${
+            statusStyles[testState.kind] || statusStyles.pending
+          }`}
+        >
+          {testState.kind === 'success' && <CheckCircleIcon className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />}
+          {(testState.kind === 'error' || testState.kind === 'warning') && (
+            <ExclamationTriangleIcon className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          )}
+          <span className="flex-1">{testState.message}</span>
         </div>
       )}
 
@@ -316,7 +358,40 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
           </select>
         </div>
 
-        <div className={`flex items-center justify-between gap-4 p-3.5 rounded-xl border border-border-default bg-surface-2/40 ${usesBrowser ? 'opacity-60' : ''}`}>
+        <div>
+          <label htmlFor="printer-qr-mode" className="block text-caption font-semibold text-text-secondary mb-1">
+            Thermal QR print mode
+          </label>
+          <select
+            id="printer-qr-mode"
+            value={profile.qrMode || 'raster'}
+            onChange={(e) => change({ qrMode: e.target.value })}
+            className={inputClass}
+          >
+            <option value="raster">Raster graphic (recommended — works on all thermal printers)</option>
+            <option value="native">Native printer command (use only if your printer supports it)</option>
+          </select>
+          <p className="text-caption text-text-muted mt-1">
+            Raster mode draws the QR code dot-by-dot. Use native only if your printer supports it.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="printer-qr-align" className="block text-caption font-semibold text-text-secondary mb-1">
+            QR code position
+          </label>
+          <select
+            id="printer-qr-align"
+            value={profile.qrAlign || 'right'}
+            onChange={(e) => change({ qrAlign: e.target.value })}
+            className={inputClass}
+          >
+            <option value="right">Right aligned</option>
+            <option value="center">Centered</option>
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 pt-1">
           <div>
             <label htmlFor="printer-drawer" className="text-small font-semibold text-text-primary">
               Open cash drawer after printing
@@ -341,7 +416,14 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
 
       <div className="space-y-2">
         <h4 className={legendClass}>Receipt preview</h4>
-        <ReceiptPreview lines={previewLines} columns={columns} logoUrl={previewLogoUrl} />
+        <ReceiptPreview
+          receipt={previewReceipt}
+          profile={profile}
+          columns={columns}
+          formatMoney={formatMoney}
+          lines={previewLines}
+          logoUrl={previewLogoUrl}
+        />
         <p className="text-caption text-text-muted">
           Sample receipt at {columns} characters per line, using your shop details, currency, and the receipt header,
           footer and logo from Settings.
@@ -365,23 +447,15 @@ export default function PrinterSettingsPanel({ showHeading = true }) {
           >
             Print test receipt
           </Button>
+
           <Button type="button" variant="ghost" size="md" onClick={handleReset}>
             Restore defaults
           </Button>
         </div>
 
-        {testState && (
-          <div
-            role="status"
-            className={`flex items-start gap-2.5 p-3.5 rounded-xl border text-small ${statusStyles[testState.kind]}`}
-          >
-            {testState.kind === 'success' && <CheckCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />}
-            {(testState.kind === 'warning' || testState.kind === 'error') && (
-              <ExclamationTriangleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
-            )}
-            <span>{testState.message}</span>
-          </div>
-        )}
+        <p className="text-caption text-text-muted">
+          Prints a short test slip to verify your printer connection, paper width and cutter.
+        </p>
       </div>
     </section>
   );

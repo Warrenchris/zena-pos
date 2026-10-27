@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const crypto = require('crypto');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
 const SalePayment = require('../models/SalePayment');
@@ -302,8 +303,42 @@ class EnhancedSaleService {
           ? parseInt(jwtId, 10)
           : null;
 
+      let receiptTokenHash = null;
+      if (body.receiptToken) {
+        if (!/^[A-Za-z0-9_-]{22}$/.test(body.receiptToken)) {
+          const err = new Error('Invalid receiptToken format');
+          err.statusCode = 400;
+          throw err;
+        }
+        receiptTokenHash = crypto.createHash('sha256').update(body.receiptToken).digest('hex');
+      }
+
+      if (body.receiptNumber) {
+        if (!/^R-[A-Z0-9]{4}-\d{6}$/.test(body.receiptNumber)) {
+          const err = new Error(`Invalid receiptNumber format '${body.receiptNumber}'. Expected format: R-XXXX-NNNNNN`);
+          err.statusCode = 400;
+          throw err;
+        }
+        const existingByReceipt = await Sale.findOne({ where: { shopId, receiptNumber: body.receiptNumber } });
+        if (existingByReceipt && (!idempotencyKey || existingByReceipt.idempotencyKey !== idempotencyKey)) {
+          const err = new Error(`Receipt number '${body.receiptNumber}' already exists for this shop with a different idempotency key.`);
+          err.statusCode = 409;
+          err.code = 'RECEIPT_NUMBER_ALREADY_EXISTS';
+          throw err;
+        }
+      }
+
+      const cashierNameSnapshot = body.cashierName || user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || user?.username || 'Cashier';
+
       // Insert Sales row
       const newSale = await Sale.create({
+        receiptNumber: body.receiptNumber || null,
+        receiptTokenHash,
+        cashierName: cashierNameSnapshot,
+        taxAmount: body.taxAmount !== undefined && body.taxAmount !== null ? parseFloat(body.taxAmount) : (parseFloat(tax || 0) || null),
+        taxRate: body.taxRate !== undefined && body.taxRate !== null ? parseFloat(body.taxRate) : 0.00,
+        taxInclusive: body.taxInclusive !== undefined && body.taxInclusive !== null ? Boolean(body.taxInclusive) : null,
+        changeAmount: body.changeAmount !== undefined && body.changeAmount !== null ? parseFloat(body.changeAmount) : (sumPayments > serverTotal ? sumPayments - serverTotal : 0),
         invoiceNumber,
         idempotencyKey: idempotencyKey || null,
         subtotal,

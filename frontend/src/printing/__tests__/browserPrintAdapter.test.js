@@ -1,4 +1,4 @@
-import { browserPrintAdapter } from '../adapters/browserPrintAdapter';
+import { browserPrintAdapter, waitForImagesToSettle } from '../adapters/browserPrintAdapter';
 
 const job = { html: () => '<html><body>receipt</body></html>' };
 

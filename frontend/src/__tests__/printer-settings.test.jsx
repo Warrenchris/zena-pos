@@ -108,10 +108,10 @@ describe('PrinterSettingsPanel', () => {
 
   it('previews with the shop details, or a placeholder name before the shop is set up', () => {
     const { unmount } = renderPanel();
-    expect(within(screen.getByTestId('receipt-preview')).getByText(/Mama Njeri/)).toBeInTheDocument();
+    expect(within(screen.getByTestId('receipt-preview')).getByText(/Mama Njeri/i)).toBeInTheDocument();
     unmount();
     renderPanel({ withShop: false });
-    expect(within(screen.getByTestId('receipt-preview')).getByText(/Your Shop/)).toBeInTheDocument();
+    expect(within(screen.getByTestId('receipt-preview')).getByText(/Your Shop/i)).toBeInTheDocument();
   });
 
   it('restores the defaults', () => {
@@ -134,7 +134,7 @@ describe('PrinterSettingsPanel', () => {
       expect(ADAPTERS.bluetooth.print).toHaveBeenCalledTimes(1);
       const job = ADAPTERS.bluetooth.print.mock.calls[0][0];
       expect(job.text()).toContain('TEST-0001');
-      expect(job.text()).toContain('Mama Njeri');
+      expect(job.text()).toMatch(/Mama Njeri/i);
       expect(ADAPTERS.browser.print).not.toHaveBeenCalled();
     });
 
