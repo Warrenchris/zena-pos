@@ -71,6 +71,7 @@ const DELETED_EPHEMERAL_MODELS = new Set([
   'SubscriptionInvoice',
   'StockTransfer',
   'BillingNotificationLog',
+  'PlatformAuditLog',
   'Brand',
   'Unit'
 ]);

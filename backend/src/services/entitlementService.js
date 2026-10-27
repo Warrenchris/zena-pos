@@ -154,13 +154,15 @@ function getEffectiveSubscriptionStatus(subscription, asOf = new Date()) {
   if (!subscription) return null;
   const now = new Date(asOf);
 
-  // Grandfathered tier is permanently immune to expiration
+  const rawStatus = subscription.status;
+
+  // Grandfathered tier is permanently immune to expiration unless manually held
   const planCode = subscription.Plan?.code || subscription.plan?.code;
-  if (planCode === 'grandfathered') {
+  const skipGrandfathered = subscription.manualHold === true && (rawStatus === 'suspended' || rawStatus === 'canceled');
+  if (planCode === 'grandfathered' && !skipGrandfathered) {
     return 'active';
   }
 
-  const rawStatus = subscription.status;
   if (rawStatus === 'suspended') {
     return 'suspended';
   }

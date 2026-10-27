@@ -265,7 +265,16 @@ router.post('/subscription/renew', auth, authzContext, requireVerifiedEmail, aut
       return res.status(400).json({ error: 'Phone number is required for M-Pesa renewal.' });
     }
 
-    // Generate pending invoice for this renewal
+    // Guard against renewal when organization is under platform hold
+    const currentSub = await Subscription.findOne({ where: { organizationId } });
+    if (currentSub?.manualHold) {
+      return res.status(409).json({
+        code: 'PLATFORM_HOLD',
+        error: 'Payments are disabled while your account is on hold. Please contact support.'
+      });
+    }
+
+        // Generate pending invoice for this renewal
     const invoice = await billingService.generateRenewalInvoice(organizationId, planId);
 
     if (channel === 'mpesa') {

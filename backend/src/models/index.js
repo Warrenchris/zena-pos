@@ -42,6 +42,7 @@ const RefundIdempotency = require('./RefundIdempotency');
 const InvoiceSequence = require('./InvoiceSequence');
 const CreditNoteSequence = require('./CreditNoteSequence');
 const CreditNote = require('./CreditNote');
+const PlatformAuditLog = require('./PlatformAuditLog');
 const { DataTypes } = require('sequelize');
 const Brand = require('./brand')(sequelize, DataTypes);
 const Unit = require('./unit')(sequelize, DataTypes);
@@ -269,6 +270,12 @@ BillingNotificationLog.belongsTo(Subscription, { foreignKey: 'subscriptionId' })
 SubscriptionInvoice.hasMany(BillingNotificationLog, { foreignKey: 'invoiceId' });
 BillingNotificationLog.belongsTo(SubscriptionInvoice, { foreignKey: 'invoiceId' });
 
+// PlatformAuditLog associations
+Organization.hasMany(PlatformAuditLog, { foreignKey: 'organizationId', constraints: false });
+PlatformAuditLog.belongsTo(Organization, { foreignKey: 'organizationId', constraints: false });
+User.hasMany(PlatformAuditLog, { foreignKey: 'actorUserId', as: 'platformAuditLogs', constraints: false });
+PlatformAuditLog.belongsTo(User, { foreignKey: 'actorUserId', as: 'actor', constraints: false });
+
 // StockTransfer associations
 StockTransfer.belongsTo(Organization, { foreignKey: 'organizationId' });
 Organization.hasMany(StockTransfer, { foreignKey: 'organizationId' });
@@ -322,8 +329,7 @@ module.exports = {
   SubscriptionInvoice,
   StockTransfer,
   BillingNotificationLog,
+  PlatformAuditLog,
   Brand,
   Unit
 };
-
-

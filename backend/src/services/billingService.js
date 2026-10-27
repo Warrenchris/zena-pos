@@ -225,6 +225,64 @@ async function processConfirmedRenewal({
   }
 
   const now = new Date();
+
+  // PLATFORM-HOLD: If subscription is under manual platform hold, record payment without altering status or period
+  if (subscription.manualHold) {
+    invoice.status = 'paid';
+    invoice.paidAt = now;
+    invoice.paymentReference = receiptOrTxRef || invoice.paymentReference;
+    if (gatewayReference) {
+      invoice.gatewayReference = gatewayReference;
+    }
+    invoice.metadata = {
+      ...(invoice.metadata || {}),
+      ...(rawMetadata || {}),
+      confirmedAt: now.toISOString(),
+      heldByPlatform: true
+    };
+    await invoice.save({ transaction });
+
+    const refString = gatewayReference ? (' Receipt/Ref: ' + gatewayReference + '.') : '';
+    await logBillingActivity({
+      organizationId: invoice.organizationId,
+      action: 'PAYMENT_RECEIVED_DURING_HOLD',
+      invoiceId: invoice.id,
+      details: 'Payment confirmed for invoice ' + invoice.invoiceNumber + '.' + refString + ' Amount: ' + invoice.amount + ' ' + invoice.currency + '. Subscription manual hold was respected; status and period unchanged.'
+    }, transaction);
+
+    const sendReceipt = () => {
+      billingNotificationService.notifyPaymentReceipt({
+        organizationId: invoice.organizationId,
+        invoice,
+        subscription,
+        paymentMethod
+      }).catch(err => console.error('Failed to notify payment receipt:', err));
+    };
+
+    if (transaction && typeof transaction.afterCommit === 'function') {
+      transaction.afterCommit(async () => {
+        try {
+          await billingNotificationService.notifyPaymentReceipt({
+            organizationId: invoice.organizationId,
+            invoice,
+            subscription,
+            paymentMethod
+          });
+        } catch (err) {
+          console.error('Failed to notify payment receipt:', err);
+        }
+      });
+    } else {
+      sendReceipt();
+    }
+
+    return {
+      invoice,
+      subscription,
+      newPeriodEnd: subscription.currentPeriodEnd
+    };
+  }
+
   const isCurrentlyActive = subscription.status === 'active' && new Date(subscription.currentPeriodEnd) > now;
   const baseDate = isCurrentlyActive ? new Date(subscription.currentPeriodEnd) : now;
   const cycle = subscription.billingCycle || 'monthly';
