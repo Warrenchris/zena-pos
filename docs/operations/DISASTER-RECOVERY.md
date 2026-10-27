@@ -7,7 +7,7 @@ This runbook defines the disaster recovery policy, logical backup pipeline, inte
 
 ## 1. RPO & RTO Objectives
 
-| Metric | Target | Description |
+| Metric | Target | Description |m
 |---|---|---|
 | **RPO (Recovery Point Objective)** | **< 1 hour** (Scheduled) / **< 5 minutes** (with Binary Log PITR) | Maximum acceptable data loss duration in a catastrophic infrastructure failure. |
 | **RTO (Recovery Time Objective)** | **< 30 minutes** | Maximum allowable downtime to reconstruct operational SaaS database services. |
