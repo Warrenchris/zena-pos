@@ -27,6 +27,11 @@ The migrations executed in sequence:
    - Creates unique index `sales_receipt_token_hash_unique` on `receiptTokenHash`.
 4. **`20261026000000-add-vat-registered-to-system-settings.js`**
    - Adds `vatRegistered BOOLEAN NOT NULL DEFAULT 0` to `SystemSettings`.
+5. **`20261026120000-create-credit-note-sequences-and-credit-notes.js`**
+   - Creates `CreditNoteSequences` table with `(shopId, date)` unique index for sequential `CN-YYYYMMDD-NNNN` sequence locking.
+   - Adds `creditNoteNumber` with unique constraint `(shopId, creditNoteNumber)`.
+6. **`20261026130000-add-auto-print-receipt-to-system-settings.js`**
+   - Adds `autoPrintReceipt BOOLEAN NOT NULL DEFAULT 0` to `SystemSettings`.
 
 ---
 
@@ -107,16 +112,22 @@ If a rollback is required, execute down migrations in reverse order:
 ```bash
 cd backend
 
-# 1. Rollback VAT registered setting
+# 1. Rollback auto print receipt setting
 npx sequelize-cli db:migrate:undo
 
-# 2. Rollback public receipt token hash
+# 2. Rollback credit note sequences and credit notes
 npx sequelize-cli db:migrate:undo
 
-# 3. Rollback receipt fields and settings columns
+# 3. Rollback VAT registered setting
 npx sequelize-cli db:migrate:undo
 
-# 4. Rollback invoice sequences table
+# 4. Rollback public receipt token hash
+npx sequelize-cli db:migrate:undo
+
+# 5. Rollback receipt fields and settings columns
+npx sequelize-cli db:migrate:undo
+
+# 6. Rollback invoice sequences table
 npx sequelize-cli db:migrate:undo
 ```
 

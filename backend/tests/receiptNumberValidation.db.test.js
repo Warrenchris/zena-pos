@@ -34,7 +34,7 @@ describe('Backend DB Receipt Number Validation [REQUIRES LIVE MYSQL DB]', () => 
 
   afterAll(async () => {
     if (dbAvailable) {
-      await sequelize.close();
+      // Teardown handled by global setup/teardown
     }
   });
 
