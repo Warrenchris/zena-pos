@@ -515,11 +515,24 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     margin-top: 6px;
     text-align: center;
   }
-  .receipt-container .thank-you {
+  .receipt-container .thank-you-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 2px 0;
+  }
+  .receipt-container .thank-you-rule {
+    flex: 1;
+    border-bottom: 0.75px solid #111111;
+    height: 0;
+  }
+  .receipt-container .thank-you,
+  .receipt-container .thank-you-text {
     font-size: 9.5px;
     font-weight: 700;
     padding: 1.5px 0;
     color: #0f172a;
+    text-align: center;
   }
   .receipt-container .tagline {
     font-size: 8px;
@@ -650,9 +663,12 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
 
   <!-- Footer -->
   <div class="footer-section">
-    <hr class="divider-rule" />
-    ${footerLines.map((l) => `<div class="thank-you">${escapeHtml(l)}</div>`).join('\n')}
-    <hr class="divider-rule" />
+    ${footerLines.map((l) => `
+    <div class="thank-you-row">
+      <span class="thank-you-rule"></span>
+      <span class="thank-you thank-you-text">${escapeHtml(l)}</span>
+      <span class="thank-you-rule"></span>
+    </div>`).join('\n')}
     ${tagline ? `<div class="tagline">${escapeHtml(tagline)}</div>` : ''}
     <div class="footer-bottom-row">
       <div class="footer-left">
