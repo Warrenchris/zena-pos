@@ -267,7 +267,7 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     margin: 0 auto;
     padding: 3.5mm;
     background: #fff;
-    color: #0f172a;
+    color: #111111;
     box-sizing: border-box;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     color-scheme: light;
@@ -294,7 +294,7 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     font-size: 13px;
     font-weight: 800;
     letter-spacing: 0.8px;
-    color: #1e293b;
+    color: #111111;
   }
   .receipt-container .store-name {
     font-size: 13.5px;
@@ -308,31 +308,31 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
-    color: #475569;
+    color: #444444;
     text-align: center;
     margin-bottom: 1.5px;
   }
   .receipt-container .store-address {
     font-size: 9.5px;
-    color: #475569;
+    color: #444444;
     text-align: center;
     margin-bottom: 1.5px;
   }
   .receipt-container .store-contact {
     font-size: 9px;
-    color: #64748b;
+    color: #666666;
     text-align: center;
     margin-bottom: 4px;
   }
   .receipt-container .custom-header {
     font-size: 9px;
-    color: #334155;
+    color: #333333;
     text-align: center;
     margin: 2px 0;
   }
   .receipt-container .divider-rule {
     border: 0;
-    border-top: 1px solid #cbd5e1;
+    border-top: 1px solid #cccccc;
     margin: 5px 0;
   }
   .receipt-container .doc-title {
@@ -348,14 +348,14 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   }
   .receipt-container .duplicate-badge {
     display: inline-block;
-    border: 1px solid #0f172a;
+    border: 1px solid #111111;
     border-radius: 3px;
     font-size: 8px;
     font-weight: 800;
     letter-spacing: 0.5px;
     padding: 1px 5px;
     text-align: center;
-    color: #0f172a;
+    color: #111111;
   }
   .receipt-container .meta-block {
     font-family: ui-monospace, "Courier New", Courier, monospace;
@@ -369,11 +369,12 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   }
   .receipt-container .meta-label {
     width: 65px;
-    color: #475569;
+    color: #111111;
+    font-weight: 600;
     flex-shrink: 0;
   }
   .receipt-container .meta-val {
-    color: #0f172a;
+    color: #111111;
     word-break: break-all;
   }
   .receipt-container .offline-banner {
@@ -408,9 +409,9 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   .receipt-container .items-table th {
     font-size: 8px;
     font-weight: 600;
-    color: #64748b;
+    color: #555555;
     text-transform: uppercase;
-    border-bottom: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cccccc;
     padding: 3px 0;
   }
   .receipt-container .col-item { width: 48%; text-align: left; }
@@ -424,23 +425,23 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   }
   .receipt-container .item-name {
     font-weight: 700;
-    color: #0f172a;
+    color: #111111;
     line-height: 1.25;
   }
   .receipt-container .item-sub {
     font-size: 8.5px;
-    color: #64748b;
+    color: #666666;
     margin-top: 1px;
   }
   .receipt-container .item-sub-note {
     font-size: 8px;
-    color: #64748b;
+    color: #666666;
     font-style: italic;
   }
   .receipt-container .items-list-58 {
     margin: 5px 0;
-    border-top: 1px solid #cbd5e1;
-    border-bottom: 1px solid #cbd5e1;
+    border-top: 1px solid #cccccc;
+    border-bottom: 1px solid #cccccc;
     padding: 3px 0;
   }
   .receipt-container .item-block-58 {
@@ -449,7 +450,7 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   .receipt-container .item-name-58 {
     font-weight: 700;
     font-size: 9.5px;
-    color: #0f172a;
+    color: #111111;
     word-break: break-word;
   }
   .receipt-container .item-row-58 {
@@ -459,11 +460,11 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     margin-top: 1px;
   }
   .receipt-container .item-sub-58 {
-    color: #64748b;
+    color: #666666;
   }
   .receipt-container .item-total-58 {
     font-weight: 600;
-    color: #0f172a;
+    color: #111111;
   }
   .receipt-container .totals-section {
     margin: 5px 0;
@@ -473,10 +474,10 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     display: flex;
     justify-content: space-between;
     padding: 1px 0;
-    color: #1e293b;
+    color: #111111;
   }
   .receipt-container .total-label {
-    color: #475569;
+    color: #333333;
   }
   .receipt-container .total-val {
     font-variant-numeric: tabular-nums;
@@ -485,7 +486,7 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: #f1f5f9;
+    background-color: #e5e5e5;
     font-size: 13px;
     font-weight: 800;
     padding: 3.5px 5px;
@@ -499,14 +500,14 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   }
   .receipt-container .change-row {
     font-weight: 700;
-    color: #0f172a;
+    color: #111111;
   }
   .receipt-container .general-notes {
     font-size: 8.5px;
-    color: #475569;
+    color: #444444;
     margin: 4px 0;
     padding-top: 3px;
-    border-top: 1px dashed #e2e8f0;
+    border-top: 1px dashed #cccccc;
   }
   .receipt-container .notes-label {
     font-weight: 600;
@@ -531,12 +532,12 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     font-size: 9.5px;
     font-weight: 700;
     padding: 1.5px 0;
-    color: #0f172a;
+    color: #111111;
     text-align: center;
   }
   .receipt-container .tagline {
     font-size: 8px;
-    color: #64748b;
+    color: #666666;
     margin-top: 2px;
   }
   .receipt-container .footer-bottom-row {
@@ -548,7 +549,7 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   }
   .receipt-container .footer-left {
     font-size: 8px;
-    color: #475569;
+    color: #444444;
   }
   .receipt-container .receipt-no {
     font-family: ui-monospace, "Courier New", Courier, monospace;
@@ -563,7 +564,7 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   }
   .receipt-container .powered-by {
     font-size: 7.5px;
-    color: #94a3b8;
+    color: #777777;
     margin-top: 1px;
   }
   .receipt-container .footer-right {
@@ -582,7 +583,7 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   }
   .receipt-container .qr-caption {
     font-size: 7px;
-    color: #64748b;
+    color: #666666;
     margin-top: 2px;
     letter-spacing: 0.2px;
     text-align: center;
