@@ -13,6 +13,28 @@
 const logoCache = new Map();
 
 /**
+ * Computes proportional target dimensions preserving aspect ratio.
+ * Scales to fit inside max width AND max height using one scale factor:
+ *   scale = min(maxW/w, maxH/h)
+ * Never stretches one axis independently.
+ *
+ * @param {number} sourceWidth
+ * @param {number} sourceHeight
+ * @param {object} [options]
+ * @param {number} [options.maxDotsWidth=288] - 192 for 58mm, 288 for 80mm
+ * @param {number} [options.maxDotsHeight=120] - 120 dots max
+ * @returns {{ scale: number, targetW: number, targetH: number, width: number, height: number }}
+ */
+export function computeLogoDimensions(sourceWidth, sourceHeight, { maxDotsWidth = 288, maxDotsHeight = 120 } = {}) {
+  const w = Number(sourceWidth) || 1;
+  const h = Number(sourceHeight) || 1;
+  const scale = Math.min(maxDotsWidth / w, maxDotsHeight / h);
+  const targetW = Math.max(1, Math.round(w * scale));
+  const targetH = Math.max(1, Math.round(h * scale));
+  return { scale, targetW, targetH, width: targetW, height: targetH };
+}
+
+/**
  * Pure dithering function that converts a 2D array of grayscale luminance values (0-255)
  * to a 1-bit monochrome Uint8Array (1 = black/print dot, 0 = white/blank).
  *
@@ -120,7 +142,7 @@ export async function getLogoBitmap(logoUrl, {
     if (!natW || !natH) return null;
 
     // Scale down proportionally if larger than constraints
-    const scale = Math.min(maxDotsWidth / natW, maxDotsHeight / natH, 1);
+    const scale = Math.min(maxDotsWidth / natW, maxDotsHeight / natH);
     const targetW = Math.max(1, Math.round(natW * scale));
     const targetH = Math.max(1, Math.round(natH * scale));
 

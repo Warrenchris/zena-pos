@@ -7,7 +7,7 @@
  * - In-memory cache behavior
  */
 
-import { ditherGrayscaleToMonochrome, getLogoBitmap, clearLogoCache } from '../logoBitmap';
+import { ditherGrayscaleToMonochrome, getLogoBitmap, clearLogoCache, computeLogoDimensions } from '../logoBitmap';
 
 describe('Logo Bitmap & Dithering Engine', () => {
   beforeEach(() => {
@@ -56,6 +56,50 @@ describe('Logo Bitmap & Dithering Engine', () => {
       // In Node test runner without full DOM Canvas support, it returns null gracefully
       const res = await getLogoBitmap('https://example.com/logo.png');
       expect(res === null || typeof res === 'object').toBe(true);
+    });
+  });
+
+  describe('Aspect ratio preservation & scaling', () => {
+    test('a square 48x48 source yields a square bitmap at both widths', () => {
+      // 58mm: max 192x120 dots
+      const dims58 = computeLogoDimensions(48, 48, { maxDotsWidth: 192, maxDotsHeight: 120 });
+      expect(dims58.width).toBe(dims58.height);
+      expect(dims58.width).toBe(120);
+
+      // 80mm: max 288x120 dots
+      const dims80 = computeLogoDimensions(48, 48, { maxDotsWidth: 288, maxDotsHeight: 120 });
+      expect(dims80.width).toBe(dims80.height);
+      expect(dims80.width).toBe(120);
+    });
+
+    test('a wide logo and a tall logo keep their ratio within 1 dot', () => {
+      // Wide logo: 400x100 (ratio 4:1)
+      const wideSrc = { w: 400, h: 100, ratio: 4.0 };
+      const wide58 = computeLogoDimensions(wideSrc.w, wideSrc.h, { maxDotsWidth: 192, maxDotsHeight: 120 });
+      expect(wide58.width).toBeLessThanOrEqual(192);
+      expect(wide58.height).toBeLessThanOrEqual(120);
+      const wide58ExpectedH = Math.round(wide58.width / wideSrc.ratio);
+      expect(Math.abs(wide58.height - wide58ExpectedH)).toBeLessThanOrEqual(1);
+
+      const wide80 = computeLogoDimensions(wideSrc.w, wideSrc.h, { maxDotsWidth: 288, maxDotsHeight: 120 });
+      expect(wide80.width).toBeLessThanOrEqual(288);
+      expect(wide80.height).toBeLessThanOrEqual(120);
+      const wide80ExpectedH = Math.round(wide80.width / wideSrc.ratio);
+      expect(Math.abs(wide80.height - wide80ExpectedH)).toBeLessThanOrEqual(1);
+
+      // Tall logo: 100x400 (ratio 1:4)
+      const tallSrc = { w: 100, h: 400, ratio: 0.25 };
+      const tall58 = computeLogoDimensions(tallSrc.w, tallSrc.h, { maxDotsWidth: 192, maxDotsHeight: 120 });
+      expect(tall58.width).toBeLessThanOrEqual(192);
+      expect(tall58.height).toBeLessThanOrEqual(120);
+      const tall58ExpectedW = Math.round(tall58.height * tallSrc.ratio);
+      expect(Math.abs(tall58.width - tall58ExpectedW)).toBeLessThanOrEqual(1);
+
+      const tall80 = computeLogoDimensions(tallSrc.w, tallSrc.h, { maxDotsWidth: 288, maxDotsHeight: 120 });
+      expect(tall80.width).toBeLessThanOrEqual(288);
+      expect(tall80.height).toBeLessThanOrEqual(120);
+      const tall80ExpectedW = Math.round(tall80.height * tallSrc.ratio);
+      expect(Math.abs(tall80.width - tall80ExpectedW)).toBeLessThanOrEqual(1);
     });
   });
 });
