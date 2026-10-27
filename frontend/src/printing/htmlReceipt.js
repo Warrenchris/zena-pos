@@ -40,6 +40,13 @@ function defaultFormatMoney(n) {
 }
 
 /**
+ * Optional default brand icon slot (e.g. inline SVG data URL 'data:image/svg+xml;utf8,...')
+ * Can be populated here or passed dynamically via business.brandIcon / options.brandIcon.
+ * Hidden automatically when showPoweredBy is false.
+ */
+export const BRAND_ICON_SLOT = '';
+
+/**
  * Renders a full, self-contained HTML document for browser/driver printing
  * directly from canonical ReceiptData.
  *
@@ -49,9 +56,11 @@ function defaultFormatMoney(n) {
  * @param {object} [options]
  * @param {number} [options.widthMm=80] - Target paper width in mm (80 or 58)
  * @param {Function} [options.formatMoney] - Money formatter function
+ * @param {string} [options.brandIcon] - Optional brand icon inline SVG data URL
  * @returns {string} Fully self-contained HTML string
  */
-export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = defaultFormatMoney } = {}) {
+export function renderReceiptHtml(receipt, options = {}) {
+  const { widthMm = 80, formatMoney = defaultFormatMoney } = options;
   const width = Number(widthMm) === 58 ? 58 : 80;
   const is58mm = width === 58;
 
@@ -67,6 +76,8 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     header = '',
     logoUrl: modelLogoUrl = null,
   } = receipt || {};
+
+  const brandIcon = business.brandIcon || business.brandIconUrl || options.brandIcon || options.brandIconUrl || BRAND_ICON_SLOT || '';
 
   // Resolve logo URL
   const logoUrl = modelLogoUrl || business.logoUrl || null;
@@ -284,6 +295,16 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     gap: 6px;
     margin-bottom: 2px;
   }
+  .receipt-container .header-brand-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .receipt-container .brand-icon {
+    width: 15px;
+    height: 15px;
+    object-fit: contain;
+  }
   .receipt-container .header-logo {
     max-height: 22px;
     max-width: 50px;
@@ -291,14 +312,15 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
     filter: grayscale(1) contrast(1.3);
   }
   .receipt-container .header-wordmark {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #111111;
   }
   .receipt-container .store-name {
-    font-size: 13.5px;
-    font-weight: 800;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
     text-align: center;
     line-height: 1.25;
@@ -595,7 +617,12 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   <!-- Header -->
   <div class="header-brand">
     ${showLogo ? `<img src="${escapeHtml(logoUrl)}" class="header-logo" alt="Business logo" />` : ''}
-    ${showPoweredBy ? '<span class="header-wordmark">ZANA POS</span>' : ''}
+    ${showPoweredBy ? `
+      <span class="header-brand-wrap">
+        ${brandIcon ? `<img src="${escapeHtml(brandIcon)}" class="brand-icon" alt="" />` : ''}
+        <span class="header-wordmark">ZANA POS</span>
+      </span>
+    ` : ''}
   </div>
 
   ${storeName ? `<div class="store-name">${escapeHtml(storeName)}</div>` : ''}
