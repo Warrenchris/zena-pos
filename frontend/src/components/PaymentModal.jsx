@@ -24,9 +24,6 @@ import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import { calculateChange, roundToTwoDecimals, isCashPaymentValid, hasSubShillingFraction } from '../utils/changeCalculation';
 
 export default function PaymentModal({
-  const authUser = useSelector((state) => state.auth?.user);
-  const reduxSettings = useSelector((state) => state.settings?.settings || {});
-
   isOpen,
   onClose,
   currentSale,
@@ -37,6 +34,8 @@ export default function PaymentModal({
   paymentError,
   setPaymentError
 }) {
+  const authUser = useSelector((state) => state.auth?.user);
+  const reduxSettings = useSelector((state) => state.settings?.settings || {});
   const { format: formatCurrency, getCode: getMetadata } = useCurrency();
   
   const [paymentStatus, setPaymentStatus] = useState('idle'); // idle, initiating, polling, redirected, failed
