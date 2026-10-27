@@ -51,6 +51,11 @@ const Subscription = sequelize.define('Subscription', {
     allowNull: false,
     defaultValue: false
   },
+  manualHold: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
   lastPaymentMethod: {
     type: DataTypes.STRING(50),
     allowNull: true

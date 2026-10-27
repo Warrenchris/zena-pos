@@ -11,8 +11,14 @@ const {
   User,
   OrganizationMembership,
   SubscriptionInvoice,
-  BillingNotificationLog
+  BillingNotificationLog,
+  PlatformAuditLog,
+  sequelize
 } = require('../models');
+const tokenRevocationService = require('../services/tokenRevocationService');
+const entitlementService = require('../services/entitlementService');
+const billingNotificationService = require('../services/billingNotificationService');
+const getClientIp = require('../utils/getClientIp');
 const {
   requirePlatformSuperAdmin,
   platformRateLimiter
@@ -470,4 +476,430 @@ router.get('/notifications', async (req, res) => {
   }
 });
 
+
+/**
+ * Validates lifecycle transition reason: required, min 10 chars, max 500.
+ */
+function validateLifecycleReason(reason) {
+  if (!reason || typeof reason !== 'string') {
+    return 'Reason is required and must be a text string.';
+  }
+  const trimmed = reason.trim();
+  if (trimmed.length < 10) {
+    return 'Reason must be at least 10 characters long.';
+  }
+  if (trimmed.length > 500) {
+    return 'Reason must not exceed 500 characters.';
+  }
+  return null;
+}
+
+/**
+ * POST /api/platform/organizations/:id/suspend
+ * Suspends an organization and its subscription with a manual hold.
+ */
+router.post('/organizations/:id/suspend', async (req, res) => {
+  const reasonError = validateLifecycleReason(req.body?.reason);
+  if (reasonError) {
+    return res.status(400).json({ error: reasonError });
+  }
+
+  const orgId = parseInt(req.params.id, 10);
+  if (isNaN(orgId)) {
+    return res.status(400).json({ error: 'Valid organization ID required' });
+  }
+
+  const t = await sequelize.transaction();
+  let org = null;
+  let sub = null;
+  let auditRow = null;
+
+  try {
+    org = await Organization.findByPk(orgId, {
+      include: [{ model: Subscription, include: [{ model: Plan }] }],
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+
+    if (!org) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    if (org.deletedAt) {
+      await t.rollback();
+      return res.status(409).json({ error: 'Cannot modify lifecycle of a closed or deleted organization.' });
+    }
+
+    sub = org.Subscription;
+
+    if (org.status === 'suspended' && sub?.manualHold === true) {
+      await t.rollback();
+      return res.status(409).json({ error: 'Organization is already suspended under manual hold.' });
+    }
+    if (org.status === 'canceled') {
+      await t.rollback();
+      return res.status(409).json({ error: 'Cannot suspend an organization that is canceled/deactivated. Reactivate first.' });
+    }
+
+    const fromStatus = org.status;
+    const fromSubStatus = sub?.status || null;
+    const fromManualHold = sub?.manualHold || false;
+
+    await org.update({ status: 'suspended' }, { transaction: t });
+
+    if (sub) {
+      await sub.update({ status: 'suspended', manualHold: true }, { transaction: t });
+    }
+
+    auditRow = await PlatformAuditLog.create({
+      actorUserId: req.user.id,
+      organizationId: org.id,
+      action: 'ORGANIZATION_SUSPENDED',
+      fromStatus,
+      toStatus: 'suspended',
+      reason: req.body.reason.trim(),
+      ip: getClientIp(req),
+      metadata: {
+        fromSubscriptionStatus: fromSubStatus,
+        toSubscriptionStatus: 'suspended',
+        fromManualHold,
+        toManualHold: true
+      }
+    }, { transaction: t });
+
+    await t.commit();
+  } catch (err) {
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+    logger.error('Error suspending organization ' + orgId + ':', err);
+    return res.status(500).json({ error: 'Failed to suspend organization' });
+  }
+
+  try {
+    await tokenRevocationService.setOrgStatus(org.id, 'suspended');
+  } catch (err) {
+    logger.error('Failed to update cached status for suspended org ' + org.id + ':', err);
+  }
+  try {
+    await entitlementService.invalidateOrgEntitlements(org.id);
+  } catch (err) {
+    logger.error('Failed to invalidate entitlements for suspended org ' + org.id + ':', err);
+  }
+
+  return res.status(200).json({
+    message: 'Organization suspended successfully.',
+    organization: {
+      id: org.id,
+      name: org.name,
+      status: 'suspended'
+    },
+    subscription: sub ? {
+      id: sub.id,
+      status: 'suspended',
+      manualHold: true
+    } : null,
+    auditLog: auditRow
+  });
+});
+
+/**
+ * POST /api/platform/organizations/:id/deactivate
+ * Deactivates an organization and its subscription with a manual hold.
+ */
+router.post('/organizations/:id/deactivate', async (req, res) => {
+  const reasonError = validateLifecycleReason(req.body?.reason);
+  if (reasonError) {
+    return res.status(400).json({ error: reasonError });
+  }
+
+  const orgId = parseInt(req.params.id, 10);
+  if (isNaN(orgId)) {
+    return res.status(400).json({ error: 'Valid organization ID required' });
+  }
+
+  const t = await sequelize.transaction();
+  let org = null;
+  let sub = null;
+  let auditRow = null;
+
+  try {
+    org = await Organization.findByPk(orgId, {
+      include: [{ model: Subscription, include: [{ model: Plan }] }],
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+
+    if (!org) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    if (org.deletedAt) {
+      await t.rollback();
+      return res.status(409).json({ error: 'Cannot modify lifecycle of a closed or deleted organization.' });
+    }
+
+    sub = org.Subscription;
+
+    if (org.status === 'canceled' && sub?.manualHold === true) {
+      await t.rollback();
+      return res.status(409).json({ error: 'Organization is already deactivated under manual hold.' });
+    }
+
+    const fromStatus = org.status;
+    const fromSubStatus = sub?.status || null;
+    const fromManualHold = sub?.manualHold || false;
+
+    await org.update({ status: 'canceled' }, { transaction: t });
+
+    if (sub) {
+      await sub.update({ status: 'canceled', manualHold: true }, { transaction: t });
+    }
+
+    auditRow = await PlatformAuditLog.create({
+      actorUserId: req.user.id,
+      organizationId: org.id,
+      action: 'ORGANIZATION_DEACTIVATED',
+      fromStatus,
+      toStatus: 'canceled',
+      reason: req.body.reason.trim(),
+      ip: getClientIp(req),
+      metadata: {
+        fromSubscriptionStatus: fromSubStatus,
+        toSubscriptionStatus: 'canceled',
+        fromManualHold,
+        toManualHold: true
+      }
+    }, { transaction: t });
+
+    await t.commit();
+  } catch (err) {
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+    logger.error('Error deactivating organization ' + orgId + ':', err);
+    return res.status(500).json({ error: 'Failed to deactivate organization' });
+  }
+
+  try {
+    await tokenRevocationService.setOrgStatus(org.id, 'canceled');
+  } catch (err) {
+    logger.error('Failed to update cached status for deactivated org ' + org.id + ':', err);
+  }
+  try {
+    await entitlementService.invalidateOrgEntitlements(org.id);
+  } catch (err) {
+    logger.error('Failed to invalidate entitlements for deactivated org ' + org.id + ':', err);
+  }
+
+  return res.status(200).json({
+    message: 'Organization deactivated successfully.',
+    organization: {
+      id: org.id,
+      name: org.name,
+      status: 'canceled'
+    },
+    subscription: sub ? {
+      id: sub.id,
+      status: 'canceled',
+      manualHold: true
+    } : null,
+    auditLog: auditRow
+  });
+});
+
+/**
+ * POST /api/platform/organizations/:id/reactivate
+ * Reactivates an organization and releases manual hold.
+ */
+router.post('/organizations/:id/reactivate', async (req, res) => {
+  const reasonError = validateLifecycleReason(req.body?.reason);
+  if (reasonError) {
+    return res.status(400).json({ error: reasonError });
+  }
+
+  const orgId = parseInt(req.params.id, 10);
+  if (isNaN(orgId)) {
+    return res.status(400).json({ error: 'Valid organization ID required' });
+  }
+
+  const t = await sequelize.transaction();
+  let org = null;
+  let sub = null;
+  let auditRow = null;
+  let newPeriodEndToSet = null;
+
+  try {
+    org = await Organization.findByPk(orgId, {
+      include: [{ model: Subscription, include: [{ model: Plan }] }],
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+
+    if (!org) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    if (org.deletedAt) {
+      await t.rollback();
+      return res.status(409).json({ error: 'Cannot modify lifecycle of a closed or deleted organization.' });
+    }
+
+    sub = org.Subscription;
+
+    if (org.status === 'active' && sub?.status === 'active' && sub?.manualHold === false) {
+      await t.rollback();
+      return res.status(409).json({ error: 'Organization is already active and not on hold.' });
+    }
+
+    const now = new Date();
+    const isGrandfathered = sub?.Plan?.code === 'grandfathered';
+    const isPeriodLapsed = sub?.currentPeriodEnd && new Date(sub.currentPeriodEnd) <= now;
+
+    if (!isGrandfathered && isPeriodLapsed) {
+      if (!req.body?.newPeriodEnd) {
+        await t.rollback();
+        return res.status(400).json({ error: 'newPeriodEnd is required because the current subscription period has lapsed.' });
+      }
+
+      const parsedDate = new Date(req.body.newPeriodEnd);
+      if (isNaN(parsedDate.getTime()) || parsedDate <= now) {
+        await t.rollback();
+        return res.status(400).json({ error: 'newPeriodEnd must be a valid future date.' });
+      }
+
+      const maxAllowedDate = new Date(now.getTime() + 400 * 24 * 60 * 60 * 1000);
+      if (parsedDate > maxAllowedDate) {
+        await t.rollback();
+        return res.status(400).json({ error: 'newPeriodEnd cannot exceed 400 days in the future.' });
+      }
+
+      newPeriodEndToSet = parsedDate;
+    }
+
+    const fromStatus = org.status;
+    const fromSubStatus = sub?.status || null;
+    const fromManualHold = sub?.manualHold || false;
+
+    await org.update({ status: 'active' }, { transaction: t });
+
+    if (sub) {
+      const subUpdates = { status: 'active', manualHold: false };
+      if (newPeriodEndToSet) {
+        subUpdates.currentPeriodEnd = newPeriodEndToSet;
+      }
+      await sub.update(subUpdates, { transaction: t });
+    }
+
+    auditRow = await PlatformAuditLog.create({
+      actorUserId: req.user.id,
+      organizationId: org.id,
+      action: 'ORGANIZATION_REACTIVATED',
+      fromStatus,
+      toStatus: 'active',
+      reason: req.body.reason.trim(),
+      ip: getClientIp(req),
+      metadata: {
+        fromSubscriptionStatus: fromSubStatus,
+        toSubscriptionStatus: 'active',
+        fromManualHold,
+        toManualHold: false,
+        ...(newPeriodEndToSet ? { newPeriodEnd: newPeriodEndToSet.toISOString() } : {})
+      }
+    }, { transaction: t });
+
+    await t.commit();
+  } catch (err) {
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+    logger.error('Error reactivating organization ' + orgId + ':', err);
+    return res.status(500).json({ error: 'Failed to reactivate organization' });
+  }
+
+  try {
+    await tokenRevocationService.setOrgStatus(org.id, 'active');
+  } catch (err) {
+    logger.error('Failed to update cached status for reactivated org ' + org.id + ':', err);
+  }
+  try {
+    await entitlementService.invalidateOrgEntitlements(org.id);
+  } catch (err) {
+    logger.error('Failed to invalidate entitlements for reactivated org ' + org.id + ':', err);
+  }
+
+  try {
+    billingNotificationService.notifyAccountReactivated({
+      organizationId: org.id,
+      subscription: sub
+    }).catch(notifErr => logger.error('Failed to send reactivation notification for org ' + org.id + ':', notifErr));
+  } catch (notifErr) {
+    logger.error('Failed to invoke reactivation notification for org ' + org.id + ':', notifErr);
+  }
+
+  return res.status(200).json({
+    message: 'Organization reactivated successfully.',
+    organization: {
+      id: org.id,
+      name: org.name,
+      status: 'active'
+    },
+    subscription: sub ? {
+      id: sub.id,
+      status: 'active',
+      manualHold: false,
+      currentPeriodEnd: sub.currentPeriodEnd
+    } : null,
+    auditLog: auditRow
+  });
+});
+
+/**
+ * GET /api/platform/organizations/:id/audit
+ * Paginated platform audit logs for an organization. Limit capped at 100.
+ */
+router.get('/organizations/:id/audit', async (req, res) => {
+  const orgId = parseInt(req.params.id, 10);
+  if (isNaN(orgId)) {
+    return res.status(400).json({ error: 'Valid organization ID required' });
+  }
+
+  try {
+    const org = await Organization.findByPk(orgId, { attributes: ['id', 'name', 'slug'] });
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    const { page, limit, offset } = getPaginationParams(req.query);
+
+    const { count, rows } = await PlatformAuditLog.findAndCountAll({
+      where: { organizationId: orgId },
+      include: [
+        { model: User, as: 'actor', attributes: ['id', 'name', 'email', 'role'] }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
+    });
+
+    return res.json({
+      organization: org,
+      auditLogs: rows,
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching audit logs for organization ' + orgId + ':', error);
+    return res.status(500).json({ error: 'Failed to fetch platform audit logs' });
+  }
+});
+
 module.exports = router;
+

@@ -54,6 +54,14 @@ function requireActiveSubscription(options = {}) {
       req.effectiveSubscriptionStatus = effectiveStatus;
 
       if (effectiveStatus === 'suspended') {
+        if (subscription?.manualHold) {
+          return res.status(403).json({
+            error: 'Your account has been placed on hold by the platform. Please contact support.',
+            code: suspendedCode,
+            isSuspended: true,
+            platformHold: true
+          });
+        }
         return res.status(403).json({
           error: 'Organization subscription is suspended. Please settle outstanding invoices to restore access.',
           code: suspendedCode,
@@ -62,13 +70,20 @@ function requireActiveSubscription(options = {}) {
       }
 
       if (effectiveStatus === 'canceled') {
+        if (subscription?.manualHold) {
+          return res.status(403).json({
+            error: 'Your account has been placed on hold by the platform. Please contact support.',
+            code: 'SUBSCRIPTION_CANCELED',
+            isCanceled: true,
+            platformHold: true
+          });
+        }
         return res.status(403).json({
           error: 'Organization subscription has been canceled. Please renew or reactivate your subscription.',
           code: 'SUBSCRIPTION_CANCELED',
           isCanceled: true
         });
       }
-
       if (effectiveStatus === 'past_due') {
         if (!allowPastDue) {
           return res.status(403).json({
