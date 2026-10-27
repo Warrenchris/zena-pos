@@ -101,7 +101,7 @@ export async function getLogoBitmap(logoUrl, {
         image.onload = null;
         image.onerror = null;
         reject(new Error('Image load timed out'));
-      }, 500);
+      }, (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') ? 500 : 5000);
 
       image.crossOrigin = 'Anonymous';
       image.onload = () => {
