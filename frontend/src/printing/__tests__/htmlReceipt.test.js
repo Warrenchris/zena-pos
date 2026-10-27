@@ -386,6 +386,35 @@ describe('htmlReceipt - renderReceiptHtml', () => {
       expect(html).toContain('class="header-wordmark">ZANA POS</span>');
       expect(html).toContain('Powered by Zana POS');
     });
+
+    it('supports optional brand icon slot next to wordmark, and hides it when showPoweredBy is false', () => {
+      const mockSvgDataUrl = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PGNpcmNsZSBjeD0iOCIgY3k9IjgiIHI9IjgiLz48L3N2Zz4=';
+      // When showPoweredBy is true
+      const receiptWithIcon = buildReceipt(fullSaleData, {
+        business: { ...fullBusiness, showPoweredBy: true, brandIcon: mockSvgDataUrl },
+      });
+      const htmlWithIcon = renderReceiptHtml(receiptWithIcon, { widthMm: 80, formatMoney });
+      expect(htmlWithIcon).toContain('class="brand-icon"');
+      expect(htmlWithIcon).toContain(mockSvgDataUrl);
+      expect(htmlWithIcon).toContain('class="header-wordmark">ZANA POS</span>');
+
+      // When showPoweredBy is false
+      const receiptHidden = buildReceipt(fullSaleData, {
+        business: { ...fullBusiness, showPoweredBy: false, brandIcon: mockSvgDataUrl },
+      });
+      const htmlHidden = renderReceiptHtml(receiptHidden, { widthMm: 80, formatMoney });
+      expect(htmlHidden).not.toContain('class="brand-icon"');
+      expect(htmlHidden).not.toContain(mockSvgDataUrl);
+      expect(htmlHidden).not.toContain('class="header-wordmark"');
+    });
+
+    it('renders header typography with ZANA POS wordmark larger than store name and store name letter-spacing', () => {
+      const receipt = buildReceipt(fullSaleData, { business: fullBusiness });
+      const html = renderReceiptHtml(receipt, { widthMm: 80, formatMoney });
+      expect(html).toContain('font-size: 15px;');
+      expect(html).toContain('font-size: 11.5px;');
+      expect(html).toContain('letter-spacing: 0.5px;');
+    });
   });
 
   describe('XSS escaping', () => {

@@ -183,6 +183,7 @@ export function buildReceipt(completedSale, { business = {}, receiptSettings = {
       kraPin: business?.kraPin || '',
       branch: business?.branch || receiptSettings?.branch || '',
       tagline: business?.tagline || receiptSettings?.tagline || '',
+      brandIcon: business?.brandIcon || receiptSettings?.brandIcon || null,
       showPoweredBy,
       qrEnabled,
       qrPayload: (qrEnabled && (typeof resolvedPublicAppUrl === 'string' ? resolvedPublicAppUrl.trim().replace(/\/+$/, '') : '') && receiptToken)
@@ -296,6 +297,7 @@ export function buildCreditNote(returnRecord, { business = {}, receiptSettings =
       kraPin: business?.kraPin || '',
       branch: business?.branch || receiptSettings?.branch || '',
       tagline: business?.tagline || receiptSettings?.tagline || '',
+      brandIcon: business?.brandIcon || receiptSettings?.brandIcon || null,
       showPoweredBy,
       qrEnabled: false,
       qrPayload: null, // Credit notes get no QR in this phase
