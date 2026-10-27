@@ -315,6 +315,16 @@ api.interceptors.response.use(
 
     if (error.response?.status === 403) {
       const code = error.response.data?.code;
+
+      if (code === 'SHOP_INACTIVE') {
+        const errorMsg = error.response.data?.error || error.response.data?.message || 'This shop branch has been deactivated.';
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('shop-inactive', {
+            detail: { code, message: errorMsg }
+          }));
+        }
+      }
+
       if (code === 'EMAIL_NOT_VERIFIED') {
         const errorMsg = error.response.data?.error || 'Email verification is required for this sensitive action.';
         if (typeof window !== 'undefined' && typeof window.showToast === 'function') {

@@ -1,13 +1,27 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { usePermissions } from '../hooks/usePermissions';
-import { logout } from '../store/slices/authSlice';
+
 import { isManagerTier } from '../utils/roles';
 import ModernSidebar from './ModernSidebar';
 import TopNavBar from './navigation/TopNavBar';
 import SubscriptionBanner from './SubscriptionBanner';
 import EmailVerificationBanner from './EmailVerificationBanner';
+import InactiveShopModal from './InactiveShopModal';
+
+const Shell = ({ children }) => (
+  <div className="min-h-screen bg-app text-text-primary font-sans antialiased selection:bg-primary/10 selection:text-primary transition-colors duration-200">
+    {/* Accessibility Skip Link */}
+    <a
+      href="#main-content"
+      className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:font-semibold focus:rounded-xl focus:shadow-floating focus:outline-none"
+    >
+      Skip to main content
+    </a>
+    {children}
+  </div>
+);
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(
@@ -22,7 +36,7 @@ export default function Layout() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const dispatch = useDispatch();
+
   const { user } = useSelector((state) => state.auth);
   const { getRoutesByRole } = usePermissions();
   const isLoginPage = location.pathname === '/login' || location.pathname === '/signup';
@@ -65,19 +79,6 @@ export default function Layout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const Shell = ({ children }) => (
-    <div className="min-h-screen bg-app text-text-primary font-sans antialiased selection:bg-primary/10 selection:text-primary transition-colors duration-200">
-      {/* Accessibility Skip Link */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:font-semibold focus:rounded-xl focus:shadow-floating focus:outline-none"
-      >
-        Skip to main content
-      </a>
-      {children}
-    </div>
-  );
-
   // If login or signup page, render minimal canvas shell
   if (isLoginPage) {
     return (
@@ -111,6 +112,7 @@ export default function Layout() {
       <div className={`${paddingLeftClass} flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out`}>
         <SubscriptionBanner />
         <EmailVerificationBanner />
+        <InactiveShopModal />
         <TopNavBar
           onMenuClick={() => setSidebarOpen(true)}
           isSidebarOpen={sidebarOpen}

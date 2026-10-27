@@ -26,6 +26,7 @@ const { WALK_IN_CUSTOMER_NAME } = require('../constants/customer');
 const { discountRequiresApproval, verifyDiscountApprovalIfNeeded } = require('../utils/discountApproval');
 const { invalidateAnalyticsCache } = require('../utils/analyticsCache');
 const { invalidateShopProductCache } = require('../services/productCache');
+const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 const {
   normalizeIdempotencyKey,
   generateSaleFingerprint,
@@ -2439,6 +2440,7 @@ exports.processRefund = async (req, res) => {
       await t.commit();
       invalidateAnalyticsCache(shopId);
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId || req.user?.organizationId, shopId);
 
       res.json(responsePayload);
     } catch (error) {

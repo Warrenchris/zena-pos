@@ -6,6 +6,7 @@ import { Popover } from '@headlessui/react';
 import DateRangePicker from '../DateRangePicker';
 import analyticsService from '../../services/analytics.service';
 import useCurrency from '../../hooks/useCurrency';
+import DashboardInsightsCarousel from './DashboardInsightsCarousel';
 
 function QuickFilter({ label, value, current, setCurrent }) {
   const isActive = current === value;
@@ -207,7 +208,11 @@ const StatsGrid = ({
   onPeriodChange,
   startDate,
   endDate,
-  onDateChange
+  onDateChange,
+  insights = null,
+  insightsLoading = false,
+  insightsError = null,
+  onRetryInsights,
 }) => {
   const { format } = useCurrency();
   const [stats, setStats] = useState([]);
@@ -340,39 +345,50 @@ const StatsGrid = ({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3 stats-asymmetric-grid">
-        {/* Featured Skeleton: Total Revenue */}
-        <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-floating animate-pulse md:col-span-2 md:row-span-3 flex flex-col justify-start md:self-start">
-          <div className="mb-2 flex items-start justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="h-3.5 w-24 rounded bg-surface-2" />
-              <div className="h-7 w-44 rounded bg-surface-2" />
-              <div className="h-3 w-20 rounded bg-surface-2" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 stats-asymmetric-grid">
+        {/* Left Column: Featured Skeleton + Carousel */}
+        <div className="md:col-span-2 flex flex-col gap-3">
+          <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-floating animate-pulse flex flex-col justify-start w-full">
+            <div className="mb-2 flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="h-3.5 w-24 rounded bg-surface-2" />
+                <div className="h-7 w-44 rounded bg-surface-2" />
+                <div className="h-3 w-20 rounded bg-surface-2" />
+              </div>
+              <div className="h-6 w-16 rounded-full bg-surface-2" />
             </div>
-            <div className="h-6 w-16 rounded-full bg-surface-2" />
+            <div className="h-20 md:h-24 rounded bg-surface-2" />
+            <div className="mt-3 flex items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default w-fit">
+              {[1, 2, 3, 4, 5].map((p) => (
+                <div key={p} className="h-6 w-14 rounded-lg bg-surface-2" />
+              ))}
+            </div>
           </div>
-          <div className="h-20 md:h-24 rounded bg-surface-2" />
-          <div className="mt-3 flex items-center gap-1.5 bg-surface-2/60 p-1 rounded-xl border border-border-default w-fit">
-            {[1, 2, 3, 4, 5].map((p) => (
-              <div key={p} className="h-6 w-14 rounded-lg bg-surface-2" />
-            ))}
-          </div>
+
+          <DashboardInsightsCarousel
+            insights={insights}
+            loading={insightsLoading}
+            error={insightsError}
+            onRetry={onRetryInsights}
+          />
         </div>
 
         {/* Secondary Skeletons: Orders, Visitors, Conversion Rate */}
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-2xl border border-border-default bg-surface p-3 shadow-floating animate-pulse md:col-span-1">
-            <div className="mb-2 flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="h-3 w-20 rounded bg-surface-2" />
-                <div className="h-5 w-16 rounded bg-surface-2" />
+        <div className="md:col-span-1 flex flex-col gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-2xl border border-border-default bg-surface p-3 shadow-floating animate-pulse flex-1 w-full">
+              <div className="mb-2 flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="h-3 w-20 rounded bg-surface-2" />
+                  <div className="h-5 w-16 rounded bg-surface-2" />
+                </div>
+                <div className="h-5 w-14 rounded-full bg-surface-2" />
               </div>
-              <div className="h-5 w-14 rounded-full bg-surface-2" />
+              <div className="h-8 rounded bg-surface-2" />
+              <div className="mt-1.5 h-3 w-16 rounded bg-surface-2" />
             </div>
-            <div className="h-8 rounded bg-surface-2" />
-            <div className="mt-1.5 h-3 w-16 rounded bg-surface-2" />
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   }
@@ -381,24 +397,34 @@ const StatsGrid = ({
   const secondaryStats = stats.filter((s) => s !== featuredStat);
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:grid-rows-3 stats-asymmetric-grid">
-      {featuredStat && (
-        <StatsCard
-          {...featuredStat}
-          featured
-          className="md:col-span-2 md:row-span-3 md:self-start"
-          period={period}
-          onPeriodChange={onPeriodChange}
-          isMasked={isRevenueMasked}
-          onToggleMask={handleToggleMask}
-          startDate={startDate}
-          endDate={endDate}
-          onDateChange={onDateChange}
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3 stats-asymmetric-grid">
+      <div className="md:col-span-2 flex flex-col gap-3">
+        {featuredStat && (
+          <StatsCard
+            {...featuredStat}
+            featured
+            className="w-full"
+            period={period}
+            onPeriodChange={onPeriodChange}
+            isMasked={isRevenueMasked}
+            onToggleMask={handleToggleMask}
+            startDate={startDate}
+            endDate={endDate}
+            onDateChange={onDateChange}
+          />
+        )}
+        <DashboardInsightsCarousel
+          insights={insights}
+          loading={insightsLoading}
+          error={insightsError}
+          onRetry={onRetryInsights}
         />
-      )}
-      {secondaryStats.map((stat, index) => (
-        <StatsCard key={index} {...stat} className="md:col-span-1" />
-      ))}
+      </div>
+      <div className="md:col-span-1 flex flex-col gap-3">
+        {secondaryStats.map((stat, index) => (
+          <StatsCard key={index} {...stat} className="w-full flex-1" />
+        ))}
+      </div>
     </div>
   );
 };

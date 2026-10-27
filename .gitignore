@@ -1,3 +1,7 @@
+# Root dependencies and IDE
+/node_modules/
+/.idea/
+/*.patch
 # Environment files
 .env
 .env.*

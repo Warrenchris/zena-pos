@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,10 +8,46 @@ init_sentry()
 
 from .routers import financial_analysis, forecasting, insights
 
+logger = logging.getLogger(__name__)
+
+
+async def warmup_prophet_model():
+    """
+    Warm Prophet at startup off the event loop so the first HTTP request
+    does not pay the Stan compilation and C++ binary loading penalty.
+    """
+    try:
+        from starlette.concurrency import run_in_threadpool
+        import pandas as pd
+        from prophet import Prophet
+
+        def _warm():
+            df = pd.DataFrame({
+                'ds': pd.date_range(start='2026-01-01', periods=10, freq='D'),
+                'y': [10.0 + i for i in range(10)]
+            })
+            m = Prophet(yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=False)
+            m.fit(df)
+            f = m.make_future_dataframe(periods=2)
+            m.predict(f)
+
+        await run_in_threadpool(_warm)
+        logger.info("[startup] Prophet model warmed up successfully.")
+    except Exception as e:
+        logger.warning(f"[startup] Prophet warmup warning: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await warmup_prophet_model()
+    yield
+
+
 app = FastAPI(
     title="Zana AI Financial Helper",
     description="AI-powered financial analysis and forecasting for African SMEs",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Health check endpoint (no authentication required)
