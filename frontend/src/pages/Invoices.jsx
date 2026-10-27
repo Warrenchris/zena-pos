@@ -350,6 +350,18 @@ export default function Invoices() {
     loadInvoices();
   }, [loadInvoices]);
 
+  const handleSelectInvoice = async (invoiceId) => {
+    try {
+      setDrawerLoading(true);
+      const result = await dispatch(fetchInvoiceById(invoiceId)).unwrap();
+      setSelectedInvoice(normalizeInvoice(result));
+    } catch {
+      showToast('error', 'Failed to load invoice details');
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
   const handleRowDownload = async (inv, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!inv || !inv.id) return;
