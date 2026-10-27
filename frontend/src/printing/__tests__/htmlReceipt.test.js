@@ -125,6 +125,11 @@ describe('htmlReceipt - renderReceiptHtml', () => {
       expect(html).toContain('class="item-name-58">Maize Flour 2kg</div>');
       expect(html).toContain('3 &times; KSh 290.00');
       expect(html).toContain('KSh 870.00');
+
+      // 58mm footer: receipt number is rendered on its own full-width line with nowrap style to prevent line splitting
+      expect(html).toContain('class="receipt-no receipt-no-full"');
+      expect(html).toMatch(/class="receipt-no receipt-no-full"[^>]*white-space:\s*nowrap/);
+      expect(html).toContain('Receipt No: R-D4E1-000042');
     });
   });
 

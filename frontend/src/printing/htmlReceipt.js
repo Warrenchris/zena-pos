@@ -542,8 +542,8 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   .receipt-container .footer-bottom-row {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    margin-top: 6px;
+    align-items: center;
+    margin-top: 3px;
     text-align: left;
   }
   .receipt-container .footer-left {
@@ -553,6 +553,13 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
   .receipt-container .receipt-no {
     font-family: ui-monospace, "Courier New", Courier, monospace;
     font-size: 8.5px;
+    white-space: nowrap;
+  }
+  .receipt-container .receipt-no-full {
+    text-align: left;
+    width: 100%;
+    margin-top: 3px;
+    white-space: nowrap;
   }
   .receipt-container .powered-by {
     font-size: 7.5px;
@@ -670,9 +677,10 @@ export function renderReceiptHtml(receipt, { widthMm = 80, formatMoney = default
       <span class="thank-you-rule"></span>
     </div>`).join('\n')}
     ${tagline ? `<div class="tagline">${escapeHtml(tagline)}</div>` : ''}
+    ${is58mm && receiptNumber ? `<div class="receipt-no receipt-no-full" style="white-space: nowrap;">Receipt No: ${escapeHtml(receiptNumber)}</div>` : ''}
     <div class="footer-bottom-row">
       <div class="footer-left">
-        ${receiptNumber ? `<div class="receipt-no">Receipt No: ${escapeHtml(receiptNumber)}</div>` : ''}
+        ${(!is58mm && receiptNumber) ? `<div class="receipt-no" style="white-space: nowrap;">Receipt No: ${escapeHtml(receiptNumber)}</div>` : ''}
         ${showPoweredBy ? '<div class="powered-by">Powered by Zana POS</div>' : ''}
       </div>
       <div class="footer-right">
