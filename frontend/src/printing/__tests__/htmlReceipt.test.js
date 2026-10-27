@@ -106,6 +106,8 @@ describe('htmlReceipt - renderReceiptHtml', () => {
       expect(html).toContain('Customer requested quick packaging');
 
       // Footer
+      expect(html).toContain('class="thank-you-row"');
+      expect(html).toContain('class="thank-you-rule"');
       expect(html).toContain('Goods once sold cannot be returned without receipt.');
       expect(html).toContain('Better Products · Brighter Together');
       expect(html).toContain('Receipt No: R-D4E1-000042');
