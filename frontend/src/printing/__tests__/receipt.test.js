@@ -4,7 +4,7 @@ import { renderEscPos, renderHtml, renderPlainText } from '../renderers';
 const money = (n) => `KSh ${Number(n).toFixed(2)}`;
 
 const sale = (overrides = {}) => ({
-  serverData: { invoiceNumber: 'INV-1001', createdAt: '2026-09-19T11:32:00' },
+  serverData: { invoiceNumber: 'INV-1001', createdAt: '2026-09-19T11:32:00+03:00' },
   items: [
     { id: 1, name: 'Sugar 1kg', price: 150, quantity: 2 },
     { id: 2, name: 'Extra long product name that must wrap onto more lines', price: '75.50', quantity: 1 },
