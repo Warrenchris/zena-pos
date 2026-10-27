@@ -368,7 +368,6 @@ const MySales = () => {
         sale={selectedSale}
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        onPrint={handlePrintReceipt}
         shopName={shop?.name || 'My Shop'}
         shop={shop || {}}
       />

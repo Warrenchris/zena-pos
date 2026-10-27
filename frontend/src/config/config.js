@@ -1,9 +1,24 @@
 // API Configuration
 // Prefer Vite-style import.meta.env (available in Vite-built modules). If
 // running under Node/test, fall back to process.env. Otherwise use localhost.
-const viteApi = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ? import.meta.env.VITE_API_URL : null;
+const readEnv = (key) => {
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
+  try {
+    return (new Function(`return import.meta.env?.${key}`))();
+  } catch {
+    return null;
+  }
+};
+
+const viteApi = readEnv('VITE_API_URL');
 const nodeApi = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL) ? process.env.REACT_APP_API_URL : null;
 export const API_URL = viteApi || nodeApi || 'http://localhost:3001';
+
+const vitePublicAppUrl = readEnv('VITE_PUBLIC_APP_URL');
+const nodePublicAppUrl = (typeof process !== 'undefined' && process.env && process.env.VITE_PUBLIC_APP_URL) ? process.env.VITE_PUBLIC_APP_URL : null;
+export const PUBLIC_APP_URL = vitePublicAppUrl || nodePublicAppUrl || '';
 
 // Other global configuration
 export const APP_NAME = 'Zana POS';

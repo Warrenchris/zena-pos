@@ -24,6 +24,7 @@ import { salesAPI, employeesAPI } from '../services/api';
 import { WALK_IN_CUSTOMER_NAME } from '../constants/customer';
 import PageHeader from '../components/ui/PageHeader';
 import { isManagerTier } from '../utils/roles';
+import { buildCreditNote, printReceipt, buildReceiptSettings } from '../printing';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -92,6 +93,44 @@ export default function SalesReturns() {
   const { format: formatCurrency } = useCurrency();
   const { showToast } = useToast();
   const { user } = useSelector((state) => state.auth || {});
+  const { shop: currentShop } = useSelector((state) => state.shops || {});
+  const settings = useSelector((state) => state.settings || {});
+
+  const handlePrintCreditNote = async (record) => {
+    if (!record) return;
+    try {
+      const receiptSettings = buildReceiptSettings(settings);
+      const activeShop = currentShop || user?.shop;
+      const business = {
+        name: activeShop?.name || record?.shop?.systemName || settings?.systemName || 'Zana Merchant',
+        branch: settings?.branch || activeShop?.branch || '',
+        address: activeShop?.address || settings?.address || '',
+        phone: activeShop?.phone || record?.shop?.contactPhone || settings?.contactPhone || '',
+        kraPin: activeShop?.kraPin || settings?.kraPin || '',
+        tagline: settings?.tagline || '',
+        showPoweredBy: settings?.showPoweredBy !== false,
+      };
+
+      const creditNoteModel = buildCreditNote(record, {
+        business,
+        receiptSettings,
+        isDuplicate: true, // Reprints are marked duplicate
+      });
+
+      const res = await printReceipt(creditNoteModel, {
+        formatMoney: formatCurrency,
+        business,
+        receiptSettings,
+      });
+
+      if (!res.ok) {
+        showToast('error', res.error || 'Failed to print credit note');
+      }
+    } catch (err) {
+      console.error('Failed to print credit note:', err);
+      showToast('error', 'Error generating credit note print job');
+    }
+  };
 
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1053,7 +1092,7 @@ export default function SalesReturns() {
               <Button
                 variant="outline"
                 leftIcon={PrinterIcon}
-                onClick={() => window.print()}
+                onClick={() => handlePrintCreditNote(creditNoteData)}
               >
                 Print Credit Note
               </Button>

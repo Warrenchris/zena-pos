@@ -11,13 +11,11 @@ import {
   DocumentTextIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { formatDateLong, formatDateShort, formatDateTime } from '../utils/formatters';
 import Spinner from '../components/ui/Spinner';
 import { useCurrency } from '../hooks/useCurrency';
 import { useToast } from '../components/Toast';
-import { salesAPI } from '../services/api';
+import api, { salesAPI } from '../services/api';
 import { invoicesAPI } from '../services/api/invoices';
 import {
   fetchInvoices,
@@ -352,159 +350,6 @@ export default function Invoices() {
     loadInvoices();
   }, [loadInvoices]);
 
-  const getImageDataUrl = async (url) => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Failed to fetch image');
-      const blob = await res.blob();
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return null;
-    }
-  };
-
-  const generatePdfDoc = async (inv) => {
-    if (!inv) return null;
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 40;
-
-    const COMPANY = {
-      name: 'Zana POS',
-      address: '123 Market St, Nairobi, Kenya',
-      phone: '+254 700 000000',
-      email: 'info@zana.example',
-      paymentTerms: 'Payment due within 30 days.'
-    };
-
-    const logoDataUrl = await getImageDataUrl('/logo.png');
-
-    const drawHeader = () => {
-      const y = margin - 10;
-      if (logoDataUrl) {
-        try { doc.addImage(logoDataUrl, 'PNG', margin, y, 60, 60); } catch {}
-      }
-      doc.setFontSize(14);
-      doc.setFont(undefined, 'bold');
-      const titleX = logoDataUrl ? margin + 76 : margin;
-      doc.text(COMPANY.name, titleX, y + 18);
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'normal');
-      doc.text(COMPANY.address, titleX, y + 34);
-      doc.text(`${COMPANY.phone} • ${COMPANY.email}`, titleX, y + 48);
-
-      const metaX = pageWidth - margin - 200;
-      doc.setFillColor(245, 245, 245);
-      doc.rect(metaX, y, 200, 50, 'F');
-      doc.setFont(undefined, 'bold');
-      doc.setFontSize(11);
-      doc.text(`INVOICE: ${inv.invoiceNumber || ''}`, metaX + 10, y + 18);
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(8);
-      doc.text(`Date: ${inv.dateIssued ? formatDateShort(inv.dateIssued) : ''}`, metaX + 10, y + 32);
-
-      if (doc.setDrawColor) {
-        doc.setDrawColor(120, 68, 33);
-      } else if (doc.setStrokeColor) {
-        doc.setStrokeColor(120, 68, 33);
-      }
-      doc.setLineWidth(1.5);
-      doc.line(margin, y + 65, pageWidth - margin, y + 65);
-    };
-
-    const drawFooter = (pageNum, totalPages) => {
-      const y = pageHeight - margin + 10;
-      if (doc.setDrawColor) {
-        doc.setDrawColor(220, 220, 220);
-      } else if (doc.setStrokeColor) {
-        doc.setStrokeColor(220, 220, 220);
-      }
-      doc.setLineWidth(0.5);
-      doc.line(margin, y - 5, pageWidth - margin, y - 5);
-      doc.setFontSize(8);
-      doc.setFont(undefined, 'normal');
-      doc.setTextColor(120, 120, 120);
-      doc.text(COMPANY.paymentTerms, margin, y + 8);
-      doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth - margin - 50, y + 8);
-    };
-
-    drawHeader();
-
-    const clientY = margin + 85;
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text('BILL TO:', margin, clientY);
-    doc.setFont(undefined, 'normal');
-    doc.text(inv.customerName || WALK_IN_CUSTOMER_NAME, margin, clientY + 14);
-
-    const items = inv.items || [];
-    const tableBody = items.length > 0
-      ? items.map((item, index) => [
-          index + 1,
-          item.name || 'Product',
-          item.quantity ?? 1,
-          formatCurrency(item.price ?? 0),
-          formatCurrency((item.price ?? 0) * (item.quantity ?? 1))
-        ])
-      : [[1, 'Sale items', 1, formatCurrency(inv.subtotal || inv.total), formatCurrency(inv.subtotal || inv.total)]];
-
-    autoTable(doc, {
-      startY: clientY + 60,
-      margin: { left: margin, right: margin },
-      head: [['#', 'Item', 'Qty', 'Unit Price', 'Total']],
-      body: tableBody,
-      headStyles: {
-        fillColor: [120, 68, 33],
-        textColor: [255, 255, 255],
-        fontStyle: 'bold',
-        fontSize: 9
-      },
-      bodyStyles: {
-        fontSize: 8,
-        textColor: [50, 50, 50]
-      },
-      columnStyles: {
-        0: { cellWidth: 30 },
-        1: { cellWidth: 'auto' },
-        2: { cellWidth: 40, halign: 'center' },
-        3: { cellWidth: 80, halign: 'right' },
-        4: { cellWidth: 80, halign: 'right' }
-      },
-      theme: 'striped'
-    });
-
-    const finalY = (doc.lastAutoTable?.finalY ?? (clientY + 60)) + 25;
-    const summaryX = pageWidth - margin - 180;
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
-    doc.text('Subtotal:', summaryX, finalY);
-    doc.text(formatCurrency(inv.subtotal || inv.total), pageWidth - margin, finalY, { align: 'right' });
-
-    doc.text('Tax:', summaryX, finalY + 14);
-    doc.text(formatCurrency(inv.tax || 0), pageWidth - margin, finalY + 14, { align: 'right' });
-
-    const totalY = finalY + 32;
-    doc.setFont(undefined, 'bold');
-    doc.setFontSize(11);
-    doc.text('Total Amount Due:', summaryX, totalY);
-    doc.text(formatCurrency(inv.total), pageWidth - margin, totalY, { align: 'right' });
-
-    const totalPages = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i);
-      drawFooter(i, totalPages);
-    }
-
-    return doc;
-  };
-
   const handleSelectInvoice = async (invoiceId) => {
     try {
       setDrawerLoading(true);
@@ -519,26 +364,37 @@ export default function Invoices() {
 
   const handleRowDownload = async (inv, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    if (!inv) return;
+    if (!inv || !inv.id) return;
     try {
-      // Use fetchInvoiceById to ensure complete line items for PDF
-      const fullData = await dispatch(fetchInvoiceById(inv.id)).unwrap();
-      const doc = await generatePdfDoc(normalizeInvoice(fullData));
-      doc.save(`${inv.invoiceNumber || 'invoice'}.pdf`);
-    } catch {
+      const res = await api.get(`/api/invoices/${inv.id}/pdf`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${inv.invoiceNumber || inv.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download invoice PDF:', err);
       showToast('error', 'Failed to generate invoice PDF');
     }
   };
 
   const handleRowPrint = async (inv, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    if (!inv) return;
+    if (!inv || !inv.id) return;
     try {
-      // Use fetchInvoiceById to ensure complete line items for print
-      const fullData = await dispatch(fetchInvoiceById(inv.id)).unwrap();
-      const doc = await generatePdfDoc(normalizeInvoice(fullData));
-      doc.output('dataurlnewwindow');
-    } catch {
+      const res = await api.get(`/api/invoices/${inv.id}/pdf`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const printWin = window.open(url, '_blank');
+      if (!printWin) {
+        showToast('error', 'Please allow popups to print invoices');
+      }
+    } catch (err) {
+      console.error('Failed to open invoice PDF:', err);
       showToast('error', 'Failed to open invoice for printing');
     }
   };

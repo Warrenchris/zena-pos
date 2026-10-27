@@ -1,35 +1,29 @@
 import { store } from '../store';
-import { selectCurrencySettings } from '../store/slices/settingsSlice';
+import { selectCurrencySettings, formatCurrency } from '../store/slices/settingsSlice';
 
 /**
  * Get current currency settings from the store
  * @returns {Object} Current currency settings
  */
 export const getCurrentCurrencySettings = () => {
-  const state = store.getState();
-  return selectCurrencySettings(state);
+  try {
+    const state = store?.getState ? store.getState() : null;
+    return state ? selectCurrencySettings(state) : { currencySymbol: 'KSh', currencyPosition: 'before', decimalPlaces: 2 };
+  } catch {
+    return { currencySymbol: 'KSh', currencyPosition: 'before', decimalPlaces: 2 };
+  }
 };
 
 /**
  * Format currency using current settings from the store
+ * Delegates to settingsSlice.formatCurrency as the single source of truth.
  * @param {number|string} amount - Amount to format
+ * @param {Object} [settingsOverride] - Optional settings override
  * @returns {string} Formatted currency string
  */
-export const formatCurrencyWithSettings = (amount) => {
-  const settings = getCurrentCurrencySettings();
-  const { currencySymbol, currencyPosition, decimalPlaces } = settings;
-  
-  if (amount === null || amount === undefined || amount === '') {
-    amount = 0;
-  }
-  
-  const formattedAmount = parseFloat(amount).toFixed(decimalPlaces);
-  
-  if (currencyPosition === 'before') {
-    return `${currencySymbol} ${formattedAmount}`;
-  } else {
-    return `${formattedAmount} ${currencySymbol}`;
-  }
+export const formatCurrencyWithSettings = (amount, settingsOverride) => {
+  const settings = settingsOverride || getCurrentCurrencySettings();
+  return formatCurrency(amount, settings);
 };
 
 /**

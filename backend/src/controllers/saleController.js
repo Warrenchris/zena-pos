@@ -1,4 +1,5 @@
 const { validationResult } = require('express-validator');
+const crypto = require('crypto');
 const { Op } = require('sequelize');
 const Sale = require('../models/Sale');
 const SaleItem = require('../models/SaleItem');
@@ -11,6 +12,8 @@ const Employee = require('../models/Employee');
 const UuidHelper = require('../utils/uuidHelper');
 const User = require('../models/User');
 const SaleRefund = require('../models/SaleRefund');
+const CreditNote = require('../models/CreditNote');
+const { generateNextCreditNoteNumber } = require('../utils/creditNoteSequence');
 const SalePayment = require('../models/SalePayment');
 const SystemSettings = require('../models/SystemSettings');
 const Inventory = require('../models/Inventory');
@@ -33,6 +36,7 @@ const {
 } = require('../utils/idempotencyUtils');
 const { isIntegerId } = require('../utils/idKind');
 const { REALIZED_SALE_FILTER, withSaleFilter } = require('../constants/saleFilters');
+const { generateNextInvoiceNumber } = require('../utils/invoiceSequence');
 
 const round2 = (num) => Math.round((parseFloat(num || 0) + Number.EPSILON) * 100) / 100;
 
@@ -733,7 +737,10 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     paymentReference,
     paymentProvider,
     paymentNotes,
-    idempotencyKey
+    idempotencyKey,
+    receiptNumber,
+    receiptToken,
+    cashierName: clientCashierName
   } = saleData;
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -760,6 +767,46 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
 
   const cleanIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
   const requestHash = generateSaleFingerprint(saleData, shopId);
+
+  const RECEIPT_NUMBER_REGEX = /^R-[A-Za-z0-9]{4}-\d{6}$/;
+  if (receiptNumber) {
+    if (!RECEIPT_NUMBER_REGEX.test(receiptNumber)) {
+      const err = new Error("Invalid receiptNumber format '" + receiptNumber + "'. Expected format: R-XXXX-NNNNNN");
+      err.statusCode = 400;
+      throw err;
+    }
+    const existingByReceipt = await Sale.findOne({ where: { shopId, receiptNumber } });
+    if (existingByReceipt) {
+      if (cleanIdempotencyKey && existingByReceipt.idempotencyKey === cleanIdempotencyKey) {
+        return existingByReceipt;
+      }
+      const err = new Error("Receipt number '" + receiptNumber + "' already exists for this shop with a different idempotency key.");
+      err.statusCode = 409;
+      err.code = 'RECEIPT_NUMBER_ALREADY_EXISTS';
+      throw err;
+    }
+  }
+
+  const RECEIPT_TOKEN_REGEX = /^[A-Za-z0-9_-]{22}$/;
+  let receiptTokenHash = null;
+  if (receiptToken) {
+    if (typeof receiptToken !== 'string' || !RECEIPT_TOKEN_REGEX.test(receiptToken)) {
+      const err = new Error("Invalid receiptToken format. Expected 22 base64url characters.");
+      err.statusCode = 400;
+      throw err;
+    }
+    receiptTokenHash = crypto.createHash('sha256').update(receiptToken).digest('hex');
+    const existingByToken = await Sale.findOne({ where: { receiptTokenHash } });
+    if (existingByToken) {
+      if (cleanIdempotencyKey && existingByToken.idempotencyKey === cleanIdempotencyKey) {
+        return existingByToken;
+      }
+      const err = new Error("Receipt token already exists with a different idempotency key.");
+      err.statusCode = 409;
+      err.code = 'RECEIPT_TOKEN_ALREADY_EXISTS';
+      throw err;
+    }
+  }
 
   // Idempotency check: if sale with this idempotencyKey already exists, verify fingerprint and return immediately
   if (cleanIdempotencyKey) {
@@ -940,26 +987,10 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
     const total = serverTotal;
     const change = paymentAmount ? parseFloat(paymentAmount) - total : 0;
 
-    const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-
-    const [lastSale] = await Sale.findAll({
-      where: {
-        invoiceNumber: { [Op.like]: `${dateStr}-%` },
-        shopId
-      },
-      order: [['invoiceNumber', 'DESC']],
-      limit: 1,
-      lock: t.LOCK.UPDATE,
+    const invoiceNumber = await generateNextInvoiceNumber({
+      shopId,
       transaction: t
     });
-
-    let sequence = '0001';
-    if (lastSale) {
-      const lastSequence = parseInt(lastSale.invoiceNumber.split('-')[1], 10);
-      sequence = String(lastSequence + 1).padStart(4, '0');
-    }
-    const invoiceNumber = `${dateStr}-${sequence}`;
 
     const jwtId = user?.id;
     const resolvedUserId = (typeof jwtId === 'number')
@@ -970,6 +1001,12 @@ exports.createSaleInternal = async (saleData, shopId, user, orgId = null, existi
 
     const sale = await Sale.create({
       invoiceNumber,
+      receiptNumber: receiptNumber || null,
+      receiptTokenHash: receiptTokenHash || null,
+      cashierName: clientCashierName || (user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null)),
+      taxAmount: totalServerTax,
+      taxInclusive: isTaxInclusive,
+      changeAmount: change > 0 ? change : 0,
       idempotencyKey: idempotencyKey || null,
       subtotal: finalSaleSubtotal,
       tax: totalServerTax,
@@ -2145,6 +2182,8 @@ exports.processRefund = async (req, res) => {
         }
       }
 
+      const creditNoteNumber = await generateNextCreditNoteNumber({ shopId, transaction: t });
+
       const createdRefunds = [];
 
       for (const item of itemsWithNetPrice) {
@@ -2177,6 +2216,7 @@ exports.processRefund = async (req, res) => {
           status: 'processed',
           shopId,
           refundedAt: new Date(),
+          creditNoteNumber,
           metadata: {
             disposition,
             isWriteOff: disposition === 'damaged_writeoff',
@@ -2345,7 +2385,37 @@ exports.processRefund = async (req, res) => {
         details: `Processed ${allFullyRefunded ? 'full' : 'partial'} refund for sale ${sale.invoiceNumber} (Total: ${totalRefundAmount} KSh)`
       }, t);
 
+      let creditNoteRecord = null;
+      if (CreditNote) {
+        creditNoteRecord = await CreditNote.create({
+          creditNoteNumber,
+          shopId,
+          saleId: parseInt(saleId, 10),
+          totalRefundAmount,
+          totalTaxRefunded: totalRefundTax,
+          refundMethod,
+          reason: itemsWithNetPrice[0]?.reasonNotes || itemsWithNetPrice[0]?.reason || 'Customer Return',
+          processedBy,
+          refundedBy,
+          status: 'processed',
+          issuedAt: new Date(),
+          metadata: {
+            itemsCount: itemsWithNetPrice.length,
+            ...(cleanIdempotencyKey ? { idempotencyKey: cleanIdempotencyKey } : {})
+          }
+        }, { transaction: t });
+
+        if (creditNoteRecord && createdRefunds.length > 0) {
+          for (const rf of createdRefunds) {
+            rf.creditNoteId = creditNoteRecord.id;
+            await rf.save({ transaction: t });
+          }
+        }
+      }
+
       const responsePayload = {
+        creditNoteNumber,
+        creditNoteId: creditNoteRecord?.id || null,
         refunds: createdRefunds,
         saleStatus,
         totalRefundAmount,
@@ -2622,6 +2692,7 @@ exports.getAllReturns = async (req, res) => {
 exports.getCreditNote = async (req, res) => {
   const { saleId } = req.params;
   const shopId = req.shopId || req.user.shopId;
+  const { creditNoteNumber } = req.query;
 
   try {
     const sale = await Sale.findOne({
@@ -2636,8 +2707,13 @@ exports.getCreditNote = async (req, res) => {
       return res.status(404).json({ error: 'Sale not found' });
     }
 
+    const refundWhere = { saleId, shopId, status: 'processed' };
+    if (creditNoteNumber) {
+      refundWhere.creditNoteNumber = creditNoteNumber;
+    }
+
     const refunds = await SaleRefund.findAll({
-      where: { saleId, shopId, status: 'processed' },
+      where: refundWhere,
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'barcode'] }
       ],
@@ -2648,20 +2724,25 @@ exports.getCreditNote = async (req, res) => {
       return res.status(404).json({ error: 'No processed refunds found for this sale' });
     }
 
+    const activeCreditNoteNumber = refunds[0]?.creditNoteNumber || `CN-${sale.invoiceNumber || sale.id}`;
+    const activeRefunds = refunds[0]?.creditNoteNumber
+      ? refunds.filter(r => r.creditNoteNumber === refunds[0].creditNoteNumber)
+      : refunds;
+
     const settings = await SystemSettings.findOne({ where: { shopId } });
-    const totalRefundedAmount = refunds.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+    const totalRefundedAmount = activeRefunds.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
 
     const creditNote = {
-      creditNoteNumber: `CN-${sale.invoiceNumber || sale.id}`,
+      creditNoteNumber: activeCreditNoteNumber,
       originalInvoiceNumber: sale.invoiceNumber,
       saleId: sale.id,
-      issuedAt: refunds[0]?.refundedAt || refunds[0]?.createdAt || new Date(),
+      issuedAt: activeRefunds[0]?.refundedAt || activeRefunds[0]?.createdAt || new Date(),
       customer: sale.Customer ? {
         name: sale.Customer.name,
         email: sale.Customer.email,
         phone: sale.Customer.phone
       } : { name: sale.customerName || 'Walk-in Customer' },
-      items: refunds.map(r => ({
+      items: activeRefunds.map(r => ({
         refundId: r.id,
         productId: r.productId,
         productName: r.product?.name || 'Unknown Product',
@@ -2675,8 +2756,8 @@ exports.getCreditNote = async (req, res) => {
         reasonNotes: r.reasonNotes || r.reason || ''
       })),
       totalRefundAmount: parseFloat(totalRefundedAmount.toFixed(2)),
-      totalTaxRefunded: parseFloat(refunds.reduce((sum, r) => sum + parseFloat(r.metadata?.taxAmount || 0), 0).toFixed(2)),
-      paymentMethod: refunds[0]?.refundMethod || sale.paymentMethod,
+      totalTaxRefunded: parseFloat(activeRefunds.reduce((sum, r) => sum + parseFloat(r.metadata?.taxAmount || 0), 0).toFixed(2)),
+      paymentMethod: activeRefunds[0]?.refundMethod || sale.paymentMethod,
       shop: {
         systemName: settings?.systemName || 'Zana POS',
         contactEmail: settings?.contactEmail,

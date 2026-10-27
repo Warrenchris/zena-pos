@@ -11,6 +11,8 @@ export const STORAGE_KEY = 'zana.printerProfile.v1';
 
 export const CONNECTIONS = ['browser', 'bluetooth', 'usb', 'serial', 'network'];
 export const CUT_MODES = ['partial', 'full', 'none'];
+export const QR_MODES = ['raster', 'native'];
+export const QR_ALIGNS = ['right', 'center', 'left'];
 
 /** Human-readable names for each connection type (used by the settings UI). */
 export const CONNECTION_INFO = {
@@ -64,6 +66,8 @@ export const DEFAULT_PROFILE = Object.freeze({
   usbSerialNumber: '',
   // Serial: the Web Serial API gives no stable device id, so the adapter uses whichever single
   // port the browser has already granted access to. baudRate is the only thing worth storing.
+  qrMode: 'raster',
+  qrAlign: 'right',
   serialBaudRate: 9600,
 });
 
@@ -99,6 +103,8 @@ export function normalizeProfile(raw) {
     usbVendorId: Number.isInteger(p.usbVendorId) && p.usbVendorId >= 0 ? p.usbVendorId : null,
     usbProductId: Number.isInteger(p.usbProductId) && p.usbProductId >= 0 ? p.usbProductId : null,
     usbSerialNumber: typeof p.usbSerialNumber === 'string' ? p.usbSerialNumber.slice(0, 128) : '',
+    qrMode: QR_MODES.includes(p.qrMode) ? p.qrMode : DEFAULT_PROFILE.qrMode,
+    qrAlign: QR_ALIGNS.includes(p.qrAlign) ? p.qrAlign : DEFAULT_PROFILE.qrAlign,
     serialBaudRate: SERIAL_BAUD_RATES.includes(Number(p.serialBaudRate)) ? Number(p.serialBaudRate) : DEFAULT_PROFILE.serialBaudRate,
   };
 }

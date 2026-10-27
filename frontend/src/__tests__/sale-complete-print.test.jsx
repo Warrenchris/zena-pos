@@ -124,6 +124,22 @@ describe('SaleCompleteModal printing', () => {
     expect(document.getElementById('pos-receipt-print-area')).toBeNull();
   });
 
+
+  it('auto-prints receipt on mount when autoPrintReceipt setting is true', async () => {
+    printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: false });
+    renderModal({ settings: { autoPrintReceipt: true } });
+
+    await waitFor(() => expect(printReceipt).toHaveBeenCalledTimes(1));
+    expect(printReceipt).toHaveBeenCalledWith(completedSale, expect.any(Object));
+  });
+
+  it('does not auto-print when autoPrintReceipt setting is false (default)', async () => {
+    printReceipt.mockResolvedValue({ ok: true, adapterId: 'browser', fellBack: false });
+    renderModal({ settings: { autoPrintReceipt: false } });
+
+    expect(printReceipt).not.toHaveBeenCalled();
+  });
+
   describe('printer settings shortcut', () => {
     it('opens printer settings without closing the sale screen', async () => {
       const onClose = jest.fn();

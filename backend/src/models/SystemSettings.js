@@ -162,6 +162,30 @@ const SystemSettings = sequelize.define('SystemSettings', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
+  branch: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  tagline: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  showPoweredBy: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
+  qrEnabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  vatRegistered: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  autoPrintReceipt: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
   printerType: {
     type: DataTypes.ENUM('browser', 'thermal'),
     defaultValue: 'browser'
@@ -317,6 +341,12 @@ SystemSettings.getDefaultSettings = function() {
     taxInclusive: false,
     receiptHeader: null,
     receiptFooter: null,
+    branch: null,
+    tagline: null,
+    showPoweredBy: true,
+    qrEnabled: false,
+    vatRegistered: false,
+    autoPrintReceipt: false,
     showLogoOnReceipt: true,
     printerType: 'browser',
     printerIP: null,
