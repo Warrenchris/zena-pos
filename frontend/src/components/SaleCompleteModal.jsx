@@ -33,6 +33,33 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
   const receiptSettings = useReceiptSettings();
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
 
+  const handlePrint = React.useCallback(async () => {
+    if (!completedSale) return;
+    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop, receiptSettings });
+    if (!window.showToast) return;
+    if (!result.ok) {
+      window.showToast({
+        type: 'error',
+        title: 'Could not print receipt',
+        message: result.error || 'Check the printer and try again.',
+        duration: 5000
+      });
+    } else if (result.fellBack) {
+      window.showToast({
+        type: 'warning',
+        title: 'Printed with browser printing',
+        message: 'Your printer could not be reached, so the system print dialog was used.',
+        duration: 5000
+      });
+    }
+  }, [completedSale, formatCurrency, shop, receiptSettings]);
+
+  React.useEffect(() => {
+    if (completedSale && settings?.autoPrintReceipt) {
+      handlePrint();
+    }
+  }, [completedSale, settings?.autoPrintReceipt, handlePrint]);
+
   if (!completedSale) return null;
 
   const {
@@ -51,32 +78,6 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
   const customerEmail = customer?.email;
 
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * item.quantity), 0);
-
-
-  React.useEffect(() => {
-    if (completedSale && settings?.autoPrintReceipt) {
-      handlePrint();
-    }
-  }, [completedSale, settings?.autoPrintReceipt]);
-  const handlePrint = async () => {
-    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop, receiptSettings });
-    if (!window.showToast) return;
-    if (!result.ok) {
-      window.showToast({
-        type: 'error',
-        title: 'Could not print receipt',
-        message: result.error || 'Check the printer and try again.',
-        duration: 5000
-      });
-    } else if (result.fellBack) {
-      window.showToast({
-        type: 'warning',
-        title: 'Printed with browser printing',
-        message: 'Your printer could not be reached, so the system print dialog was used.',
-        duration: 5000
-      });
-    }
-  };
 
   const handleEmailReceipt = () => {
     if (window.showToast) {
