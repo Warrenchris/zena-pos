@@ -114,6 +114,15 @@ describe('htmlReceipt - renderReceiptHtml', () => {
       expect(html).toContain('Powered by Zana POS');
     });
 
+    it('applies neutral light grey #e5e5e5 to TOTAL bar with print-color-adjust: exact and neutral greys', () => {
+      const receipt = buildReceipt(fullSaleData, { business: fullBusiness });
+      const html = renderReceiptHtml(receipt, { widthMm: 80, formatMoney });
+      expect(html).toContain('background-color: #e5e5e5;');
+      expect(html).toContain('print-color-adjust: exact;');
+      expect(html).not.toContain('#0f172a');
+      expect(html).not.toContain('#f1f5f9');
+    });
+
     it('renders a complete 58mm sales receipt with 2-line layout', () => {
       const receipt = buildReceipt(fullSaleData, { business: fullBusiness });
       const html = renderReceiptHtml(receipt, { widthMm: 58, formatMoney });
