@@ -1,0 +1,518 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Receipt</title>
+<style>
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+  @media print {
+    html, body {
+      width: 58mm !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #fff !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .receipt-container {
+      width: 58mm !important;
+      box-shadow: none !important;
+      border: none !important;
+      padding: 3mm 3mm 5mm !important;
+    }
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+  }
+  .receipt-container {
+    width: 58mm;
+    margin: 0 auto;
+    padding: 3.5mm;
+    background: #fff;
+    color: #111111;
+    box-sizing: border-box;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color-scheme: light;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .receipt-container * {
+    box-sizing: border-box;
+  }
+  .receipt-container .header-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .receipt-container .header-brand-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .receipt-container .brand-icon {
+    width: 15px;
+    height: 15px;
+    object-fit: contain;
+  }
+  .receipt-container .header-logo {
+    max-height: 22px;
+    max-width: 50px;
+    object-fit: contain;
+    filter: grayscale(1) contrast(1.3);
+  }
+  .receipt-container .header-wordmark {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    color: #111111;
+  }
+  .receipt-container .store-name {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.25;
+    margin: 2px 0;
+  }
+  .receipt-container .store-branch {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #444444;
+    text-align: center;
+    margin-bottom: 1.5px;
+  }
+  .receipt-container .store-address {
+    font-size: 9.5px;
+    color: #444444;
+    text-align: center;
+    margin-bottom: 1.5px;
+  }
+  .receipt-container .store-contact {
+    font-size: 9px;
+    color: #666666;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .receipt-container .custom-header {
+    font-size: 9px;
+    color: #333333;
+    text-align: center;
+    margin: 2px 0;
+  }
+  .receipt-container .divider-rule {
+    border: 0;
+    border-top: 1px solid #cccccc;
+    margin: 5px 0;
+  }
+  .receipt-container .doc-title {
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.5px;
+    margin: 4px 0 2px;
+  }
+  .receipt-container .duplicate-badge-wrap {
+    text-align: center;
+    margin: 1px 0 3px;
+  }
+  .receipt-container .duplicate-badge {
+    display: inline-block;
+    border: 1px solid #111111;
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 1px 5px;
+    text-align: center;
+    color: #111111;
+  }
+  .receipt-container .meta-block {
+    font-family: ui-monospace, "Courier New", Courier, monospace;
+    font-size: 9px;
+    line-height: 1.4;
+    margin: 5px 0;
+  }
+  .receipt-container .meta-row {
+    display: flex;
+    justify-content: flex-start;
+  }
+  .receipt-container .meta-label {
+    width: 65px;
+    color: #111111;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .receipt-container .meta-val {
+    color: #111111;
+    word-break: break-all;
+  }
+  .receipt-container .offline-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background-color: #fef3c7;
+    color: #92400e;
+    border-radius: 4px;
+    padding: 3.5px 6px;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin: 5px 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .receipt-container .offline-icon {
+    width: 13px;
+    height: 13px;
+    stroke: #92400e;
+    flex-shrink: 0;
+  }
+  .receipt-container .items-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    margin: 5px 0;
+    font-size: 9.5px;
+  }
+  .receipt-container .items-table th {
+    font-size: 8px;
+    font-weight: 600;
+    color: #555555;
+    text-transform: uppercase;
+    border-bottom: 1px solid #cccccc;
+    padding: 3px 0;
+  }
+  .receipt-container .col-item { width: 48%; text-align: left; }
+  .receipt-container .col-qty { width: 12%; text-align: center; }
+  .receipt-container .col-price { width: 20%; text-align: right; }
+  .receipt-container .col-total { width: 20%; text-align: right; }
+  .receipt-container .items-table td {
+    padding: 3px 0;
+    vertical-align: top;
+    word-break: break-word;
+  }
+  .receipt-container .item-name {
+    font-weight: 700;
+    color: #111111;
+    line-height: 1.25;
+  }
+  .receipt-container .item-sub {
+    font-size: 8.5px;
+    color: #666666;
+    margin-top: 1px;
+  }
+  .receipt-container .item-sub-note {
+    font-size: 8px;
+    color: #666666;
+    font-style: italic;
+  }
+  .receipt-container .items-list-58 {
+    margin: 5px 0;
+    border-top: 1px solid #cccccc;
+    border-bottom: 1px solid #cccccc;
+    padding: 3px 0;
+  }
+  .receipt-container .item-block-58 {
+    margin-bottom: 4px;
+  }
+  .receipt-container .item-name-58 {
+    font-weight: 700;
+    font-size: 9.5px;
+    color: #111111;
+    word-break: break-word;
+  }
+  .receipt-container .item-row-58 {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5px;
+    margin-top: 1px;
+  }
+  .receipt-container .item-sub-58 {
+    color: #666666;
+  }
+  .receipt-container .item-total-58 {
+    font-weight: 600;
+    color: #111111;
+  }
+  .receipt-container .totals-section {
+    margin: 5px 0;
+    font-size: 9.5px;
+  }
+  .receipt-container .total-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 1px 0;
+    color: #111111;
+  }
+  .receipt-container .total-label {
+    color: #333333;
+  }
+  .receipt-container .total-val {
+    font-variant-numeric: tabular-nums;
+  }
+  .receipt-container .grand-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #e5e5e5;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 3.5px 5px;
+    margin: 4px 0;
+    border-radius: 3px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .receipt-container .grand-total-val {
+    font-variant-numeric: tabular-nums;
+  }
+  .receipt-container .change-row {
+    font-weight: 700;
+    color: #111111;
+  }
+  .receipt-container .general-notes {
+    font-size: 8.5px;
+    color: #444444;
+    margin: 4px 0;
+    padding-top: 3px;
+    border-top: 1px dashed #cccccc;
+  }
+  .receipt-container .notes-label {
+    font-weight: 600;
+  }
+  .receipt-container .footer-section {
+    margin-top: 6px;
+    text-align: center;
+  }
+  .receipt-container .thank-you-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 2px 0;
+  }
+  .receipt-container .thank-you-rule {
+    flex: 1;
+    border-bottom: 0.75px solid #111111;
+    height: 0;
+  }
+  .receipt-container .thank-you,
+  .receipt-container .thank-you-text {
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1.5px 0;
+    color: #111111;
+    text-align: center;
+  }
+  .receipt-container .tagline {
+    font-size: 8px;
+    color: #666666;
+    margin-top: 2px;
+  }
+  .receipt-container .footer-bottom-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 3px;
+    text-align: left;
+  }
+  .receipt-container .footer-left {
+    font-size: 8px;
+    color: #444444;
+  }
+  .receipt-container .receipt-no {
+    font-family: ui-monospace, "Courier New", Courier, monospace;
+    font-size: 8.5px;
+    white-space: nowrap;
+  }
+  .receipt-container .receipt-no-full {
+    text-align: left;
+    width: 100%;
+    margin-top: 3px;
+    white-space: nowrap;
+  }
+  .receipt-container .powered-by {
+    font-size: 7.5px;
+    color: #777777;
+    margin-top: 1px;
+  }
+  .receipt-container .footer-right {
+    min-width: 44px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .receipt-container .qr-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .receipt-container .qr-caption {
+    font-size: 7px;
+    color: #666666;
+    margin-top: 2px;
+    letter-spacing: 0.2px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="receipt-container">
+  <!-- Header -->
+  <div class="header-brand">
+    
+    
+      <span class="header-brand-wrap">
+        
+        <span class="header-wordmark">ZANA POS</span>
+      </span>
+    
+  </div>
+
+  <div class="store-name">ZANA SUPERMARKET</div>
+  <div class="store-branch">Westlands Branch</div>
+  <div class="store-address">Ring Road Parklands</div>
+  <div class="store-contact">Tel: 0712 345 678 | PIN: P051234567X</div>
+  <div class="custom-header">Karibu Zana!</div>
+<div class="custom-header">Open Daily 8:00 AM - 9:00 PM</div>
+
+  <hr class="divider-rule" />
+
+  <!-- Title & Duplicate -->
+  <div class="doc-title">SALES RECEIPT</div>
+  <div class="duplicate-badge-wrap"><span class="duplicate-badge">DUPLICATE COPY</span></div>
+
+  <!-- Meta Block -->
+  <div class="meta-block">
+    <div class="meta-row"><span class="meta-label">Invoice:</span><span class="meta-val">#INV-2026-0042</span></div>
+    <div class="meta-row"><span class="meta-label">Date:</span><span class="meta-val">2026-10-24 17:30</span></div>
+    <div class="meta-row"><span class="meta-label">Cashier:</span><span class="meta-val">Jane Mwangi</span></div>
+    <div class="meta-row"><span class="meta-label">Customer:</span><span class="meta-val">Peter Karanja</span></div>
+    <div class="meta-row"><span class="meta-label">Payment:</span><span class="meta-val">Cash</span></div>
+    
+    
+  </div>
+
+  <!-- Status banner -->
+  
+
+  <!-- Items -->
+  <div class="items-list-58">
+        <div class="item-block-58">
+          <div class="item-name-58">Maize Flour 2kg</div>
+          <div class="item-row-58">
+            <span class="item-sub-58">3 &times; KSh 290.00</span>
+            <span class="item-total-58">KSh 870.00</span>
+          </div>
+          
+        </div>
+      
+        <div class="item-block-58">
+          <div class="item-name-58">Cooking Oil 1L</div>
+          <div class="item-row-58">
+            <span class="item-sub-58">2 &times; KSh 350.00</span>
+            <span class="item-total-58">KSh 700.00</span>
+          </div>
+          
+        </div>
+      
+        <div class="item-block-58">
+          <div class="item-name-58">Sugar 1kg</div>
+          <div class="item-row-58">
+            <span class="item-sub-58">2 &times; KSh 165.00</span>
+            <span class="item-total-58">KSh 330.00</span>
+          </div>
+          
+        </div>
+      
+        <div class="item-block-58">
+          <div class="item-name-58">Prestige Margarine 500g</div>
+          <div class="item-row-58">
+            <span class="item-sub-58">1 &times; KSh 250.00</span>
+            <span class="item-total-58">KSh 250.00</span>
+          </div>
+          
+        </div>
+      </div>
+
+  <!-- Divider rule -->
+  <hr class="divider-rule" />
+
+  <!-- Totals -->
+  <div class="totals-section">
+    <div class="total-row">
+      <span class="total-label">Subtotal</span>
+      <span class="total-val">KSh 2,150.00</span>
+    </div>
+    
+      <div class="total-row">
+        <span class="total-label">Discount</span>
+        <span class="total-val">-KSh 50.00</span>
+      </div>
+    
+    
+      <div class="total-row">
+        <span class="total-label">Tax (16% incl.)</span>
+        <span class="total-val">KSh 289.66</span>
+      </div>
+    
+    <div class="grand-total-row">
+      <span class="grand-total-label">TOTAL</span>
+      <span class="grand-total-val">KSh 2,100.00</span>
+    </div>
+    
+      <div class="total-row">
+        <span class="total-label">Amount Received</span>
+        <span class="total-val">KSh 2,500.00</span>
+      </div>
+    
+        <div class="total-row change-row">
+          <span class="total-label">Change Due</span>
+          <span class="total-val">KSh 400.00</span>
+        </div>
+      
+  </div>
+
+  
+
+  <!-- Footer -->
+  <div class="footer-section">
+    
+    <div class="thank-you-row">
+      <span class="thank-you-rule"></span>
+      <span class="thank-you thank-you-text">Thank you for your business!</span>
+      <span class="thank-you-rule"></span>
+    </div>
+    <div class="tagline">Better Products · Brighter Together</div>
+    <div class="receipt-no receipt-no-full" style="white-space: nowrap;">Receipt No: R-D4E1-000042</div>
+    <div class="footer-bottom-row">
+      <div class="footer-left">
+        
+        <div class="powered-by">Powered by Zana POS</div>
+      </div>
+      <div class="footer-right">
+        
+          <div class="qr-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41" width="18mm" height="18mm" shape-rendering="crispEdges" aria-label="Receipt QR Code"><rect width="100%" height="100%" fill="#ffffff"/><path fill="#000000" d="M4,4h1v1h-1z M5,4h1v1h-1z M6,4h1v1h-1z M7,4h1v1h-1z M8,4h1v1h-1z M9,4h1v1h-1z M10,4h1v1h-1z M12,4h1v1h-1z M16,4h1v1h-1z M17,4h1v1h-1z M20,4h1v1h-1z M21,4h1v1h-1z M25,4h1v1h-1z M26,4h1v1h-1z M30,4h1v1h-1z M31,4h1v1h-1z M32,4h1v1h-1z M33,4h1v1h-1z M34,4h1v1h-1z M35,4h1v1h-1z M36,4h1v1h-1z M4,5h1v1h-1z M10,5h1v1h-1z M12,5h1v1h-1z M13,5h1v1h-1z M16,5h1v1h-1z M17,5h1v1h-1z M18,5h1v1h-1z M20,5h1v1h-1z M22,5h1v1h-1z M23,5h1v1h-1z M28,5h1v1h-1z M30,5h1v1h-1z M36,5h1v1h-1z M4,6h1v1h-1z M6,6h1v1h-1z M7,6h1v1h-1z M8,6h1v1h-1z M10,6h1v1h-1z M12,6h1v1h-1z M14,6h1v1h-1z M17,6h1v1h-1z M18,6h1v1h-1z M19,6h1v1h-1z M24,6h1v1h-1z M25,6h1v1h-1z M27,6h1v1h-1z M28,6h1v1h-1z M30,6h1v1h-1z M32,6h1v1h-1z M33,6h1v1h-1z M34,6h1v1h-1z M36,6h1v1h-1z M4,7h1v1h-1z M6,7h1v1h-1z M7,7h1v1h-1z M8,7h1v1h-1z M10,7h1v1h-1z M15,7h1v1h-1z M16,7h1v1h-1z M18,7h1v1h-1z M20,7h1v1h-1z M22,7h1v1h-1z M23,7h1v1h-1z M24,7h1v1h-1z M26,7h1v1h-1z M27,7h1v1h-1z M30,7h1v1h-1z M32,7h1v1h-1z M33,7h1v1h-1z M34,7h1v1h-1z M36,7h1v1h-1z M4,8h1v1h-1z M6,8h1v1h-1z M7,8h1v1h-1z M8,8h1v1h-1z M10,8h1v1h-1z M12,8h1v1h-1z M13,8h1v1h-1z M17,8h1v1h-1z M19,8h1v1h-1z M20,8h1v1h-1z M21,8h1v1h-1z M25,8h1v1h-1z M27,8h1v1h-1z M30,8h1v1h-1z M32,8h1v1h-1z M33,8h1v1h-1z M34,8h1v1h-1z M36,8h1v1h-1z M4,9h1v1h-1z M10,9h1v1h-1z M13,9h1v1h-1z M14,9h1v1h-1z M15,9h1v1h-1z M19,9h1v1h-1z M20,9h1v1h-1z M22,9h1v1h-1z M23,9h1v1h-1z M26,9h1v1h-1z M27,9h1v1h-1z M28,9h1v1h-1z M30,9h1v1h-1z M36,9h1v1h-1z M4,10h1v1h-1z M5,10h1v1h-1z M6,10h1v1h-1z M7,10h1v1h-1z M8,10h1v1h-1z M9,10h1v1h-1z M10,10h1v1h-1z M12,10h1v1h-1z M14,10h1v1h-1z M16,10h1v1h-1z M18,10h1v1h-1z M20,10h1v1h-1z M22,10h1v1h-1z M24,10h1v1h-1z M26,10h1v1h-1z M28,10h1v1h-1z M30,10h1v1h-1z M31,10h1v1h-1z M32,10h1v1h-1z M33,10h1v1h-1z M34,10h1v1h-1z M35,10h1v1h-1z M36,10h1v1h-1z M13,11h1v1h-1z M17,11h1v1h-1z M19,11h1v1h-1z M20,11h1v1h-1z M22,11h1v1h-1z M26,11h1v1h-1z M28,11h1v1h-1z M4,12h1v1h-1z M7,12h1v1h-1z M8,12h1v1h-1z M9,12h1v1h-1z M10,12h1v1h-1z M11,12h1v1h-1z M12,12h1v1h-1z M13,12h1v1h-1z M14,12h1v1h-1z M15,12h1v1h-1z M16,12h1v1h-1z M20,12h1v1h-1z M21,12h1v1h-1z M22,12h1v1h-1z M29,12h1v1h-1z M32,12h1v1h-1z M34,12h1v1h-1z M35,12h1v1h-1z M36,12h1v1h-1z M5,13h1v1h-1z M6,13h1v1h-1z M9,13h1v1h-1z M11,13h1v1h-1z M12,13h1v1h-1z M13,13h1v1h-1z M17,13h1v1h-1z M18,13h1v1h-1z M21,13h1v1h-1z M22,13h1v1h-1z M23,13h1v1h-1z M24,13h1v1h-1z M25,13h1v1h-1z M26,13h1v1h-1z M27,13h1v1h-1z M32,13h1v1h-1z M33,13h1v1h-1z M34,13h1v1h-1z M35,13h1v1h-1z M8,14h1v1h-1z M9,14h1v1h-1z M10,14h1v1h-1z M12,14h1v1h-1z M14,14h1v1h-1z M15,14h1v1h-1z M17,14h1v1h-1z M19,14h1v1h-1z M26,14h1v1h-1z M27,14h1v1h-1z M28,14h1v1h-1z M29,14h1v1h-1z M32,14h1v1h-1z M33,14h1v1h-1z M34,14h1v1h-1z M36,14h1v1h-1z M4,15h1v1h-1z M8,15h1v1h-1z M11,15h1v1h-1z M13,15h1v1h-1z M16,15h1v1h-1z M17,15h1v1h-1z M22,15h1v1h-1z M23,15h1v1h-1z M25,15h1v1h-1z M26,15h1v1h-1z M29,15h1v1h-1z M31,15h1v1h-1z M34,15h1v1h-1z M4,16h1v1h-1z M5,16h1v1h-1z M7,16h1v1h-1z M8,16h1v1h-1z M9,16h1v1h-1z M10,16h1v1h-1z M13,16h1v1h-1z M14,16h1v1h-1z M17,16h1v1h-1z M19,16h1v1h-1z M21,16h1v1h-1z M23,16h1v1h-1z M25,16h1v1h-1z M30,16h1v1h-1z M31,16h1v1h-1z M35,16h1v1h-1z M5,17h1v1h-1z M6,17h1v1h-1z M7,17h1v1h-1z M8,17h1v1h-1z M9,17h1v1h-1z M13,17h1v1h-1z M14,17h1v1h-1z M15,17h1v1h-1z M16,17h1v1h-1z M18,17h1v1h-1z M21,17h1v1h-1z M22,17h1v1h-1z M23,17h1v1h-1z M24,17h1v1h-1z M25,17h1v1h-1z M27,17h1v1h-1z M29,17h1v1h-1z M34,17h1v1h-1z M5,18h1v1h-1z M10,18h1v1h-1z M13,18h1v1h-1z M14,18h1v1h-1z M16,18h1v1h-1z M18,18h1v1h-1z M19,18h1v1h-1z M21,18h1v1h-1z M23,18h1v1h-1z M24,18h1v1h-1z M30,18h1v1h-1z M31,18h1v1h-1z M33,18h1v1h-1z M34,18h1v1h-1z M4,19h1v1h-1z M7,19h1v1h-1z M9,19h1v1h-1z M11,19h1v1h-1z M13,19h1v1h-1z M14,19h1v1h-1z M16,19h1v1h-1z M20,19h1v1h-1z M24,19h1v1h-1z M26,19h1v1h-1z M27,19h1v1h-1z M29,19h1v1h-1z M32,19h1v1h-1z M33,19h1v1h-1z M34,19h1v1h-1z M36,19h1v1h-1z M4,20h1v1h-1z M6,20h1v1h-1z M7,20h1v1h-1z M8,20h1v1h-1z M10,20h1v1h-1z M12,20h1v1h-1z M13,20h1v1h-1z M16,20h1v1h-1z M17,20h1v1h-1z M19,20h1v1h-1z M26,20h1v1h-1z M28,20h1v1h-1z M29,20h1v1h-1z M30,20h1v1h-1z M31,20h1v1h-1z M32,20h1v1h-1z M34,20h1v1h-1z M4,21h1v1h-1z M5,21h1v1h-1z M6,21h1v1h-1z M7,21h1v1h-1z M9,21h1v1h-1z M11,21h1v1h-1z M12,21h1v1h-1z M16,21h1v1h-1z M17,21h1v1h-1z M19,21h1v1h-1z M21,21h1v1h-1z M22,21h1v1h-1z M23,21h1v1h-1z M24,21h1v1h-1z M26,21h1v1h-1z M28,21h1v1h-1z M30,21h1v1h-1z M32,21h1v1h-1z M34,21h1v1h-1z M6,22h1v1h-1z M7,22h1v1h-1z M10,22h1v1h-1z M13,22h1v1h-1z M17,22h1v1h-1z M19,22h1v1h-1z M21,22h1v1h-1z M22,22h1v1h-1z M23,22h1v1h-1z M25,22h1v1h-1z M26,22h1v1h-1z M27,22h1v1h-1z M28,22h1v1h-1z M31,22h1v1h-1z M33,22h1v1h-1z M34,22h1v1h-1z M36,22h1v1h-1z M4,23h1v1h-1z M5,23h1v1h-1z M8,23h1v1h-1z M9,23h1v1h-1z M14,23h1v1h-1z M15,23h1v1h-1z M19,23h1v1h-1z M20,23h1v1h-1z M26,23h1v1h-1z M28,23h1v1h-1z M30,23h1v1h-1z M32,23h1v1h-1z M33,23h1v1h-1z M34,23h1v1h-1z M4,24h1v1h-1z M7,24h1v1h-1z M9,24h1v1h-1z M10,24h1v1h-1z M15,24h1v1h-1z M18,24h1v1h-1z M20,24h1v1h-1z M22,24h1v1h-1z M25,24h1v1h-1z M26,24h1v1h-1z M33,24h1v1h-1z M4,25h1v1h-1z M6,25h1v1h-1z M9,25h1v1h-1z M11,25h1v1h-1z M12,25h1v1h-1z M13,25h1v1h-1z M15,25h1v1h-1z M16,25h1v1h-1z M17,25h1v1h-1z M30,25h1v1h-1z M32,25h1v1h-1z M33,25h1v1h-1z M4,26h1v1h-1z M6,26h1v1h-1z M10,26h1v1h-1z M11,26h1v1h-1z M12,26h1v1h-1z M13,26h1v1h-1z M16,26h1v1h-1z M18,26h1v1h-1z M21,26h1v1h-1z M22,26h1v1h-1z M23,26h1v1h-1z M24,26h1v1h-1z M25,26h1v1h-1z M27,26h1v1h-1z M30,26h1v1h-1z M32,26h1v1h-1z M35,26h1v1h-1z M36,26h1v1h-1z M4,27h1v1h-1z M6,27h1v1h-1z M11,27h1v1h-1z M13,27h1v1h-1z M15,27h1v1h-1z M16,27h1v1h-1z M17,27h1v1h-1z M18,27h1v1h-1z M19,27h1v1h-1z M21,27h1v1h-1z M23,27h1v1h-1z M24,27h1v1h-1z M28,27h1v1h-1z M29,27h1v1h-1z M34,27h1v1h-1z M35,27h1v1h-1z M4,28h1v1h-1z M5,28h1v1h-1z M6,28h1v1h-1z M8,28h1v1h-1z M9,28h1v1h-1z M10,28h1v1h-1z M11,28h1v1h-1z M12,28h1v1h-1z M13,28h1v1h-1z M14,28h1v1h-1z M15,28h1v1h-1z M17,28h1v1h-1z M18,28h1v1h-1z M21,28h1v1h-1z M24,28h1v1h-1z M26,28h1v1h-1z M27,28h1v1h-1z M28,28h1v1h-1z M29,28h1v1h-1z M30,28h1v1h-1z M31,28h1v1h-1z M32,28h1v1h-1z M33,28h1v1h-1z M12,29h1v1h-1z M13,29h1v1h-1z M15,29h1v1h-1z M16,29h1v1h-1z M17,29h1v1h-1z M20,29h1v1h-1z M21,29h1v1h-1z M22,29h1v1h-1z M25,29h1v1h-1z M27,29h1v1h-1z M28,29h1v1h-1z M32,29h1v1h-1z M34,29h1v1h-1z M35,29h1v1h-1z M4,30h1v1h-1z M5,30h1v1h-1z M6,30h1v1h-1z M7,30h1v1h-1z M8,30h1v1h-1z M9,30h1v1h-1z M10,30h1v1h-1z M12,30h1v1h-1z M13,30h1v1h-1z M14,30h1v1h-1z M17,30h1v1h-1z M19,30h1v1h-1z M21,30h1v1h-1z M23,30h1v1h-1z M27,30h1v1h-1z M28,30h1v1h-1z M30,30h1v1h-1z M32,30h1v1h-1z M34,30h1v1h-1z M4,31h1v1h-1z M10,31h1v1h-1z M12,31h1v1h-1z M14,31h1v1h-1z M15,31h1v1h-1z M16,31h1v1h-1z M17,31h1v1h-1z M19,31h1v1h-1z M20,31h1v1h-1z M21,31h1v1h-1z M22,31h1v1h-1z M24,31h1v1h-1z M25,31h1v1h-1z M26,31h1v1h-1z M27,31h1v1h-1z M28,31h1v1h-1z M32,31h1v1h-1z M33,31h1v1h-1z M34,31h1v1h-1z M35,31h1v1h-1z M36,31h1v1h-1z M4,32h1v1h-1z M6,32h1v1h-1z M7,32h1v1h-1z M8,32h1v1h-1z M10,32h1v1h-1z M12,32h1v1h-1z M13,32h1v1h-1z M15,32h1v1h-1z M19,32h1v1h-1z M20,32h1v1h-1z M21,32h1v1h-1z M25,32h1v1h-1z M26,32h1v1h-1z M27,32h1v1h-1z M28,32h1v1h-1z M29,32h1v1h-1z M30,32h1v1h-1z M31,32h1v1h-1z M32,32h1v1h-1z M35,32h1v1h-1z M4,33h1v1h-1z M6,33h1v1h-1z M7,33h1v1h-1z M8,33h1v1h-1z M10,33h1v1h-1z M12,33h1v1h-1z M13,33h1v1h-1z M15,33h1v1h-1z M16,33h1v1h-1z M18,33h1v1h-1z M20,33h1v1h-1z M21,33h1v1h-1z M22,33h1v1h-1z M25,33h1v1h-1z M26,33h1v1h-1z M27,33h1v1h-1z M28,33h1v1h-1z M29,33h1v1h-1z M31,33h1v1h-1z M33,33h1v1h-1z M36,33h1v1h-1z M4,34h1v1h-1z M6,34h1v1h-1z M7,34h1v1h-1z M8,34h1v1h-1z M10,34h1v1h-1z M14,34h1v1h-1z M18,34h1v1h-1z M19,34h1v1h-1z M22,34h1v1h-1z M23,34h1v1h-1z M27,34h1v1h-1z M28,34h1v1h-1z M31,34h1v1h-1z M32,34h1v1h-1z M33,34h1v1h-1z M35,34h1v1h-1z M36,34h1v1h-1z M4,35h1v1h-1z M10,35h1v1h-1z M13,35h1v1h-1z M14,35h1v1h-1z M15,35h1v1h-1z M16,35h1v1h-1z M17,35h1v1h-1z M22,35h1v1h-1z M23,35h1v1h-1z M24,35h1v1h-1z M27,35h1v1h-1z M31,35h1v1h-1z M32,35h1v1h-1z M33,35h1v1h-1z M34,35h1v1h-1z M35,35h1v1h-1z M36,35h1v1h-1z M4,36h1v1h-1z M5,36h1v1h-1z M6,36h1v1h-1z M7,36h1v1h-1z M8,36h1v1h-1z M9,36h1v1h-1z M10,36h1v1h-1z M12,36h1v1h-1z M14,36h1v1h-1z M15,36h1v1h-1z M17,36h1v1h-1z M19,36h1v1h-1z M21,36h1v1h-1z M22,36h1v1h-1z M23,36h1v1h-1z M24,36h1v1h-1z M28,36h1v1h-1z M29,36h1v1h-1z M30,36h1v1h-1z M31,36h1v1h-1z M32,36h1v1h-1z M34,36h1v1h-1z"/></svg>
+            <div class="qr-caption">Scan to view receipt</div>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
