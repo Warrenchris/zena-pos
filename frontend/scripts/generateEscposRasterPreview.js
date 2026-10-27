@@ -202,8 +202,8 @@ function renderThermalRoll(paperWidth, logo, qr, title) {
   }
 
   // Blit QR Code in footer
-  // Right-aligned on 80mm, centered on 58mm
-  const qrX = paperWidth > 400 ? paperWidth - qr.width - 24 : Math.floor((paperWidth - qr.width) / 2);
+  // Right-aligned by default on both 80mm and 58mm matching profile.js default (qrAlign: 'right')
+  const qrX = paperWidth - qr.width - 24;
   const qrY = 300;
   blitBitmap(qr, qrX, qrY);
 
