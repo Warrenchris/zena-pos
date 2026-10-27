@@ -24,6 +24,7 @@ function formatProductWithInventory(product) {
 }
 const redisClient = require('../config/redis');
 const { invalidateShopProductCache, invalidateOrgProductCaches } = require('../services/productCache');
+const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 const logger = require('../utils/logger');
 
 // Get all products with filters and pagination
@@ -515,6 +516,7 @@ exports.createProduct = async (req, res) => {
 
     if (shopId) {
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     }
 
     res.status(201).json(formatProductWithInventory(productWithCategory));
@@ -638,8 +640,10 @@ exports.updateProduct = async (req, res) => {
 
     if (organizationId) {
       await invalidateOrgProductCaches(organizationId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     } else if (shopId) {
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     }
 
     const updatedProduct = await Product.findOne({
@@ -707,8 +711,10 @@ exports.deleteProduct = async (req, res) => {
 
     if (organizationId) {
       await invalidateOrgProductCaches(organizationId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     } else if (shopId) {
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     }
     res.json({
       message: destroyed > 0
@@ -770,8 +776,10 @@ exports.deactivateProductOrgWide = async (req, res) => {
 
     if (organizationId) {
       await invalidateOrgProductCaches(organizationId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     } else if (shopId) {
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     }
     res.json({ message: 'Product deactivated across all branches' });
     try {
@@ -897,6 +905,7 @@ exports.updateStock = async (req, res) => {
 
     if (shopId) {
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(req.organizationId || req.user?.organizationId, shopId);
     }
 
     res.json(formatProductWithInventory(resultProduct));
@@ -1338,8 +1347,10 @@ exports.importProducts = async (req, res) => {
     // Invalidate cache
     if (organizationId) {
       await invalidateOrgProductCaches(organizationId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     } else if (shopId) {
       await invalidateShopProductCache(shopId);
+      await invalidateShopInsightsCache(organizationId, shopId);
     }
 
     const isSuccess = successfulProducts.length > 0;

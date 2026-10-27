@@ -431,8 +431,14 @@ exports.resetPassword = async (req, res) => {
     let account = null;
     let isEmployee = !!decoded.isEmployee;
     if (isEmployee) {
+      if (typeof decoded.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded.id)) {
+        return res.status(400).json({ error: 'Invalid token' });
+      }
       account = await Employee.findByPk(decoded.id);
     } else {
+      if (!/^\d+$/.test(String(decoded.id))) {
+        return res.status(400).json({ error: 'Invalid token' });
+      }
       account = await User.findByPk(decoded.id);
     }
 

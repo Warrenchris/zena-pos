@@ -77,6 +77,91 @@ def _quality_label(mape: Optional[float]) -> str:
     return "poor"
 
 
+from starlette.concurrency import run_in_threadpool
+
+
+def _fit_prophet_sync(dates: List[Any], values: List[float], periods: int = 30) -> dict:
+    import pandas as pd
+    import numpy as np
+    from prophet import Prophet
+
+    ds_col = pd.to_datetime(dates)
+    if ds_col.tz is not None:
+        ds_col = ds_col.tz_localize(None)
+
+    df = pd.DataFrame({
+        'ds': ds_col,
+        'y': values
+    }).sort_values('ds').reset_index(drop=True)
+
+    freq = 'D'
+    if len(df) >= 2:
+        avg_diff = (df['ds'].iloc[-1] - df['ds'].iloc[0]).days / max(1, len(df) - 1)
+        if avg_diff >= 25:
+            freq = 'MS'
+        elif avg_diff >= 6:
+            freq = 'W'
+
+    model_quality = None
+    split_idx = int(len(df) * 0.8)
+    train_df = df.iloc[:split_idx]
+    test_df = df.iloc[split_idx:]
+
+    if len(test_df) >= 5:
+        eval_model = Prophet(
+            daily_seasonality=False,
+            weekly_seasonality=True,
+            yearly_seasonality=len(train_df) > 180
+        )
+        eval_model.fit(train_df)
+        eval_future = eval_model.make_future_dataframe(periods=len(test_df))
+        eval_forecast = eval_model.predict(eval_future)
+
+        eval_preds = eval_forecast.tail(len(test_df))['yhat'].values
+        eval_actuals = test_df['y'].values
+
+        mae = float(np.mean(np.abs(eval_actuals - eval_preds)))
+        rmse = float(np.sqrt(np.mean((eval_actuals - eval_preds) ** 2)))
+
+        nonzero = eval_actuals != 0
+        mape = None
+        if nonzero.any():
+            mape = float(np.mean(np.abs((eval_actuals[nonzero] - eval_preds[nonzero]) / eval_actuals[nonzero])) * 100)
+
+        model_quality = {
+            "mae": round(mae, 2),
+            "rmse": round(rmse, 2),
+            "mape": round(mape, 2) if mape is not None else None,
+            "holdout_size": len(test_df),
+            "quality_label": _quality_label(mape),
+        }
+
+    model = Prophet(
+        yearly_seasonality=len(df) > 365,
+        weekly_seasonality=freq == 'D',
+        daily_seasonality=False
+    )
+    model.fit(df)
+
+    future = model.make_future_dataframe(periods=periods, freq=freq)
+    forecast = model.predict(future)
+
+    # Revenue predictions must be non-negative (>= 0)
+    preds = [max(0.0, float(val)) for val in forecast['yhat'].tolist()[-periods:]]
+    lowers = [max(0.0, float(val)) for val in forecast['yhat_lower'].tolist()[-periods:]]
+    uppers = [max(0.0, float(val)) for val in forecast['yhat_upper'].tolist()[-periods:]]
+
+    return {
+        "dates": forecast['ds'].tolist()[-periods:],
+        "predictions": preds,
+        "lower_bounds": lowers,
+        "upper_bounds": uppers,
+        "model_quality": model_quality,
+        "training_samples": len(df),
+        "algorithm": "prophet"
+    }
+
+
 @router.post("/forecast")
 async def create_forecast(
     data: TimeSeriesData,
@@ -86,87 +171,10 @@ async def create_forecast(
     """
     Create time series forecast using Facebook Prophet.
     Extended with holdout model quality metrics.
+    Offloaded to threadpool to prevent blocking the asyncio event loop.
     """
     try:
-        import pandas as pd
-        import numpy as np
-        from prophet import Prophet
-
-        ds_col = pd.to_datetime(data.dates)
-        if ds_col.tz is not None:
-            ds_col = ds_col.tz_localize(None)
-
-        df = pd.DataFrame({
-            'ds': ds_col,
-            'y': data.values
-        }).sort_values('ds').reset_index(drop=True)
-
-        freq = 'D'
-        if len(df) >= 2:
-            avg_diff = (df['ds'].iloc[-1] - df['ds'].iloc[0]).days / max(1, len(df) - 1)
-            if avg_diff >= 25:
-                freq = 'MS'
-            elif avg_diff >= 6:
-                freq = 'W'
-
-        model_quality = None
-        split_idx = int(len(df) * 0.8)
-        train_df = df.iloc[:split_idx]
-        test_df = df.iloc[split_idx:]
-
-        if len(test_df) >= 5:
-            eval_model = Prophet(
-                daily_seasonality=False,
-                weekly_seasonality=True,
-                yearly_seasonality=len(train_df) > 180
-            )
-            eval_model.fit(train_df)
-            eval_future = eval_model.make_future_dataframe(periods=len(test_df))
-            eval_forecast = eval_model.predict(eval_future)
-
-            eval_preds = eval_forecast.tail(len(test_df))['yhat'].values
-            eval_actuals = test_df['y'].values
-
-            mae = float(np.mean(np.abs(eval_actuals - eval_preds)))
-            rmse = float(np.sqrt(np.mean((eval_actuals - eval_preds) ** 2)))
-
-            nonzero = eval_actuals != 0
-            mape = None
-            if nonzero.any():
-                mape = float(np.mean(np.abs((eval_actuals[nonzero] - eval_preds[nonzero]) / eval_actuals[nonzero])) * 100)
-
-            model_quality = {
-                "mae": round(mae, 2),
-                "rmse": round(rmse, 2),
-                "mape": round(mape, 2) if mape is not None else None,
-                "holdout_size": len(test_df),
-                "quality_label": _quality_label(mape),
-            }
-
-        model = Prophet(
-            yearly_seasonality=len(df) > 365,
-            weekly_seasonality=freq == 'D',
-            daily_seasonality=False
-        )
-        model.fit(df)
-
-        future = model.make_future_dataframe(periods=periods, freq=freq)
-        forecast = model.predict(future)
-
-        # Revenue predictions must be non-negative (>= 0)
-        preds = [max(0.0, float(val)) for val in forecast['yhat'].tolist()[-periods:]]
-        lowers = [max(0.0, float(val)) for val in forecast['yhat_lower'].tolist()[-periods:]]
-        uppers = [max(0.0, float(val)) for val in forecast['yhat_upper'].tolist()[-periods:]]
-
-        return {
-            "dates": forecast['ds'].tolist()[-periods:],
-            "predictions": preds,
-            "lower_bounds": lowers,
-            "upper_bounds": uppers,
-            "model_quality": model_quality,
-            "training_samples": len(df),
-            "algorithm": "prophet"
-        }
+        return await run_in_threadpool(_fit_prophet_sync, data.dates, data.values, periods)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

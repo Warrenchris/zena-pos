@@ -165,6 +165,14 @@ async function evaluateAuthorization(req, options = {}) {
     if (targetShopId !== null && targetShopId !== undefined) {
       const hasAccess = authz.scope.hasShopAccess(targetShopId);
       if (!hasAccess) {
+        if (!authz.tenant?.isOwner && authz.scope?.isInactiveAccessibleShop && authz.scope.isInactiveAccessibleShop(targetShopId)) {
+          return {
+            allowed: false,
+            status: 403,
+            code: 'SHOP_INACTIVE',
+            message: 'Shop is inactive.'
+          };
+        }
         if (options.antiOracle || options.ownership?.antiOracle) {
           return {
             allowed: false,
@@ -187,6 +195,14 @@ async function evaluateAuthorization(req, options = {}) {
     if (queryShopId !== undefined && queryShopId !== null && queryShopId !== '') {
       const parsedQueryShopId = parseInt(queryShopId, 10);
       if (!authz.scope.hasShopAccess(parsedQueryShopId)) {
+        if (!authz.tenant?.isOwner && authz.scope?.isInactiveAccessibleShop && authz.scope.isInactiveAccessibleShop(parsedQueryShopId)) {
+          return {
+            allowed: false,
+            status: 403,
+            code: 'SHOP_INACTIVE',
+            message: 'Shop is inactive.'
+          };
+        }
         return {
           allowed: false,
           status: 403,

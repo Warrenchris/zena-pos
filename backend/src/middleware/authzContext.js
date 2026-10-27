@@ -106,7 +106,9 @@ async function authzContext(req, res, next) {
             activeShopId: null,
             homeShopId: null,
             accessibleShopIds: [],
-            hasShopAccess: () => true
+            inactiveAccessibleShopIds: [],
+            hasShopAccess: () => true,
+            isInactiveAccessibleShop: () => false
           }),
           permissions: Object.freeze({
             granted: new Set(['*']),
@@ -174,6 +176,7 @@ async function authzContext(req, res, next) {
       // Resolve shop access & scope
       const activeShopId = req.shopId || tokenShopId || null;
       let accessibleShopIds = [];
+      let inactiveAccessibleShopIds = [];
 
       if (orgRole === 'owner') {
         // Owner Shop.findAll STAYS as a DB query (that is C3)
@@ -186,12 +189,21 @@ async function authzContext(req, res, next) {
         accessibleShopIds = Array.isArray(cached.scope.memberAccessibleShopIds)
           ? [...cached.scope.memberAccessibleShopIds]
           : [];
+        inactiveAccessibleShopIds = Array.isArray(cached.scope.memberInactiveAccessibleShopIds)
+          ? [...cached.scope.memberInactiveAccessibleShopIds]
+          : [];
       }
 
       const hasShopAccess = (targetShopId) => {
         if (targetShopId === null || targetShopId === undefined) return false;
         const numId = Number(targetShopId);
         return accessibleShopIds.includes(numId);
+      };
+
+      const isInactiveAccessibleShop = (targetShopId) => {
+        if (targetShopId === null || targetShopId === undefined) return false;
+        const numId = Number(targetShopId);
+        return inactiveAccessibleShopIds.includes(numId);
       };
 
       // Resolve permissions
@@ -279,7 +291,9 @@ async function authzContext(req, res, next) {
           activeShopId,
           homeShopId: cached.scope.homeShopId,
           accessibleShopIds,
-          hasShopAccess
+          inactiveAccessibleShopIds,
+          hasShopAccess,
+          isInactiveAccessibleShop
         }),
         permissions: Object.freeze(permissionsHelper),
         ownership: Object.freeze(ownershipHelper)
@@ -356,7 +370,9 @@ async function authzContext(req, res, next) {
           activeShopId: null,
           homeShopId: null,
           accessibleShopIds: [],
-          hasShopAccess: () => true
+          inactiveAccessibleShopIds: [],
+          hasShopAccess: () => true,
+          isInactiveAccessibleShop: () => false
         }),
         permissions: Object.freeze({
           granted: new Set(['*']),
@@ -560,6 +576,7 @@ async function authzContext(req, res, next) {
     // 7. Resolve Shop Access & Scope
     const activeShopId = req.shopId || tokenShopId || null;
     let accessibleShopIds = [];
+    let inactiveAccessibleShopIds = [];
 
     if (orgRole === 'owner') {
       // Universal implicit bypass across all organization branches
@@ -573,9 +590,23 @@ async function authzContext(req, res, next) {
         where: { membershipId: membership.id },
         attributes: ['shopId']
       });
-      accessibleShopIds = accesses.map(a => a.shopId).filter(Boolean);
-      if (homeShopId && !accessibleShopIds.includes(homeShopId)) {
-        accessibleShopIds.push(homeShopId);
+      const candidateShopIds = accesses.map(a => a.shopId).filter(Boolean);
+      if (homeShopId && !candidateShopIds.includes(homeShopId)) {
+        candidateShopIds.push(homeShopId);
+      }
+      if (candidateShopIds.length > 0) {
+        const matchingShops = await Shop.findAll({
+          where: {
+            id: candidateShopIds,
+            organizationId: organization.id
+          },
+          attributes: ['id', 'active']
+        });
+        accessibleShopIds = matchingShops.filter(s => s.active).map(s => s.id);
+        inactiveAccessibleShopIds = matchingShops.filter(s => !s.active).map(s => s.id);
+      } else {
+        accessibleShopIds = [];
+        inactiveAccessibleShopIds = [];
       }
     }
 
@@ -583,6 +614,12 @@ async function authzContext(req, res, next) {
       if (targetShopId === null || targetShopId === undefined) return false;
       const numId = Number(targetShopId);
       return accessibleShopIds.includes(numId);
+    };
+
+    const isInactiveAccessibleShop = (targetShopId) => {
+      if (targetShopId === null || targetShopId === undefined) return false;
+      const numId = Number(targetShopId);
+      return inactiveAccessibleShopIds.includes(numId);
     };
 
     // 8. Resolve Permissions
@@ -671,7 +708,9 @@ async function authzContext(req, res, next) {
         activeShopId,
         homeShopId,
         accessibleShopIds,
-        hasShopAccess
+        inactiveAccessibleShopIds,
+        hasShopAccess,
+        isInactiveAccessibleShop
       }),
       permissions: Object.freeze(permissionsHelper),
       ownership: Object.freeze(ownershipHelper)
@@ -709,6 +748,7 @@ async function authzContext(req, res, next) {
         membership,
         homeShopId,
         accessibleShopIds,
+        inactiveAccessibleShopIds,
         email,
         name
       });

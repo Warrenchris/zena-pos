@@ -12,6 +12,7 @@ const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
 const aiClient = require('../utils/aiClient');
 const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER, NET_SALE_REVENUE_SQL } = require('../constants/saleFilters');
+const { getInsightsCache, setInsightsCache } = require('../services/insightsCacheService');
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
@@ -44,8 +45,8 @@ const getAuthorizedShopId = (req) => {
  * Calculate trends from sales and inventory data
  */
 const calculateTrends = async (shopId) => {
-  const currentDate = new Date();
-  const lastMonth = new Date(currentDate.setMonth(currentDate.getMonth() - 1));
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
 
   // Get sales trends
   const salesTrends = await Sale.findAll({
@@ -194,7 +195,7 @@ const generateRuleBasedAlerts = async (shopId) => {
 /**
  * AI-powered sales anomaly detection using Isolation Forest
  */
-const generateSmartAlerts = async (shopId, userOrId) => {
+const generateSmartAlerts = async (shopId, userOrId, aiTracker) => {
   const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : null;
   const userId = user?.id || (typeof userOrId === 'number' || typeof userOrId === 'string' ? userOrId : null);
   const ninetyDaysAgo = new Date();
@@ -239,6 +240,7 @@ const generateSmartAlerts = async (shopId, userOrId) => {
     }));
   } catch (error) {
     console.error('[generateSmartAlerts] AI service unavailable, using rule-based fallback:', error.message);
+    if (aiTracker) aiTracker.failed = true;
     return generateRuleBasedAlerts(shopId);
   }
 };
@@ -317,7 +319,7 @@ const buildNetDemandQuery = (shopId, sinceDate, groupByDate = true) => {
 /**
  * Prophet-based stock depletion forecast via AI service
  */
-const getStockDepletionForecast = async (shopId, userOrId) => {
+const getStockDepletionForecast = async (shopId, userOrId, aiTracker) => {
   const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : null;
   const userId = user?.id || (typeof userOrId === 'number' || typeof userOrId === 'string' ? userOrId : null);
   const ninetyDaysAgo = new Date();
@@ -378,6 +380,7 @@ const getStockDepletionForecast = async (shopId, userOrId) => {
     }));
   } catch (error) {
     console.error('[getStockDepletionForecast] AI service unavailable, using linear fallback:', error.message);
+    if (aiTracker) aiTracker.failed = true;
 
     const lookbackDays = insightsConfig.SALES_VELOCITY_LOOKBACK_DAYS;
     const twoWeeksAgo = new Date();
@@ -409,7 +412,7 @@ const getStockDepletionForecast = async (shopId, userOrId) => {
 /**
  * Generate business alerts based on critical metrics
  */
-const generateAlerts = async (shopId, userOrId) => {
+const generateAlerts = async (shopId, userOrId, aiTracker) => {
   const alerts = [];
 
   const criticalInventories = await Inventory.findAll({
@@ -440,7 +443,7 @@ const generateAlerts = async (shopId, userOrId) => {
     });
   }
 
-  const salesAlerts = await generateSmartAlerts(shopId, userOrId);
+  const salesAlerts = await generateSmartAlerts(shopId, userOrId, aiTracker);
   alerts.push(...salesAlerts);
 
   return alerts;
@@ -456,10 +459,17 @@ const getInsights = async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    const cached = await getInsightsCache(req, shopId);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const aiTracker = { failed: false };
+
     const [trends, recommendations, alerts] = await Promise.all([
       calculateTrends(shopId),
       generateRecommendations(shopId),
-      generateAlerts(shopId, req.user)
+      generateAlerts(shopId, req.user, aiTracker)
     ]);
 
     // Smart dashboard insights (heuristics)
@@ -473,17 +483,30 @@ const getInsights = async (req, res) => {
     const startPrevWeek = new Date(startThisWeek);
     startPrevWeek.setDate(startPrevWeek.getDate() - 7);
 
-    const [thisWeekRevenue, prevWeekRevenue] = await Promise.all([
-      Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: startThisWeek } } }),
-      Sale.sum('total', { where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime()-1)] } } }),
+    const [thisWeekRevenueRow, prevWeekRevenueRow] = await Promise.all([
+      Sale.findOne({
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: startThisWeek } },
+        attributes: [[sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue']],
+        raw: true
+      }),
+      Sale.findOne({
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.between]: [startPrevWeek, new Date(startThisWeek.getTime()-1)] } },
+        attributes: [[sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue']],
+        raw: true
+      }),
     ]);
+    const thisWeekRevenue = parseFloat(thisWeekRevenueRow?.revenue || 0);
+    const prevWeekRevenue = parseFloat(prevWeekRevenueRow?.revenue || 0);
     if (thisWeekRevenue != null && prevWeekRevenue) {
-      const change = prevWeekRevenue === 0 ? 0 : ((thisWeekRevenue - prevWeekRevenue) / prevWeekRevenue);
+      const daysThisWeek = Math.max(1, (now.getTime() - startThisWeek.getTime()) / (24 * 60 * 60 * 1000));
+      const avgDailyThisWeek = (thisWeekRevenue || 0) / daysThisWeek;
+      const avgDailyPrevWeek = prevWeekRevenue / 7;
+      const change = avgDailyPrevWeek === 0 ? 0 : ((avgDailyThisWeek - avgDailyPrevWeek) / avgDailyPrevWeek);
       if (change < -insightsConfig.REVENUE_DECLINE_THRESHOLD) {
         smartRecommendations.push({
           type: 'INSIGHT',
           priority: 'MEDIUM',
-          message: `You sold ${(Math.abs(change)*100).toFixed(0)}% less this week. Consider restocking fast movers.`,
+          message: `Daily sales velocity is ${(Math.abs(change)*100).toFixed(0)}% lower this week. Consider restocking fast movers.`,
           details: []
         });
       }
@@ -517,7 +540,7 @@ const getInsights = async (req, res) => {
     }
 
     // 3) Stock depletion forecast (Prophet via AI service)
-    const soonOut = await getStockDepletionForecast(shopId, req.user);
+    const soonOut = await getStockDepletionForecast(shopId, req.user, aiTracker);
     if (soonOut.length) {
       smartRecommendations.push({
         type: 'FORECAST',
@@ -570,7 +593,7 @@ const getInsights = async (req, res) => {
         attributes: [
           [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
           [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
-          [sequelize.fn('SUM', sequelize.col('total')), 'sumTotal'],
+          [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'sumTotal'],
           [sequelize.fn('COUNT', sequelize.col('id')), 'countSales'],
         ],
         group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
@@ -639,9 +662,41 @@ const getInsights = async (req, res) => {
         average_transaction_value.push(s.tx > 0 ? s.revenue / s.tx : 0);
       }
 
+      // Customer repeat and retention metrics
+      const uniqueCustomerSales = await Sale.findAll({
+        where: {
+          shopId,
+          ...NON_CANCELLED_SALE_FILTER,
+          customerId: { [Op.ne]: null }
+        },
+        attributes: [
+          'customerId',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'orderCount'],
+          [sequelize.fn('MAX', sequelize.col('createdAt')), 'lastVisit']
+        ],
+        group: ['customerId'],
+        raw: true
+      });
+      const totalUniqueCustomers = uniqueCustomerSales.length;
+      const repeatCustomers = uniqueCustomerSales.filter(c => Number(c.orderCount) > 1).length;
+      const repeatCustomerRate = totalUniqueCustomers > 0 ? (repeatCustomers / totalUniqueCustomers) : 0;
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const activeCustomersCount = uniqueCustomerSales.filter(c => new Date(c.lastVisit) >= thirtyDaysAgo).length;
+      const activeRetentionRate = totalUniqueCustomers > 0 ? (activeCustomersCount / totalUniqueCustomers) : 0;
+
       const aiResponse = await aiClient.post(
         '/api/insights/analyze',
-        { revenue, costs, customer_count, transaction_count, average_transaction_value },
+        {
+          revenue,
+          costs,
+          customer_count,
+          transaction_count,
+          average_transaction_value,
+          repeat_customer_rate: repeatCustomerRate,
+          retention_rate: activeRetentionRate,
+          total_customers: totalUniqueCustomers,
+          repeat_customers: repeatCustomers,
+        },
         {
           timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS,
           shopId,
@@ -659,16 +714,25 @@ const getInsights = async (req, res) => {
           message: x.description || 'AI insight',
           details: x.recommendations || [],
         }));
+      } else {
+        aiTracker.failed = true;
       }
     } catch (e) {
       console.error('[InsightsController] AI service call failed:', e.message);
+      aiTracker.failed = true;
     }
 
-    res.json({
+    const payload = {
       trends,
       recommendations: [...smartRecommendations, ...recommendations, ...aiRecs],
       alerts: [...alerts, ...marketAlerts],
-    });
+    };
+
+    if (!aiTracker.failed) {
+      await setInsightsCache(req, shopId, payload);
+    }
+
+    res.json(payload);
   } catch (error) {
     console.error('Error generating insights:', error);
     res.status(500).json({ error: 'Failed to generate insights' });
@@ -730,7 +794,7 @@ const getMonthlyRevenue = async (req, res) => {
       where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: twelveMonthsAgo } },
       attributes: [
         [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m-01'), 'month'],
-        [sequelize.fn('SUM', sequelize.col('total')), 'revenue'],
+        [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue'],
       ],
       group: [sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m-01')],
       order: [[sequelize.literal('month'), 'ASC']],
@@ -790,11 +854,14 @@ const getStockDepletion = async (req, res) => {
   const shopId = getAuthorizedShopId(req);
   if (!shopId) return res.status(401).json({ error: 'Unauthorized' });
 
+  let products = null;
+  let salesByProduct = null;
+
   try {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const products = await Product.findAll({
+    products = await Product.findAll({
       where: { active: true },
       attributes: ['id', 'name'],
       include: [{
@@ -807,7 +874,7 @@ const getStockDepletion = async (req, res) => {
 
     const dailySalesRows = await SaleItem.findAll(buildNetDemandQuery(shopId, ninetyDaysAgo, true));
 
-    const salesByProduct = {};
+    salesByProduct = {};
     for (const row of dailySalesRows) {
       const pid = row.productId;
       const qty = parseFloat(row.quantity || 0);
@@ -837,11 +904,41 @@ const getStockDepletion = async (req, res) => {
 
     res.json(aiResponse.data);
   } catch (error) {
-    console.error('[getStockDepletion] Error:', error.message);
-    if (error.status === 503) {
-      return res.status(503).json({ error: error.message });
+    if (products === null || salesByProduct === null) {
+      console.error('[getStockDepletion] Database query failed before AI call:', error.message);
+      return res.status(500).json({ error: 'Failed to generate stock depletion forecast' });
     }
-    res.status(500).json({ error: 'Failed to generate stock depletion forecast' });
+
+    console.warn('[getStockDepletion] AI service unavailable, generating local linear fallback:', error.message);
+    try {
+      const fallbackResults = products.map((p) => {
+        const invStock = parseFloat(p.Inventories?.[0]?.stockQuantity || 0);
+        const sales = salesByProduct[p.id] || [];
+        const totalSold = sales.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
+        const dailyVelocity = totalSold / 90;
+        let daysUntilDepletion = 999;
+        if (invStock <= 0) {
+          daysUntilDepletion = 0;
+        } else if (dailyVelocity > 0) {
+          daysUntilDepletion = Math.ceil(invStock / dailyVelocity);
+        }
+        return {
+          product_id: String(p.id),
+          product_name: p.name,
+          current_stock: invStock,
+          days_until_depletion: daysUntilDepletion,
+          alert: daysUntilDepletion <= insightsConfig.STOCK_DEPLETION_DAYS,
+          algorithm: 'linear_fallback',
+          confidence: totalSold > 0 ? 'medium' : 'low',
+          data_points: sales.length,
+          warning: 'AI service offline; using linear velocity estimate.'
+        };
+      });
+      return res.json(fallbackResults);
+    } catch (fallbackErr) {
+      console.error('[getStockDepletion] Linear fallback failed:', fallbackErr.message);
+      return res.status(500).json({ error: 'Failed to generate stock depletion forecast' });
+    }
   }
 };
 
