@@ -190,6 +190,7 @@ router.get('/organizations', async (req, res) => {
         slug: org.slug,
         status: org.status,
         currency: org.currency,
+        deletedAt: org.deletedAt || null,
         createdAt: org.createdAt,
         shopCount: org.Shops?.length || 0,
         subscription: sub ? {
@@ -266,7 +267,7 @@ router.get('/organizations/:id', async (req, res) => {
     }
 
     // Invoices and Notifications history
-    const [recentInvoices, recentNotifications, memberCount] = await Promise.all([
+    const [recentInvoices, recentNotifications, memberCount, recentPaidInvoices] = await Promise.all([
       SubscriptionInvoice.findAll({
         where: { organizationId: orgId },
         include: [{ model: Plan, attributes: ['code', 'name'] }],
@@ -280,8 +281,34 @@ router.get('/organizations/:id', async (req, res) => {
       }),
       OrganizationMembership.count({
         where: { organizationId: orgId, status: 'active' }
+      }),
+      SubscriptionInvoice.findAll({
+        where: { organizationId: orgId, status: 'paid' },
+        order: [['createdAt', 'DESC']],
+        limit: 50
       })
     ]);
+
+    const heldPaidInvoices = (recentPaidInvoices || [])
+      .filter((inv) => {
+        let meta = inv.metadata;
+        if (typeof meta === 'string') {
+          try {
+            meta = JSON.parse(meta);
+          } catch (_) {
+            meta = null;
+          }
+        }
+        return Boolean(meta && meta.heldByPlatform === true);
+      })
+      .map((inv) => ({
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        amount: inv.amount,
+        currency: inv.currency,
+        paidAt: inv.paidAt || inv.updatedAt,
+        updatedAt: inv.updatedAt
+      }));
 
     const plan = org.Subscription?.Plan;
     const quotaUsage = {
@@ -302,6 +329,7 @@ router.get('/organizations/:id', async (req, res) => {
         slug: org.slug,
         status: org.status,
         currency: org.currency,
+        deletedAt: org.deletedAt || null,
         createdAt: org.createdAt,
         updatedAt: org.updatedAt
       },
@@ -309,6 +337,7 @@ router.get('/organizations/:id', async (req, res) => {
         id: org.Subscription.id,
         status: org.Subscription.status,
         billingCycle: org.Subscription.billingCycle,
+        manualHold: Boolean(org.Subscription.manualHold),
         currentPeriodStart: org.Subscription.currentPeriodStart,
         currentPeriodEnd: org.Subscription.currentPeriodEnd,
         trialEndsAt: org.Subscription.trialEndsAt,
@@ -342,6 +371,7 @@ router.get('/organizations/:id', async (req, res) => {
         } : null
       })),
       recentInvoices,
+      heldPaidInvoices,
       recentNotifications
     });
   } catch (error) {

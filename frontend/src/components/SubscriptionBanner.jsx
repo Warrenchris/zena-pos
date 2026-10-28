@@ -36,7 +36,8 @@ export default function SubscriptionBanner() {
     }
   }, [subscription, loading.subscription, error?.subscription, user, dispatch]);
 
-  if (isDismissed || !subscription) {
+  // Suppress banner (including non-payment / Reactivate copy) when account is under platform hold
+  if (isDismissed || !subscription || subscription.platformHold) {
     return null;
   }
 

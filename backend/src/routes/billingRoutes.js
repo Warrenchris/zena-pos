@@ -175,6 +175,7 @@ router.get('/subscription', auth, authzContext, authorize(), async (req, res) =>
         lastPaymentMethod: subscription.lastPaymentMethod,
         lastPaymentDate: subscription.lastPaymentDate,
         daysRemainingInTrial,
+        platformHold: Boolean(subscription.manualHold && ['suspended', 'canceled'].includes(subscription.status)),
         plan: {
           id: plan.id,
           name: plan.name,

@@ -314,6 +314,14 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 403) {
+      if (error.response.data?.platformHold || error.response.data?.code === 'PLATFORM_HOLD') {
+        const errorMsg = error.response.data?.error || error.response.data?.message || 'Your account has been placed on hold by the platform.';
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('platform-hold', {
+            detail: { code: error.response.data?.code, message: errorMsg, ...error.response.data }
+          }));
+        }
+      }
       const code = error.response.data?.code;
 
       if (code === 'SHOP_INACTIVE') {

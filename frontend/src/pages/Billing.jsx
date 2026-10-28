@@ -263,9 +263,13 @@ export default function Billing() {
           <div className="flex items-center gap-3">
             <ExclamationTriangleIcon className="h-6 w-6 shrink-0" />
             <div>
-              <p className="font-bold text-small">Subscription Suspended</p>
+              <p className="font-bold text-small">
+                {subscription?.platformHold ? 'Account on Platform Hold' : 'Subscription Suspended'}
+              </p>
               <p className="text-caption text-danger/90">
-                Operational POS and catalog activities are locked. Please renew to restore full branch access.
+                {subscription?.platformHold
+                  ? 'Your account has been placed on hold by the platform. Operational services and renewal payments are disabled. Please contact support.'
+                  : 'Operational POS and catalog activities are locked. Please renew to restore full branch access.'}
               </p>
             </div>
           </div>
@@ -273,9 +277,11 @@ export default function Billing() {
             <Button
               variant="danger"
               size="sm"
+              disabled={Boolean(subscription?.platformHold)}
+              title={subscription?.platformHold ? 'Renewals disabled while account is on platform hold' : undefined}
               onClick={() => openRenewalModal(currentPlan)}
             >
-              Pay Now & Restore Access
+              {subscription?.platformHold ? 'Renewal Disabled' : 'Pay Now & Restore Access'}
             </Button>
           )}
         </div>
@@ -411,6 +417,8 @@ export default function Billing() {
                   variant="primary"
                   size="sm"
                   className="w-full"
+                  disabled={Boolean(subscription?.platformHold)}
+                  title={subscription?.platformHold ? 'Renewals disabled while account is on platform hold' : undefined}
                   onClick={() => openRenewalModal(currentPlan)}
                 >
                   {subscription?.status === 'trialing' ? 'Activate Commercial Plan' : 'Renew Subscription'}
@@ -806,6 +814,7 @@ export default function Billing() {
                     variant="primary"
                     size="md"
                     className="w-1/2"
+                    disabled={Boolean(subscription?.platformHold) || renewal.loading}
                     loading={renewal.loading}
                   >
                     Pay Now
