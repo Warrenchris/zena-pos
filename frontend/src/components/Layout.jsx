@@ -7,6 +7,7 @@ import { isManagerTier } from '../utils/roles';
 import ModernSidebar from './ModernSidebar';
 import TopNavBar from './navigation/TopNavBar';
 import SubscriptionBanner from './SubscriptionBanner';
+import PlatformHoldBanner from './PlatformHoldBanner';
 import EmailVerificationBanner from './EmailVerificationBanner';
 import InactiveShopModal from './InactiveShopModal';
 
@@ -110,6 +111,7 @@ export default function Layout() {
       
       {/* Floating Content Area dynamically offset */}
       <div className={`${paddingLeftClass} flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out`}>
+        <PlatformHoldBanner />
         <SubscriptionBanner />
         <EmailVerificationBanner />
         <InactiveShopModal />

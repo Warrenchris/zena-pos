@@ -844,4 +844,197 @@ describe('Platform Lifecycle Controls Suite (Suspend / Deactivate / Reactivate /
     });
   });
 
+  describe('9. Platform Org Detail & Owner Subscription Hold Projections', () => {
+    let testOrgDetail;
+    let testSubDetail;
+    let detailOwner;
+    let detailOwnerToken;
+    let unheldProjOwnerToken;
+
+    beforeAll(async () => {
+      testOrgDetail = await Organization.create({
+        name: 'Detail Projections Org',
+        slug: `detail-proj-${Date.now()}`,
+        status: 'suspended',
+        currency: 'KES'
+      });
+      testSubDetail = await Subscription.create({
+        organizationId: testOrgDetail.id,
+        planId: starterPlan.id,
+        status: 'suspended',
+        manualHold: true,
+        billingCycle: 'monthly',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 15 * 86400000)
+      });
+      const testShopDetail = await Shop.create({
+        name: 'Detail Shop',
+        organizationId: testOrgDetail.id,
+        active: true
+      });
+      detailOwner = await User.create({
+        name: 'Detail Owner',
+        email: `detail-owner-${Date.now()}@example.com`,
+        password: 'password123',
+        role: 'admin',
+        shopId: testShopDetail.id,
+        organizationId: testOrgDetail.id
+      });
+      await OrganizationMembership.create({
+        organizationId: testOrgDetail.id,
+        userId: detailOwner.id,
+        orgRole: 'owner',
+        status: 'active'
+      });
+      detailOwnerToken = generateToken({
+        id: detailOwner.id,
+        userId: detailOwner.id,
+        email: detailOwner.email,
+        role: 'admin',
+        orgRole: 'owner',
+        organizationId: testOrgDetail.id
+      });
+
+      const unheldOrgDetail = await Organization.create({
+        name: 'Unheld Projections Org',
+        slug: `unheld-proj-${Date.now()}`,
+        status: 'active',
+        currency: 'KES'
+      });
+      const unheldShopDetail = await Shop.create({
+        name: 'Unheld Detail Shop',
+        organizationId: unheldOrgDetail.id,
+        active: true
+      });
+      await Subscription.create({
+        organizationId: unheldOrgDetail.id,
+        planId: starterPlan.id,
+        status: 'active',
+        manualHold: false,
+        billingCycle: 'monthly',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 15 * 86400000)
+      });
+      const unheldOwnerUser = await User.create({
+        name: 'Unheld Detail Owner',
+        email: `unheld-owner-${Date.now()}@example.com`,
+        password: 'password123',
+        role: 'admin',
+        shopId: unheldShopDetail.id,
+        organizationId: unheldOrgDetail.id
+      });
+      await OrganizationMembership.create({
+        organizationId: unheldOrgDetail.id,
+        userId: unheldOwnerUser.id,
+        orgRole: 'owner',
+        status: 'active'
+      });
+      unheldProjOwnerToken = generateToken({
+        id: unheldOwnerUser.id,
+        userId: unheldOwnerUser.id,
+        email: unheldOwnerUser.email,
+        role: 'admin',
+        orgRole: 'owner',
+        organizationId: unheldOrgDetail.id
+      });
+
+      // Create an older held paid invoice (createdAt 20 days ago)
+      const olderDate = new Date(Date.now() - 20 * 86400000);
+      await SubscriptionInvoice.create({
+        invoiceNumber: `INV-HELD-OLD-${Date.now()}`,
+        organizationId: testOrgDetail.id,
+        subscriptionId: testSubDetail.id,
+        planId: starterPlan.id,
+        amount: 1500,
+        currency: 'KES',
+        paymentChannel: 'mpesa',
+        status: 'paid',
+        paidAt: olderDate,
+        createdAt: olderDate,
+        updatedAt: olderDate,
+        metadata: { heldByPlatform: true }
+      });
+
+      // Create 12 newer invoices (not held) to push the held invoice past the 10 most recent
+      for (let i = 0; i < 12; i++) {
+        const invDate = new Date(Date.now() - (12 - i) * 86400000);
+        await SubscriptionInvoice.create({
+          invoiceNumber: `INV-NEW-${i}-${Date.now()}`,
+          organizationId: testOrgDetail.id,
+          subscriptionId: testSubDetail.id,
+          planId: starterPlan.id,
+          amount: 1500,
+          currency: 'KES',
+          paymentChannel: 'mpesa',
+          status: 'paid',
+          paidAt: invDate,
+          createdAt: invDate,
+          updatedAt: invDate,
+          metadata: { note: 'regular renewal' }
+        });
+      }
+    });
+
+    it('GET /api/platform/organizations/:id returns manualHold, deletedAt, and heldPaidInvoices (including one older than top 10)', async () => {
+      const res = await request(app)
+        .get(`/api/platform/organizations/${testOrgDetail.id}`)
+        .set('Authorization', 'Bearer ' + superAdminToken);
+
+      expect(res.status).toBe(200);
+      expect(res.body.organization).toHaveProperty('deletedAt');
+      expect(res.body.organization.deletedAt).toBeNull();
+      expect(res.body.subscription).toHaveProperty('manualHold', true);
+
+      // Verify recentInvoices is capped at 10 and does NOT include the older held invoice
+      expect(res.body.recentInvoices.length).toBe(10);
+      const inRecent = res.body.recentInvoices.some(inv => inv.metadata?.heldByPlatform === true);
+      expect(inRecent).toBe(false);
+
+      // Verify top-level heldPaidInvoices contains the older held invoice
+      expect(Array.isArray(res.body.heldPaidInvoices)).toBe(true);
+      expect(res.body.heldPaidInvoices.length).toBeGreaterThanOrEqual(1);
+      const heldInv = res.body.heldPaidInvoices.find(inv => inv.invoiceNumber.startsWith('INV-HELD-OLD-'));
+      expect(heldInv).toBeDefined();
+      expect(heldInv).toHaveProperty('id');
+      expect(heldInv).toHaveProperty('invoiceNumber');
+      expect(heldInv).toHaveProperty('amount');
+      expect(heldInv).toHaveProperty('currency', 'KES');
+      expect(heldInv).toHaveProperty('paidAt');
+      expect(heldInv).toHaveProperty('updatedAt');
+    });
+
+    it('GET /api/billing/subscription returns platformHold: true when held AND suspended/canceled', async () => {
+      const res = await request(app)
+        .get('/api/billing/subscription')
+        .set('Authorization', 'Bearer ' + detailOwnerToken);
+
+      expect(res.status).toBe(200);
+      expect(res.body.subscription).toHaveProperty('platformHold', true);
+    });
+
+    it('GET /api/billing/subscription returns platformHold: false when held but active', async () => {
+      await testSubDetail.update({ status: 'active' });
+      await entitlementService.invalidateOrgEntitlements(testOrgDetail.id);
+
+      const res = await request(app)
+        .get('/api/billing/subscription')
+        .set('Authorization', 'Bearer ' + detailOwnerToken);
+
+      expect(res.status).toBe(200);
+      expect(res.body.subscription).toHaveProperty('platformHold', false);
+
+      await testSubDetail.update({ status: 'suspended' });
+      await entitlementService.invalidateOrgEntitlements(testOrgDetail.id);
+    });
+
+    it('GET /api/billing/subscription returns platformHold: false when unheld and active/suspended', async () => {
+      const resUnheld = await request(app)
+        .get('/api/billing/subscription')
+        .set('Authorization', 'Bearer ' + unheldProjOwnerToken);
+
+      expect(resUnheld.status).toBe(200);
+      expect(resUnheld.body.subscription).toHaveProperty('platformHold', false);
+    });
+  });
+
 });
