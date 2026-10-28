@@ -1,0 +1,253 @@
+# CD: Continuous Deployment to Render
+#
+# Required Secret:
+#   - RENDER_API_KEY: Render API key with deployment permissions
+#
+# Required Variables:
+#   - RENDER_SERVICE_ID_BACKEND: Render Service ID for backend
+#   - RENDER_SERVICE_ID_FRONTEND: Render Service ID for frontend static site
+#   - RENDER_SERVICE_ID_AI: Render Service ID for AI service
+#
+# Note: Workflows triggered by workflow_run always execute using the workflow
+# file and definition from the default branch (master).
+
+name: CD
+
+on:
+  workflow_run:
+    workflows:
+      - "Backend CI"
+      - "Frontend CI"
+      - "AI Service CI"
+    types:
+      - completed
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to deploy"
+        required: true
+        type: choice
+        options:
+          - backend
+          - frontend
+          - ai
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    concurrency:
+      group: cd-${{ inputs.service || github.event.inputs.service || (github.event.workflow_run.name == 'Backend CI' && 'backend') || (github.event.workflow_run.name == 'Frontend CI' && 'frontend') || (github.event.workflow_run.name == 'AI Service CI' && 'ai') || 'unknown' }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Resolve service
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_SERVICE: ${{ inputs.service || github.event.inputs.service }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          SERVICE=""
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            SERVICE="$INPUT_SERVICE"
+          elif [ "$EVENT_NAME" = "workflow_run" ]; then
+            case "$WORKFLOW_NAME" in
+              "Backend CI")
+                SERVICE="backend"
+                ;;
+              "Frontend CI")
+                SERVICE="frontend"
+                ;;
+              "AI Service CI")
+                SERVICE="ai"
+                ;;
+              *)
+                echo "::error::Unknown triggering workflow: '$WORKFLOW_NAME'"
+                exit 1
+                ;;
+            esac
+          else
+            echo "::error::Unsupported event: '$EVENT_NAME'"
+            exit 1
+          fi
+
+          if [ -z "$SERVICE" ]; then
+            echo "::error::Service could not be resolved."
+            exit 1
+          fi
+
+          HEAD_SHA=""
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            HEAD_SHA="$WORKFLOW_HEAD_SHA"
+          else
+            HEAD_SHA="$GITHUB_SHA"
+          fi
+
+          if [ -z "$HEAD_SHA" ]; then
+            echo "::error::Target commit SHA could not be resolved."
+            exit 1
+          fi
+
+          echo "Resolved service: $SERVICE"
+          echo "Resolved commit SHA: $HEAD_SHA"
+
+          echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger deploy
+        id: trigger
+        env:
+          SERVICE: ${{ steps.resolve.outputs.service }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID_BACKEND: ${{ vars.RENDER_SERVICE_ID_BACKEND }}
+          RENDER_SERVICE_ID_FRONTEND: ${{ vars.RENDER_SERVICE_ID_FRONTEND }}
+          RENDER_SERVICE_ID_AI: ${{ vars.RENDER_SERVICE_ID_AI }}
+        run: |
+          set -euo pipefail
+
+          SERVICE_ID=""
+          VAR_NAME=""
+
+          case "$SERVICE" in
+            backend)
+              SERVICE_ID="$RENDER_SERVICE_ID_BACKEND"
+              VAR_NAME="RENDER_SERVICE_ID_BACKEND"
+              ;;
+            frontend)
+              SERVICE_ID="$RENDER_SERVICE_ID_FRONTEND"
+              VAR_NAME="RENDER_SERVICE_ID_FRONTEND"
+              ;;
+            ai)
+              SERVICE_ID="$RENDER_SERVICE_ID_AI"
+              VAR_NAME="RENDER_SERVICE_ID_AI"
+              ;;
+            *)
+              echo "::error::Unrecognized service: '$SERVICE'"
+              exit 1
+              ;;
+          esac
+
+          if [ -z "$SERVICE_ID" ]; then
+            echo "::error::Render service ID variable '$VAR_NAME' is empty or not configured in repository variables."
+            exit 1
+          fi
+
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "::error::Secret 'RENDER_API_KEY' is empty or not configured in repository secrets."
+            exit 1
+          fi
+
+          echo "Triggering Render deploy for service: $SERVICE (Service ID: $SERVICE_ID, Commit: $HEAD_SHA)..."
+
+          JSON_PAYLOAD=$(jq -n --arg commitId "$HEAD_SHA" '{"commitId": $commitId}')
+
+          RESPONSE_FILE=$(mktemp)
+          HTTP_STATUS=$(curl -s -S -o "$RESPONSE_FILE" -w "%{http_code}" \
+            -X POST "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD")
+
+          RESPONSE_BODY=$(cat "$RESPONSE_FILE")
+          rm -f "$RESPONSE_FILE"
+
+          echo "Render API HTTP status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "::error::Failed to trigger deploy on Render (HTTP $HTTP_STATUS)."
+            echo "Response body:"
+            echo "$RESPONSE_BODY"
+            exit 1
+          fi
+
+          DEPLOY_ID=$(echo "$RESPONSE_BODY" | jq -r '.id // empty')
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "::error::Render API response missing deploy ID (.id)."
+            echo "Response body:"
+            echo "$RESPONSE_BODY"
+            exit 1
+          fi
+
+          echo "Deploy triggered successfully. Deploy ID: $DEPLOY_ID"
+          echo "service_id=$SERVICE_ID" >> "$GITHUB_OUTPUT"
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for deploy
+        env:
+          SERVICE_ID: ${{ steps.trigger.outputs.service_id }}
+          DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          POLL_INTERVAL=15
+          MAX_DURATION_SECONDS=$((25 * 60))
+          START_TIME=$SECONDS
+          PREV_STATUS=""
+
+          echo "Polling deploy status for service $SERVICE_ID, deploy $DEPLOY_ID every ${POLL_INTERVAL}s (timeout: 25 minutes)..."
+
+          while true; do
+            ELAPSED=$((SECONDS - START_TIME))
+            if [ "$ELAPSED" -ge "$MAX_DURATION_SECONDS" ]; then
+              echo "::error::Deploy timed out after $((ELAPSED / 60)) minutes. Last observed status: '${PREV_STATUS:-unknown}'."
+              exit 1
+            fi
+
+            RESPONSE_FILE=$(mktemp)
+            HTTP_STATUS=$(curl -s -S -o "$RESPONSE_FILE" -w "%{http_code}" \
+              -X GET "https://api.render.com/v1/services/$SERVICE_ID/deploys/$DEPLOY_ID" \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Accept: application/json") || HTTP_STATUS=000
+
+            BODY=$(cat "$RESPONSE_FILE")
+            rm -f "$RESPONSE_FILE"
+
+            if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+              echo "Warning: Render API returned HTTP $HTTP_STATUS while polling: $BODY. Retrying in ${POLL_INTERVAL}s..."
+            else
+              STATUS=$(echo "$BODY" | jq -r '.status // empty')
+
+              if [ -n "$STATUS" ] && [ "$STATUS" != "$PREV_STATUS" ]; then
+                echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Deploy status transition: '${PREV_STATUS:-none}' -> '$STATUS' (${ELAPSED}s elapsed)"
+                PREV_STATUS="$STATUS"
+              fi
+
+              case "$STATUS" in
+                live)
+                  echo "Deploy $DEPLOY_ID reached terminal status 'live' in ${ELAPSED}s. Deploy successful!"
+                  exit 0
+                  ;;
+                build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                  echo "::error::Deploy $DEPLOY_ID failed with terminal status: '$STATUS' (${ELAPSED}s elapsed)."
+                  echo "Deploy details:"
+                  echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+                  exit 1
+                  ;;
+                created|queued|build_in_progress|update_in_progress|pre_deploy_in_progress)
+                  # In-progress statuses: keep waiting
+                  ;;
+                *)
+                  # Any other status: print it and keep waiting
+                  echo "Observed status: '$STATUS'. Waiting ${POLL_INTERVAL}s..."
+                  ;;
+              esac
+            fi
+
+            sleep "$POLL_INTERVAL"
+          done
+

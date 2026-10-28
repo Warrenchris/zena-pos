@@ -259,7 +259,6 @@ jobs:
     name: Backend Test (Authz Cache Enabled)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
 
     services:
       mysql:
