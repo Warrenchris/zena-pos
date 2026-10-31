@@ -102,11 +102,12 @@ export const showSnackbar = (message, type = 'info', duration = 3000, action) =>
  * Sale completed notification
  */
 export const notifySaleComplete = (saleData) => {
-  const total = saleData.total || saleData.totalAmount || 0;
+  const rawTotal = saleData?.total || saleData?.totalAmount || 0;
+  const total = Number(rawTotal) || 0;
   notify({
     type: 'sale',
     title: 'Sale Completed',
-    message: `Sale #${saleData.invoiceNumber || 'N/A'} - Total: $${total.toFixed(2)}`
+    message: `Sale #${saleData?.invoiceNumber || 'N/A'} - Total: $${total.toFixed(2)}`
   });
 };
 
