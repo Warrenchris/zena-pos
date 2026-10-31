@@ -415,6 +415,40 @@ describe('htmlReceipt - renderReceiptHtml', () => {
       expect(html).toContain('font-size: 11.5px;');
       expect(html).toContain('letter-spacing: 0.5px;');
     });
+
+    it('renders shop logo above store name (not beside ZANA POS wordmark) with contain, 28px max-height, and aspect-ratio fallback', () => {
+      const receipt = buildReceipt(fullSaleData, {
+        business: {
+          ...fullBusiness,
+          logoUrl: 'https://cdn.zana.test/shop-logo.png',
+          showPoweredBy: true,
+        },
+      });
+      const html = renderReceiptHtml(receipt, { widthMm: 80, formatMoney });
+
+      // CSS assertions
+      expect(html).toContain('.receipt-container .header-logo');
+      expect(html).toContain('max-height: 28px;');
+      expect(html).toContain('object-fit: contain;');
+      expect(html).toContain('image-rendering: auto;');
+
+      // Fallback attributes
+      expect(html).toContain("onerror='this.style.display=\"none\"'");
+      expect(html).toContain("onload='if(this.naturalWidth>4*this.naturalHeight){this.style.display=\"none\"}'");
+
+      // Layout ordering: header-brand (ZANA POS) -> header-logo-wrap -> store-name
+      const brandIndex = html.indexOf('class="header-brand"');
+      const logoIndex = html.indexOf('class="header-logo"');
+      const storeNameIndex = html.indexOf('class="store-name"');
+
+      expect(brandIndex).toBeGreaterThan(-1);
+      expect(logoIndex).toBeGreaterThan(-1);
+      expect(storeNameIndex).toBeGreaterThan(-1);
+
+      // Logo is after header-brand, and before store-name
+      expect(logoIndex).toBeGreaterThan(brandIndex);
+      expect(logoIndex).toBeLessThan(storeNameIndex);
+    });
   });
 
   describe('XSS escaping', () => {
