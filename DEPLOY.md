@@ -44,10 +44,37 @@ The migrations executed in sequence:
 > **In-Memory Rate Limiter Caveat**: If Redis is temporarily unreachable or offline, the endpoint automatically fails closed using a local in-memory Map fallback enforcing 30 req/min/IP. In multi-instance or load-balanced environments with multiple Node.js worker processes, each worker enforces this limit independently while Redis is disconnected. Once Redis reconnects, rate tracking resumes globally across all cluster nodes.
 
 ### Frontend (`frontend/.env` or build environment)
-- **`VITE_PUBLIC_APP_URL`** (or `PUBLIC_APP_URL`):
-  - Example: `https://app.zana.pos`
-  - Defines the public root domain used to generate customer-facing receipt URLs: `${PUBLIC_APP_URL}/r/${receiptToken}`.
-  - **Important**: If this environment variable is missing or empty, `qrEnabled` is automatically bypassed and thermal receipts print without a QR code (an explanatory alert is displayed in the Settings UI).
+- **`VITE_PUBLIC_APP_URL`**:
+  - Example: `https://app.zana.pos` (or `https://pos.yourstore.com`)
+  - **Purpose**: Defines the public base domain used to construct customer-facing receipt verification URLs: `${VITE_PUBLIC_APP_URL}/r/${receiptToken}`.
+  - **Build-Time Inlining Requirement**:
+    - Vite bundles static client-side single-page applications. Any client-accessible variable prefixed with `VITE_` is statically replaced during the build step (`npm run build` / `vite build`).
+    - It **must** be set in the build environment before running `vite build`; setting it as a server runtime environment variable after the bundle is compiled has no effect on pre-built assets.
+  - **Where to Configure**:
+    1. **Local and Staging Files**:
+       - In `frontend/.env.production` (or `frontend/.env.local`):
+         ```bash
+         VITE_PUBLIC_APP_URL=https://app.zana.pos
+         ```
+    2. **Cloud Hosting Providers (Render, Vercel, Netlify, Cloudflare Pages)**:
+       - Set `VITE_PUBLIC_APP_URL` in the provider's Environment Variables dashboard for the Frontend Static Site / Web Service before triggering the deployment build.
+    3. **Docker Multi-Stage Builds**:
+       - Pass as a build argument in `Dockerfile`:
+         ```dockerfile
+         ARG VITE_PUBLIC_APP_URL
+         ENV VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL
+         RUN npm run build
+         ```
+       - Command-line invocation:
+         ```bash
+         docker build --build-arg VITE_PUBLIC_APP_URL=https://app.zana.pos -t zana-pos-frontend .
+         ```
+    4. **CI/CD Pipelines (GitHub Actions, GitLab CI)**:
+       - Export `VITE_PUBLIC_APP_URL` as an environment variable in the workflow step executing `npm run build`.
+  - **Fallback Behavior**:
+    - If `VITE_PUBLIC_APP_URL` is omitted or empty at build time, the frontend defaults to `''`.
+    - `buildReceipt` automatically suppresses the receipt QR code cleanly without throwing errors or leaving broken image placeholders on thermal or browser receipts.
+    - An explanatory warning badge is displayed in the **Settings > Receipt & Printer** tab to guide store administrators.
 
 ---
 
