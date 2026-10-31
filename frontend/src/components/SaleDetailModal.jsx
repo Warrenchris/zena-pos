@@ -25,6 +25,8 @@ import { useToast } from './Toast';
 
 const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => {
   const settings = useSelector(selectSettings);
+  const authShop = useSelector((state) => state.auth?.shop || state.auth?.user?.shop);
+  const shopSliceShop = useSelector((state) => state.shop?.shop);
   const { format: formatCurrency } = useCurrency();
   const { hasPermission } = usePermissions();
   const receiptSettings = useReceiptSettings();
@@ -66,8 +68,11 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
       onPrint(sale);
       return;
     }
-    const effectiveBusiness = (shop && Object.keys(shop).length > 0)
+    const activeShop = (shop && Object.keys(shop).length > 0)
       ? shop
+      : (shopSliceShop || authShop);
+    const effectiveBusiness = (activeShop && Object.keys(activeShop).length > 0)
+      ? activeShop
       : { name: shopName || 'Zana POS' };
     await printStoredSale(sale, {
       business: effectiveBusiness,

@@ -34,25 +34,13 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
   const receiptSettings = useReceiptSettings();
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
 
-  const business = React.useMemo(() => {
-    const active = shopSliceShop || authShop || completedSale?.business || completedSale?.shop || {};
-    return {
-      name: active.name || settings?.systemName || '',
-      branch: active.branch || settings?.branch || '',
-      address: active.address || settings?.address || '',
-      phone: active.phone || settings?.contactPhone || '',
-      kraPin: active.kraPin || settings?.kraPin || '',
-      tagline: active.tagline || settings?.tagline || '',
-      logoUrl: active.logo || active.logoUrl || settings?.businessLogo || null,
-      brandIcon: active.brandIcon || settings?.brandIcon || null,
-      showPoweredBy: settings?.showPoweredBy !== false,
-      qrEnabled: settings?.qrEnabled || false,
-    };
-  }, [shopSliceShop, authShop, completedSale, settings]);
+  const shop = React.useMemo(() => {
+    return shopSliceShop || authShop || completedSale?.business || completedSale?.shop || null;
+  }, [shopSliceShop, authShop, completedSale]);
 
   const handlePrint = React.useCallback(async () => {
     if (!completedSale) return;
-    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business, receiptSettings });
+    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop, receiptSettings });
     if (!window.showToast) return;
     if (!result.ok) {
       window.showToast({
@@ -69,7 +57,7 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
         duration: 5000
       });
     }
-  }, [completedSale, formatCurrency, business, receiptSettings]);
+  }, [completedSale, formatCurrency, shop, receiptSettings]);
 
   React.useEffect(() => {
     if (completedSale && settings?.autoPrintReceipt) {
