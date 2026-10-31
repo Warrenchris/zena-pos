@@ -11,6 +11,8 @@
   @media print {
     html, body {
       width: 58mm !important;
+      height: auto !important;
+      min-height: 0 !important;
       margin: 0 !important;
       padding: 0 !important;
       background: #fff !important;
@@ -25,6 +27,8 @@
     }
   }
   html, body {
+    height: auto;
+    min-height: 0;
     margin: 0;
     padding: 0;
     background: #fff;
@@ -58,15 +62,22 @@
     gap: 4px;
   }
   .receipt-container .brand-icon {
-    width: 15px;
-    height: 15px;
+    max-height: 28px;
+    max-width: 28px;
     object-fit: contain;
+    image-rendering: auto;
+  }
+  .receipt-container .header-logo-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 2px 0 3px 0;
   }
   .receipt-container .header-logo {
-    max-height: 22px;
-    max-width: 50px;
+    max-height: 28px;
+    max-width: 100%;
     object-fit: contain;
-    filter: grayscale(1) contrast(1.3);
+    image-rendering: auto;
   }
   .receipt-container .header-wordmark {
     font-size: 15px;
@@ -299,7 +310,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 4px 0 2px 0;
+    margin: 6px 0 2px 0;
   }
   .receipt-container .thank-you-rule {
     flex: 1;
@@ -372,15 +383,20 @@
 <body>
 <div class="receipt-container">
   <!-- Header -->
-  <div class="header-brand">
-    <img src="data:image/svg+xml;utf8,&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 160 50&quot; width=&quot;160&quot; height=&quot;50&quot;&gt;&lt;rect width=&quot;160&quot; height=&quot;50&quot; rx=&quot;8&quot; fill=&quot;%23111111&quot;/&gt;&lt;text x=&quot;80&quot; y=&quot;32&quot; font-family=&quot;sans-serif&quot; font-size=&quot;22&quot; font-weight=&quot;900&quot; fill=&quot;%23ffffff&quot; text-anchor=&quot;middle&quot;&gt;ZANA&lt;/text&gt;&lt;/svg&gt;" class="header-logo" alt="Business logo" />
-    
+  
+    <div class="header-brand">
       <span class="header-brand-wrap">
         
         <span class="header-wordmark">ZANA POS</span>
       </span>
-    
-  </div>
+    </div>
+  
+
+  
+    <div class="header-logo-wrap">
+      <img src="data:image/svg+xml;utf8,&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 160 50&quot; width=&quot;160&quot; height=&quot;50&quot;&gt;&lt;rect width=&quot;160&quot; height=&quot;50&quot; rx=&quot;8&quot; fill=&quot;%23111111&quot;/&gt;&lt;text x=&quot;80&quot; y=&quot;32&quot; font-family=&quot;sans-serif&quot; font-size=&quot;22&quot; font-weight=&quot;900&quot; fill=&quot;%23ffffff&quot; text-anchor=&quot;middle&quot;&gt;ZANA&lt;/text&gt;&lt;/svg&gt;" class="header-logo" alt="Business logo" onerror='this.style.display="none"' onload='if(this.naturalWidth>4*this.naturalHeight){this.style.display="none"}' />
+    </div>
+  
 
   <div class="store-name">ZANA SUPERMARKET</div>
   <div class="store-branch">Westlands Branch</div>
