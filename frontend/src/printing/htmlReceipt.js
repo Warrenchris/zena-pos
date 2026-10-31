@@ -254,6 +254,8 @@ export function renderReceiptHtml(receipt, options = {}) {
   @media print {
     html, body {
       width: ${width}mm !important;
+      height: auto !important;
+      min-height: 0 !important;
       margin: 0 !important;
       padding: 0 !important;
       background: #fff !important;
@@ -268,6 +270,8 @@ export function renderReceiptHtml(receipt, options = {}) {
     }
   }
   html, body {
+    height: auto;
+    min-height: 0;
     margin: 0;
     padding: 0;
     background: #fff;
