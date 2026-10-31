@@ -37,5 +37,6 @@ export function buildReceiptSettings(settings, apiBaseUrl = '') {
     tagline: typeof s.tagline === 'string' ? s.tagline : '',
     showPoweredBy: s.showPoweredBy !== undefined ? Boolean(s.showPoweredBy) : true,
     qrEnabled: s.qrEnabled !== undefined ? Boolean(s.qrEnabled) : false,
+    ...(s.publicAppUrl ? { publicAppUrl: s.publicAppUrl } : {}),
   };
 }

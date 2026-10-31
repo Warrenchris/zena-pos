@@ -5,6 +5,10 @@ import { initSentry } from './instrument'
 import App from './App.jsx'
 import { registerServiceWorker } from './pwa/registerServiceWorker'
 
+if (typeof window !== 'undefined') {
+  window.__PUBLIC_APP_URL__ = import.meta.env?.VITE_PUBLIC_APP_URL || '';
+}
+
 initSentry()
 
 createRoot(document.getElementById('root')).render(
