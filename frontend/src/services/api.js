@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Sentry from '../instrument';
 import { logger, loggerInterceptor } from '../utils/logger';
+import { coerceMoney, coerceMoneyFields } from '../utils/money';
 
 // Safely read Vite / Node env var without throwing in browser (where
 // `process` is undefined) or in Jest (where `import.meta` is not parsed by Babel).
@@ -32,6 +33,14 @@ const api = axios.create({
 // Add logging interceptors
 api.interceptors.request.use(loggerInterceptor.request);
 api.interceptors.response.use(loggerInterceptor.response, loggerInterceptor.error);
+
+// ponytail: Coerce API DECIMAL strings (e.g. "50.00") to Numbers at the API boundary
+api.interceptors.response.use((response) => {
+  if (response && response.data) {
+    response.data = coerceMoneyFields(response.data);
+  }
+  return response;
+});
 
 // ponytail: global GET cache and request de-duplication to prevent duplicate concurrent queries
 const getCache = new Map();
@@ -585,4 +594,5 @@ export const activityAPI = {
   getAll: (params) => api.get('/api/activity', { params }),
 };
 
+export { coerceMoney, coerceMoneyFields };
 export default api;

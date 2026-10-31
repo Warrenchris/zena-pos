@@ -202,50 +202,50 @@ export default function FinancialAnalysis() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <MetricCard
                     label="Gross Profit Margin"
-                    value={metrics.gross_profit_margin != null ? `${metrics.gross_profit_margin.toFixed(1)}%` : "N/A"}
+                    value={metrics.gross_profit_margin != null ? `${Number(metrics.gross_profit_margin).toFixed(1)}%` : "N/A"}
                     hint={metrics.gross_profit_margin != null ? "Gross margin ratio" : "No sales recorded yet"}
                   />
                   <MetricCard
                     label="Net Profit Margin"
-                    value={metrics.net_profit_margin != null ? `${metrics.net_profit_margin.toFixed(2)}%` : "N/A"}
+                    value={metrics.net_profit_margin != null ? `${Number(metrics.net_profit_margin).toFixed(2)}%` : "N/A"}
                     hint={metrics.net_profit_margin != null ? "Net margin after operating expenses" : "No sales recorded yet"}
                   />
                   <MetricCard
                     label="Current Ratio"
-                    value={metrics.current_ratio != null ? metrics.current_ratio.toFixed(2) : "N/A"}
+                    value={metrics.current_ratio != null ? Number(metrics.current_ratio).toFixed(2) : "N/A"}
                     hint={metrics.current_ratio != null ? "Liquidity (assets / liabilities)" : (metrics.data_quality_warnings?.find(w => w.includes('current_ratio')) || "No liabilities or assets details")}
                   />
                   <MetricCard
                     label="Inventory Turnover"
-                    value={metrics.inventory_turnover != null ? `${metrics.inventory_turnover.toFixed(2)}x` : "N/A"}
+                    value={metrics.inventory_turnover != null ? `${Number(metrics.inventory_turnover).toFixed(2)}x` : "N/A"}
                     hint={metrics.inventory_turnover_note || "Requires direct inventory value"}
                   />
                   <MetricCard
                     label="Quick Ratio"
-                    value={metrics.quick_ratio != null ? metrics.quick_ratio.toFixed(2) : "N/A"}
+                    value={metrics.quick_ratio != null ? Number(metrics.quick_ratio).toFixed(2) : "N/A"}
                     hint={metrics.quick_ratio_note || "Cash + receivables / liabilities"}
                   />
                   <MetricCard
                     label="Debt to Equity"
-                    value={metrics.debt_to_equity != null ? metrics.debt_to_equity.toFixed(2) : "N/A"}
+                    value={metrics.debt_to_equity != null ? Number(metrics.debt_to_equity).toFixed(2) : "N/A"}
                     hint={metrics.debt_to_equity != null ? "Financial leverage ratio" : (metrics.data_quality_warnings?.find(w => w.includes('debt_to_equity')) || "No balance sheet data")}
                   />
                   <MetricCard
                     label="Operating Expense Ratio"
-                    value={metrics.operating_expense_ratio != null ? `${metrics.operating_expense_ratio.toFixed(1)}%` : "N/A"}
+                    value={metrics.operating_expense_ratio != null ? `${Number(metrics.operating_expense_ratio).toFixed(1)}%` : "N/A"}
                     hint={metrics.operating_expense_ratio_note || "Operating expenses / net revenue"}
                   />
                   {metrics.return_on_assets != null && (
                     <MetricCard
                       label="Return on Assets (ROA)"
-                      value={`${metrics.return_on_assets.toFixed(1)}%`}
+                      value={`${Number(metrics.return_on_assets).toFixed(1)}%`}
                       hint="Net profit / total assets"
                     />
                   )}
                   {metrics.cash_conversion_cycle != null && (
                     <MetricCard
                       label="Cash Conversion Cycle"
-                      value={`${metrics.cash_conversion_cycle.toFixed(0)} days`}
+                      value={`${Number(metrics.cash_conversion_cycle).toFixed(0)} days`}
                       hint={metrics.cash_conversion_cycle_note || "Days to convert inventory to cash"}
                     />
                   )}
