@@ -7,7 +7,7 @@
  * - In-memory cache behavior
  */
 
-import { ditherGrayscaleToMonochrome, getLogoBitmap, clearLogoCache, computeLogoDimensions } from '../logoBitmap';
+import { ditherGrayscaleToMonochrome, getLogoBitmap, clearLogoCache, computeLogoDimensions, isLogoAspectRatioSafe } from '../logoBitmap';
 
 describe('Logo Bitmap & Dithering Engine', () => {
   beforeEach(() => {
@@ -100,6 +100,29 @@ describe('Logo Bitmap & Dithering Engine', () => {
       expect(tall80.height).toBeLessThanOrEqual(120);
       const tall80ExpectedW = Math.round(tall80.height * tallSrc.ratio);
       expect(Math.abs(tall80.width - tall80ExpectedW)).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe('isLogoAspectRatioSafe', () => {
+    test('returns true for square and safe aspect ratios between 1:2 and 4:1', () => {
+      expect(isLogoAspectRatioSafe(100, 100)).toBe(true);
+      expect(isLogoAspectRatioSafe(400, 100)).toBe(true); // 4:1
+      expect(isLogoAspectRatioSafe(100, 200)).toBe(true); // 1:2
+      expect(isLogoAspectRatioSafe(300, 100)).toBe(true);
+    });
+
+    test('returns false for aspect ratios outside 1:2 to 4:1', () => {
+      expect(isLogoAspectRatioSafe(401, 100)).toBe(false); // > 4:1 (too wide)
+      expect(isLogoAspectRatioSafe(100, 201)).toBe(false); // < 1:2 (too tall, h > 2*w)
+      expect(isLogoAspectRatioSafe(50, 200)).toBe(false);
+      expect(isLogoAspectRatioSafe(600, 100)).toBe(false);
+    });
+
+    test('returns false for zero, negative or non-numeric dimensions', () => {
+      expect(isLogoAspectRatioSafe(0, 100)).toBe(false);
+      expect(isLogoAspectRatioSafe(100, 0)).toBe(false);
+      expect(isLogoAspectRatioSafe(-10, 50)).toBe(false);
+      expect(isLogoAspectRatioSafe(null, undefined)).toBe(false);
     });
   });
 });
