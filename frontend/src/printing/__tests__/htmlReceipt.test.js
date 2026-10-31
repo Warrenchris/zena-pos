@@ -107,6 +107,7 @@ describe('htmlReceipt - renderReceiptHtml', () => {
 
       // Footer
       expect(html).toContain('class="thank-you-row"');
+      expect(html).toContain('margin: 6px 0 2px 0;');
       expect(html).toContain('class="thank-you-rule"');
       expect(html).toContain('Goods once sold cannot be returned without receipt.');
       expect(html).toContain('Better Products · Brighter Together');

@@ -549,7 +549,7 @@ export function renderReceiptHtml(receipt, options = {}) {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 4px 0 2px 0;
+    margin: 6px 0 2px 0;
   }
   .receipt-container .thank-you-rule {
     flex: 1;
