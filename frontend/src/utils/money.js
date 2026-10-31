@@ -8,8 +8,37 @@
  *   TypeError: value.toFixed is not a function
  * Furthermore, string addition ("50.00" + "10.00") results in concatenation ("50.0010.00").
  *
- * This utility provides safe Number coercion at the API boundary.
+ * This utility provides safe Number coercion at the API boundary while preserving
+ * non-plain objects (Blob, ArrayBuffer, FormData, Date), null/undefined, and non-numeric values.
  */
+
+/**
+ * Check if a value is a plain JavaScript object (i.e. created with {} or Object.create(null)).
+ * Returns false for null, primitives, Arrays, and non-plain object instances
+ * like Blob, ArrayBuffer, FormData, Date, RegExp, Map, Set, TypedArray, etc.
+ *
+ * @param {any} val - The value to check
+ * @returns {boolean} True if plain object, false otherwise
+ */
+export const isPlainObject = (val) => {
+  if (val === null || typeof val !== 'object') return false;
+
+  // Explicitly guard against known browser and Node non-plain objects
+  if (
+    val instanceof Date ||
+    val instanceof RegExp ||
+    (typeof Blob !== 'undefined' && val instanceof Blob) ||
+    (typeof ArrayBuffer !== 'undefined' && (val instanceof ArrayBuffer || ArrayBuffer.isView(val))) ||
+    (typeof FormData !== 'undefined' && val instanceof FormData)
+  ) {
+    return false;
+  }
+
+  // Fast check: prototype must be Object.prototype or null
+  const proto = Object.getPrototypeOf(val);
+  if (proto === null) return true;
+  return proto === Object.prototype;
+};
 
 /**
  * Safely coerce any value (especially "50.00"-style strings from API DECIMAL columns)
@@ -90,23 +119,27 @@ export const MONEY_FIELD_NAMES = new Set([
 
 /**
  * Recursively traverse and coerce known money/decimal fields in an API response
- * from "50.00"-style strings to numbers.
+ * from decimal strings (e.g. "50.00") to JavaScript numbers.
  *
- * @param {any} data - The response payload (object, array, primitive)
+ * Rules:
+ * 1. Skips non-plain objects (Blob, ArrayBuffer, FormData, Date, etc.) and leaves them untouched.
+ * 2. Preserves null and undefined exactly as-is.
+ * 3. Only coerces string values in money fields that parse as finite numbers (e.g. "50.00" -> 50).
+ *    All other values (already numbers, non-numeric strings, booleans, null/undefined) are left as-is.
+ *
+ * @param {any} data - The response payload (object, array, primitive, blob, etc.)
  * @param {Set<string>} [moneyFields=MONEY_FIELD_NAMES] - Field names to coerce
- * @returns {any} A clone of data with decimal fields coerced to numbers
+ * @returns {any} A clone of data with decimal fields coerced, or data untouched if non-plain/primitive
  */
 export const coerceMoneyFields = (data, moneyFields = MONEY_FIELD_NAMES) => {
+  // Preserve null and undefined exactly as-is
   if (data === null || data === undefined) return data;
+
+  // Primitives (number, string, boolean, symbol, bigint) are left untouched
   if (typeof data !== 'object') return data;
 
-  // Preserve non-plain objects (Date, RegExp, Blob, FormData, etc.)
-  if (
-    data instanceof Date ||
-    data instanceof RegExp ||
-    (typeof Blob !== 'undefined' && data instanceof Blob) ||
-    (typeof FormData !== 'undefined' && data instanceof FormData)
-  ) {
+  // Skip non-plain objects (Blob, ArrayBuffer, FormData, Date, etc.)
+  if (!Array.isArray(data) && !isPlainObject(data)) {
     return data;
   }
 
@@ -116,14 +149,53 @@ export const coerceMoneyFields = (data, moneyFields = MONEY_FIELD_NAMES) => {
 
   const result = {};
   for (const [key, value] of Object.entries(data)) {
-    if (moneyFields.has(key) && (typeof value === 'string' || typeof value === 'number')) {
-      result[key] = coerceMoney(value);
-    } else if (value && typeof value === 'object') {
+    // 1. Preserve null and undefined exactly as-is
+    if (value === null || value === undefined) {
+      result[key] = value;
+      continue;
+    }
+
+    // 2. For money fields: only coerce strings that parse as finite numbers
+    if (moneyFields.has(key)) {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed !== '') {
+          // Clean numeric check
+          const num = Number(trimmed);
+          if (Number.isFinite(num)) {
+            result[key] = num;
+            continue;
+          }
+          // Check formatted currency strings (e.g. "1,250.50", "$50.00", "KSh 50.00")
+          const cleaned = trimmed.replace(/,/g, '').replace(/^[^\d.-]+/, '').trim();
+          if (cleaned !== '' && cleaned !== '-' && cleaned !== '.') {
+            const cleanedNum = Number(cleaned);
+            if (Number.isFinite(cleanedNum)) {
+              result[key] = cleanedNum;
+              continue;
+            }
+          }
+        }
+        // Non-numeric or empty string: leave as-is
+        result[key] = value;
+      } else {
+        // Already a number or non-string: leave as-is
+        result[key] = value;
+      }
+      continue;
+    }
+
+    // 3. Recursive traversal for arrays and plain objects
+    if (Array.isArray(value)) {
+      result[key] = coerceMoneyFields(value, moneyFields);
+    } else if (isPlainObject(value)) {
       result[key] = coerceMoneyFields(value, moneyFields);
     } else {
+      // Non-plain objects (e.g. Date inside an object) or other values: leave as-is
       result[key] = value;
     }
   }
+
   return result;
 };
 

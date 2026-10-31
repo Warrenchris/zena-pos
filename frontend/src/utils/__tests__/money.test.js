@@ -1,5 +1,6 @@
-import { coerceMoney, coerceMoneyFields, MONEY_FIELD_NAMES } from '../money';
+import { coerceMoney, coerceMoneyFields, isPlainObject, MONEY_FIELD_NAMES } from '../money';
 import { coerceMoney as apiCoerceMoney, coerceMoneyFields as apiCoerceMoneyFields } from '../../services/api';
+import { printStoredSale } from '../../printing/printStoredSale';
 
 describe('coerceMoney - Number() coercion helper at API boundary', () => {
   describe('Coercion of "50.00"-style DECIMAL inputs', () => {
@@ -96,7 +97,178 @@ describe('coerceMoney - Number() coercion helper at API boundary', () => {
     });
   });
 
-  describe('coerceMoneyFields - deep API response normalization', () => {
+  describe('Non-plain objects and preservation of null/undefined in coerceMoneyFields', () => {
+    test('passes Blob response through completely untouched', () => {
+      const blob = new Blob(['%PDF-1.4 mock binary content'], { type: 'application/pdf' });
+      const result = coerceMoneyFields(blob);
+      expect(result).toBe(blob); // Exact same reference
+      expect(result instanceof Blob).toBe(true);
+      expect(result.size).toBe(blob.size);
+      expect(result.type).toBe('application/pdf');
+    });
+
+    test('passes ArrayBuffer response through completely untouched', () => {
+      const buffer = new ArrayBuffer(16);
+      const result = coerceMoneyFields(buffer);
+      expect(result).toBe(buffer);
+      expect(result instanceof ArrayBuffer).toBe(true);
+      expect(result.byteLength).toBe(16);
+    });
+
+    test('passes FormData through completely untouched', () => {
+      const formData = new FormData();
+      formData.append('total', '50.00');
+      const result = coerceMoneyFields(formData);
+      expect(result).toBe(formData);
+      expect(result instanceof FormData).toBe(true);
+    });
+
+    test('passes Date instances through untouched both at root and nested', () => {
+      const now = new Date('2026-10-31T12:00:00Z');
+      expect(coerceMoneyFields(now)).toBe(now);
+
+      const objWithDate = {
+        total: '50.00',
+        createdAt: now
+      };
+      const normalized = coerceMoneyFields(objWithDate);
+      expect(normalized.total).toBe(50);
+      expect(normalized.createdAt).toBe(now);
+      expect(normalized.createdAt instanceof Date).toBe(true);
+      expect(normalized.createdAt.toISOString()).toBe('2026-10-31T12:00:00.000Z');
+    });
+
+    test('preserves null and undefined at root and inside nested fields', () => {
+      expect(coerceMoneyFields(null)).toBeNull();
+      expect(coerceMoneyFields(undefined)).toBeUndefined();
+
+      const payload = {
+        total: '50.00',
+        subtotal: null,
+        taxAmount: null,
+        changeAmount: undefined,
+        notes: null
+      };
+      const normalized = coerceMoneyFields(payload);
+      expect(normalized.total).toBe(50);
+      expect(normalized.subtotal).toBeNull();
+      expect(normalized.taxAmount).toBeNull();
+      expect(normalized.changeAmount).toBeUndefined();
+      expect(normalized.notes).toBeNull();
+    });
+
+    test('only coerces string values that parse as finite numbers (leaves non-numeric as-is)', () => {
+      const payload = {
+        total: '50.00',
+        tax: 'EXEMPT',
+        discount: 'N/A',
+        change: '',
+        status: 'completed',
+        amount: 100 // already a number
+      };
+      const normalized = coerceMoneyFields(payload);
+      expect(normalized.total).toBe(50);
+      expect(normalized.tax).toBe('EXEMPT');
+      expect(normalized.discount).toBe('N/A');
+      expect(normalized.change).toBe('');
+      expect(normalized.status).toBe('completed');
+      expect(normalized.amount).toBe(100);
+    });
+  });
+
+  describe('Legacy sale reprinting with null taxAmount/changeAmount/receiptNumber', () => {
+    test('legacy sale normalizes without corrupting null fields and reprints successfully via printStoredSale', async () => {
+      // Stored legacy sale from database where modern columns are NULL
+      const legacyRawDbSale = {
+        id: 42,
+        invoiceNumber: '20261025-0042',
+        receiptNumber: null,
+        total: '50.00',
+        subtotal: '50.00',
+        tax: null,
+        taxAmount: null,
+        change: null,
+        changeAmount: null,
+        paymentAmount: '50.00',
+        paymentMethod: 'cash',
+        createdAt: '2026-10-25T14:30:00Z',
+        items: [
+          {
+            id: 1,
+            name: 'Mineral Water 500ml',
+            price: '50.00',
+            unitPrice: '50.00',
+            quantity: 1,
+            lineTotal: '50.00'
+          }
+        ]
+      };
+
+      // 1. Pass through coerceMoneyFields (as would occur in api interceptor)
+      const normalizedSale = coerceMoneyFields(legacyRawDbSale);
+
+      // Assert numeric money fields were coerced
+      expect(normalizedSale.total).toBe(50);
+      expect(normalizedSale.subtotal).toBe(50);
+      expect(normalizedSale.items[0].price).toBe(50);
+      expect(normalizedSale.items[0].lineTotal).toBe(50);
+
+      // Assert null fields remained strictly null
+      expect(normalizedSale.receiptNumber).toBeNull();
+      expect(normalizedSale.tax).toBeNull();
+      expect(normalizedSale.taxAmount).toBeNull();
+      expect(normalizedSale.change).toBeNull();
+      expect(normalizedSale.changeAmount).toBeNull();
+
+      // 2. Assert printStoredSale reprints this legacy sale cleanly
+      let capturedReceipt = null;
+      const mockAdapter = {
+        id: 'mock',
+        isSupported: () => true,
+        print: jest.fn().mockImplementation((job) => {
+          capturedReceipt = job?.receipt || job;
+          return Promise.resolve({ ok: true });
+        })
+      };
+
+      const printResult = await printStoredSale(normalizedSale, {
+        profile: { connection: 'browser' },
+        adapters: { browser: mockAdapter },
+        business: { name: 'Soko Safi Fresh' }
+      });
+
+      expect(printResult.ok).toBe(true);
+      expect(capturedReceipt).not.toBeNull();
+      // Receipt number cleanly falls back to invoiceNumber
+      expect(capturedReceipt.meta.receiptNumber).toBe('20261025-0042');
+      expect(capturedReceipt.meta.invoiceNumber).toBe('20261025-0042');
+      expect(capturedReceipt.totals.total).toBe(50);
+      expect(capturedReceipt.lines[0].name).toBe('Mineral Water 500ml');
+    });
+  });
+
+  describe('Invoice PDF download path (blob) with API interceptor', () => {
+    test('blob response from /api/invoices/:id/pdf passes through interceptor untouched', () => {
+      const mockPdfBlob = new Blob(['%PDF-1.4 mock binary PDF content'], { type: 'application/pdf' });
+      const apiResponse = {
+        data: mockPdfBlob,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/pdf' }
+      };
+
+      // Apply the same transformation used in api.interceptors.response
+      if (apiResponse && apiResponse.data) {
+        apiResponse.data = coerceMoneyFields(apiResponse.data);
+      }
+
+      expect(apiResponse.data).toBe(mockPdfBlob);
+      expect(apiResponse.data instanceof Blob).toBe(true);
+      expect(apiResponse.data.type).toBe('application/pdf');
+    });
+  });
+
+  describe('Deep API response normalization', () => {
     test('recursively coerces DECIMAL string fields in nested API responses', () => {
       const apiResponse = {
         success: true,
@@ -171,13 +343,6 @@ describe('coerceMoney - Number() coercion helper at API boundary', () => {
       expect(normalized[0].tax).toBe(8);
       expect(normalized[1].total).toBe(120.5);
       expect(normalized[1].tax).toBe(19.28);
-    });
-
-    test('returns non-object and null values unchanged', () => {
-      expect(coerceMoneyFields(null)).toBe(null);
-      expect(coerceMoneyFields(undefined)).toBe(undefined);
-      expect(coerceMoneyFields('hello')).toBe('hello');
-      expect(coerceMoneyFields(123)).toBe(123);
     });
   });
 
