@@ -60,6 +60,10 @@ describe('htmlReceipt - renderReceiptHtml', () => {
 
       // Page size and light theme
       expect(html).toContain('size: 80mm auto');
+      expect(html).toContain('height: auto !important;');
+      expect(html).toContain('min-height: 0 !important;');
+      expect(html).toContain('height: auto;');
+      expect(html).toContain('min-height: 0;');
       expect(html).toContain('color-scheme: light');
       expect(html).toContain('width: 80mm');
 
