@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 import { renderReceiptHtml } from '../printing/htmlReceipt';
 import useCurrency from '../hooks/useCurrency';
 
@@ -28,7 +28,7 @@ export default function PublicReceiptView() {
 
     const fetchReceipt = async () => {
       try {
-        const response = await axios.get(`/api/public/receipts/${token}`, {
+        const response = await api.get(`/api/public/receipts/${token}`, {
           headers: {
             'Cache-Control': 'no-cache',
           },
