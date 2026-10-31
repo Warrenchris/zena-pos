@@ -73,7 +73,7 @@ describe('PublicReceiptView Integration', () => {
     );
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/api/public/receipts/tXwq-0XJu8HMdUAwja2cNQ', expect.any(Object));
+      expect(api.get).toHaveBeenCalledWith('/api/public/receipts/tXwq-0XJu8HMdUAwja2cNQ');
     });
 
     // Wait for receipt to settle and render buttons
