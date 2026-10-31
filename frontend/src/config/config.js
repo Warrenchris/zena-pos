@@ -18,7 +18,7 @@ export const API_URL = viteApi || nodeApi || 'http://localhost:3001';
 
 const vitePublicAppUrl = readEnv('VITE_PUBLIC_APP_URL');
 const nodePublicAppUrl = (typeof process !== 'undefined' && process.env && process.env.VITE_PUBLIC_APP_URL) ? process.env.VITE_PUBLIC_APP_URL : null;
-export const PUBLIC_APP_URL = vitePublicAppUrl || nodePublicAppUrl || '';
+export const PUBLIC_APP_URL = vitePublicAppUrl || nodePublicAppUrl || (typeof window !== 'undefined' && window.__PUBLIC_APP_URL__ ? window.__PUBLIC_APP_URL__ : '') || '';
 
 // Other global configuration
 export const APP_NAME = 'Zana POS';
