@@ -28,14 +28,31 @@ const EMAIL_RECEIPTS_ENABLED = false;
 
 export default function SaleCompleteModal({ completedSale, onNewSale, onClose }) {
   const { format: formatCurrency } = useCurrency();
-  const shop = useSelector((state) => state.shop?.shop);
+  const shopSliceShop = useSelector((state) => state.shop?.shop);
+  const authShop = useSelector((state) => state.auth?.shop || state.auth?.user?.shop);
   const settings = useSelector((state) => state.settings);
   const receiptSettings = useReceiptSettings();
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
 
+  const business = React.useMemo(() => {
+    const active = shopSliceShop || authShop || completedSale?.business || completedSale?.shop || {};
+    return {
+      name: active.name || settings?.systemName || '',
+      branch: active.branch || settings?.branch || '',
+      address: active.address || settings?.address || '',
+      phone: active.phone || settings?.contactPhone || '',
+      kraPin: active.kraPin || settings?.kraPin || '',
+      tagline: active.tagline || settings?.tagline || '',
+      logoUrl: active.logo || active.logoUrl || settings?.businessLogo || null,
+      brandIcon: active.brandIcon || settings?.brandIcon || null,
+      showPoweredBy: settings?.showPoweredBy !== false,
+      qrEnabled: settings?.qrEnabled || false,
+    };
+  }, [shopSliceShop, authShop, completedSale, settings]);
+
   const handlePrint = React.useCallback(async () => {
     if (!completedSale) return;
-    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business: shop, receiptSettings });
+    const result = await printReceipt(completedSale, { formatMoney: formatCurrency, business, receiptSettings });
     if (!window.showToast) return;
     if (!result.ok) {
       window.showToast({
@@ -52,7 +69,7 @@ export default function SaleCompleteModal({ completedSale, onNewSale, onClose })
         duration: 5000
       });
     }
-  }, [completedSale, formatCurrency, shop, receiptSettings]);
+  }, [completedSale, formatCurrency, business, receiptSettings]);
 
   React.useEffect(() => {
     if (completedSale && settings?.autoPrintReceipt) {

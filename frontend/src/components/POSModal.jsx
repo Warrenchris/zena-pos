@@ -165,15 +165,16 @@ export default function POSModal({ products = [], customers = [], onClose }) {
   const handlePrintReceipt = async (saleToPrint) => {
     try {
       setPrinting(true);
+      const activeShop = authUser?.shop || {};
       await printStoredSale(saleToPrint, {
         business: {
-          name: settings.systemName || settings.businessName || 'Zana POS',
-          branch: settings.branch,
-          address: settings.address,
-          phone: settings.contactPhone || settings.phone,
-          kraPin: settings.kraPin,
-          tagline: settings.tagline,
-          logoUrl: settings.businessLogo
+          name: activeShop.name || settings.systemName || settings.businessName || 'Zana POS',
+          branch: activeShop.branch || settings.branch,
+          address: activeShop.address || settings.address,
+          phone: activeShop.phone || settings.contactPhone || settings.phone,
+          kraPin: activeShop.kraPin || settings.kraPin,
+          tagline: activeShop.tagline || settings.tagline,
+          logoUrl: activeShop.logo || settings.businessLogo
         },
         receiptSettings: buildReceiptSettings(settings)
       });

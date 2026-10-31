@@ -189,4 +189,83 @@ describe('Reprint & Duplicate Copy support', () => {
     expect(capturedReceipt.meta.receiptNumber).toBe('20261025-0077');
     expect(capturedReceipt.meta.invoiceNumber).toBe('20261025-0077');
   });
+
+  describe('Path (c): printStoredSale business settings preservation', () => {
+    it('preserves business settings passed in options', async () => {
+      let capturedReceipt = null;
+      const mockAdapter = {
+        id: 'mock',
+        isSupported: () => true,
+        print: jest.fn().mockImplementation((job) => {
+          capturedReceipt = job?.receipt || job;
+          return Promise.resolve({ ok: true });
+        }),
+      };
+
+      const sale = {
+        id: 88,
+        invoiceNumber: 'INV-2026-88',
+        createdAt: '2026-10-25T11:00:00Z',
+        items: [{ name: 'Item', price: 100, quantity: 1 }],
+        total: 100,
+      };
+
+      await printStoredSale(sale, {
+        profile: { connection: 'browser' },
+        adapters: { browser: mockAdapter },
+        business: {
+          name: 'Zana Market',
+          branch: 'Main Branch',
+          address: 'Station Road',
+          phone: '0799887766',
+          kraPin: 'P998877665A',
+        },
+      });
+
+      expect(capturedReceipt).not.toBeNull();
+      expect(capturedReceipt.business.name).toBe('Zana Market');
+      expect(capturedReceipt.business.branch).toBe('Main Branch');
+      expect(capturedReceipt.business.address).toBe('Station Road');
+      expect(capturedReceipt.business.phone).toBe('0799887766');
+      expect(capturedReceipt.business.kraPin).toBe('P998877665A');
+    });
+
+    it('falls back to sale.Shop / sale.shop when options.business is omitted or empty', async () => {
+      let capturedReceipt = null;
+      const mockAdapter = {
+        id: 'mock',
+        isSupported: () => true,
+        print: jest.fn().mockImplementation((job) => {
+          capturedReceipt = job?.receipt || job;
+          return Promise.resolve({ ok: true });
+        }),
+      };
+
+      const saleWithShop = {
+        id: 89,
+        invoiceNumber: 'INV-2026-89',
+        createdAt: '2026-10-25T11:00:00Z',
+        items: [{ name: 'Item', price: 100, quantity: 1 }],
+        total: 100,
+        Shop: {
+          name: 'Embedded Shop Name',
+          address: '42 Market Street',
+          phone: '0711223344',
+          kraPin: 'P112233445B',
+        },
+      };
+
+      await printStoredSale(saleWithShop, {
+        profile: { connection: 'browser' },
+        adapters: { browser: mockAdapter },
+        business: {},
+      });
+
+      expect(capturedReceipt).not.toBeNull();
+      expect(capturedReceipt.business.name).toBe('Embedded Shop Name');
+      expect(capturedReceipt.business.address).toBe('42 Market Street');
+      expect(capturedReceipt.business.phone).toBe('0711223344');
+      expect(capturedReceipt.business.kraPin).toBe('P112233445B');
+    });
+  });
 });
