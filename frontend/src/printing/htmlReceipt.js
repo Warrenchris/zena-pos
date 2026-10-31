@@ -301,15 +301,22 @@ export function renderReceiptHtml(receipt, options = {}) {
     gap: 4px;
   }
   .receipt-container .brand-icon {
-    width: 15px;
-    height: 15px;
+    max-height: 28px;
+    max-width: 28px;
     object-fit: contain;
+    image-rendering: auto;
+  }
+  .receipt-container .header-logo-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 2px 0 3px 0;
   }
   .receipt-container .header-logo {
-    max-height: 22px;
-    max-width: 50px;
+    max-height: 28px;
+    max-width: 100%;
     object-fit: contain;
-    filter: grayscale(1) contrast(1.3);
+    image-rendering: auto;
   }
   .receipt-container .header-wordmark {
     font-size: 15px;
@@ -615,15 +622,20 @@ export function renderReceiptHtml(receipt, options = {}) {
 <body>
 <div class="receipt-container">
   <!-- Header -->
-  <div class="header-brand">
-    ${showLogo ? `<img src="${escapeHtml(logoUrl)}" class="header-logo" alt="Business logo" />` : ''}
-    ${showPoweredBy ? `
+  ${showPoweredBy ? `
+    <div class="header-brand">
       <span class="header-brand-wrap">
-        ${brandIcon ? `<img src="${escapeHtml(brandIcon)}" class="brand-icon" alt="" />` : ''}
+        ${brandIcon ? `<img src="${escapeHtml(brandIcon)}" class="brand-icon" alt="" onerror='this.style.display="none"' onload='if(this.naturalWidth>4*this.naturalHeight){this.style.display="none"}' />` : ''}
         <span class="header-wordmark">ZANA POS</span>
       </span>
-    ` : ''}
-  </div>
+    </div>
+  ` : ''}
+
+  ${showLogo ? `
+    <div class="header-logo-wrap">
+      <img src="${escapeHtml(logoUrl)}" class="header-logo" alt="Business logo" onerror='this.style.display="none"' onload='if(this.naturalWidth>4*this.naturalHeight){this.style.display="none"}' />
+    </div>
+  ` : ''}
 
   ${storeName ? `<div class="store-name">${escapeHtml(storeName)}</div>` : ''}
   ${branch ? `<div class="store-branch">${escapeHtml(branch)}</div>` : ''}
