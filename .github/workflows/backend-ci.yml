@@ -79,6 +79,7 @@ jobs:
           JWT_PRIVATE_KEY: "test-private-key"
           JWT_PUBLIC_KEY: "test-public-key"
           ENCRYPTION_SECRET: "e7b4198c61fa2d75a02482310bf8b975e5330e2fbd08544c4897f1f415ef414a"
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: npm test
 
       - name: Build production backend Docker image
@@ -298,6 +299,7 @@ jobs:
         env:
           NODE_ENV: test
           AUTHZ_CONTEXT_CACHE_ENABLED: "true"
+          NODE_OPTIONS: "--max-old-space-size=4096"
           REDIS_HOST: 127.0.0.1
           REDIS_PORT: 6379
           REDIS_DB: 1

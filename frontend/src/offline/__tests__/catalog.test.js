@@ -134,8 +134,10 @@ describe('syncCatalog', () => {
     const api = { get: jest.fn(() => new Promise((resolve) => (release = () => resolve({ data: { products: CATALOG, pagination: { totalPages: 1 } } })))) };
     const a = syncCatalog({ api, shopKey: '1', sleep: noSleep });
     const b = syncCatalog({ api, shopKey: '1', sleep: noSleep });
-    await new Promise((r) => setTimeout(r, 10));
-    release();
+    for (let i = 0; i < 50 && !release; i += 1) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    if (typeof release === 'function') release();
     await Promise.all([a, b]);
     expect(api.get).toHaveBeenCalledTimes(1);
   });
