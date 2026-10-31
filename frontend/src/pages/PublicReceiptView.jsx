@@ -28,11 +28,7 @@ export default function PublicReceiptView() {
 
     const fetchReceipt = async () => {
       try {
-        const response = await api.get(`/api/public/receipts/${token}`, {
-          headers: {
-            'Cache-Control': 'no-cache',
-          },
-        });
+        const response = await api.get(`/api/public/receipts/${token}`);
         if (isMounted) {
           setReceiptData(response.data);
           setLoading(false);
