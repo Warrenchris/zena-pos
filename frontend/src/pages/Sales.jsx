@@ -31,6 +31,7 @@ export default function Sales() {
   const { products } = useSelector((state) => state.products);
   const { customers } = useSelector((state) => state.customers);
   const { user } = useSelector((state) => state.auth);
+  const activeShop = useSelector((state) => state.shop?.shop || state.auth?.shop || state.auth?.user?.shop);
   const { format: formatCurrency } = useCurrency();
   const receiptSettings = useReceiptSettings();
   const { showToast } = useToast();
@@ -222,7 +223,7 @@ export default function Sales() {
           </button>
           <button
             onClick={() => printStoredSale(row, {
-              business: user?.shop || {},
+              business: activeShop || user?.shop || {},
               receiptSettings,
               showToast,
               formatMoney: formatCurrency,
@@ -358,8 +359,8 @@ export default function Sales() {
         sale={selectedSale}
         isOpen={Boolean(selectedSale)}
         onClose={() => setSelectedSale(null)}
-        shopName={user?.shop?.name || 'Zana POS'}
-        shop={user?.shop || {}}
+        shopName={activeShop?.name || user?.shop?.name || 'Zana POS'}
+        shop={activeShop || user?.shop || {}}
       />
 
       {/* POS Modal */}

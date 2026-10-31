@@ -172,18 +172,23 @@ export function buildReceipt(completedSale, { business = {}, receiptSettings = {
     ? Boolean(business.qrEnabled)
     : Boolean(receiptSettings?.qrEnabled);
 
+  const saleShop = completedSale?.business || completedSale?.shop || completedSale?.serverData?.shop || {};
+  const activeBusiness = (business && Object.keys(business).length > 0) ? business : saleShop;
+
   return {
     documentType: 'SALES_RECEIPT',
     isDuplicate: Boolean(isDuplicate || completedSale?.isDuplicate),
-    logoUrl: receiptSettings?.showLogo !== false && receiptSettings?.logoUrl ? receiptSettings.logoUrl : null,
+    logoUrl: receiptSettings?.showLogo !== false && receiptSettings?.logoUrl
+      ? receiptSettings.logoUrl
+      : (activeBusiness?.logoUrl || null),
     business: {
-      name: business?.name || '',
-      address: business?.address || '',
-      phone: business?.phone || '',
-      kraPin: business?.kraPin || '',
-      branch: business?.branch || receiptSettings?.branch || '',
-      tagline: business?.tagline || receiptSettings?.tagline || '',
-      brandIcon: business?.brandIcon || receiptSettings?.brandIcon || null,
+      name: activeBusiness?.name || activeBusiness?.systemName || '',
+      address: activeBusiness?.address || '',
+      phone: activeBusiness?.phone || activeBusiness?.contactPhone || '',
+      kraPin: activeBusiness?.kraPin || '',
+      branch: activeBusiness?.branch || receiptSettings?.branch || '',
+      tagline: activeBusiness?.tagline || receiptSettings?.tagline || '',
+      brandIcon: activeBusiness?.brandIcon || receiptSettings?.brandIcon || null,
       showPoweredBy,
       qrEnabled,
       qrPayload: (qrEnabled && (typeof resolvedPublicAppUrl === 'string' ? resolvedPublicAppUrl.trim().replace(/\/+$/, '') : '') && receiptToken)

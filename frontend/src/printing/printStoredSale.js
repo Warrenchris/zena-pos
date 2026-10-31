@@ -69,6 +69,11 @@ export async function printStoredSale(sale, options = {}) {
   const change = sale.changeAmount ?? sale.serverData?.changeAmount ?? sale.change ?? sale.serverData?.change ?? 0;
   const receiptToken = sale.receiptToken ?? sale.serverData?.receiptToken ?? null;
 
+  const fallbackSaleShop = sale.Shop || sale.shop || sale.business || null;
+  const effectiveBusiness = (options.business && Object.keys(options.business).length > 0)
+    ? { ...(fallbackSaleShop || {}), ...options.business }
+    : (fallbackSaleShop || options.business || {});
+
   const completedSale = {
     serverData: {
       id: sale.id,
@@ -81,6 +86,7 @@ export async function printStoredSale(sale, options = {}) {
       taxRate,
       taxInclusive,
       changeAmount: change,
+      shop: fallbackSaleShop,
     },
     receiptNumber: effectiveReceiptNumber,
     receiptToken,
@@ -104,11 +110,12 @@ export async function printStoredSale(sale, options = {}) {
     notes: sale.notes || '',
     isOffline: pendingSync,
     isDuplicate: options.isDuplicate !== undefined ? options.isDuplicate : true,
+    business: effectiveBusiness,
   };
 
   const result = await printReceipt(completedSale, {
     formatMoney: options.formatMoney,
-    business: options.business,
+    business: effectiveBusiness,
     receiptSettings: options.receiptSettings,
     profile: options.profile || loadProfile(),
     adapters: options.adapters,

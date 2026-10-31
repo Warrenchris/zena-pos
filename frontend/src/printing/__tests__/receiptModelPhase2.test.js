@@ -252,4 +252,71 @@ describe('Receipt Model Phase 2 (Data Model & Snapshots)', () => {
     };
     expect(buildReceipt(saleWithInvoiceOnly).meta.receiptNumber).toBe('20260101-0005');
   });
+
+  describe('Business settings resolution and preservation across paths', () => {
+    const sampleShop = {
+      name: 'SokoSafi Main',
+      branch: 'CBD Branch',
+      address: 'Moi Avenue, Nairobi',
+      phone: '0712345678',
+      kraPin: 'P051234567X',
+      tagline: 'Fresh Every Day',
+    };
+
+    it('Path (a): preserves store name, branch, address, phone, and KRA PIN from business option', () => {
+      const sale = {
+        serverData: { id: 101, invoiceNumber: 'INV-101' },
+        items: [{ name: 'Item A', price: 100, quantity: 1 }],
+        total: 100,
+      };
+
+      const receipt = buildReceipt(sale, { business: sampleShop });
+      expect(receipt.business.name).toBe('SokoSafi Main');
+      expect(receipt.business.branch).toBe('CBD Branch');
+      expect(receipt.business.address).toBe('Moi Avenue, Nairobi');
+      expect(receipt.business.phone).toBe('0712345678');
+      expect(receipt.business.kraPin).toBe('P051234567X');
+      expect(receipt.business.tagline).toBe('Fresh Every Day');
+    });
+
+    it('Path (b): offline sale retains business settings from completedSale.business when options.business is empty', () => {
+      const offlineSale = {
+        serverData: { id: 'offline-1793000000', invoiceNumber: null },
+        items: [{ name: 'Item B', price: 200, quantity: 1 }],
+        total: 200,
+        isOffline: true,
+        business: sampleShop,
+      };
+
+      const receipt = buildReceipt(offlineSale, { business: {} });
+      expect(receipt.business.name).toBe('SokoSafi Main');
+      expect(receipt.business.branch).toBe('CBD Branch');
+      expect(receipt.business.address).toBe('Moi Avenue, Nairobi');
+      expect(receipt.business.phone).toBe('0712345678');
+      expect(receipt.business.kraPin).toBe('P051234567X');
+    });
+
+    it('Store name equals "Zana POS": store name is not suppressed and renders properly', () => {
+      const sale = {
+        serverData: { id: 102, invoiceNumber: 'INV-102' },
+        items: [{ name: 'Item C', price: 50, quantity: 1 }],
+        total: 50,
+      };
+
+      const receipt = buildReceipt(sale, {
+        business: {
+          name: 'Zana POS',
+          branch: 'Downtown',
+          address: 'Kenyatta Ave',
+          phone: '0700000000',
+          kraPin: 'P012345678Z',
+        },
+      });
+
+      expect(receipt.business.name).toBe('Zana POS');
+      const { renderReceiptHtml } = require('../htmlReceipt');
+      const html = renderReceiptHtml(receipt, { widthMm: 80 });
+      expect(html).toContain('class="store-name">ZANA POS</div>');
+    });
+  });
 });

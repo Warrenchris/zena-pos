@@ -1134,7 +1134,8 @@ export default function CashierDashboard() {
         paymentMethod: currentSale.paymentMethod,
         paymentAmount: roundToTwoDecimals(currentSale.paymentAmount),
         change: changeAmount,
-        notes: currentSale.notes
+        notes: currentSale.notes,
+        business: user?.shop || {},
       });
       notifySaleComplete(response.data);
       setShowPaymentModal(false);
@@ -1158,6 +1159,7 @@ export default function CashierDashboard() {
             taxRate,
             taxInclusive,
             changeAmount,
+            shop: user?.shop || {},
           },
           receiptNumber,
       receiptToken,
@@ -1174,7 +1176,8 @@ export default function CashierDashboard() {
           paymentAmount: roundToTwoDecimals(currentSale.paymentAmount),
           change: changeAmount,
           notes: currentSale.notes,
-          isOffline: true
+          isOffline: true,
+          business: user?.shop || {},
         });
         showToast('Offline mode: Cash sale saved locally. Will auto-sync when reconnected.', 'warning');
         setShowPaymentModal(false);
@@ -1200,7 +1203,8 @@ export default function CashierDashboard() {
       paymentMethod: currentSale.paymentMethod,
       paymentAmount: parseFloat(currentSale.paymentAmount || currentSale.total),
       change: parseFloat(completeSale?.change || 0),
-      notes: currentSale.notes
+      notes: currentSale.notes,
+      business: user?.shop || {},
     });
     notifySaleComplete(completeSale);
     setShowPaymentModal(false);

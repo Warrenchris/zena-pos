@@ -66,8 +66,11 @@ const SaleDetailModal = ({ sale, isOpen, onClose, onPrint, shopName, shop }) => 
       onPrint(sale);
       return;
     }
+    const effectiveBusiness = (shop && Object.keys(shop).length > 0)
+      ? shop
+      : { name: shopName || 'Zana POS' };
     await printStoredSale(sale, {
-      business: shop || { name: shopName },
+      business: effectiveBusiness,
       receiptSettings,
       showToast,
       formatMoney: formatCurrency,
