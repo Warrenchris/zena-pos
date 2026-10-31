@@ -47,6 +47,22 @@ function defaultFormatMoney(n) {
 export const BRAND_ICON_SLOT = '';
 
 /**
+ * Validates whether an image aspect ratio is safe for receipt printing.
+ * Skips/hides when natural height > 2x width (too tall/narrow, < 1:2)
+ * OR width > 4x height (too wide/flat, > 4:1).
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {boolean}
+ */
+export function isLogoAspectRatioSafe(width, height) {
+  const w = Number(width) || 0;
+  const h = Number(height) || 0;
+  if (w <= 0 || h <= 0) return false;
+  return !(h > 2 * w || w > 4 * h);
+}
+
+/**
  * Renders a full, self-contained HTML document for browser/driver printing
  * directly from canonical ReceiptData.
  *
@@ -629,7 +645,7 @@ export function renderReceiptHtml(receipt, options = {}) {
   ${showPoweredBy ? `
     <div class="header-brand">
       <span class="header-brand-wrap">
-        ${brandIcon ? `<img src="${escapeHtml(brandIcon)}" class="brand-icon" alt="" onerror='this.style.display="none"' onload='if(this.naturalWidth>4*this.naturalHeight){this.style.display="none"}' />` : ''}
+        ${brandIcon ? `<img src="${escapeHtml(brandIcon)}" class="brand-icon" alt="" onerror='this.style.display="none"' onload='if(this.naturalHeight>2*this.naturalWidth||this.naturalWidth>4*this.naturalHeight){this.style.display="none"}' />` : ''}
         <span class="header-wordmark">ZANA POS</span>
       </span>
     </div>
@@ -637,7 +653,7 @@ export function renderReceiptHtml(receipt, options = {}) {
 
   ${showLogo ? `
     <div class="header-logo-wrap">
-      <img src="${escapeHtml(logoUrl)}" class="header-logo" alt="Business logo" onerror='this.style.display="none"' onload='if(this.naturalWidth>4*this.naturalHeight){this.style.display="none"}' />
+      <img src="${escapeHtml(logoUrl)}" class="header-logo" alt="Business logo" onerror='this.style.display="none"' onload='if(this.naturalHeight>2*this.naturalWidth||this.naturalWidth>4*this.naturalHeight){this.style.display="none"}' />
     </div>
   ` : ''}
 

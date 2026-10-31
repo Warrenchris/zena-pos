@@ -57,6 +57,7 @@ const Settings = () => {
   const [saveStatus, setSaveStatus] = useState(null); // 'saving', 'success', 'error'
   
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoWarning, setLogoWarning] = useState(null);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordStatus, setPasswordStatus] = useState(null);
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -182,6 +183,35 @@ const Settings = () => {
     }
 
     try {
+      if (typeof window !== 'undefined' && typeof Image !== 'undefined') {
+        const img = new Image();
+        const objectUrl = window.URL?.createObjectURL ? window.URL.createObjectURL(file) : null;
+        if (objectUrl) {
+          await new Promise((resolve) => {
+            img.onload = () => {
+              const w = img.naturalWidth || img.width;
+              const h = img.naturalHeight || img.height;
+              if (window.URL?.revokeObjectURL) window.URL.revokeObjectURL(objectUrl);
+              if (w > 0 && h > 0 && (h > 2 * w || w > 4 * h)) {
+                setLogoWarning('Use a simple, square or wide logo for best receipt results');
+              } else {
+                setLogoWarning(null);
+              }
+              resolve();
+            };
+            img.onerror = () => {
+              if (window.URL?.revokeObjectURL) window.URL.revokeObjectURL(objectUrl);
+              resolve();
+            };
+            img.src = objectUrl;
+          });
+        }
+      }
+    } catch (e) {
+      // Ignore aspect ratio check errors in unsupported environments
+    }
+
+    try {
       setLogoUploading(true);
       const data = new FormData();
       data.append('logo', file);
@@ -278,7 +308,10 @@ const Settings = () => {
               />
               <button
                 type="button"
-                onClick={() => handleInputChange('businessLogo', null)}
+                onClick={() => {
+                  handleInputChange('businessLogo', null);
+                  setLogoWarning(null);
+                }}
                 className="absolute -top-2 -right-2 bg-danger text-white rounded-full p-1 hover:bg-danger/90 focus:outline-none shadow-sm"
                 title="Remove logo"
               >
@@ -312,6 +345,16 @@ const Settings = () => {
             <p className="text-caption text-text-muted mt-1.5">
               Supports PNG, JPEG, WEBP, or SVG (Max size: 2MB).
             </p>
+            {logoWarning && (
+              <div
+                className="flex items-center gap-2 mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-caption font-medium"
+                role="alert"
+                data-testid="logo-aspect-ratio-warning"
+              >
+                <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+                <span>{logoWarning}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

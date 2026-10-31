@@ -13,6 +13,25 @@
 const logoCache = new Map();
 
 /**
+ * Validates whether an image aspect ratio is safe for thermal receipt printing.
+ * Skips/rejects when natural height > 2x width (too tall/narrow, < 1:2)
+ * OR width > 4x height (too wide/flat, > 4:1).
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {boolean}
+ */
+export function isLogoAspectRatioSafe(width, height) {
+  const w = Number(width) || 0;
+  const h = Number(height) || 0;
+  if (w <= 0 || h <= 0) return false;
+  if (h > 2 * w || w > 4 * h) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Computes proportional target dimensions preserving aspect ratio.
  * Scales to fit inside max width AND max height using one scale factor:
  *   scale = min(maxW/w, maxH/h)
@@ -140,6 +159,11 @@ export async function getLogoBitmap(logoUrl, {
     const natW = img.naturalWidth || img.width;
     const natH = img.naturalHeight || img.height;
     if (!natW || !natH) return null;
+
+    // Aspect ratio safety check: skip if natural height > 2x width OR width > 4x height
+    if (!isLogoAspectRatioSafe(natW, natH)) {
+      return null;
+    }
 
     // Scale down proportionally if larger than constraints
     const scale = Math.min(maxDotsWidth / natW, maxDotsHeight / natH);

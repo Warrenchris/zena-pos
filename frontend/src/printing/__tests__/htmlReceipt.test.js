@@ -1,4 +1,4 @@
-import { renderReceiptHtml, escapeHtml } from '../htmlReceipt';
+import { renderReceiptHtml, escapeHtml, isLogoAspectRatioSafe } from '../htmlReceipt';
 import { buildReceipt } from '../receiptModel';
 
 const formatMoney = (n) => {
@@ -439,7 +439,7 @@ describe('htmlReceipt - renderReceiptHtml', () => {
 
       // Fallback attributes
       expect(html).toContain("onerror='this.style.display=\"none\"'");
-      expect(html).toContain("onload='if(this.naturalWidth>4*this.naturalHeight){this.style.display=\"none\"}'");
+      expect(html).toContain("onload='if(this.naturalHeight>2*this.naturalWidth||this.naturalWidth>4*this.naturalHeight){this.style.display=\"none\"}'");
 
       // Layout ordering: header-brand (ZANA POS) -> header-logo-wrap -> store-name
       const brandIndex = html.indexOf('class="header-brand"');
@@ -569,6 +569,29 @@ describe('htmlReceipt - renderReceiptHtml', () => {
 
       expect(html).not.toContain('class="qr-wrap"');
       expect(html).not.toContain('Scan to view receipt');
+    });
+  });
+
+  describe('isLogoAspectRatioSafe', () => {
+    it('returns true for square and safe aspect ratios between 1:2 and 4:1', () => {
+      expect(isLogoAspectRatioSafe(100, 100)).toBe(true);
+      expect(isLogoAspectRatioSafe(400, 100)).toBe(true); // 4:1
+      expect(isLogoAspectRatioSafe(100, 200)).toBe(true); // 1:2
+      expect(isLogoAspectRatioSafe(250, 100)).toBe(true);
+    });
+
+    it('returns false for aspect ratios outside 1:2 to 4:1', () => {
+      expect(isLogoAspectRatioSafe(401, 100)).toBe(false); // > 4:1 (too wide)
+      expect(isLogoAspectRatioSafe(100, 201)).toBe(false); // < 1:2 (too tall, h > 2*w)
+      expect(isLogoAspectRatioSafe(50, 200)).toBe(false);
+      expect(isLogoAspectRatioSafe(500, 100)).toBe(false);
+    });
+
+    it('returns false for invalid, zero, or negative dimensions', () => {
+      expect(isLogoAspectRatioSafe(0, 100)).toBe(false);
+      expect(isLogoAspectRatioSafe(100, 0)).toBe(false);
+      expect(isLogoAspectRatioSafe(-10, 50)).toBe(false);
+      expect(isLogoAspectRatioSafe(null, undefined)).toBe(false);
     });
   });
 });
