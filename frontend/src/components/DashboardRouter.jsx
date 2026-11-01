@@ -1,11 +1,12 @@
-import React, { lazy, Suspense } from 'react';
+import React, { Suspense } from 'react';
+import { safeLazy } from '../utils/safeLazy';
 import { useSelector } from 'react-redux';
 import { Navigate } from 'react-router-dom';
 import { isManagerTier } from '../utils/roles';
 import Spinner from './ui/Spinner';
 
-const Dashboard = lazy(() => import('../pages/Dashboard'));
-const CashierDashboard = lazy(() => import('../pages/CashierDashboard'));
+const Dashboard = safeLazy(() => import('../pages/Dashboard'));
+const CashierDashboard = safeLazy(() => import('../pages/CashierDashboard'));
 
 const DashboardRouter = () => {
   const { user } = useSelector((state) => state.auth);
