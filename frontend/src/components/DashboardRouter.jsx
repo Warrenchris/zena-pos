@@ -2,9 +2,9 @@ import React, { lazy, Suspense } from 'react';
 import { useSelector } from 'react-redux';
 import { Navigate } from 'react-router-dom';
 import { isManagerTier } from '../utils/roles';
-import Dashboard from '../pages/Dashboard';
 import Spinner from './ui/Spinner';
 
+const Dashboard = lazy(() => import('../pages/Dashboard'));
 const CashierDashboard = lazy(() => import('../pages/CashierDashboard'));
 
 const DashboardRouter = () => {
@@ -13,7 +13,9 @@ const DashboardRouter = () => {
     return <Navigate to="/platform" replace />;
   }
   return isManagerTier(user?.role) ? (
-    <Dashboard />
+    <Suspense fallback={<Spinner />}>
+      <Dashboard />
+    </Suspense>
   ) : (
     <Suspense fallback={<Spinner />}>
       <CashierDashboard />
