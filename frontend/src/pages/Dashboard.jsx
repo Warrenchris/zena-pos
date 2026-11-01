@@ -27,7 +27,7 @@ const OrderTracking = lazy(() => import('../components/dashboard/OrderTracking')
 const SellingPlatform = lazy(() => import('../components/dashboard/SellingPlatform'));
 const LocationAudience = lazy(() => import('../components/dashboard/LocationAudience'));
 const TopSellingProducts = lazy(() => import('../components/dashboard/TopSellingProducts'));
-import CashierDashboard from './CashierDashboard';
+const CashierDashboard = lazy(() => import('./CashierDashboard'));
 import SaleDetailModal from '../components/SaleDetailModal';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { fetchSalesStatistics, fetchSales } from '../store/slices/salesSlice';
@@ -395,7 +395,11 @@ export default function Dashboard() {
 
   // Only render cashier dashboard for non-manager-tier users
   if (!isManagerTier(user?.role)) {
-    return <CashierDashboard />;
+    return (
+      <Suspense fallback={<Spinner />}>
+        <CashierDashboard />
+      </Suspense>
+    );
   }
 
   return (
