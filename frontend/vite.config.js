@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
         // Report/export libraries are big and only needed on a few screens. Leave them out of the install
         // download; the rule below stores them the first time they are used.
-        globIgnores: ['**/xlsx-*.js', '**/jspdf*.js', '**/html2canvas*.js', '**/index.es-*.js'],
+        globIgnores: ['**/xlsx-*.js', '**/jspdf*.js', '**/html2canvas*.js', '**/index.es-*.js', '**/inter-{latin-ext,cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-wght-normal-*.woff2'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
         cleanupOutdatedCaches: true,

@@ -1,4 +1,10 @@
-import * as Sentry from '@sentry/react';
+import {
+  init,
+  captureException,
+  addBreadcrumb,
+  setUser,
+  setTag,
+} from '@sentry/react';
 
 function getEnv(key, fallback = '') {
   try {
@@ -55,7 +61,7 @@ export function initSentry() {
     : 0;
 
   try {
-    Sentry.init({
+    init({
       dsn,
       environment,
       release,
@@ -107,5 +113,13 @@ export function initSentry() {
     console.warn('[sentry:frontend] Sentry initialization failed:', err.message);
   }
 }
+
+const Sentry = {
+  init,
+  captureException,
+  addBreadcrumb,
+  setUser,
+  setTag,
+};
 
 export default Sentry;

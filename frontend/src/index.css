@@ -4,7 +4,7 @@
    Dual Light & Dark Mode Operating System Aesthetics
    ══════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import '@fontsource-variable/inter/wght.css';
 
 @tailwind base;
 @tailwind components;
@@ -117,7 +117,7 @@
 
 @layer base {
   html {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
     font-size: 15px;
     line-height: 1.5;
     scroll-behavior: smooth;
