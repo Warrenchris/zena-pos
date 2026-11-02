@@ -29,8 +29,23 @@ function syncSentryUser(user, shop) {
 export const CONNECTIVITY_ERROR = 'Cannot reach the server. Check your internet connection and try again.'
 
 const initialState = {
-  user: null,
-  shop: null,
+  user: (() => {
+    try {
+      const savedToken = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+      return savedToken ? readCachedProfile(savedToken)?.user || null : null;
+    } catch {
+      return null;
+    }
+  })(),
+  shop: (() => {
+    try {
+      const savedToken = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+      const cached = savedToken ? readCachedProfile(savedToken) : null;
+      return cached?.shop || cached?.user?.shop || null;
+    } catch {
+      return null;
+    }
+  })(),
   token: localStorage.getItem('token'),
   loading: false,
   error: null,
