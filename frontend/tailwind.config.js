@@ -116,7 +116,7 @@ module.exports = {
          Display: 44px, H1: 32px, H2: 24px, Card Title: 18px, Body: 15px, Caption: 13px
          ────────────────────────────────────────────── */
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Inter Variable', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       fontSize: {
         'display': ['2.75rem', { lineHeight: '1.15', letterSpacing: '-0.025em', fontWeight: '700' }], // 44px
