@@ -1,18 +1,45 @@
-export default function DeleteConfirmModal({ open, title, message, onCancel, onConfirm }) {
-  if (!open) return null
+import React from 'react';
+import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import Modal from '../ui/Modal';
+import Button from '../ui/Button';
+
+export default function DeleteConfirmModal({ open, title = 'Delete Expense', message, onCancel, onConfirm, loading = false }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70" onClick={onCancel} />
-      <div className="relative bg-black border border-yellow-600/30 rounded-lg w-full max-w-md mx-4 p-4">
-        <h3 className="text-lg font-semibold text-yellow-400 mb-2">{title}</h3>
-        <p className="text-gray-300 mb-4">{message}</p>
-        <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="px-4 py-2 rounded-md border border-yellow-600/30 text-gray-200">Cancel</button>
-          <button onClick={onConfirm} className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-500">Delete</button>
+    <Modal
+      isOpen={Boolean(open)}
+      onClose={onCancel}
+      title={title}
+      size="sm"
+    >
+      <div className="space-y-4 pt-1">
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 rounded-xl bg-danger/10 text-danger shrink-0">
+            <ExclamationTriangleIcon className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <p className="text-body text-text-secondary leading-relaxed">
+            {message || 'Are you sure you want to delete this expense record? This action cannot be undone.'}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-border-default">
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="md"
+            onClick={onConfirm}
+            loading={loading}
+          >
+            Delete Expense
+          </Button>
         </div>
       </div>
-    </div>
-  )
+    </Modal>
+  );
 }
-
-

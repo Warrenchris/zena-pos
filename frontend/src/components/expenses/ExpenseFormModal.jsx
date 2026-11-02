@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
-import { expensesAPI } from '../../services/api'
-import { toast } from '../../utils/toast'
+import React, { useEffect, useState } from 'react';
+import Modal from '../ui/Modal';
+import Button from '../ui/Button';
+import { expensesAPI } from '../../services/api';
+import { toast } from '../../utils/toast';
 
 const categories = [
   { value: 'inventory', label: 'Inventory' },
@@ -10,7 +12,7 @@ const categories = [
   { value: 'maintenance', label: 'Maintenance' },
   { value: 'marketing', label: 'Marketing' },
   { value: 'other', label: 'Other' },
-]
+];
 
 const paymentMethods = [
   { value: 'cash', label: 'Cash' },
@@ -18,7 +20,7 @@ const paymentMethods = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'mobile_money', label: 'M-Pesa / Mobile Money' },
   { value: 'other', label: 'Other' },
-]
+];
 
 export default function ExpenseFormModal({ open, onClose, onSaved, editing }) {
   const [form, setForm] = useState({
@@ -29,9 +31,9 @@ export default function ExpenseFormModal({ open, onClose, onSaved, editing }) {
     paymentMethod: 'cash',
     reference: '',
     notes: '',
-  })
-  const [submitting, setSubmitting] = useState(false)
-  const [errors, setErrors] = useState({})
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (editing) {
@@ -43,178 +45,226 @@ export default function ExpenseFormModal({ open, onClose, onSaved, editing }) {
         paymentMethod: editing.paymentMethod || 'cash',
         reference: editing.reference || '',
         notes: editing.notes || '',
-      })
+      });
     } else {
-      setForm({ 
-        description: '', 
-        amount: '', 
-        date: new Date().toISOString().split('T')[0], 
-        category: 'other', 
-        paymentMethod: 'cash', 
-        reference: '', 
-        notes: '' 
-      })
+      setForm({
+        description: '',
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
+        category: 'other',
+        paymentMethod: 'cash',
+        reference: '',
+        notes: '',
+      });
     }
-  }, [editing])
-
-  if (!open) return null
+    setErrors({});
+  }, [editing, open]);
 
   const onChange = (field, value) => {
-    setForm((f) => ({ ...f, [field]: value }))
-  }
+    setForm((f) => ({ ...f, [field]: value }));
+    if (errors[field]) {
+      setErrors((errs) => ({ ...errs, [field]: undefined }));
+    }
+  };
 
   const validate = () => {
-    const errs = {}
-    if (!form.description?.trim()) errs.description = 'Description is required'
-    if (!form.amount || Number(form.amount) <= 0) errs.amount = 'Amount must be greater than 0'
-    if (!form.category) errs.category = 'Category is required'
-    if (!form.paymentMethod) errs.paymentMethod = 'Payment method is required'
-    if (!form.date) errs.date = 'Date is required'
-    setErrors(errs)
-    return Object.keys(errs).length === 0
-  }
+    const errs = {};
+    if (!form.description?.trim()) errs.description = 'Description is required';
+    if (!form.amount || Number(form.amount) <= 0) errs.amount = 'Amount must be greater than 0';
+    if (!form.category) errs.category = 'Category is required';
+    if (!form.paymentMethod) errs.paymentMethod = 'Payment method is required';
+    if (!form.date) errs.date = 'Date is required';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
 
   const submit = async (e) => {
-    e.preventDefault()
-    if (!validate()) return
-    setSubmitting(true)
+    e.preventDefault();
+    if (!validate()) return;
+    setSubmitting(true);
     try {
       if (editing) {
-        await expensesAPI.update(editing.id, form)
-        toast.success('Expense updated successfully!')
+        await expensesAPI.update(editing.id, form);
+        toast.success('Expense updated successfully');
       } else {
-        await expensesAPI.create(form)
-        toast.success('Expense added successfully!')
+        await expensesAPI.create(form);
+        toast.success('Expense added successfully');
       }
-      onSaved?.()
-    } catch (err) {
-      toast.error('Failed to save expense')
+      onSaved?.();
+    } catch {
+      toast.error('Failed to save expense');
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
+
+  const inputClass = (hasError) => `
+    w-full bg-surface text-text-primary border rounded-xl px-3.5 py-2.5 text-small transition-colors duration-150
+    placeholder-text-muted focus:outline-none focus:ring-2
+    ${
+      hasError
+        ? 'border-danger focus:ring-danger/30 focus:border-danger'
+        : 'border-border-default hover:border-border-hover focus:ring-primary/30 focus:border-primary'
+    }
+  `;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 sm:px-6">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} aria-hidden="true" />
-      <div
-        className="relative bg-black border border-yellow-600/30 rounded-lg responsive-modal mx-auto p-4 sm:p-6 safe-area-padding overflow-y-auto max-h-[92vh]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="expense-form-heading"
-      >
-        <h3 id="expense-form-heading" className="text-xl font-semibold text-yellow-400 mb-3">{editing ? 'Edit Expense' : 'Add Expense'}</h3>
-        <form onSubmit={submit} className="space-y-4">
+    <Modal
+      isOpen={Boolean(open)}
+      onClose={onClose}
+      title={editing ? 'Edit Expense' : 'Add Expense'}
+      description="Record operational costs to maintain accurate business cash flow."
+      size="lg"
+    >
+      <form onSubmit={submit} className="space-y-4 pt-2">
+        <div>
+          <label htmlFor="expense-description" className="block text-small font-semibold text-text-primary mb-1.5">
+            Description <span className="text-danger">*</span>
+          </label>
+          <input
+            id="expense-description"
+            type="text"
+            value={form.description}
+            onChange={(e) => onChange('description', e.target.value)}
+            placeholder="e.g., Monthly electricity bill, shop cleaning, office supplies"
+            className={inputClass(errors.description)}
+          />
+          {errors.description && (
+            <p className="text-caption text-danger font-medium mt-1">{errors.description}</p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Description</label>
+            <label htmlFor="expense-amount" className="block text-small font-semibold text-text-primary mb-1.5">
+              Amount <span className="text-danger">*</span>
+            </label>
             <input
-              type="text"
-              value={form.description}
-              onChange={(e) => onChange('description', e.target.value)}
-              className="w-full bg-black text-white border border-yellow-600/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              id="expense-amount"
+              type="number"
+              step="0.01"
+              value={form.amount}
+              onChange={(e) => onChange('amount', e.target.value)}
+              placeholder="0.00"
+              className={inputClass(errors.amount)}
             />
-            {errors.description && <p className="text-red-400 text-xs mt-1">{errors.description}</p>}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Amount</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.amount}
-                onChange={(e) => onChange('amount', e.target.value)}
-                className="w-full bg-black text-white border border-yellow-600/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-              />
-              {errors.amount && <p className="text-red-400 text-xs mt-1">{errors.amount}</p>}
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Date</label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => onChange('date', e.target.value)}
-                  required
-                  max={new Date().toISOString().split('T')[0]}
-                  className="w-full bg-black text-white border border-yellow-600/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 cursor-pointer"
-                />
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                  <svg className="h-5 w-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Category</label>
-              <select
-                value={form.category}
-                onChange={(e) => onChange('category', e.target.value)}
-                className="w-full bg-black text-white border border-yellow-600/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-              >
-                {categories.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
-              {errors.category && <p className="text-red-400 text-xs mt-1">{errors.category}</p>}
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Payment Method</label>
-              <select
-                value={form.paymentMethod}
-                onChange={(e) => onChange('paymentMethod', e.target.value)}
-                className="w-full bg-black text-white border border-yellow-600/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-              >
-                {paymentMethods.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-              {errors.paymentMethod && <p className="text-red-400 text-xs mt-1">{errors.paymentMethod}</p>}
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Reference (optional)</label>
-              <input
-                type="text"
-                value={form.reference}
-                onChange={(e) => onChange('reference', e.target.value)}
-                className="w-full bg-black text-white border border-yellow-600/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Notes (optional)</label>
-              <input
-                type="text"
-                value={form.notes}
-                onChange={(e) => onChange('notes', e.target.value)}
-                className="w-full bg-black text-white border border-yellow-600/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-              />
-            </div>
+            {errors.amount && (
+              <p className="text-caption text-danger font-medium mt-1">{errors.amount}</p>
+            )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-md border border-yellow-600/30 text-gray-200 hover:bg-black/40 focus:outline-none focus:ring-2 focus:ring-yellow-500/40 touch-target"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-4 py-2 rounded-md bg-yellow-500 text-black hover:bg-yellow-400 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-yellow-500/60 touch-target"
-            >
-              {submitting ? 'Saving...' : editing ? 'Save Changes' : 'Add Expense'}
-            </button>
+          <div>
+            <label htmlFor="expense-date" className="block text-small font-semibold text-text-primary mb-1.5">
+              Date <span className="text-danger">*</span>
+            </label>
+            <input
+              id="expense-date"
+              type="date"
+              value={form.date}
+              onChange={(e) => onChange('date', e.target.value)}
+              max={new Date().toISOString().split('T')[0]}
+              className={inputClass(errors.date)}
+            />
+            {errors.date && (
+              <p className="text-caption text-danger font-medium mt-1">{errors.date}</p>
+            )}
           </div>
-        </form>
-      </div>
-    </div>
-  )
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="expense-category" className="block text-small font-semibold text-text-primary mb-1.5">
+              Category <span className="text-danger">*</span>
+            </label>
+            <select
+              id="expense-category"
+              value={form.category}
+              onChange={(e) => onChange('category', e.target.value)}
+              className={`${inputClass(errors.category)} cursor-pointer`}
+            >
+              {categories.map((c) => (
+                <option key={c.value} value={c.value} className="bg-surface text-text-primary">
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            {errors.category && (
+              <p className="text-caption text-danger font-medium mt-1">{errors.category}</p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="expense-payment-method" className="block text-small font-semibold text-text-primary mb-1.5">
+              Payment Method <span className="text-danger">*</span>
+            </label>
+            <select
+              id="expense-payment-method"
+              value={form.paymentMethod}
+              onChange={(e) => onChange('paymentMethod', e.target.value)}
+              className={`${inputClass(errors.paymentMethod)} cursor-pointer`}
+            >
+              {paymentMethods.map((m) => (
+                <option key={m.value} value={m.value} className="bg-surface text-text-primary">
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            {errors.paymentMethod && (
+              <p className="text-caption text-danger font-medium mt-1">{errors.paymentMethod}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="expense-reference" className="block text-small font-semibold text-text-primary mb-1.5">
+              Reference / Invoice # (optional)
+            </label>
+            <input
+              id="expense-reference"
+              type="text"
+              value={form.reference}
+              onChange={(e) => onChange('reference', e.target.value)}
+              placeholder="e.g. INV-2026-0042, Receipt #89"
+              className={inputClass(false)}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="expense-notes" className="block text-small font-semibold text-text-primary mb-1.5">
+              Notes (optional)
+            </label>
+            <input
+              id="expense-notes"
+              type="text"
+              value={form.notes}
+              onChange={(e) => onChange('notes', e.target.value)}
+              placeholder="Additional notes or payee info"
+              className={inputClass(false)}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-default">
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            loading={submitting}
+          >
+            {editing ? 'Save Changes' : 'Add Expense'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
 }
-
-
