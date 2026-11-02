@@ -26,12 +26,12 @@ const variantStyles = {
   `,
   danger: `
     bg-danger text-white font-semibold
-    hover:bg-red-600 active:bg-red-700
+    hover:bg-danger-hover active:bg-danger-hover
     shadow-sm
   `,
   success: `
     bg-success text-white font-semibold
-    hover:bg-emerald-600 active:bg-emerald-700
+    hover:bg-success-hover active:bg-success-hover
     shadow-sm
   `,
 };
