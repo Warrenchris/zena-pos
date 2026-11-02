@@ -27,14 +27,44 @@ export function escapeCSVField(value, options = {}) {
     return '';
   }
 
+  // Handle Date objects cleanly and predictably
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? '' : value.toISOString();
+  }
+
+  // Handle non-finite numbers (NaN, Infinity, -Infinity)
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return '';
+  }
+
   let str = String(value);
 
-  // Prevent spreadsheet formula injection if text starts with formula triggers
+  // Prevent spreadsheet formula injection if untrusted text starts with formula triggers
+  // CRITICAL: Legitimate numeric values (positive or negative, e.g. -150.50, +42) must remain numeric
+  // and must NOT be converted to text with a leading quote.
   if (preventInjection && str.length > 0) {
     const firstChar = str.charAt(0);
-    if (firstChar === '=' || firstChar === '+' || firstChar === '-' || firstChar === '@' || firstChar === '\t') {
+    const isFormulaTrigger =
+      firstChar === '=' ||
+      firstChar === '@' ||
+      firstChar === '\t' ||
+      firstChar === '\r' ||
+      firstChar === '|';
+
+    const isPlusOrMinus = firstChar === '+' || firstChar === '-';
+
+    if (isFormulaTrigger) {
       // Prepend a single quote to force spreadsheet programs to treat as text
       str = `'${str}`;
+    } else if (isPlusOrMinus) {
+      // Legitimate numeric literal check: matches integers, decimals, scientific notation
+      const isLegitimateNumber =
+        (typeof value === 'number' && Number.isFinite(value)) ||
+        /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/.test(str.trim());
+
+      if (!isLegitimateNumber) {
+        str = `'${str}`;
+      }
     }
   }
 

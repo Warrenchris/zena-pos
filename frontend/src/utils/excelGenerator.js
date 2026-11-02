@@ -12,7 +12,7 @@
  * - Safe browser download and Node testing compatibility
  */
 
-import { DOCUMENT_FORMATS } from './documentTokens';
+import { DOCUMENT_FORMATS } from './documentTokens.js';
 
 /**
  * Dynamically resolves the xlsx module across both Vite ESM and Jest CommonJS environments.
@@ -168,13 +168,24 @@ export function buildWorksheet(xlsx, options = {}) {
     if (formatString || colType === 'number' || colType === 'currency') {
       const colLetter = xlsx.utils.encode_col(c);
 
+      // Helper to safely parse numeric values (handling numbers and formatted strings like "-1,250.00")
+      const coerceToNumber = (val) => {
+        if (typeof val === 'number') return Number.isFinite(val) ? val : null;
+        if (typeof val === 'string') {
+          const sanitized = val.replace(/,/g, '').trim();
+          const parsed = parseFloat(sanitized);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+      };
+
       // Data rows
       for (let r = dataStartRowIndex; r < dataStartRowIndex + rows.length; r++) {
         const cellRef = `${colLetter}${r + 1}`; // 1-indexed for Excel
         const cell = ws[cellRef];
         if (cell && cell.v !== undefined && cell.v !== '') {
-          const num = typeof cell.v === 'number' ? cell.v : parseFloat(cell.v);
-          if (Number.isFinite(num)) {
+          const num = coerceToNumber(cell.v);
+          if (num !== null) {
             cell.t = 'n';
             cell.v = num;
             if (formatString) {
@@ -189,8 +200,8 @@ export function buildWorksheet(xlsx, options = {}) {
         const cellRef = `${colLetter}${summaryRowIndex + 1}`;
         const cell = ws[cellRef];
         if (cell && cell.v !== undefined && cell.v !== '') {
-          const num = typeof cell.v === 'number' ? cell.v : parseFloat(cell.v);
-          if (Number.isFinite(num)) {
+          const num = coerceToNumber(cell.v);
+          if (num !== null) {
             cell.t = 'n';
             cell.v = num;
             if (formatString) {

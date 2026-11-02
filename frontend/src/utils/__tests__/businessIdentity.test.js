@@ -1,9 +1,28 @@
 import {
   resolveBusinessIdentity,
   resolveInvoiceDocumentTitle,
+  isValidKraPin,
 } from '../businessIdentity';
 
 describe('businessIdentity resolver', () => {
+  describe('isValidKraPin', () => {
+    it('validates 11-character corporate (P) and individual (A) KRA PINs', () => {
+      expect(isValidKraPin('P051234567X')).toBe(true);
+      expect(isValidKraPin('A012345678Z')).toBe(true);
+      expect(isValidKraPin('p051234567x')).toBe(true); // Case-insensitive
+    });
+
+    it('rejects invalid KRA PIN formats', () => {
+      expect(isValidKraPin('1234567890')).toBe(false); // No prefix letter
+      expect(isValidKraPin('B051234567X')).toBe(false); // Must start with A or P
+      expect(isValidKraPin('P051234567')).toBe(false); // Too short (10 chars)
+      expect(isValidKraPin('P0512345678X')).toBe(false); // Too long (12 chars)
+      expect(isValidKraPin('P05123456XX')).toBe(false); // Letter inside numeric block
+      expect(isValidKraPin('')).toBe(false);
+      expect(isValidKraPin(null)).toBe(false);
+      expect(isValidKraPin(undefined)).toBe(false);
+    });
+  });
   it('resolves complete business identity from full root state', () => {
     const rootState = {
       auth: {
@@ -104,19 +123,40 @@ describe('businessIdentity resolver', () => {
     expect(identity.hasTaxIdentity).toBe(false);
   });
 
-  it('resolves invoice title: TAX INVOICE when VAT registered and KRA PIN is present', () => {
+  it('resolves invoice title: TAX INVOICE when VAT registered and KRA PIN is valid', () => {
     const identityWithTax = {
       vatRegistered: true,
       kraPin: 'P051234567Z',
+      isValidPin: true,
       hasTaxIdentity: true,
     };
     expect(resolveInvoiceDocumentTitle(identityWithTax)).toBe('TAX INVOICE');
   });
 
+  it('conservatively falls back to INVOICE when PIN format is structurally invalid despite VAT flag', () => {
+    const identityWithInvalidPin = {
+      vatRegistered: true,
+      kraPin: 'INVALID_PIN',
+      isValidPin: false,
+    };
+    expect(resolveInvoiceDocumentTitle(identityWithInvalidPin)).toBe('INVOICE');
+  });
+
   it('resolves invoice title: INVOICE when not VAT registered or missing KRA PIN', () => {
-    expect(resolveInvoiceDocumentTitle({ vatRegistered: false, kraPin: 'P051234567Z' })).toBe('INVOICE');
+    expect(resolveInvoiceDocumentTitle({ vatRegistered: false, kraPin: 'P051234567Z', isValidPin: true })).toBe('INVOICE');
     expect(resolveInvoiceDocumentTitle({ vatRegistered: true, kraPin: null })).toBe('INVOICE');
     expect(resolveInvoiceDocumentTitle({})).toBe('INVOICE');
+  });
+
+  it('explicitly flags isETimsCertified as false and provides statutory disclaimer', () => {
+    const identity = resolveBusinessIdentity({
+      settings: { vatRegistered: true },
+      auth: { shop: { kraPin: 'P051234567X' } },
+    });
+
+    expect(identity.isETimsCertified).toBe(false);
+    expect(typeof identity.statutoryNotice).toBe('string');
+    expect(identity.statutoryNotice).toContain('KRA eTIMS');
   });
 
   it('resolves printedBy from firstName and lastName when name is absent', () => {

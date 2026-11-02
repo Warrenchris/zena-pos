@@ -12,7 +12,7 @@
  * - Both browser direct download and in-memory Blob/Buffer generation
  */
 
-import { DOCUMENT_COLORS, DOCUMENT_FONTS, DOCUMENT_GEOMETRY } from './documentTokens';
+import { DOCUMENT_COLORS, DOCUMENT_FONTS, DOCUMENT_GEOMETRY } from './documentTokens.js';
 
 /**
  * Dynamically imports jsPDF and jspdf-autotable across ESM and CommonJS.

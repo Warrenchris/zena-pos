@@ -80,6 +80,34 @@ describe('Excel Generation Utility (SheetJS CE)', () => {
       expect(totalCell.v).toBe(130);
       expect(totalCell.z).toBe('"KSh" #,##0.00');
     });
+
+    it('handles negative numeric values and formatted numeric strings with commas', () => {
+      const options = {
+        title: 'PROFIT & LOSS',
+        columns: [
+          { header: 'Item', key: 'item', type: 'string' },
+          { header: 'Amount', key: 'amount', type: 'currency' },
+        ],
+        rows: [
+          { item: 'Net Loss', amount: -1500.50 },
+          { item: 'Formatted Loss', amount: '-2,450.75' },
+        ],
+      };
+
+      const { ws } = buildWorksheet(xlsx, options);
+
+      // Find cell for Net Loss (-1500.50)
+      const netLossCell = ws['B6'] || ws['B7'] || ws['B8'];
+      expect(netLossCell).toBeDefined();
+      expect(netLossCell.t).toBe('n');
+      expect(netLossCell.v).toBe(-1500.50);
+
+      // Find cell for Formatted Loss (should be parsed into -2450.75, not truncated to -2)
+      const formattedLossCell = ws['B7'] || ws['B8'] || ws['B9'];
+      expect(formattedLossCell).toBeDefined();
+      expect(formattedLossCell.t).toBe('n');
+      expect(formattedLossCell.v).toBe(-2450.75);
+    });
   });
 
   describe('generateExcel', () => {

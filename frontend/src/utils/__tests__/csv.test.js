@@ -34,11 +34,45 @@ describe('CSV Utility (RFC 4180 & Enhanced Features)', () => {
       expect(escapeCSVField('trailing ')).toBe('"trailing "');
     });
 
-    it('neutralizes spreadsheet formula injection by prepending a single quote', () => {
+    it('neutralizes spreadsheet formula injection for malicious formulas and non-numeric triggers', () => {
       expect(escapeCSVField('=SUM(A1:A10)')).toBe("'=SUM(A1:A10)");
-      expect(escapeCSVField('+1234567890')).toBe("'+1234567890");
       expect(escapeCSVField('-5+5')).toBe("'-5+5");
       expect(escapeCSVField('@echo off')).toBe("'@echo off");
+      expect(escapeCSVField("-cmd|' /C calc'!A0")).toBe("'-cmd|' /C calc'!A0");
+      expect(escapeCSVField('+cmd|calc')).toBe("'+cmd|calc");
+      expect(escapeCSVField('\tmaliciousTab')).toBe("'\tmaliciousTab");
+    });
+
+    it('preserves legitimate numeric values (both positive and negative) without converting to text', () => {
+      // JavaScript primitive numbers
+      expect(escapeCSVField(-150.50)).toBe('-150.5');
+      expect(escapeCSVField(-1000)).toBe('-1000');
+      expect(escapeCSVField(42)).toBe('42');
+      expect(escapeCSVField(0)).toBe('0');
+      expect(escapeCSVField(-0.005)).toBe('-0.005');
+
+      // Valid numeric strings
+      expect(escapeCSVField('-150.50')).toBe('-150.50');
+      expect(escapeCSVField('+42.75')).toBe('+42.75');
+      expect(escapeCSVField('1200.00')).toBe('1200.00');
+      expect(escapeCSVField('-1e5')).toBe('-1e5');
+    });
+
+    it('handles Date objects, null, undefined, NaN, and Unicode characters predictably', () => {
+      expect(escapeCSVField(null)).toBe('');
+      expect(escapeCSVField(undefined)).toBe('');
+      expect(escapeCSVField(NaN)).toBe('');
+      expect(escapeCSVField(Infinity)).toBe('');
+      expect(escapeCSVField(-Infinity)).toBe('');
+
+      const testDate = new Date('2026-11-02T10:30:00.000Z');
+      expect(escapeCSVField(testDate)).toBe('2026-11-02T10:30:00.000Z');
+
+      // Invalid Date
+      expect(escapeCSVField(new Date('invalid-date'))).toBe('');
+
+      // Unicode text
+      expect(escapeCSVField('Café Nairobi — KES 1500')).toBe('Café Nairobi — KES 1500');
     });
 
     it('respects preventInjection: false when explicitly configured', () => {
