@@ -53,7 +53,7 @@ export default function Layout() {
   };
 
   useEffect(() => {
-    if (!isLoginPage) {
+    if (!isLoginPage && user) {
       const allowedRoutes = getRoutesByRole().map(route => route.path);
       const currentPath = location.pathname;
       const isAllowed = allowedRoutes.some(path => currentPath === path || currentPath.startsWith(`${path}/`));
