@@ -142,7 +142,7 @@ export default function CompanySettings() {
             <button
               type="button"
               onClick={fetchCompanyDetails}
-              className="px-3 py-1.5 rounded-lg text-caption font-semibold bg-danger text-white hover:bg-red-700 transition-colors inline-flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg text-caption font-semibold bg-danger text-white hover:bg-danger-hover transition-colors inline-flex items-center gap-1.5"
             >
               <ArrowPathIcon className="h-3.5 w-3.5" />
               Retry

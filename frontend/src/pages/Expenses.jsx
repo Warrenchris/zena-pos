@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { PlusIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import useCurrency from '../hooks/useCurrency';
 import { expensesAPI } from '../services/api';
 import { toast } from '../utils/toast';
@@ -14,7 +14,6 @@ import ExpenseAnalytics from '../components/expenses/ExpenseAnalytics';
 import ExportButtons from '../components/expenses/ExportButtons';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
 
 const DEFAULT_LIMIT = 10;
 
@@ -28,6 +27,7 @@ export default function Expenses() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
   const [filters, setFilters] = useState({
@@ -104,6 +104,7 @@ export default function Expenses() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    setDeleting(true);
     try {
       await expensesAPI.delete(deleteTarget.id);
       toast.success('Expense deleted successfully');
@@ -111,6 +112,8 @@ export default function Expenses() {
       fetchExpenses();
     } catch {
       toast.error('Failed to delete expense');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -124,12 +127,16 @@ export default function Expenses() {
     <div className="space-y-6">
       <PageHeader
         title="Expense Management"
-        description="Record, categorize, analyze, and track all operational business expenses."
-        primaryAction={canManage ? {
-          label: 'Add Expense',
-          icon: PlusIcon,
-          onClick: onCreate
-        } : null}
+        description="Record, categorize, analyze, and track operational business expenses with real-time analytics."
+        primaryAction={
+          canManage
+            ? {
+                label: 'Add Expense',
+                icon: PlusIcon,
+                onClick: onCreate,
+              }
+            : null
+        }
         secondaryActions={
           <ExportButtons expenses={expenses} formatCurrency={formatCurrency} filters={filters} />
         }
@@ -142,11 +149,17 @@ export default function Expenses() {
           title="Expense Records"
           subtitle={`Total for selected period: ${formatCurrency(periodTotal)}`}
         />
-        <Card.Body className="space-y-4">
+        <Card.Body className="space-y-5">
           <ExpenseFilters
             value={filters}
-            onChange={setFilters}
-            onReset={() => setFilters({ startDate: '', endDate: '', category: '', paymentMethod: '' })}
+            onChange={(next) => {
+              setFilters(next);
+              setPage(1);
+            }}
+            onReset={() => {
+              setFilters({ startDate: '', endDate: '', category: '', paymentMethod: '' });
+              setPage(1);
+            }}
           />
 
           <ExpenseTable
@@ -167,9 +180,13 @@ export default function Expenses() {
               }
             }}
             onPageChange={setPage}
-            onLimitChange={setLimit}
+            onLimitChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
             onEdit={onEdit}
             onDelete={onDelete}
+            onCreate={onCreate}
             canManage={canManage}
             formatCurrency={formatCurrency}
             currentUser={user}
@@ -185,9 +202,14 @@ export default function Expenses() {
       />
 
       <DeleteConfirmModal
-        open={!!deleteTarget}
+        open={Boolean(deleteTarget)}
         title="Delete Expense"
-        message="Are you sure you want to delete this expense record? This action cannot be undone."
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete "${deleteTarget.description}" (${formatCurrency(deleteTarget.amount)})? This action cannot be undone.`
+            : 'Are you sure you want to delete this expense record? This action cannot be undone.'
+        }
+        loading={deleting}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
       />

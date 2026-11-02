@@ -7,6 +7,21 @@
     <meta name="description" content="Zana POS brings checkout speed, M-Pesa STK push, multi-branch inventory, and AI demand forecasting into one beautifully simple system built for modern African retail." />
     <meta name="keywords" content="POS Kenya, Point of Sale Nairobi, M-Pesa POS, retail inventory software, multi-branch POS, restaurant POS, pharmacy POS Kenya" />
     <meta name="theme-color" content="#784421" />
+    <!-- Apply the saved theme before first paint so dark-mode users don't see a light flash.
+         Keep this logic in sync with src/providers/ThemeProvider.jsx (storage key: zana_theme). -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('zana_theme');
+          var dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', '#12100E');
+          }
+        } catch (e) { /* storage unavailable: fall back to default light theme */ }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="canonical" href="https://zanapos.com/" />

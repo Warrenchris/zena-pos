@@ -49,7 +49,8 @@ module.exports = {
         },
 
         success: {
-          DEFAULT: '#10B981',
+          DEFAULT: withOpacity('--color-success'),
+          hover:   withOpacity('--color-success-hover'),
           muted:   withOpacity('--color-success-muted'),
           border:  withOpacity('--color-success-border'),
           text:    withOpacity('--color-success-text'),
@@ -61,13 +62,15 @@ module.exports = {
           text:    withOpacity('--color-warning-text'),
         },
         danger: {
-          DEFAULT: '#EF4444',
+          DEFAULT: withOpacity('--color-danger'),
+          hover:   withOpacity('--color-danger-hover'),
           muted:   withOpacity('--color-danger-muted'),
           border:  withOpacity('--color-danger-border'),
           text:    withOpacity('--color-danger-text'),
         },
         info: {
-          DEFAULT: '#0EA5E9',
+          DEFAULT: withOpacity('--color-info'),
+          hover:   withOpacity('--color-info-hover'),
           muted:   withOpacity('--color-info-muted'),
           border:  withOpacity('--color-info-border'),
           text:    withOpacity('--color-info-text'),
@@ -82,6 +85,7 @@ module.exports = {
         // Borders
         'border-default': withOpacity('--border-default'),
         'border-hover':   withOpacity('--border-hover'),
+        'border-input':   withOpacity('--border-input'),
         'border-focus':   withOpacity('--color-primary'),
 
         /* Legacy Brand Aliases mapped to semantic variables for zero breakage */

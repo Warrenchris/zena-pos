@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
+const STORAGE_KEY = 'zana_theme';
+const VALID_THEMES = ['light', 'dark', 'system'];
+const THEME_COLOR = { light: '#784421', dark: '#12100E' };
+
 const ThemeContext = createContext({
   theme: 'light',
   resolvedTheme: 'light',
@@ -7,40 +11,46 @@ const ThemeContext = createContext({
   toggleTheme: () => {},
 });
 
-export const ThemeProvider = ({ children }) => {
-  const [theme, setThemeState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('zana_theme');
-      if (savedTheme) return savedTheme;
-    }
-    return 'light'; // Default to light mode as requested
-  });
+/** Read the saved preference; ignore anything that isn't a known theme. */
+const readStoredTheme = () => {
+  try {
+    if (typeof window === 'undefined') return 'light';
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (VALID_THEMES.includes(saved)) return saved;
+  } catch {
+    /* storage blocked (e.g. private mode) — fall through to default */
+  }
+  return 'light'; // Default to light mode
+};
 
-  const [resolvedTheme, setResolvedTheme] = useState('light');
+const prefersDark = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+const resolveTheme = (theme) =>
+  theme === 'system' ? (prefersDark() ? 'dark' : 'light') : theme;
+
+export const ThemeProvider = ({ children }) => {
+  const [theme, setThemeState] = useState(readStoredTheme);
+  // Resolve synchronously so the very first render already matches the saved
+  // theme (previously this started as 'light' and corrected itself one render later).
+  const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(readStoredTheme()));
 
   useEffect(() => {
     const root = document.documentElement;
+    const meta = document.querySelector('meta[name="theme-color"]');
 
     const applyTheme = (currentTheme) => {
-      let isDark = false;
-      if (currentTheme === 'system') {
-        isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      } else {
-        isDark = currentTheme === 'dark';
-      }
-
-      if (isDark) {
-        root.classList.add('dark');
-        setResolvedTheme('dark');
-      } else {
-        root.classList.remove('dark');
-        setResolvedTheme('light');
-      }
+      const next = resolveTheme(currentTheme);
+      root.classList.toggle('dark', next === 'dark');
+      if (meta) meta.setAttribute('content', THEME_COLOR[next]);
+      setResolvedTheme(next);
     };
 
     applyTheme(theme);
 
-    if (theme === 'system') {
+    if (theme === 'system' && typeof window.matchMedia === 'function') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       const handleChange = () => applyTheme('system');
       mediaQuery.addEventListener('change', handleChange);
@@ -49,9 +59,12 @@ export const ThemeProvider = ({ children }) => {
   }, [theme]);
 
   const setTheme = (newTheme) => {
+    if (!VALID_THEMES.includes(newTheme)) return;
     setThemeState(newTheme);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('zana_theme', newTheme);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, newTheme);
+    } catch {
+      /* storage blocked — theme still applies for this session */
     }
   };
 

@@ -1830,12 +1830,12 @@ export default function CashierDashboard() {
                   {/* Undo Toast */}
                   {undoToast && (
                     <div 
-                      className="bg-brand-gray/95 border border-brand-yellow/30 p-3 rounded-xl flex items-center justify-between text-xs text-white shadow-2xl animate-slideIn relative overflow-hidden my-2 mx-4"
+                      className="bg-surface-2 border border-border-default p-3 rounded-xl flex items-center justify-between text-xs text-text-primary shadow-2xl animate-slideIn relative overflow-hidden my-2 mx-4"
                       role="status"
                       aria-live="polite"
                     >
                       <div 
-                        className="absolute bottom-0 left-0 h-1 bg-brand-yellow" 
+                        className="absolute bottom-0 left-0 h-1 bg-primary" 
                         style={{ 
                           width: '100%', 
                           animation: 'countdown 5s linear forwards' 
@@ -1854,7 +1854,7 @@ export default function CashierDashboard() {
                         <button
                           type="button"
                           onClick={() => undoRemoval(undoToast.itemId)}
-                          className="px-3 py-1 bg-brand-yellow text-brand-black rounded-lg font-bold hover:bg-brand-yellowDark focus:ring-2 focus:ring-brand-yellow focus:outline-none text-xs"
+                          className="px-3 py-1 bg-primary text-white dark:text-surface rounded-lg font-bold hover:bg-primary-hover focus:ring-2 focus:ring-primary focus:outline-none text-xs"
                           ref={undoButtonRef}
                         >
                           Undo
@@ -1862,7 +1862,7 @@ export default function CashierDashboard() {
                         <button
                           type="button"
                           onClick={() => commitRemoval(undoToast.itemId)}
-                          className="text-gray-400 hover:text-white p-1"
+                          className="text-text-secondary hover:text-text-primary p-1"
                           title="Dismiss"
                         >
                           <XMarkIcon className="h-3.5 w-3.5" />
@@ -2161,19 +2161,19 @@ export default function CashierDashboard() {
           ></div>
           
           {/* Drawer Panel */}
-          <div className="relative w-full max-w-md h-full bg-gradient-to-b from-[#0f0f11] to-[#0b0b0c] border-l border-brand-yellow/20 flex flex-col shadow-2xl animate-slideOver">
+          <div className="relative w-full max-w-md h-full bg-surface border-l border-border-default flex flex-col shadow-modal animate-slideOver">
             {/* Header */}
-            <div className="p-6 border-b border-brand-yellow/20 flex items-center justify-between">
+            <div className="p-6 border-b border-border-default flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <h3 className="text-xl font-bold text-text-primary flex items-center gap-2">
                   <PauseIcon className="h-5 w-5 text-primary" /> Held Carts
                 </h3>
-                <p className="text-xs text-gray-400 mt-1">Select a held transaction to recall it</p>
+                <p className="text-xs text-text-secondary mt-1">Select a held transaction to recall it</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowHeldCartsDrawer(false)}
-                className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-white border border-gray-800 hover:border-gray-600 rounded-xl transition-all"
+                className="w-10 h-10 flex items-center justify-center text-text-secondary hover:text-text-primary border border-border-input hover:border-border-hover rounded-xl transition-all"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
@@ -2183,9 +2183,9 @@ export default function CashierDashboard() {
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {heldCarts.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center">
-                  <InboxIcon className="h-12 w-12 text-gray-500 mb-2" />
-                  <p className="text-gray-300 font-medium">No Held Carts</p>
-                  <p className="text-xs text-gray-400 max-w-xs mt-1">Carts parked by any cashier in this shop will appear here.</p>
+                  <InboxIcon className="h-12 w-12 text-text-muted mb-2" />
+                  <p className="text-text-primary font-medium">No Held Carts</p>
+                  <p className="text-xs text-text-secondary max-w-xs mt-1">Carts parked by any cashier in this shop will appear here.</p>
                 </div>
               ) : (
                 heldCarts.map(cart => {
@@ -2196,15 +2196,15 @@ export default function CashierDashboard() {
                   return (
                     <div
                       key={cart.id}
-                      className="bg-brand-gray/20 border border-brand-yellow/10 hover:border-brand-yellow/30 rounded-xl p-4 transition-all flex flex-col justify-between gap-3 group"
+                      className="bg-surface-2 border border-border-default hover:border-border-hover rounded-xl p-4 transition-all flex flex-col justify-between gap-3 group"
                     >
                       <div className="flex items-start justify-between">
                         <div>
-                          <h4 className="font-bold text-white text-base">{cart.label}</h4>
-                          <p className="text-xs text-gray-400 mt-1">
+                          <h4 className="font-bold text-text-primary text-base">{cart.label}</h4>
+                          <p className="text-xs text-text-secondary mt-1">
                             {itemCount} item(s) • Total: {formatCurrency(totalAmt)}
                           </p>
-                          <p className="text-xs text-brand-yellow/70 mt-1">Held at: {heldTime}</p>
+                          <p className="text-xs text-primary mt-1">Held at: {heldTime}</p>
                         </div>
                       </div>
                       
@@ -2212,14 +2212,14 @@ export default function CashierDashboard() {
                         <button
                           type="button"
                           onClick={() => handleRecall(cart)}
-                          className="flex-1 py-2 bg-brand-yellow text-brand-black text-xs font-bold rounded-lg hover:bg-brand-yellowDark transition-all"
+                          className="flex-1 py-2 bg-primary text-white dark:text-surface text-xs font-bold rounded-lg hover:bg-primary-hover transition-all"
                         >
                           Recall Transaction
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDismissHeldCart(cart.id, cart.label)}
-                          className="px-3 py-2 bg-transparent text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 rounded-lg text-xs font-bold transition-all"
+                          className="px-3 py-2 bg-transparent text-danger-text hover:bg-danger-muted border border-danger-border rounded-lg text-xs font-bold transition-all"
                           title="Dismiss / Delete held cart"
                         >
                           Dismiss
@@ -2240,16 +2240,16 @@ export default function CashierDashboard() {
       {
         showStatsPanel && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-50 flex items-center justify-end" onClick={withTrustedClick(() => setShowStatsPanel(false))}>
-            <div className="absolute right-4 sm:right-8 top-24 w-96 max-w-[calc(100vw-2rem)] bg-gradient-to-br from-[#0f0f11] to-[#0b0b0c]/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-brand-yellow/20 p-6 sm:p-8 animate-slideIn" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute right-4 sm:right-8 top-24 w-96 max-w-[calc(100vw-2rem)] bg-surface rounded-3xl shadow-modal border border-border-default p-6 sm:p-8 animate-slideIn" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className="flex items-center justify-between mb-8">
                 <div>
-                  <p className="text-xs text-brand-yellow uppercase tracking-widest font-bold">Performance Dashboard</p>
-                  <h3 className="text-3xl font-black text-brand-text mt-1">My Stats</h3>
+                  <p className="text-xs text-primary uppercase tracking-widest font-bold">Performance Dashboard</p>
+                  <h3 className="text-3xl font-black text-text-primary mt-1">My Stats</h3>
                 </div>
                 <button
                   onClick={withTrustedClick(() => setShowStatsPanel(false))}
-                  className="w-10 h-10 flex items-center justify-center text-brand-yellow/60 hover:text-brand-yellow hover:bg-brand-yellow/10 rounded-xl transition-all duration-200"
+                  className="w-10 h-10 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-xl transition-all duration-200"
                 >
                   <XMarkIcon className="h-6 w-6" />
                 </button>
@@ -2261,12 +2261,12 @@ export default function CashierDashboard() {
                   <div className="absolute top-0 right-0 w-20 h-20 bg-brand-green/10 rounded-full blur-2xl group-hover:blur-3xl transition-all"></div>
                   <div className="relative flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-brand-green/80 uppercase tracking-wide font-semibold mb-1">Today's Revenue</p>
-                      <p className="text-3xl font-black text-brand-text mb-1">{formatCurrency(cashierStats?.today?.totalSales || 0)}</p>
-                      <p className="text-sm text-brand-green/70">{cashierStats?.today?.orderCount || 0} completed transactions</p>
+                      <p className="text-xs text-success-text uppercase tracking-wide font-semibold mb-1">Today's Revenue</p>
+                      <p className="text-3xl font-black text-text-primary mb-1">{formatCurrency(cashierStats?.today?.totalSales || 0)}</p>
+                      <p className="text-sm text-success-text">{cashierStats?.today?.orderCount || 0} completed transactions</p>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-brand-green/20 flex items-center justify-center">
-                      <ArrowTrendingUpIcon className="h-6 w-6 text-brand-green" />
+                      <ArrowTrendingUpIcon className="h-6 w-6 text-success-text" />
                     </div>
                   </div>
                 </div>
@@ -2276,36 +2276,36 @@ export default function CashierDashboard() {
                   <div className="absolute top-0 right-0 w-20 h-20 bg-brand-cyan/10 rounded-full blur-2xl group-hover:blur-3xl transition-all"></div>
                   <div className="relative flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-brand-cyan/80 uppercase tracking-wide font-semibold mb-1">Weekly Revenue</p>
-                      <p className="text-3xl font-black text-brand-text mb-1">{formatCurrency(cashierStats?.week?.totalSales || 0)}</p>
-                      <p className="text-sm text-brand-cyan/70">{cashierStats?.week?.orderCount || 0} transactions this week</p>
+                      <p className="text-xs text-info-text uppercase tracking-wide font-semibold mb-1">Weekly Revenue</p>
+                      <p className="text-3xl font-black text-text-primary mb-1">{formatCurrency(cashierStats?.week?.totalSales || 0)}</p>
+                      <p className="text-sm text-info-text">{cashierStats?.week?.orderCount || 0} transactions this week</p>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-brand-cyan/20 flex items-center justify-center">
-                      <ChartBarIcon className="h-6 w-6 text-brand-cyan" />
+                      <ChartBarIcon className="h-6 w-6 text-info-text" />
                     </div>
                   </div>
                 </div>
 
                 {/* Recent Sales */}
-                <div className="bg-gradient-to-br from-[#0b0b0c]/60 to-[#0b0b0c]/40 border border-brand-yellow/10 rounded-2xl p-5 sm:p-6">
+                <div className="bg-surface-2 border border-border-default rounded-2xl p-5 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-bold text-brand-text text-lg">Recent Sales</h4>
-                    <ShoppingCartIcon className="h-5 w-5 text-brand-yellow/60" />
+                    <h4 className="font-bold text-text-primary text-lg">Recent Sales</h4>
+                    <ShoppingCartIcon className="h-5 w-5 text-text-secondary" />
                   </div>
                   <div className="space-y-2">
                     {(recentSales || []).slice(0, 4).map((sale, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-[#0b0b0c]/30 hover:bg-[#0b0b0c]/50 rounded-lg transition-colors group">
+                      <div key={index} className="flex justify-between items-center p-3 bg-surface hover:bg-surface-3 rounded-lg transition-colors group">
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 rounded-full bg-brand-green group-hover:animate-pulse"></div>
-                          <span className="text-sm text-gray-300 font-medium">Receipt #{sale?.id || 'N/A'}</span>
+                          <span className="text-sm text-text-primary font-medium">Receipt #{sale?.id || 'N/A'}</span>
                         </div>
-                        <span className="font-bold text-brand-yellow">{formatCurrency(sale?.total || 0)}</span>
+                        <span className="font-bold text-primary">{formatCurrency(sale?.total || 0)}</span>
                       </div>
                     ))}
                     {recentSales.length === 0 && (
                       <div className="text-center py-6">
-                        <ShoppingCartIcon className="h-8 w-8 text-gray-500 mx-auto mb-2" />
-                        <p className="text-gray-400 text-sm">No recent sales</p>
+                        <ShoppingCartIcon className="h-8 w-8 text-text-muted mx-auto mb-2" />
+                        <p className="text-text-secondary text-sm">No recent sales</p>
                       </div>
                     )}
                   </div>

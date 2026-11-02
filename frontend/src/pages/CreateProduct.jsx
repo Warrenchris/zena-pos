@@ -149,12 +149,12 @@ export default function CreateProduct() {
     <div className="px-6 py-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-brand-yellow">Create Product</h1>
-          <p className="text-sm text-gray-400">Add a new product to your catalog.</p>
+          <h1 className="text-2xl font-bold text-primary">Create Product</h1>
+          <p className="text-sm text-text-secondary">Add a new product to your catalog.</p>
         </div>
         <button
           onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-200 hover:bg-black/40 rounded-lg"
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-surface-2 rounded-lg"
         >
           <ArrowLeftIcon className="h-5 w-5" /> Back
         </button>
@@ -162,24 +162,24 @@ export default function CreateProduct() {
 
       <form onSubmit={onSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Details */}
-        <div className="lg:col-span-2 bg-brand-gray border border-brand-yellow/20 rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-gray-200 mb-4">Product Details</h2>
+        <div className="lg:col-span-2 bg-surface border border-border-default rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-4">Product Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Name</label>
-              <input name="name" value={form.name} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
+              <label className="block text-xs text-text-secondary mb-1">Name</label>
+              <input name="name" value={form.name} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">SKU</label>
-              <input name="sku" value={form.sku} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
+              <label className="block text-xs text-text-secondary mb-1">SKU</label>
+              <input name="sku" value={form.sku} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Barcode (optional)</label>
-              <input name="barcode" value={form.barcode} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
+              <label className="block text-xs text-text-secondary mb-1">Barcode (optional)</label>
+              <input name="barcode" value={form.barcode} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Category</label>
-              <select name="CategoryId" value={form.CategoryId} onChange={onCategoryChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow">
+              <label className="block text-xs text-text-secondary mb-1">Category</label>
+              <select name="CategoryId" value={form.CategoryId} onChange={onCategoryChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary">
                 <option value="">Select category</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -187,35 +187,35 @@ export default function CreateProduct() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Tax Category</label>
-              <select name="taxCategory" value={form.taxCategory || 'standard'} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow">
+              <label className="block text-xs text-text-secondary mb-1">Tax Category</label>
+              <select name="taxCategory" value={form.taxCategory || 'standard'} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary">
                 <option value="standard">Standard (16%)</option>
                 <option value="zero_rated">Zero-Rated (0%)</option>
                 <option value="exempt">Exempt (0%)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Price</label>
-              <input name="price" type="number" step="0.01" value={form.price} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
+              <label className="block text-xs text-text-secondary mb-1">Price</label>
+              <input name="price" type="number" step="0.01" value={form.price} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cost</label>
-              <input name="cost" type="number" step="0.01" value={form.cost} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
+              <label className="block text-xs text-text-secondary mb-1">Cost</label>
+              <input name="cost" type="number" step="0.01" value={form.cost} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Weight (grams)</label>
-            <input name="weightGrams" type="number" min="0" step="1" value={form.weightGrams} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" placeholder="e.g. 750" />
+            <label className="block text-xs text-text-secondary mb-1">Weight (grams)</label>
+            <input name="weightGrams" type="number" min="0" step="1" value={form.weightGrams} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" placeholder="e.g. 750" />
           </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Stock Quantity</label>
-              <input name="stockQuantity" type="number" value={form.stockQuantity} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
+              <label className="block text-xs text-text-secondary mb-1">Stock Quantity</label>
+              <input name="stockQuantity" type="number" value={form.stockQuantity} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Reorder Point</label>
-              <input name="reorderPoint" type="number" value={form.reorderPoint} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
+              <label className="block text-xs text-text-secondary mb-1">Reorder Point</label>
+              <input name="reorderPoint" type="number" value={form.reorderPoint} onChange={onChange} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Expiration Date</label>
+              <label className="block text-xs text-text-secondary mb-1">Expiration Date</label>
               <div className="relative" ref={calendarRef}>
                 <div className="flex gap-2">
                   <select
@@ -225,7 +225,7 @@ export default function CreateProduct() {
                       setForm((f) => ({ ...f, expirationDate: mode === 'never' ? 'never' : '' }))
                       if (mode === 'never') setShowCalendar(false)
                     }}
-                    className="px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow"
+                    className="px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="never">Never</option>
                     <option value="date">Set date…</option>
@@ -254,7 +254,7 @@ export default function CreateProduct() {
                       if (form.expirationDate !== 'never') setShowCalendar(true)
                     }}
                     placeholder="dd/mm/yyyy"
-                    className="flex-1 px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow disabled:opacity-50 cursor-pointer"
+                    className="flex-1 px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 cursor-pointer"
                   />
                 </div>
 
@@ -275,46 +275,46 @@ export default function CreateProduct() {
                   </div>
                 )}
               </div>
-              <p className="mt-1 text-xs text-gray-500">Default is "Never"; choose a date to enable.</p>
+              <p className="mt-1 text-xs text-text-secondary">Default is "Never"; choose a date to enable.</p>
             </div>
           </div>
 
           <div className="mt-4">
-            <label className="block text-xs text-gray-400 mb-1">Description (optional)</label>
-            <textarea name="description" value={form.description} onChange={onChange} rows={4} className="w-full px-3 py-2 rounded-lg bg-brand-black text-gray-100 border border-brand-yellow/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow" />
+            <label className="block text-xs text-text-secondary mb-1">Description (optional)</label>
+            <textarea name="description" value={form.description} onChange={onChange} rows={4} className="w-full px-3 py-2 rounded-lg bg-surface text-text-primary border border-border-input focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
         </div>
 
         {/* Media */}
-        <div className="bg-brand-gray border border-brand-yellow/20 rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-gray-200 mb-4">Product Image (optional)</h2>
-          <div className="border border-dashed border-brand-yellow/30 rounded-lg p-4 text-center">
+        <div className="bg-surface border border-border-default rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-4">Product Image (optional)</h2>
+          <div className="border border-dashed border-border-input rounded-lg p-4 text-center">
             {imagePreview ? (
               <img src={imagePreview} alt="Preview" className="mx-auto max-h-48 rounded-md" />
             ) : (
-              <div className="flex flex-col items-center justify-center text-gray-400">
+              <div className="flex flex-col items-center justify-center text-text-secondary">
                 <PhotoIcon className="h-12 w-12 mb-2" />
                 <p className="text-xs">Upload an image to help identify the product</p>
               </div>
             )}
             <div className="mt-4">
               <input id="file" type="file" accept="image/*" onChange={onImageChange} className="hidden" />
-              <label htmlFor="file" className="inline-block cursor-pointer px-3 py-2 rounded-lg border border-brand-yellow/30 text-sm text-gray-100 hover:bg-black/40">Choose Image</label>
+              <label htmlFor="file" className="inline-block cursor-pointer px-3 py-2 rounded-lg border border-border-input text-sm text-text-primary hover:bg-surface-2">Choose Image</label>
             </div>
           </div>
-          <p className="mt-3 text-xs text-gray-500">Images are optional and currently not uploaded to the server.</p>
+          <p className="mt-3 text-xs text-text-secondary">Images are optional and currently not uploaded to the server.</p>
         </div>
 
         {/* Footer actions */}
         <div className="lg:col-span-3 flex items-center justify-end gap-3">
           {error && (
-            <div className="flex items-center gap-2 text-red-400 text-sm">
+            <div className="flex items-center gap-2 text-danger-text text-sm">
               <ExclamationTriangleIcon className="h-5 w-5" />
               <span>{error}</span>
             </div>
           )}
-          <button type="button" onClick={() => navigate('/products')} className="px-4 py-2 rounded-lg border border-brand-yellow/30 text-sm text-gray-100 hover:bg-black/40">Cancel</button>
-          <button type="submit" disabled={!canSubmit || loading} className="px-4 py-2 rounded-lg border border-brand-yellow/40 text-sm font-medium text-brand-black bg-brand-yellow hover:bg-brand-yellowDark disabled:opacity-60">
+          <button type="button" onClick={() => navigate('/products')} className="px-4 py-2 rounded-lg border border-border-input text-sm text-text-primary hover:bg-surface-2">Cancel</button>
+          <button type="submit" disabled={!canSubmit || loading} className="px-4 py-2 rounded-lg border border-primary/20 text-sm font-medium text-white dark:text-surface bg-primary hover:bg-primary-hover disabled:opacity-60">
             {loading ? 'Saving...' : 'Create Product'}
           </button>
         </div>

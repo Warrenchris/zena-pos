@@ -54,15 +54,15 @@ const DateRangePicker = ({ startDate, endDate, onChange, renderTrigger, align = 
           ) : (
             <Popover.Button 
               className={`
-                inline-flex items-center px-3.5 py-2 border rounded-xl shadow-sm text-xs font-semibold 
-                transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500/50
+                inline-flex items-center px-3.5 py-2 border rounded-xl shadow-2xs text-small font-medium 
+                transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30
                 ${open 
-                  ? 'bg-yellow-500/20 border-yellow-500/60 text-brand-yellow ring-2 ring-yellow-500/40' 
-                  : 'bg-black/80 border-yellow-500/30 text-brand-yellow hover:bg-yellow-500/10'
+                  ? 'bg-primary/10 border-primary/40 text-primary ring-2 ring-primary/20' 
+                  : 'bg-surface border-border-default text-text-primary hover:bg-surface-2 hover:border-border-hover'
                 }
               `}
             >
-              <FaCalendar className="mr-2 h-3.5 w-3.5 text-brand-yellow flex-shrink-0" />
+              <FaCalendar className="mr-2 h-3.5 w-3.5 text-primary flex-shrink-0" />
               <span className="whitespace-nowrap">
                 {formattedStartStr && formattedEndStr 
                   ? `${formattedStartStr} - ${formattedEndStr}`

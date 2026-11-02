@@ -1,27 +1,52 @@
-import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
-import useCurrency from '../../hooks/useCurrency'
+import React from 'react';
+import {
+  PencilIcon,
+  TrashIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  BanknotesIcon,
+  ExclamationCircleIcon,
+  PlusIcon
+} from '@heroicons/react/24/outline';
+import Badge from '../ui/Badge';
+import Button from '../ui/Button';
+import EmptyState from '../ui/EmptyState';
 
-function SkeletonRow() {
+const categoryBadgeVariants = {
+  inventory: 'primary',
+  salary: 'info',
+  rent: 'warning',
+  utilities: 'neutral',
+  maintenance: 'neutral',
+  marketing: 'success',
+  other: 'neutral',
+};
+
+function SkeletonRow({ canManage }) {
   return (
     <tr className="animate-pulse">
-      <td className="px-4 py-3"><div className="h-4 bg-gray-800 rounded" /></td>
-      <td className="px-4 py-3"><div className="h-4 bg-gray-800 rounded" /></td>
-      <td className="px-4 py-3"><div className="h-4 bg-gray-800 rounded" /></td>
-      <td className="px-4 py-3"><div className="h-4 bg-gray-800 rounded" /></td>
-      <td className="px-4 py-3"><div className="h-4 bg-gray-800 rounded" /></td>
-      <td className="px-4 py-3"><div className="h-4 bg-gray-800 rounded" /></td>
-      <td className="px-4 py-3"><div className="h-4 bg-gray-800 rounded" /></td>
+      <td className="px-4 py-3.5"><div className="h-4 bg-surface-2 rounded-md w-3/4" /></td>
+      <td className="px-4 py-3.5"><div className="h-5 bg-surface-2 rounded-full w-20" /></td>
+      <td className="px-4 py-3.5"><div className="h-4 bg-surface-2 rounded-md w-24" /></td>
+      <td className="px-4 py-3.5"><div className="h-4 bg-surface-2 rounded-md w-20" /></td>
+      <td className="px-4 py-3.5"><div className="h-4 bg-surface-2 rounded-md w-24" /></td>
+      <td className="px-4 py-3.5"><div className="h-4 bg-surface-2 rounded-md w-24" /></td>
+      {canManage && (
+        <td className="px-4 py-3.5 text-right"><div className="h-7 bg-surface-2 rounded-lg w-16 ml-auto" /></td>
+      )}
     </tr>
-  )
+  );
 }
 
 export default function ExpenseTable({
   loading,
   error,
-  expenses,
-  page,
-  limit,
-  total,
+  expenses = [],
+  page = 1,
+  limit = 10,
+  total = 0,
   sortField,
   sortDirection,
   onSortChange,
@@ -29,147 +54,233 @@ export default function ExpenseTable({
   onLimitChange,
   onEdit,
   onDelete,
-  canManage,
+  canManage = false,
   formatCurrency,
+  onCreate,
 }) {
-  const totalPages = Math.max(1, Math.ceil((total || 0) / (limit || 10)))
+  const totalPages = Math.max(1, Math.ceil((total || 0) / (limit || 10)));
+
   const sorted = (expenses || []).slice().sort((a, b) => {
-    const dir = sortDirection === 'asc' ? 1 : -1
+    const dir = sortDirection === 'asc' ? 1 : -1;
     const get = (obj) => {
       switch (sortField) {
-        case 'description': return (obj.description || '').toLowerCase()
-        case 'category': return (obj.category || '').toLowerCase()
-        case 'amount': return Number(obj.amount || 0)
-        case 'date': return obj.date ? new Date(obj.date).getTime() : 0
-        case 'paymentMethod': return (obj.paymentMethod || '').toLowerCase()
-        case 'addedBy': return ((obj.recordedBy?.name || obj.user?.name || '')).toLowerCase()
-        default: return obj.id || 0
+        case 'description': return (obj.description || '').toLowerCase();
+        case 'category': return (obj.category || '').toLowerCase();
+        case 'amount': return Number(obj.amount || 0);
+        case 'date': return obj.date ? new Date(obj.date).getTime() : 0;
+        case 'paymentMethod': return (obj.paymentMethod || '').toLowerCase();
+        case 'addedBy': return (obj.recordedBy?.name || obj.user?.name || '').toLowerCase();
+        default: return obj.id || 0;
       }
-    }
-    const va = get(a)
-    const vb = get(b)
-    if (va < vb) return -1 * dir
-    if (va > vb) return 1 * dir
-    return 0
-  })
+    };
+    const va = get(a);
+    const vb = get(b);
+    if (va < vb) return -1 * dir;
+    if (va > vb) return 1 * dir;
+    return 0;
+  });
 
   const SortHeader = ({ field, children, alignRight }) => {
     const isActiveSort = sortField === field;
-    const ariaSortValue = isActiveSort ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
+    const ariaSortValue = isActiveSort
+      ? (sortDirection === 'asc' ? 'ascending' : 'descending')
+      : undefined;
 
     return (
       <th
         scope="col"
         aria-sort={ariaSortValue}
-        className={`px-4 py-3 text-left text-xs font-semibold ${alignRight ? 'text-right' : ''}`}
+        className={`px-4 py-3 text-caption font-semibold uppercase tracking-wider select-none ${
+          alignRight ? 'text-right' : 'text-left'
+        }`}
       >
         <button
-          onClick={() => onSortChange(field)}
-          className="inline-flex items-center gap-1 text-yellow-400 hover:underline focus:outline-none focus:ring-2 focus:ring-yellow-300/40 rounded"
+          type="button"
+          onClick={() => onSortChange?.(field)}
+          className={`inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md py-0.5 ${
+            isActiveSort
+              ? 'text-primary font-bold'
+              : 'text-text-secondary hover:text-text-primary'
+          }`}
         >
           <span>{children}</span>
-          {sortField === field && (
-            <span className="text-[10px]">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+          {isActiveSort ? (
+            sortDirection === 'asc' ? (
+              <ChevronUpIcon className="h-3.5 w-3.5 text-primary stroke-[2.5]" aria-hidden="true" />
+            ) : (
+              <ChevronDownIcon className="h-3.5 w-3.5 text-primary stroke-[2.5]" aria-hidden="true" />
+            )
+          ) : (
+            <span className="h-3.5 w-3.5 opacity-0 group-hover:opacity-40 transition-opacity">↕</span>
           )}
         </button>
       </th>
     );
-  }
+  };
 
   return (
-    <div className="overflow-x-auto border border-yellow-600/20 rounded-lg">
-      <table className="responsive-table bg-black text-gray-200">
-        <thead className="bg-yellow-500/10 text-yellow-400">
-          <tr>
-            <SortHeader field="description">Description</SortHeader>
-            <SortHeader field="category">Category</SortHeader>
-            <SortHeader field="amount">Amount</SortHeader>
-            <SortHeader field="date">Date</SortHeader>
-            <SortHeader field="paymentMethod">Payment</SortHeader>
-            <SortHeader field="addedBy">Added By</SortHeader>
-            {canManage && <SortHeader field="actions" alignRight>Actions</SortHeader>}
-          </tr>
-        </thead>
-        <tbody>
-          {loading && Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonRow key={i} />
-          ))}
-
-          {!loading && sorted?.length === 0 && (
+    <div className="overflow-hidden rounded-2xl border border-border-default bg-surface shadow-floating">
+      <div className="overflow-x-auto scrollbar-thin">
+        <table className="responsive-table w-full text-left text-body border-collapse">
+          <thead className="bg-surface-2/70 text-text-secondary border-b border-border-default sticky top-0 z-10">
             <tr>
-              <td colSpan={canManage ? 7 : 6} className="px-4 py-6 text-center text-gray-400">
-                No expenses recorded yet — add your first one to start tracking.
-              </td>
-            </tr>
-          )}
-
-          {!loading && sorted?.map((e) => (
-            <tr key={e.id} className="border-t border-yellow-600/10 hover:bg-yellow-500/5 transition-colors duration-200">
-              <td className="px-4 py-3" data-label="Description">{e.description}</td>
-              <td className="px-4 py-3 capitalize" data-label="Category">{e.category?.replace('_', ' ')}</td>
-              <td className="px-4 py-3 text-yellow-300 font-semibold" data-label="Amount">{formatCurrency ? formatCurrency(e.amount) : e.amount}</td>
-              <td className="px-4 py-3" data-label="Date">{e.date ? new Date(e.date).toLocaleDateString() : '-'}</td>
-              <td className="px-4 py-3 capitalize" data-label="Payment">{e.paymentMethod?.replace('_', ' ')}</td>
-              <td className="px-4 py-3" data-label="Added By">{e.recordedBy?.name || e.user?.name || '—'}</td>
+              <SortHeader field="description">Description</SortHeader>
+              <SortHeader field="category">Category</SortHeader>
+              <SortHeader field="amount">Amount</SortHeader>
+              <SortHeader field="date">Date</SortHeader>
+              <SortHeader field="paymentMethod">Payment Method</SortHeader>
+              <SortHeader field="addedBy">Added By</SortHeader>
               {canManage && (
-                <td className="px-4 py-3" data-label="Actions">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => onEdit(e)}
-                      className="touch-target flex items-center justify-center px-2 py-1 rounded-md border border-yellow-600/30 text-yellow-300 hover:bg-yellow-600/10 focus:outline-none focus:ring-2 focus:ring-yellow-300/40 focus:ring-offset-2 focus:ring-offset-black"
-                      aria-label={`Edit expense ${e.description}`}
-                    >
-                      <PencilIcon className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(e)}
-                      className="touch-target flex items-center justify-center px-2 py-1 rounded-md border border-red-600/30 text-red-400 hover:bg-red-600/10 focus:outline-none focus:ring-2 focus:ring-red-400/40 focus:ring-offset-2 focus:ring-offset-black"
-                      aria-label={`Delete expense ${e.description}`}
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                </td>
+                <th scope="col" className="px-4 py-3 text-caption font-semibold uppercase tracking-wider text-right">
+                  Actions
+                </th>
               )}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
 
-      {/* Pagination */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3">
-        <div className="text-sm text-gray-400">Page {page} of {totalPages} • {total} total</div>
-        <div className="flex items-center gap-2">
-          <select
-            value={limit}
-            onChange={(e) => onLimitChange(parseInt(e.target.value))}
-            className="bg-black text-gray-200 border border-yellow-600/30 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-300/40"
-            aria-label="Items per page"
-          >
-            {[10, 20, 50].map((n) => (
-              <option key={n} value={n}>{n} / page</option>
-            ))}
-          </select>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => onPageChange(Math.max(1, page - 1))}
+          <tbody className="divide-y divide-border-default text-text-primary">
+            {loading ? (
+              Array.from({ length: Math.min(limit, 5) }).map((_, i) => (
+                <SkeletonRow key={i} canManage={canManage} />
+              ))
+            ) : error ? (
+              <tr>
+                <td colSpan={canManage ? 7 : 6} className="p-8 text-center">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="p-2.5 rounded-full bg-danger/10 text-danger">
+                      <ExclamationCircleIcon className="h-6 w-6" aria-hidden="true" />
+                    </div>
+                    <p className="font-semibold text-text-primary">Failed to load expenses</p>
+                    <p className="text-caption text-text-secondary">{error}</p>
+                  </div>
+                </td>
+              </tr>
+            ) : sorted.length === 0 ? (
+              <tr>
+                <td colSpan={canManage ? 7 : 6} className="p-0">
+                  <EmptyState
+                    icon={BanknotesIcon}
+                    title="No expenses found"
+                    description="No expenses match your current filters. Add a new record or adjust your filter dates and category."
+                    primaryAction={
+                      canManage && onCreate ? (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          leftIcon={PlusIcon}
+                          onClick={onCreate}
+                        >
+                          Add Expense
+                        </Button>
+                      ) : null
+                    }
+                  />
+                </td>
+              </tr>
+            ) : (
+              sorted.map((e) => (
+                <tr
+                  key={e.id}
+                  className="hover:bg-surface-2/60 transition-colors duration-150 group"
+                >
+                  <td className="px-4 py-3.5 font-medium text-text-primary" data-label="Description">
+                    {e.description}
+                  </td>
+                  <td className="px-4 py-3.5 capitalize" data-label="Category">
+                    <Badge variant={categoryBadgeVariants[e.category] || 'neutral'}>
+                      {e.category ? e.category.replace('_', ' ') : 'other'}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3.5 font-bold text-text-primary font-mono tracking-tight" data-label="Amount">
+                    {formatCurrency ? formatCurrency(e.amount) : e.amount}
+                  </td>
+                  <td className="px-4 py-3.5 text-text-secondary text-caption whitespace-nowrap" data-label="Date">
+                    {e.date ? new Date(e.date).toLocaleDateString() : '—'}
+                  </td>
+                  <td className="px-4 py-3.5 text-text-secondary text-caption capitalize" data-label="Payment">
+                    {e.paymentMethod ? e.paymentMethod.replace('_', ' ') : '—'}
+                  </td>
+                  <td className="px-4 py-3.5 text-text-secondary text-caption" data-label="Added By">
+                    {e.recordedBy?.name || e.user?.name || '—'}
+                  </td>
+                  {canManage && (
+                    <td className="px-4 py-3.5 text-right" data-label="Actions">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onEdit?.(e)}
+                          className="touch-target p-1.5 rounded-xl border border-border-default bg-surface text-text-secondary hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          aria-label={`Edit expense ${e.description}`}
+                          title="Edit expense"
+                        >
+                          <PencilIcon className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete?.(e)}
+                          className="touch-target p-1.5 rounded-xl border border-border-default bg-surface text-text-secondary hover:text-danger hover:border-danger/40 hover:bg-danger/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+                          aria-label={`Delete expense ${e.description}`}
+                          title="Delete expense"
+                        >
+                          <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-border-default bg-surface text-caption text-text-secondary">
+        <div>
+          Showing page <span className="font-semibold text-text-primary">{page}</span> of{' '}
+          <span className="font-semibold text-text-primary">{totalPages}</span> •{' '}
+          <span className="font-semibold text-text-primary">{total}</span> total records
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-caption text-text-muted">Per page:</span>
+            <select
+              value={limit}
+              onChange={(e) => onLimitChange?.(parseInt(e.target.value, 10))}
+              className="bg-surface text-text-primary border border-border-default rounded-xl px-2.5 py-1 text-caption focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary cursor-pointer"
+              aria-label="Items per page"
+            >
+              {[10, 20, 50].map((n) => (
+                <option key={n} value={n} className="bg-surface text-text-primary">
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
               disabled={page <= 1}
-              className="px-3 py-1 rounded-md border border-yellow-600/30 text-gray-200 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-yellow-300/40"
+              onClick={() => onPageChange?.(Math.max(1, page - 1))}
+              leftIcon={ChevronLeftIcon}
             >
               Prev
-            </button>
-            <button
-              onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               disabled={page >= totalPages}
-              className="px-3 py-1 rounded-md border border-yellow-600/30 text-gray-200 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-yellow-300/40"
+              onClick={() => onPageChange?.(Math.min(totalPages, page + 1))}
+              rightIcon={ChevronRightIcon}
             >
               Next
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
-
-

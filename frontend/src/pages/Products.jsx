@@ -382,7 +382,7 @@ function ProductsContent() {
               {selectedProducts.length > 0 && (
                 <button
                   onClick={handleBatchDelete}
-                  className="bg-danger text-white px-3.5 py-2 rounded-xl hover:bg-red-700 flex items-center gap-1.5 text-small font-medium shadow-2xs transition-colors"
+                  className="bg-danger text-white px-3.5 py-2 rounded-xl hover:bg-danger-hover flex items-center gap-1.5 text-small font-medium shadow-2xs transition-colors"
                   disabled={loading || localLoading.delete}
                 >
                   <TrashIcon className="h-4 w-4" />
