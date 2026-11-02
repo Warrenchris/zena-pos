@@ -119,43 +119,43 @@ const Categories = () => {
         <div 
           className={`p-4 rounded-2xl transition-all duration-300 ${
             level === 0 
-              ? 'bg-white/5 border border-white/10 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.25)]' 
-              : 'bg-white/5 border border-white/10 backdrop-blur-sm'
-          } hover:bg-white/10 hover:shadow-[0_16px_36px_rgba(0,0,0,0.35)] flex items-center justify-between group text-white`}
+              ? 'bg-surface border border-border-default shadow-sm' 
+              : 'bg-surface border border-border-default'
+          } hover:bg-surface-2 hover:shadow-md flex items-center justify-between group text-text-primary`}
           style={{ marginLeft: `${level * 14}px` }}
         >
           <div className="flex items-center flex-1 min-w-0 gap-3">
             {hasChildren && (
               <button
                 onClick={() => toggleExpand(category.id)}
-                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors mr-1"
+                className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors mr-1"
                 title={isExpanded ? 'Collapse' : 'Expand'}
               >
                 {isExpanded ? (
-                  <ChevronDownIcon className="h-4 w-4 text-white/70" />
+                  <ChevronDownIcon className="h-4 w-4 text-text-secondary" />
                 ) : (
-                  <ChevronRightIcon className="h-4 w-4 text-white/70" />
+                  <ChevronRightIcon className="h-4 w-4 text-text-secondary" />
                 )}
               </button>
             )}
             {level === 0 ? (
-              <FolderIcon className="h-5 w-5 text-brand-yellow/90 flex-shrink-0" title="Category" />
+              <FolderIcon className="h-5 w-5 text-primary flex-shrink-0" title="Category" />
             ) : (
-              <Squares2X2Icon className="h-5 w-5 text-white/70 flex-shrink-0" title="Subcategory" />
+              <Squares2X2Icon className="h-5 w-5 text-text-secondary flex-shrink-0" title="Subcategory" />
             )}
             <div className="truncate flex items-center gap-2">
-              <span className="font-semibold text-white">{category.name}</span>
+              <span className="font-semibold text-text-primary">{category.name}</span>
               <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${
                 category.taxCategory === 'zero_rated'
-                  ? 'border-blue-500/40 text-blue-400 bg-blue-500/10'
+                  ? 'border-info-border text-info-text bg-info-muted'
                   : category.taxCategory === 'exempt'
-                  ? 'border-purple-500/40 text-purple-400 bg-purple-500/10'
-                  : 'border-brand-yellow/30 text-brand-yellow bg-brand-yellow/10'
+                  ? 'border-warning-border text-warning-text bg-warning-muted'
+                  : 'border-primary/30 text-primary bg-primary/10'
               }`}>
                 {category.taxCategory === 'zero_rated' ? 'Zero-Rated (0%)' : category.taxCategory === 'exempt' ? 'Exempt (0%)' : 'Standard (16%)'}
               </span>
               {category.description && (
-                <p className="text-sm text-white/60 truncate">{category.description}</p>
+                <p className="text-sm text-text-secondary truncate">{category.description}</p>
               )}
             </div>
           </div>
@@ -166,21 +166,21 @@ const Categories = () => {
                 setDefaultParentId(category.id);
                 setShowModal(true);
               }}
-              className="p-2 text-white/70 hover:text-brand-yellow hover:bg-white/10 rounded-full transition-colors"
+              className="p-2 text-text-secondary hover:text-primary hover:bg-surface-3 rounded-full transition-colors"
               title="Add subcategory"
             >
               <PlusIcon className="h-4 w-4" />
             </button>
             <button
               onClick={() => handleEdit(category)}
-              className="p-2 text-white/70 hover:text-brand-yellow hover:bg-white/10 rounded-full transition-colors"
+              className="p-2 text-text-secondary hover:text-primary hover:bg-surface-3 rounded-full transition-colors"
               title="Edit category"
             >
               <PencilIcon className="h-4 w-4" />
             </button>
             <button
               onClick={() => handleDelete(category.id)}
-              className="p-2 text-white/70 hover:text-red-400 hover:bg-white/10 rounded-full transition-colors"
+              className="p-2 text-text-secondary hover:text-danger-text hover:bg-surface-3 rounded-full transition-colors"
               title="Delete category"
             >
               <TrashIcon className="h-4 w-4" />
@@ -188,7 +188,7 @@ const Categories = () => {
           </div>
         </div>
         {hasChildren && isExpanded && (
-          <div className="space-y-2 border-l border-white/10 ml-4 pl-4 transition-all duration-300">
+          <div className="space-y-2 border-l border-border-default ml-4 pl-4 transition-all duration-300">
             {category.children.map(child => renderCategoryRow(child, level + 1))}
           </div>
         )}
@@ -197,19 +197,19 @@ const Categories = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-120px)] px-6 py-6 max-w-6xl mx-auto bg-neutral-950/60 rounded-2xl">
+    <div className="min-h-[calc(100vh-120px)] px-6 py-6 max-w-6xl mx-auto bg-surface border border-border-default rounded-2xl">
       <div className="mb-8 space-y-5">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-white">Categories</h1>
-            <p className="text-white/60">Manage your product categories and subcategories</p>
+            <h1 className="text-2xl font-bold text-text-primary">Categories</h1>
+            <p className="text-text-secondary">Manage your product categories and subcategories</p>
           </div>
           <button
             onClick={() => {
               setEditingCategory(null);
               setShowModal(true);
             }}
-            className="px-4 py-2 rounded-xl bg-brand-yellow text-black font-medium shadow-[0_8px_24px_rgba(255,214,0,0.35)] hover:shadow-[0_12px_28px_rgba(255,214,0,0.45)] hover:bg-brand-yellow/95 active:translate-y-[1px] transition-all duration-200 flex items-center gap-2"
+            className="px-4 py-2 rounded-xl bg-primary text-text-primary dark:text-surface font-medium shadow-sm hover:bg-primary-hover active:translate-y-[1px] transition-all duration-200 flex items-center gap-2"
             title="Create a new category"
           >
             <PlusIcon className="h-5 w-5" />
@@ -219,14 +219,14 @@ const Categories = () => {
 
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <MagnifyingGlassIcon className="h-5 w-5 text-white/50" />
+            <MagnifyingGlassIcon className="h-5 w-5 text-text-muted" />
           </div>
           <input
             type="text"
             placeholder="Search categories..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-2 w-full rounded-xl bg-white/5 text-white placeholder-white/50 border border-white/10 focus:outline-none focus:ring-2 focus:ring-brand-yellow/80 focus:border-brand-yellow/60 transition-all shadow-inner"
+            className="pl-10 pr-4 py-2 w-full rounded-xl bg-surface text-text-primary placeholder:text-text-muted border border-border-input focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition-all shadow-inner"
             title="Type to filter categories"
           />
         </div>
@@ -235,12 +235,12 @@ const Categories = () => {
       <div className="space-y-4">
         {loading ? (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-yellow mx-auto"></div>
-            <p className="mt-2 text-white/70">Loading categories...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-2 text-text-secondary">Loading categories...</p>
           </div>
         ) : filteredRoots.length === 0 ? (
-          <div className="text-center py-12 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm">
-            <p className="text-white/70">
+          <div className="text-center py-12 bg-surface-2 rounded-2xl border border-border-default">
+            <p className="text-text-secondary">
               {searchQuery
                 ? 'No categories found matching your search'
                 : 'No categories yet. Click "Add Category" to create one.'}

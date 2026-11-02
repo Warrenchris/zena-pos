@@ -106,33 +106,33 @@ export default function EmployeeDetailsCard({ employee, onClose }) {
               leaveFrom="translate-y-0 opacity-100 sm:scale-100" 
               leaveTo="translate-y-8 opacity-0 sm:scale-95"
             >
-              <div className="relative transform overflow-hidden rounded-2xl bg-brand-black border border-yellow-500/30 text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-4xl max-h-[90vh] flex flex-col">
+              <div className="relative transform overflow-hidden rounded-2xl bg-surface border border-border-default text-left shadow-modal transition-all sm:my-8 sm:w-full sm:max-w-4xl max-h-[90vh] flex flex-col">
                 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-yellow-500/20 bg-black/50">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border-default bg-surface-2">
                   <div className="flex items-center space-x-3">
-                    <div className="h-12 w-12 rounded-full bg-brand-yellow/10 border border-brand-yellow/30 flex items-center justify-center text-brand-yellow font-bold text-lg">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-primary font-bold text-lg">
                       {fullName.charAt(0).toUpperCase()}
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
-                        <h3 className="text-xl font-bold text-brand-yellow">{fullName}</h3>
+                        <h3 className="text-xl font-bold text-text-primary">{fullName}</h3>
                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
                           emp.status === 'active' 
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
-                            : 'bg-red-500/10 text-red-400 border-red-500/30'
+                            ? 'bg-success-muted text-success-text border-success-border' 
+                            : 'bg-danger-muted text-danger-text border-danger-border'
                         }`}>
                           {emp.status ? emp.status.toUpperCase() : 'ACTIVE'}
                         </span>
                       </div>
-                      <p className="text-xs text-yellow-200/70">
+                      <p className="text-xs text-text-secondary">
                         {emp.position || 'Staff Member'} • Hired {emp.hireDate ? new Date(emp.hireDate).toLocaleDateString() : 'N/A'}
                       </p>
                     </div>
                   </div>
                   <button 
                     onClick={onClose} 
-                    className="p-2 rounded-lg hover:bg-yellow-500/10 text-yellow-300 transition-colors" 
+                    className="p-2 rounded-lg hover:bg-surface-3 text-text-secondary hover:text-text-primary transition-colors" 
                     aria-label="Close"
                   >
                     <XMarkIcon className="h-6 w-6" />
@@ -140,74 +140,74 @@ export default function EmployeeDetailsCard({ employee, onClose }) {
                 </div>
 
                 {/* Content Container */}
-                <div className="p-6 overflow-y-auto space-y-6 flex-1 text-gray-100">
+                <div className="p-6 overflow-y-auto space-y-6 flex-1 text-text-primary">
                   {loading ? (
                     <div className="py-12 text-center">
-                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-brand-yellow border-t-transparent"></div>
-                      <p className="mt-3 text-sm text-yellow-200/70">Loading performance data...</p>
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent"></div>
+                      <p className="mt-3 text-sm text-text-secondary">Loading performance data...</p>
                     </div>
                   ) : (
                     <>
                       {/* Stat Cards */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="bg-black/40 border border-yellow-500/20 rounded-xl p-4">
-                          <div className="flex items-center justify-between text-yellow-200/70 text-xs mb-1">
+                        <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                          <div className="flex items-center justify-between text-text-secondary text-xs mb-1">
                             <span>Total Revenue</span>
-                            <CurrencyDollarIcon className="h-4 w-4 text-brand-yellow" />
+                            <CurrencyDollarIcon className="h-4 w-4 text-primary" />
                           </div>
-                          <p className="text-xl font-bold text-brand-yellow">{formatCurrency(stats.totalRevenue)}</p>
+                          <p className="text-xl font-bold text-text-primary">{formatCurrency(stats.totalRevenue)}</p>
                         </div>
 
-                        <div className="bg-black/40 border border-yellow-500/20 rounded-xl p-4">
-                          <div className="flex items-center justify-between text-yellow-200/70 text-xs mb-1">
+                        <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                          <div className="flex items-center justify-between text-text-secondary text-xs mb-1">
                             <span>Total Sales</span>
-                            <ShoppingBagIcon className="h-4 w-4 text-brand-yellow" />
+                            <ShoppingBagIcon className="h-4 w-4 text-primary" />
                           </div>
-                          <p className="text-xl font-bold text-white">{stats.totalSales}</p>
+                          <p className="text-xl font-bold text-text-primary">{stats.totalSales}</p>
                         </div>
 
-                        <div className="bg-black/40 border border-yellow-500/20 rounded-xl p-4">
-                          <div className="flex items-center justify-between text-yellow-200/70 text-xs mb-1">
+                        <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                          <div className="flex items-center justify-between text-text-secondary text-xs mb-1">
                             <span>Avg Sale Value</span>
-                            <DocumentTextIcon className="h-4 w-4 text-brand-yellow" />
+                            <DocumentTextIcon className="h-4 w-4 text-primary" />
                           </div>
-                          <p className="text-xl font-bold text-white">{formatCurrency(stats.averageSaleValue)}</p>
+                          <p className="text-xl font-bold text-text-primary">{formatCurrency(stats.averageSaleValue)}</p>
                         </div>
 
-                        <div className="bg-black/40 border border-yellow-500/20 rounded-xl p-4">
-                          <div className="flex items-center justify-between text-yellow-200/70 text-xs mb-1">
+                        <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                          <div className="flex items-center justify-between text-text-secondary text-xs mb-1">
                             <span>Last Active</span>
-                            <ClockIcon className="h-4 w-4 text-brand-yellow" />
+                            <ClockIcon className="h-4 w-4 text-primary" />
                           </div>
-                          <p className="text-sm font-semibold text-white mt-1">
+                          <p className="text-sm font-semibold text-text-primary mt-1">
                             {stats.lastSaleDate ? new Date(stats.lastSaleDate).toLocaleDateString() : 'No sales yet'}
                           </p>
                         </div>
                       </div>
 
                       {/* Contact & Employment Info */}
-                      <div className="bg-black/40 border border-yellow-500/20 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div className="bg-surface-2 border border-border-default rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div className="flex items-center space-x-3">
-                          <EnvelopeIcon className="h-5 w-5 text-brand-yellow flex-shrink-0" />
+                          <EnvelopeIcon className="h-5 w-5 text-primary flex-shrink-0" />
                           <div className="truncate">
-                            <p className="text-xs text-yellow-200/60">Email</p>
-                            <p className="text-gray-200 truncate">{emp.email || 'N/A'}</p>
+                            <p className="text-xs text-text-secondary">Email</p>
+                            <p className="text-text-primary truncate">{emp.email || 'N/A'}</p>
                           </div>
                         </div>
 
                         <div className="flex items-center space-x-3">
-                          <PhoneIcon className="h-5 w-5 text-brand-yellow flex-shrink-0" />
+                          <PhoneIcon className="h-5 w-5 text-primary flex-shrink-0" />
                           <div>
-                            <p className="text-xs text-yellow-200/60">Phone</p>
-                            <p className="text-gray-200">{emp.phone || 'N/A'}</p>
+                            <p className="text-xs text-text-secondary">Phone</p>
+                            <p className="text-text-primary">{emp.phone || 'N/A'}</p>
                           </div>
                         </div>
 
                         <div className="flex items-center space-x-3">
-                          <CurrencyDollarIcon className="h-5 w-5 text-brand-yellow flex-shrink-0" />
+                          <CurrencyDollarIcon className="h-5 w-5 text-primary flex-shrink-0" />
                           <div>
-                            <p className="text-xs text-yellow-200/60">Salary</p>
-                            <p className="text-gray-200">{emp.salary ? formatCurrency(Number(emp.salary)) : 'N/A'}</p>
+                            <p className="text-xs text-text-secondary">Salary</p>
+                            <p className="text-text-primary">{emp.salary ? formatCurrency(Number(emp.salary)) : 'N/A'}</p>
                           </div>
                         </div>
                       </div>
@@ -215,26 +215,26 @@ export default function EmployeeDetailsCard({ employee, onClose }) {
                       {/* Top Products Sold Section */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-semibold text-brand-yellow flex items-center gap-1.5">
+                          <h4 className="text-sm font-semibold text-primary flex items-center gap-1.5">
                             <StarIcon className="h-4 w-4" />
                             Top Products Sold
                           </h4>
-                          <span className="text-xs text-yellow-200/60">{topProducts.length} items</span>
+                          <span className="text-xs text-text-secondary">{topProducts.length} items</span>
                         </div>
 
                         {topProducts.length === 0 ? (
-                          <div className="bg-black/20 border border-yellow-500/10 rounded-xl p-4 text-center text-xs text-yellow-200/60">
+                          <div className="bg-surface-2 border border-border-default rounded-xl p-4 text-center text-xs text-text-secondary">
                             No product sales history recorded for this employee yet.
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                             {topProducts.map((prod, idx) => (
-                              <div key={prod.productId || idx} className="bg-black/30 border border-yellow-500/20 rounded-lg p-3 text-xs flex justify-between items-center">
+                              <div key={prod.productId || idx} className="bg-surface-2 border border-border-default rounded-lg p-3 text-xs flex justify-between items-center">
                                 <div>
-                                  <p className="font-semibold text-white truncate max-w-[140px]">{prod.name}</p>
-                                  <p className="text-yellow-200/60 mt-0.5">{prod.timesSold} sales • {prod.totalQuantity} units</p>
+                                  <p className="font-semibold text-text-primary truncate max-w-[140px]">{prod.name}</p>
+                                  <p className="text-text-secondary mt-0.5">{prod.timesSold} sales • {prod.totalQuantity} units</p>
                                 </div>
-                                <span className="font-bold text-brand-yellow">{formatCurrency(prod.totalRevenue)}</span>
+                                <span className="font-bold text-primary">{formatCurrency(prod.totalRevenue)}</span>
                               </div>
                             ))}
                           </div>
@@ -244,22 +244,22 @@ export default function EmployeeDetailsCard({ employee, onClose }) {
                       {/* Sales Order History */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-semibold text-brand-yellow flex items-center gap-1.5">
+                          <h4 className="text-sm font-semibold text-primary flex items-center gap-1.5">
                             <ShoppingBagIcon className="h-4 w-4" />
                             Sales History
                           </h4>
-                          <span className="text-xs text-yellow-200/60">Total {pagination.totalSales} sales</span>
+                          <span className="text-xs text-text-secondary">Total {pagination.totalSales} sales</span>
                         </div>
 
                         {salesHistory.length === 0 ? (
-                          <div className="bg-black/20 border border-yellow-500/10 rounded-xl p-8 text-center text-xs text-yellow-200/60">
-                            <ShoppingBagIcon className="h-8 w-8 mx-auto mb-2 text-yellow-500/40" />
+                          <div className="bg-surface-2 border border-border-default rounded-xl p-8 text-center text-xs text-text-secondary">
+                            <ShoppingBagIcon className="h-8 w-8 mx-auto mb-2 text-text-muted" />
                             No sales processed by this employee yet.
                           </div>
                         ) : (
-                          <div className="bg-black/30 border border-yellow-500/20 rounded-xl overflow-hidden">
+                          <div className="bg-surface-2 border border-border-default rounded-xl overflow-hidden">
                             <table className="w-full text-left text-xs">
-                              <thead className="bg-black/50 text-yellow-200/70 border-b border-yellow-500/20">
+                              <thead className="bg-surface-3 text-text-secondary border-b border-border-default">
                                 <tr>
                                   <th className="px-4 py-2.5">Invoice</th>
                                   <th className="px-4 py-2.5">Date</th>
@@ -269,21 +269,21 @@ export default function EmployeeDetailsCard({ employee, onClose }) {
                                   <th className="px-4 py-2.5 text-right">Action</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-yellow-500/10">
+                              <tbody className="divide-y divide-border-default">
                                 {salesHistory.map((sale) => (
-                                  <tr key={sale.id} className="hover:bg-yellow-500/5 transition-colors">
-                                    <td className="px-4 py-2.5 font-medium text-white">{sale.invoiceNumber}</td>
-                                    <td className="px-4 py-2.5 text-yellow-200/70">
+                                  <tr key={sale.id} className="hover:bg-surface-3 transition-colors">
+                                    <td className="px-4 py-2.5 font-medium text-text-primary">{sale.invoiceNumber}</td>
+                                    <td className="px-4 py-2.5 text-text-secondary">
                                       {new Date(sale.createdAt).toLocaleDateString()}
                                     </td>
-                                    <td className="px-4 py-2.5 text-gray-300">{sale.itemCount} items</td>
-                                    <td className="px-4 py-2.5 capitalize text-gray-300">{sale.paymentMethod}</td>
-                                    <td className="px-4 py-2.5 font-bold text-brand-yellow">{formatCurrency(sale.total)}</td>
+                                    <td className="px-4 py-2.5 text-text-secondary">{sale.itemCount} items</td>
+                                    <td className="px-4 py-2.5 capitalize text-text-secondary">{sale.paymentMethod}</td>
+                                    <td className="px-4 py-2.5 font-bold text-primary">{formatCurrency(sale.total)}</td>
                                     <td className="px-4 py-2.5 text-right">
                                       <button 
                                         onClick={() => handleViewSale(sale.id)}
                                         disabled={fetchingSale}
-                                        className="text-xs text-brand-yellow hover:underline"
+                                        className="text-xs text-primary hover:underline"
                                       >
                                         View Details
                                       </button>
@@ -295,20 +295,20 @@ export default function EmployeeDetailsCard({ employee, onClose }) {
 
                             {/* Pagination Controls */}
                             {pagination.totalPages > 1 && (
-                              <div className="flex items-center justify-between px-4 py-2.5 bg-black/40 border-t border-yellow-500/20 text-xs text-yellow-200/70">
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-surface-2 border-t border-border-default text-xs text-text-secondary">
                                 <span>Page {pagination.currentPage} of {pagination.totalPages}</span>
                                 <div className="flex space-x-2">
                                   <button
                                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                     disabled={currentPage === 1}
-                                    className="p-1 rounded border border-yellow-500/30 hover:bg-yellow-500/10 disabled:opacity-50"
+                                    className="p-1 rounded border border-border-input hover:bg-surface-3 disabled:opacity-50"
                                   >
                                     <ChevronLeftIcon className="h-4 w-4" />
                                   </button>
                                   <button
                                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, pagination.totalPages))}
                                     disabled={currentPage === pagination.totalPages}
-                                    className="p-1 rounded border border-yellow-500/30 hover:bg-yellow-500/10 disabled:opacity-50"
+                                    className="p-1 rounded border border-border-input hover:bg-surface-3 disabled:opacity-50"
                                   >
                                     <ChevronRightIcon className="h-4 w-4" />
                                   </button>
@@ -323,10 +323,10 @@ export default function EmployeeDetailsCard({ employee, onClose }) {
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-yellow-500/20 bg-black/50 flex justify-end">
+                <div className="px-6 py-4 border-t border-border-default bg-surface-2 flex justify-end">
                   <button 
                     onClick={onClose} 
-                    className="px-4 py-2 rounded-lg border border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10 text-sm font-medium transition-colors"
+                    className="px-4 py-2 rounded-lg border border-border-input text-text-primary hover:bg-surface-2 text-sm font-medium transition-colors"
                   >
                     Close Profile
                   </button>
