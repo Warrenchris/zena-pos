@@ -27,14 +27,23 @@
   /* Text Hierarchy (Warm Stone / Slate) */
   --text-primary: #1C1917;         /* Warm Stone 950 */
   --text-secondary: #57534E;       /* Warm Stone 600 */
-  --text-muted: #A8A29E;           /* Warm Stone 400 */
-  --text-disabled: #D6D3D1;        /* Warm Stone 300 */
+  --text-muted: #706A64;           /* Warm Stone ~550 — 5.3:1 on white, 4.7:1 on sand (WCAG AA) */
+  --text-disabled: #D6D3D1;        /* Warm Stone 300 — disabled controls only, never for readable text */
 
   /* Borders */
   --border-default: #E7E5E4;       /* Warm Stone 200 */
   --border-hover: #D6D3D1;         /* Warm Stone 300 */
+  --border-input: #857F79;         /* Form-control boundary — 4.0:1 on white (WCAG 1.4.11 needs 3:1) */
 
   /* Status Tokens Light */
+  /* Solid fills for buttons/badges carrying white text (all >= 5.4:1) */
+  --color-success: #047857;
+  --color-success-hover: #065F46;
+  --color-danger: #B91C1C;
+  --color-danger-hover: #991B1B;
+  --color-info: #0369A1;
+  --color-info-hover: #075985;
+
   --color-success-muted: #ECFDF5;
   --color-success-border: #A7F3D0;
   --color-success-text: #047857;
@@ -89,8 +98,16 @@
   /* Borders Dark */
   --border-default: #292524;       /* Warm Stone 800 */
   --border-hover: #44403C;         /* Warm Stone 700 */
+  --border-input: #44403C;         /* Warm Stone 700 */
 
   /* Status Tokens Dark */
+  --color-success: #10B981;
+  --color-success-hover: #059669;
+  --color-danger: #EF4444;
+  --color-danger-hover: #DC2626;
+  --color-info: #0EA5E9;
+  --color-info-hover: #0284C7;
+
   --color-success-muted: #064E3B;
   --color-success-border: #047857;
   --color-success-text: #6EE7B7;
