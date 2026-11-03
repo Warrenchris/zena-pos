@@ -33,7 +33,7 @@ exports.getAllProducts = async (req, res) => {
     const {
       search,
       categoryId,
-      availability, // 'in_stock' | 'low_stock' | 'out_of_stock' | 'not_carried'
+      availability, // 'in_stock' | 'low_stock' | 'out_of_stock' | 'not_carried' | 'needs_restock'
       minPrice,
       maxPrice,
       page = 1,
@@ -178,6 +178,12 @@ exports.getAllProducts = async (req, res) => {
         Sequelize.where(Sequelize.col('Inventories.stockQuantity'), '<=', Sequelize.col('Inventories.reorderPoint'))
       ];
       inventoryRequired = true;
+    } else if (availability === 'needs_restock') {
+      const { Sequelize } = require('sequelize');
+      inventoryWhere[Op.and] = [
+        Sequelize.where(Sequelize.col('Inventories.stockQuantity'), '<=', Sequelize.col('Inventories.reorderPoint'))
+      ];
+      inventoryRequired = true;
     } else if (availability === 'out_of_stock') {
       where[Op.or] = [
         { '$Inventories.id$': null },
@@ -200,12 +206,24 @@ exports.getAllProducts = async (req, res) => {
       }
     ];
 
+    let order = [['createdAt', 'DESC']];
+    let subQuery;
+
+    if (availability === 'needs_restock') {
+      order = [
+        [{ model: Inventory, as: 'Inventories' }, 'stockQuantity', 'ASC'],
+        ['name', 'ASC'],
+      ];
+      subQuery = false;
+    }
+
     let { rows, count } = await Product.findAndCountAll({
       where,
       include,
       limit: numericPageSize,
       offset,
-      order: [['createdAt', 'DESC']],
+      order,
+      subQuery,
       distinct: true,
     });
 
@@ -243,7 +261,8 @@ exports.getAllProducts = async (req, res) => {
           include,
           limit: numericPageSize,
           offset,
-          order: [['createdAt', 'DESC']],
+          order,
+          subQuery,
           distinct: true,
         });
 
@@ -297,7 +316,7 @@ exports.getAllProducts = async (req, res) => {
     const totalPages = Math.ceil(count / numericPageSize) || 1;
     const formattedRows = rows.map(p => formatProductWithInventory(p));
 
-    res.json({
+    const responsePayload = {
       products: formattedRows,
       searchType,
       pagination: {
@@ -305,7 +324,13 @@ exports.getAllProducts = async (req, res) => {
         totalPages,
         total: count,
       },
-    });
+    };
+
+    if (availability === 'needs_restock') {
+      responsePayload.availability = 'needs_restock';
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Error in getAllProducts:', error);
     res.status(500).json({ error: 'Failed to fetch products', details: error.message });
