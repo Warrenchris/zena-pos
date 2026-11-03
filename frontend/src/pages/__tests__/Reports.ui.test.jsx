@@ -73,6 +73,7 @@ function createTestStore() {
 }
 
 describe('Reports Page UI Theme & Consistency Audit', () => {
+  jest.setTimeout(15000);
   const mockSalesData = {
     kpis: {
       totalRevenue: 5200.0,

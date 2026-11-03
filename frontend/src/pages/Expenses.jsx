@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import useCurrency from '../hooks/useCurrency';
@@ -48,7 +48,7 @@ export default function Expenses() {
 
   const canManage = hasPermission('manage_expenses');
 
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -69,11 +69,11 @@ export default function Expenses() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, filters.startDate, filters.endDate, filters.category, filters.paymentMethod]);
 
   useEffect(() => {
     fetchExpenses();
-  }, [page, limit, filters.startDate, filters.endDate, filters.category, filters.paymentMethod]);
+  }, [fetchExpenses]);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -83,7 +83,9 @@ export default function Expenses() {
           endDate: filters.endDate || undefined,
         });
         setPeriodTotal(Number(data.totalExpenses || 0));
-      } catch {}
+      } catch (err) {
+        // Fallback gracefully if statistics call fails
+      }
     };
     loadStats();
   }, [filters.startDate, filters.endDate]);
@@ -138,7 +140,7 @@ export default function Expenses() {
             : null
         }
         secondaryActions={
-          <ExportButtons expenses={expenses} formatCurrency={formatCurrency} filters={filters} />
+          <ExportButtons expenses={expenses} formatCurrency={formatCurrency} filters={filters} total={total} periodTotal={periodTotal} />
         }
       />
 

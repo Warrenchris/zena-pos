@@ -1,23 +1,29 @@
 import React, { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { reportsAPI } from '../services/api';
+import { reportsAPI, employeesAPI, expensesAPI } from '../services/api';
 import useCurrency from '../hooks/useCurrency';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { fetchCategories } from '../store/slices/categoriesSlice';
-import { employeesAPI } from '../services/api';
 import aiAPI from '../services/ai.service';
 import analyticsService from '../services/analytics.service';
 import DateRangePicker from '../components/DateRangePicker';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import { generatePDF } from '../utils/documentGenerator';
+import { generateExcel } from '../utils/excelGenerator';
+import { downloadCSV } from '../utils/csv';
+import { resolveBusinessIdentity } from '../utils/businessIdentity';
+import { PrintableDocumentContainer } from '../components/documents/PrintableDocumentContainer';
+import { toast } from '../utils/toast';
 import {
   SparklesIcon,
   ChartBarIcon,
   ExclamationCircleIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline';
 
 const MODERN_CHART_COLORS = [
@@ -46,7 +52,12 @@ const chartTooltipProps = {
 export default function Reports() {
   const { format: formatCurrency } = useCurrency();
   const dispatch = useDispatch();
-  const { user } = useSelector((state) => state.auth);
+  const auth = useSelector((state) => state.auth);
+  const settings = useSelector((state) => state.settings);
+  const shop = useSelector((state) => state.shop?.currentShop || state.shop?.shop);
+  const identity = useMemo(() => resolveBusinessIdentity({ auth: { ...auth, shop }, settings }), [auth, settings, shop]);
+  const [exporting, setExporting] = useState(null);
+  const user = auth?.user;
   const { categories = [] } = useSelector((state) => state.categories || { categories: [] });
   const [tab, setTab] = useState('sales');
   const [range, setRange] = useState('monthly');
@@ -91,11 +102,8 @@ export default function Reports() {
   const [insights, setInsights] = useState('');
   const cacheRef = useRef(new Map());
   const debounceRef = useRef(null);
-
-  // Load data when component mounts
-  useEffect(() => {
-    load();
-  }, []);
+  const isInitialMount = useRef(true);
+  const prevTabRef = useRef(tab);
 
   // Update date range when range type changes
   useEffect(() => {
@@ -135,7 +143,6 @@ export default function Reports() {
       setLoading(true);
       setError(null);
       
-      // Check if dates are within 24 hours
       const start = new Date(startDate);
       const end = new Date(endDate);
       const diffHours = (end - start) / (1000 * 60 * 60);
@@ -154,7 +161,7 @@ export default function Reports() {
       if (cacheRef.current.has(cacheKey)) {
         const cached = cacheRef.current.get(cacheKey);
         setData(cached.data);
-        if (tab === 'sales') {
+        if (tab === 'sales' || tab === 'cashier') {
           const k = cached.data?.kpis || {};
           setKpis({ 
             revenue: Number(k.totalRevenue || 0),
@@ -184,15 +191,22 @@ export default function Reports() {
           sales: Number(k.totalSales || 0),
           activeCustomers: Number(k.activeCustomers || 0),
           topProduct: k.topProduct || '-',
-          grossProfit: 0,
-          taxPayable: 0
+          grossProfit: Number(k.grossProfit || 0),
+          taxPayable: Number(k.taxPayable || 0),
         });
 
-        const [channels, topProducts, employees, pl] = await Promise.all([
+        const [channels, topProducts, employees, pl, expStats] = await Promise.all([
           analyticsService.getSalesChannels(range === 'monthly' ? 'month' : 'week').catch(() => null),
           analyticsService.getTopProducts(range === 'monthly' ? 'month' : 'week', 5).catch(() => null),
           reportsAPI.employeeSales(baseParams).then(r=>({ data: r.data })).catch(()=>({ data: [] })),
-          reportsAPI.profitAndLoss(baseParams).catch(()=>({ data: null }))
+          reportsAPI.profitAndLoss(baseParams).catch(()=>({ data: null })),
+          typeof expensesAPI?.getStatistics === 'function'
+            ? expensesAPI.getStatistics({
+                startDate: startDate || undefined,
+                endDate: endDate || undefined,
+                shopId: user?.shopId || user?.shop?.id,
+              }).catch(() => null)
+            : Promise.resolve(null),
         ]);
 
         const paymentBreakdown = (Array.isArray(res.data?.paymentBreakdown) && res.data.paymentBreakdown.length > 0)
@@ -239,10 +253,62 @@ export default function Reports() {
           ...(Number.isFinite(taxPayable) ? { taxPayable: taxPayable } : {}),
         }));
 
-        const rve = Array.isArray(res.data?.revVsExp) ? res.data?.revVsExp :
-          (Array.isArray(res.data?.salesTrend) ? res.data.salesTrend.map(r => ({ period: r.period, revenue: r.revenue || 0, expenses: Math.max(0, (r.revenue||0) * 0.6) })) : []);
+        // Build real expense map from actual backend expense statistics
+        const expMap = new Map();
+        if (Array.isArray(expStats?.data?.monthlyTrend)) {
+          expStats.data.monthlyTrend.forEach((m) => {
+            const key = String(m.month || '').substring(0, 7);
+            expMap.set(key, Number(m.total || 0));
+          });
+        }
+
+        const rve = Array.isArray(res.data?.revVsExp) && res.data.revVsExp.length > 0
+          ? res.data.revVsExp
+          : (Array.isArray(res.data?.salesTrend)
+              ? res.data.salesTrend.map(r => {
+                  const pKey = String(r.period || '').substring(0, 7);
+                  const periodExpense = expMap.get(pKey) || (pl?.data?.totalExpenses ? Number(pl.data.totalExpenses) / Math.max(1, res.data.salesTrend.length) : 0);
+                  return {
+                    period: r.period,
+                    revenue: Number(r.revenue || 0),
+                    expenses: Number(periodExpense || 0),
+                  };
+                })
+              : []);
         setRevVsExp(rve);
         cacheRef.current.set(cacheKey, { data: res.data, ts: Date.now() });
+      } else if (tab === 'cashier') {
+        const [empRes, summaryRes] = await Promise.all([
+          reportsAPI.employeeSales(baseParams),
+          reportsAPI.salesSummary(baseParams),
+        ]);
+        const employeesList = Array.isArray(empRes.data) ? empRes.data : [];
+        const summaryData = summaryRes.data || {};
+        const cashierData = {
+          employees: employeesList,
+          summary: summaryData,
+        };
+        setData(cashierData);
+        const k = summaryData.kpis || {};
+        setKpis({
+          revenue: Number(k.totalRevenue || 0),
+          sales: Number(k.totalSales || 0),
+          activeCustomers: Number(k.activeCustomers || 0),
+          topProduct: k.topProduct || '-',
+          grossProfit: Number(k.grossProfit || 0),
+          taxPayable: Number(k.taxPayable || 0),
+        });
+        setCharts({
+          salesTrend: summaryData.salesTrend || [],
+          paymentBreakdown: summaryData.paymentBreakdown || [],
+          topEmployees: employeesList.map(e => ({
+            name: e.performerName || 'Cashier',
+            revenue: Number(e.totalRevenue || 0),
+          })),
+          productPerformance: summaryData.productPerformance || [],
+          customerSegments: summaryData.customerSegments || [],
+        });
+        cacheRef.current.set(cacheKey, { data: cashierData, ts: Date.now() });
       } else if (tab === 'pl') {
         const res = await reportsAPI.profitAndLoss(baseParams);
         setData(res.data);
@@ -270,7 +336,9 @@ export default function Reports() {
         const res = await employeesAPI.getAll();
         const rows = Array.isArray(res.data) ? res.data : [];
         setCashiers(rows);
-      } catch {}
+      } catch (err) {
+        // Fallback gracefully if cashiers list fails
+      }
     })();
   }, [dispatch]);
 
@@ -308,7 +376,7 @@ export default function Reports() {
       let prevLabel = 'prev';
       if (typeof label === 'string') {
         if (isWithin24Hours) {
-          if (/^\d{2}:\d{2}$/.test(label)) {
+          if (/^\\d{2}:\\d{2}$/.test(label)) {
             const h = parseInt(label.split(':')[0], 10);
             const ph = (h + 23) % 24;
             prevLabel = `${String(ph).padStart(2, '0')}:00`;
@@ -322,7 +390,7 @@ export default function Reports() {
             }
           }
         } else {
-          const m = label.match(/^(\d{4})-(\d{1,2})/);
+          const m = label.match(/^(\\d{4})-(\\d{1,2})/);
           if (m) {
             const y = Number(m[1]);
             const mo = Number(m[2]);
@@ -365,35 +433,148 @@ export default function Reports() {
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
+    const tabChanged = prevTabRef.current !== tab;
+    prevTabRef.current = tab;
+
+    if (isInitialMount.current || tabChanged) {
+      isInitialMount.current = false;
       load();
-    }, 450);
+    } else {
+      debounceRef.current = setTimeout(() => {
+        load();
+      }, 450);
+    }
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, range, startDate, endDate, cashierId, categoryId]);
 
+  const selectedCashierName = useMemo(() => {
+    if (!cashierId) return '';
+    const found = cashiers.find(c => String(c.id) === String(cashierId));
+    return found ? `${found.firstName || ''} ${found.lastName || ''}`.trim() || found.email || String(found.id) : '';
+  }, [cashierId, cashiers]);
+
   const exportCsv = () => {
-    let rows = [];
-    if (tab === 'sales') {
-      rows = [['Period', 'Sales', 'Revenue', 'Tax', 'Discount'], ...(Array.isArray(data) ? data : []).map(r => [r.period, r.saleCount, r.revenue, r.tax, r.discount])];
-    } else if (tab === 'pl' && data) {
-      rows = [
-        ['Gross Revenue', 'Tax', 'Discount', 'Refunds', 'Net Revenue', 'COGS', 'Gross Profit', 'Operating Expenses', 'Net Profit'],
-        [data.grossRevenue || 0, data.totalTax || 0, data.totalDiscount || 0, data.totalRefunds || 0, data.revenue ?? data.netRevenue ?? 0, data.cogs || 0, data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0)), data.operatingExpenses ?? data.totalExpenses ?? 0, data.profit || 0]
-      ];
-    } else if (tab === 'tax' && data) {
-      rows = [['Taxable Revenue','Rate','Estimated Tax'], [data.taxableRevenue, data.taxRate, data.estimatedTax]];
+    try {
+      setExporting('csv');
+      let csvRows = [];
+      let filename = `${tab}-report-${startDate}-to-${endDate}.csv`;
+
+      if (tab === 'sales') {
+        const salesTrend = charts.salesTrend || [];
+        if (salesTrend.length === 0) {
+          toast.error('No sales data available to export');
+          return;
+        }
+        csvRows = salesTrend.map(r => ({
+          Period: r.period || '',
+          'Sales Count': r.sales ?? r.saleCount ?? 0,
+          Revenue: Number(r.revenue || 0).toFixed(2),
+          Tax: Number(r.tax || 0).toFixed(2),
+          Discount: Number(r.discount || 0).toFixed(2)
+        }));
+        const totalSales = salesTrend.reduce((acc, r) => acc + Number(r.sales ?? r.saleCount ?? 0), 0);
+        const totalRevenue = salesTrend.reduce((acc, r) => acc + Number(r.revenue || 0), 0);
+        const totalTax = salesTrend.reduce((acc, r) => acc + Number(r.tax || 0), 0);
+        const totalDiscount = salesTrend.reduce((acc, r) => acc + Number(r.discount || 0), 0);
+        csvRows.push({
+          Period: 'TOTAL',
+          'Sales Count': totalSales,
+          Revenue: totalRevenue.toFixed(2),
+          Tax: totalTax.toFixed(2),
+          Discount: totalDiscount.toFixed(2)
+        });
+        filename = `sales-summary-${startDate}-to-${endDate}.csv`;
+      } else if (tab === 'cashier') {
+        const empRows = (data?.employees && Array.isArray(data.employees)) ? data.employees : (charts.topEmployees || []);
+        if (empRows.length === 0) {
+          toast.error('No cashier or staff sales records to export');
+          return;
+        }
+        csvRows = empRows.map(e => ({
+          'Cashier / Staff': e.performerName || e.name || 'Staff Member',
+          Role: e.role || 'Cashier',
+          'Orders Handled': Number(e.totalSales || e.sales || 0),
+          'Revenue Collected': Number(e.totalRevenue || e.revenue || 0).toFixed(2),
+          'Average Order Value': Number(e.averageSaleValue || (e.totalSales > 0 ? (e.totalRevenue / e.totalSales) : 0)).toFixed(2),
+        }));
+        const totalStaffSales = empRows.reduce((sum, e) => sum + Number(e.totalSales || e.sales || 0), 0);
+        const totalStaffRevenue = empRows.reduce((sum, e) => sum + Number(e.totalRevenue || e.revenue || 0), 0);
+        csvRows.push({
+          'Cashier / Staff': 'TOTAL',
+          Role: '',
+          'Orders Handled': totalStaffSales,
+          'Revenue Collected': totalStaffRevenue.toFixed(2),
+          'Average Order Value': totalStaffSales > 0 ? (totalStaffRevenue / totalStaffSales).toFixed(2) : '0.00',
+        });
+        filename = `cashier-shift-report-${startDate}-to-${endDate}.csv`;
+      } else if (tab === 'pl' && data) {
+        csvRows = [
+          { Section: 'Revenue & Adjustments', Metric: 'Gross Revenue (Pre-Discount)', Amount: Number(data.grossRevenue || 0).toFixed(2) },
+          { Section: 'Revenue & Adjustments', Metric: 'Total Tax (Sales Tax)', Amount: Number(data.totalTax || 0).toFixed(2) },
+          { Section: 'Revenue & Adjustments', Metric: 'Discounts', Amount: Number(data.totalDiscount || 0).toFixed(2) },
+          { Section: 'Revenue & Adjustments', Metric: 'Refunds', Amount: Number(data.totalRefunds || 0).toFixed(2) },
+          { Section: 'Direct Costs & Margins', Metric: 'Net Revenue (after discounts & refunds)', Amount: Number(data.revenue ?? data.netRevenue ?? 0).toFixed(2) },
+          { Section: 'Direct Costs & Margins', Metric: 'Cost of Goods Sold (COGS)', Amount: Number(data.cogs || 0).toFixed(2) },
+          { Section: 'Direct Costs & Margins', Metric: 'Gross Profit', Amount: Number(data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0))).toFixed(2) },
+          { Section: 'Operating Costs & Bottom Line', Metric: 'Operating Expenses', Amount: Number(data.operatingExpenses ?? data.totalExpenses ?? 0).toFixed(2) },
+          { Section: 'Operating Costs & Bottom Line', Metric: 'Net Profit / (Loss)', Amount: Number(data.profit || 0).toFixed(2) }
+        ];
+        filename = `profit-and-loss-${startDate}-to-${endDate}.csv`;
+      } else if (tab === 'tax' && data) {
+        const breakdown = Array.isArray(data.breakdown) ? data.breakdown : [];
+        csvRows = breakdown.length > 0
+          ? breakdown.map(b => ({
+              'Tax Category': b.name || b.category || '',
+              'Rate (%)': Number(b.rate || 0).toFixed(2),
+              'Taxable Turnover': Number(b.taxableAmount || 0).toFixed(2),
+              'Tax Liability': Number(b.taxAmount || 0).toFixed(2)
+            }))
+          : [{
+              'Tax Category': 'Standard Sales Tax (16%)',
+              'Rate (%)': ((Number(data.taxRate || 0)) * 100).toFixed(2),
+              'Taxable Turnover': Number(data.taxableRevenue || 0).toFixed(2),
+              'Tax Liability': Number(data.estimatedTax || 0).toFixed(2)
+            }];
+        const totalTaxable = breakdown.length > 0
+          ? breakdown.reduce((acc, b) => acc + Number(b.taxableAmount || 0), 0)
+          : Number(data.taxableRevenue || 0);
+        const totalTax = breakdown.length > 0
+          ? breakdown.reduce((acc, b) => acc + Number(b.taxAmount || 0), 0)
+          : Number(data.estimatedTax || 0);
+        csvRows.push({
+          'Tax Category': 'TOTAL',
+          'Rate (%)': '-',
+          'Taxable Turnover': totalTaxable.toFixed(2),
+          'Tax Liability': totalTax.toFixed(2)
+        });
+        filename = `tax-report-${startDate}-to-${endDate}.csv`;
+      } else if (tab === 'insights') {
+        const trajectory = (revVsExp && revVsExp.length > 0) ? revVsExp : (charts.salesTrend || []);
+        csvRows = trajectory.map(r => ({
+          Period: r.period || '',
+          Revenue: Number(r.revenue || 0).toFixed(2),
+          Expenses: Number(r.expenses || 0).toFixed(2),
+          'Net Margin': (Number(r.revenue || 0) - Number(r.expenses || 0)).toFixed(2)
+        }));
+        filename = `business-insights-${startDate}-to-${endDate}.csv`;
+      }
+
+      if (csvRows.length === 0) {
+        toast.error('No report records to export');
+        return;
+      }
+
+      downloadCSV(filename, csvRows);
+      toast.success('Report exported to CSV successfully');
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+      toast.error('Failed to export CSV. Please try again.');
+    } finally {
+      setExporting(null);
     }
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${tab}-report.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const printReport = () => {
@@ -402,38 +583,243 @@ export default function Reports() {
 
   const exportExcel = async () => {
     try {
-      const xlsx = await import('xlsx');
-      const wb = xlsx.utils.book_new();
-      if (tab === 'sales' && Array.isArray(charts.salesTrend)) {
-        const aoa = [['Period','Sales','Revenue']].concat((charts.salesTrend||[]).map(r=>[r.period,r.sales||0,r.revenue||0]));
-        const ws = xlsx.utils.aoa_to_sheet(aoa);
-        xlsx.utils.book_append_sheet(wb, ws, 'SalesTrend');
-      } else if (tab === 'pl' && data) {
-        const aoa = [
-          ['Metric', 'Amount'],
-          ['Gross Revenue (Pre-Discount)', data.grossRevenue || 0],
-          ['Total Tax', data.totalTax || 0],
-          ['Discounts', data.totalDiscount || 0],
-          ['Refunds', data.totalRefunds || 0],
-          ['Net Revenue (after discounts & refunds)', data.revenue ?? data.netRevenue ?? 0],
-          ['Cost of Goods Sold (COGS)', data.cogs || 0],
-          ['Gross Profit', data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0))],
-          ['Operating Expenses', data.operatingExpenses ?? data.totalExpenses ?? 0],
-          ['Net Profit', data.profit || 0]
+      setExporting('excel');
+      if (tab === 'sales') {
+        const salesTrend = charts.salesTrend || [];
+        const salesRows = salesTrend.map(r => [
+          r.period || '',
+          Number(r.sales ?? r.saleCount ?? 0),
+          Number(r.revenue || 0),
+          Number(r.tax || 0),
+          Number(r.discount || 0)
+        ]);
+        const totalSales = salesTrend.reduce((acc, r) => acc + Number(r.sales ?? r.saleCount ?? 0), 0);
+        const totalRevenue = salesTrend.reduce((acc, r) => acc + Number(r.revenue || 0), 0);
+        const totalTax = salesTrend.reduce((acc, r) => acc + Number(r.tax || 0), 0);
+        const totalDiscount = salesTrend.reduce((acc, r) => acc + Number(r.discount || 0), 0);
+
+        const sheets = [
+          {
+            sheetName: 'Sales Trend',
+            title: 'SALES SUMMARY REPORT',
+            subtitle: `Period: ${startDate} to ${endDate}${selectedCashierName ? ` | Cashier: ${selectedCashierName}` : ''}`,
+            identity,
+            meta: [
+              { label: 'Total Revenue', value: formatCurrency(kpis.revenue) },
+              { label: 'Total Sales', value: kpis.sales },
+              { label: 'Active Customers', value: kpis.activeCustomers },
+              { label: 'Top Product', value: kpis.topProduct }
+            ],
+            columns: [
+              { header: 'Period', key: 'period', width: 16 },
+              { header: 'Sales Count', key: 'sales', type: 'number', width: 14 },
+              { header: 'Revenue', key: 'revenue', type: 'currency', width: 18 },
+              { header: 'Tax', key: 'tax', type: 'currency', width: 16 },
+              { header: 'Discount', key: 'discount', type: 'currency', width: 16 }
+            ],
+            rows: salesRows,
+            summaryRow: ['TOTAL', totalSales, totalRevenue, totalTax, totalDiscount]
+          }
         ];
-        const ws = xlsx.utils.aoa_to_sheet(aoa);
-        xlsx.utils.book_append_sheet(wb, ws, 'ProfitAndLoss');
+
+        if (charts.paymentBreakdown && charts.paymentBreakdown.length > 0) {
+          sheets.push({
+            sheetName: 'Payment Methods',
+            title: 'PAYMENT METHOD BREAKDOWN',
+            subtitle: `Period: ${startDate} to ${endDate}`,
+            identity,
+            columns: [
+              { header: 'Payment Method', key: 'method', width: 22 },
+              { header: 'Amount / Orders', key: 'value', type: 'currency', width: 20 }
+            ],
+            rows: charts.paymentBreakdown.map(p => [p.method || '', Number(p.value || 0)])
+          });
+        }
+
+        if (charts.topEmployees && charts.topEmployees.length > 0) {
+          sheets.push({
+            sheetName: 'Cashier Performance',
+            title: 'CASHIER & STAFF PERFORMANCE',
+            subtitle: `Period: ${startDate} to ${endDate}`,
+            identity,
+            columns: [
+              { header: 'Staff Member', key: 'name', width: 24 },
+              { header: 'Revenue Generated', key: 'revenue', type: 'currency', width: 20 }
+            ],
+            rows: charts.topEmployees.map(e => [e.name || '', Number(e.revenue || 0)])
+          });
+        }
+
+        await generateExcel({
+          fileName: `sales-summary-${startDate}-to-${endDate}.xlsx`,
+          sheets
+        });
+      } else if (tab === 'cashier') {
+        const empRows = (data?.employees && Array.isArray(data.employees)) ? data.employees : (charts.topEmployees || []);
+        const cashierRows = empRows.map(e => [
+          e.performerName || e.name || 'Staff Member',
+          e.role || 'Cashier',
+          Number(e.totalSales || e.sales || 0),
+          Number(e.totalRevenue || e.revenue || 0),
+          Number(e.averageSaleValue || (e.totalSales > 0 ? (e.totalRevenue / e.totalSales) : 0))
+        ]);
+        const totalOrders = empRows.reduce((sum, e) => sum + Number(e.totalSales || e.sales || 0), 0);
+        const totalRev = empRows.reduce((sum, e) => sum + Number(e.totalRevenue || e.revenue || 0), 0);
+
+        const sheets = [
+          {
+            sheetName: 'Shift Summary',
+            title: 'CASHIER & SHIFT SALES REPORT',
+            subtitle: `Period: ${startDate} to ${endDate}${selectedCashierName ? ` | Cashier: ${selectedCashierName}` : ''}`,
+            identity,
+            meta: [
+              { label: 'Shift Gross Revenue', value: formatCurrency(kpis.revenue) },
+              { label: 'Shift Orders', value: kpis.sales },
+              { label: 'Active Staff', value: empRows.length },
+              { label: 'Average Ticket', value: formatCurrency(kpis.sales > 0 ? kpis.revenue / kpis.sales : 0) }
+            ],
+            columns: [
+              { header: 'Cashier / Staff Member', key: 'performer', width: 26 },
+              { header: 'Role', key: 'role', width: 18 },
+              { header: 'Orders Handled', key: 'orders', type: 'number', width: 16 },
+              { header: 'Revenue Collected', key: 'revenue', type: 'currency', width: 20 },
+              { header: 'Average Ticket Value', key: 'avgTicket', type: 'currency', width: 20 }
+            ],
+            rows: cashierRows,
+            summaryRow: ['TOTAL', '', totalOrders, totalRev, totalOrders > 0 ? totalRev / totalOrders : 0]
+          }
+        ];
+
+        if (charts.paymentBreakdown && charts.paymentBreakdown.length > 0) {
+          sheets.push({
+            sheetName: 'Tender Reconciliation',
+            title: 'PAYMENT TENDER RECONCILIATION',
+            subtitle: `Period: ${startDate} to ${endDate}`,
+            identity,
+            columns: [
+              { header: 'Payment Method', key: 'method', width: 22 },
+              { header: 'Orders / Collected Amount', key: 'value', type: 'currency', width: 22 }
+            ],
+            rows: charts.paymentBreakdown.map(p => [p.method || '', Number(p.value || 0)])
+          });
+        }
+
+        await generateExcel({
+          fileName: `cashier-shift-report-${startDate}-to-${endDate}.xlsx`,
+          sheets
+        });
+      } else if (tab === 'pl' && data) {
+        const plRows = [
+          ['Revenue & Adjustments', 'Gross Revenue (Pre-Discount)', Number(data.grossRevenue || 0)],
+          ['Revenue & Adjustments', 'Total Tax (Sales Tax)', Number(data.totalTax || 0)],
+          ['Revenue & Adjustments', 'Discounts', Number(data.totalDiscount || 0)],
+          ['Revenue & Adjustments', 'Refunds', Number(data.totalRefunds || 0)],
+          ['Direct Costs & Margins', 'Net Revenue (after discounts & refunds)', Number(data.revenue ?? data.netRevenue ?? 0)],
+          ['Direct Costs & Margins', 'Cost of Goods Sold (COGS)', Number(data.cogs || 0)],
+          ['Direct Costs & Margins', 'Gross Profit', Number(data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0)))],
+          ['Operating Costs & Bottom Line', 'Operating Expenses', Number(data.operatingExpenses ?? data.totalExpenses ?? 0)],
+          ['Operating Costs & Bottom Line', 'Net Profit / (Loss)', Number(data.profit || 0)]
+        ];
+        await generateExcel({
+          fileName: `profit-and-loss-${startDate}-to-${endDate}.xlsx`,
+          sheetName: 'ProfitAndLoss',
+          title: 'PROFIT & LOSS STATEMENT',
+          subtitle: `Period: ${startDate} to ${endDate}`,
+          identity,
+          meta: [
+            { label: 'Gross Revenue', value: formatCurrency(data.grossRevenue || 0) },
+            { label: 'Net Revenue', value: formatCurrency(data.revenue ?? data.netRevenue ?? 0) },
+            { label: 'Net Profit', value: formatCurrency(data.profit || 0) }
+          ],
+          columns: [
+            { header: 'Section', key: 'section', width: 28 },
+            { header: 'Financial Metric', key: 'metric', width: 38 },
+            { header: 'Amount', key: 'amount', type: 'currency', width: 20 }
+          ],
+          rows: plRows
+        });
+      } else if (tab === 'tax' && data) {
+        const breakdown = Array.isArray(data.breakdown) ? data.breakdown : [];
+        const taxRows = breakdown.length > 0
+          ? breakdown.map(b => [b.name || b.category || '', Number(b.rate || 0), Number(b.taxableAmount || 0), Number(b.taxAmount || 0)])
+          : [['Standard Sales Tax (16%)', Number(data.taxRate || 0) * 100, Number(data.taxableRevenue || 0), Number(data.estimatedTax || 0)]];
+        const totalTaxable = breakdown.length > 0
+          ? breakdown.reduce((acc, b) => acc + Number(b.taxableAmount || 0), 0)
+          : Number(data.taxableRevenue || 0);
+        const totalTax = breakdown.length > 0
+          ? breakdown.reduce((acc, b) => acc + Number(b.taxAmount || 0), 0)
+          : Number(data.estimatedTax || 0);
+
+        await generateExcel({
+          fileName: `tax-report-${startDate}-to-${endDate}.xlsx`,
+          sheetName: 'TaxReport',
+          title: 'TAX SUMMARY & RATE BREAKDOWN',
+          subtitle: `Period: ${startDate} to ${endDate}`,
+          identity,
+          meta: [
+            { label: 'Taxable Turnover', value: formatCurrency(data.taxableRevenue || 0) },
+            { label: 'Sales Tax Rate', value: `${((Number(data.taxRate || 0)) * 100).toFixed(2)}%` },
+            { label: 'Estimated Tax Liability', value: formatCurrency(data.estimatedTax || 0) }
+          ],
+          columns: [
+            { header: 'Tax Category', key: 'category', width: 30 },
+            { header: 'Rate (%)', key: 'rate', type: 'number', width: 14 },
+            { header: 'Taxable Turnover', key: 'taxable', type: 'currency', width: 22 },
+            { header: 'Tax Liability', key: 'tax', type: 'currency', width: 22 }
+          ],
+          rows: taxRows,
+          summaryRow: ['TOTAL', '-', totalTaxable, totalTax]
+        });
+      } else if (tab === 'insights') {
+        const trajectory = (revVsExp && revVsExp.length > 0) ? revVsExp : (charts.salesTrend || []);
+        const trajectoryRows = trajectory.map(r => [
+          r.period || '',
+          Number(r.revenue || 0),
+          Number(r.expenses || 0),
+          Number(r.revenue || 0) - Number(r.expenses || 0)
+        ]);
+        const sheets = [
+          {
+            sheetName: 'Revenue vs Expenses',
+            title: 'BUSINESS TRENDS & AI INSIGHTS',
+            subtitle: `Period: ${startDate} to ${endDate}`,
+            identity,
+            meta: [
+              { label: 'Executive AI Analysis', value: insights ? (insights.length > 120 ? insights.substring(0, 117) + '...' : insights) : 'Analysis generated' }
+            ],
+            columns: [
+              { header: 'Period', key: 'period', width: 18 },
+              { header: 'Revenue', key: 'revenue', type: 'currency', width: 20 },
+              { header: 'Operating Expenses', key: 'expenses', type: 'currency', width: 20 },
+              { header: 'Net Margin', key: 'margin', type: 'currency', width: 20 }
+            ],
+            rows: trajectoryRows
+          }
+        ];
+        if (charts.paymentBreakdown && charts.paymentBreakdown.length > 0) {
+          sheets.push({
+            sheetName: 'Payment Mix',
+            title: 'PAYMENT CHANNEL MIX',
+            subtitle: `Period: ${startDate} to ${endDate}`,
+            identity,
+            columns: [
+              { header: 'Payment Method', key: 'method', width: 22 },
+              { header: 'Transactions / Value', key: 'value', type: 'number', width: 22 }
+            ],
+            rows: charts.paymentBreakdown.map(p => [p.method || '', Number(p.value || 0)])
+          });
+        }
+        await generateExcel({
+          fileName: `business-insights-${startDate}-to-${endDate}.xlsx`,
+          sheets
+        });
       }
-      const wbout = xlsx.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${tab}-report.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      exportCsv();
+      toast.success('Report exported to Excel successfully');
+    } catch (err) {
+      console.error('Failed to export Excel:', err);
+      toast.error('Failed to export Excel. Please try again.');
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -449,44 +835,229 @@ export default function Reports() {
 
   const exportPdf = async () => {
     try {
-      const jsPDFmod = await import('jspdf');
-      const jsPDF = jsPDFmod.jsPDF || jsPDFmod.default?.jsPDF || jsPDFmod.default;
-      const doc = new jsPDF('p','pt','a4');
-      doc.setFontSize(14);
-      doc.text(`Zana Reports - ${tab.toUpperCase()}`, 40, 40);
-      let y = 70;
-      if (tab === 'sales' && Array.isArray(charts.salesTrend)) {
-        doc.setFontSize(10);
-        doc.text('Sales Trend (first 20 rows)', 40, y);
-        y += 16;
-        const rows = (charts.salesTrend || []).slice(0, 20);
-        rows.forEach(r => {
-          doc.text(`${r.period || ''}: ${r.revenue || 0}`, 40, y);
-          y += 14;
+      setExporting('pdf');
+      if (tab === 'sales') {
+        const salesTrend = charts.salesTrend || [];
+        const salesRows = salesTrend.map(r => [
+          r.period || '',
+          String(r.sales ?? r.saleCount ?? 0),
+          formatCurrency(r.revenue || 0),
+          formatCurrency(r.tax || 0),
+          formatCurrency(r.discount || 0)
+        ]);
+        const totalSales = salesTrend.reduce((acc, r) => acc + Number(r.sales ?? r.saleCount ?? 0), 0);
+        const totalRevenue = salesTrend.reduce((acc, r) => acc + Number(r.revenue || 0), 0);
+        const totalTax = salesTrend.reduce((acc, r) => acc + Number(r.tax || 0), 0);
+        const totalDiscount = salesTrend.reduce((acc, r) => acc + Number(r.discount || 0), 0);
+
+        const tables = [
+          {
+            title: 'Sales Volume & Trend',
+            columns: [
+              { header: 'Period', align: 'left', width: 35 },
+              { header: 'Sales Count', align: 'right', width: 30 },
+              { header: 'Revenue', align: 'right', width: 40 },
+              { header: 'Tax', align: 'right', width: 35 },
+              { header: 'Discount', align: 'right', width: 35 }
+            ],
+            rows: salesRows,
+            summaryRow: ['TOTAL', String(totalSales), formatCurrency(totalRevenue), formatCurrency(totalTax), formatCurrency(totalDiscount)]
+          }
+        ];
+
+        if (charts.paymentBreakdown && charts.paymentBreakdown.length > 0) {
+          tables.push({
+            title: 'Payment Method Breakdown',
+            columns: [
+              { header: 'Payment Method', align: 'left', width: 90 },
+              { header: 'Total Value / Volume', align: 'right', width: 85 }
+            ],
+            rows: charts.paymentBreakdown.map(p => [p.method || '', formatCurrency(p.value || 0)])
+          });
+        }
+
+        if (charts.topEmployees && charts.topEmployees.length > 0) {
+          tables.push({
+            title: 'Top Employees by Revenue',
+            columns: [
+              { header: 'Staff Member', align: 'left', width: 90 },
+              { header: 'Revenue Generated', align: 'right', width: 85 }
+            ],
+            rows: charts.topEmployees.map(e => [e.name || '', formatCurrency(e.revenue || 0)])
+          });
+        }
+
+        await generatePDF({
+          fileName: `sales-summary-${startDate}-to-${endDate}.pdf`,
+          title: 'SALES SUMMARY REPORT',
+          subtitle: `Period: ${startDate} to ${endDate}${selectedCashierName ? ` | Cashier: ${selectedCashierName}` : ''}`,
+          identity,
+          summaryCards: [
+            { label: 'Total Revenue', value: formatCurrency(kpis.revenue) },
+            { label: 'Total Sales', value: String(kpis.sales) },
+            { label: 'Gross Profit', value: formatCurrency(kpis.grossProfit || 0) },
+            { label: 'Active Customers', value: String(kpis.activeCustomers) }
+          ],
+          tables
+        });
+      } else if (tab === 'cashier') {
+        const empRows = (data?.employees && Array.isArray(data.employees)) ? data.employees : (charts.topEmployees || []);
+        const cashierRows = empRows.map(e => [
+          e.performerName || e.name || 'Staff Member',
+          e.role || 'Cashier',
+          String(e.totalSales || e.sales || 0),
+          formatCurrency(e.totalRevenue || e.revenue || 0),
+          formatCurrency(e.averageSaleValue || (e.totalSales > 0 ? (e.totalRevenue / e.totalSales) : 0))
+        ]);
+        const totalStaffOrders = empRows.reduce((sum, e) => sum + Number(e.totalSales || e.sales || 0), 0);
+        const totalStaffRev = empRows.reduce((sum, e) => sum + Number(e.totalRevenue || e.revenue || 0), 0);
+
+        const tables = [
+          {
+            title: 'Cashier & Staff Sales Performance',
+            columns: [
+              { header: 'Cashier / Staff Member', align: 'left', width: 55 },
+              { header: 'Role', align: 'left', width: 30 },
+              { header: 'Orders Handled', align: 'right', width: 30 },
+              { header: 'Revenue Collected', align: 'right', width: 35 },
+              { header: 'Average Ticket', align: 'right', width: 30 }
+            ],
+            rows: cashierRows,
+            summaryRow: ['TOTAL', '', String(totalStaffOrders), formatCurrency(totalStaffRev), formatCurrency(totalStaffOrders > 0 ? totalStaffRev / totalStaffOrders : 0)]
+          }
+        ];
+
+        if (charts.paymentBreakdown && charts.paymentBreakdown.length > 0) {
+          tables.push({
+            title: 'Register Payment Tender Breakdown',
+            columns: [
+              { header: 'Payment Method', align: 'left', width: 90 },
+              { header: 'Collected Amount / Orders', align: 'right', width: 85 }
+            ],
+            rows: charts.paymentBreakdown.map(p => [p.method || '', formatCurrency(p.value || 0)])
+          });
+        }
+
+        await generatePDF({
+          fileName: `cashier-shift-report-${startDate}-to-${endDate}.pdf`,
+          title: 'CASHIER & SHIFT RECONCILIATION REPORT',
+          subtitle: `Period: ${startDate} to ${endDate}${selectedCashierName ? ` | Cashier: ${selectedCashierName}` : ''}`,
+          identity,
+          summaryCards: [
+            { label: 'Shift Gross Revenue', value: formatCurrency(kpis.revenue) },
+            { label: 'Shift Transactions', value: String(kpis.sales) },
+            { label: 'Active Cashiers', value: String(empRows.length) },
+            { label: 'Average Ticket', value: formatCurrency(kpis.sales > 0 ? kpis.revenue / kpis.sales : 0) }
+          ],
+          tables
         });
       } else if (tab === 'pl' && data) {
-        doc.setFontSize(10);
-        doc.text('Profit & Loss Summary', 40, y);
-        y += 18;
-        const items = [
+        const plRows = [
           ['Gross Revenue (Pre-Discount)', formatCurrency(data.grossRevenue || 0)],
-          ['Total Tax', formatCurrency(data.totalTax || 0)],
+          ['Total Tax (Sales Tax)', formatCurrency(data.totalTax || 0)],
           ['Discounts', formatCurrency(data.totalDiscount || 0)],
           ['Refunds', formatCurrency(data.totalRefunds || 0)],
           ['Net Revenue (after discounts & refunds)', formatCurrency(data.revenue ?? data.netRevenue ?? 0)],
           ['Cost of Goods Sold (COGS)', formatCurrency(data.cogs || 0)],
           ['Gross Profit', formatCurrency(data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0)))],
           ['Operating Expenses', formatCurrency(data.operatingExpenses ?? data.totalExpenses ?? 0)],
-          ['Net Profit', formatCurrency(data.profit || 0)]
+          ['Net Profit / (Loss)', formatCurrency(data.profit || 0)]
         ];
-        items.forEach(([label, val]) => {
-          doc.text(`${label}: ${val}`, 40, y);
-          y += 16;
+        await generatePDF({
+          fileName: `profit-and-loss-${startDate}-to-${endDate}.pdf`,
+          title: 'PROFIT & LOSS STATEMENT',
+          subtitle: `Period: ${startDate} to ${endDate}`,
+          identity,
+          summaryCards: [
+            { label: 'Gross Revenue', value: formatCurrency(data.grossRevenue || 0) },
+            { label: 'Net Revenue', value: formatCurrency(data.revenue ?? data.netRevenue ?? 0) },
+            { label: 'Operating Expenses', value: formatCurrency(data.operatingExpenses ?? data.totalExpenses ?? 0) },
+            { label: 'Net Profit', value: formatCurrency(data.profit || 0) }
+          ],
+          columns: [
+            { header: 'Financial Metric', align: 'left', width: 110 },
+            { header: 'Amount', align: 'right', width: 65 }
+          ],
+          rows: plRows
+        });
+      } else if (tab === 'tax' && data) {
+        const breakdown = Array.isArray(data.breakdown) ? data.breakdown : [];
+        const taxRows = breakdown.length > 0
+          ? breakdown.map(b => [b.name || b.category || '', `${Number(b.rate || 0).toFixed(2)}%`, formatCurrency(b.taxableAmount || 0), formatCurrency(b.taxAmount || 0)])
+          : [['Standard Sales Tax (16%)', `${((Number(data.taxRate || 0)) * 100).toFixed(2)}%`, formatCurrency(data.taxableRevenue || 0), formatCurrency(data.estimatedTax || 0)]];
+        const totalTaxable = breakdown.length > 0
+          ? breakdown.reduce((acc, b) => acc + Number(b.taxableAmount || 0), 0)
+          : Number(data.taxableRevenue || 0);
+        const totalTax = breakdown.length > 0
+          ? breakdown.reduce((acc, b) => acc + Number(b.taxAmount || 0), 0)
+          : Number(data.estimatedTax || 0);
+
+        await generatePDF({
+          fileName: `tax-report-${startDate}-to-${endDate}.pdf`,
+          title: 'TAX SUMMARY & RATE BREAKDOWN',
+          subtitle: `Period: ${startDate} to ${endDate}`,
+          identity,
+          summaryCards: [
+            { label: 'Taxable Turnover', value: formatCurrency(data.taxableRevenue || 0) },
+            { label: 'Sales Tax Rate', value: `${((Number(data.taxRate || 0)) * 100).toFixed(2)}%` },
+            { label: 'Estimated Tax Liability', value: formatCurrency(data.estimatedTax || 0) }
+          ],
+          columns: [
+            { header: 'Tax Category', align: 'left', width: 75 },
+            { header: 'Rate (%)', align: 'center', width: 25 },
+            { header: 'Taxable Turnover', align: 'right', width: 40 },
+            { header: 'Tax Liability', align: 'right', width: 35 }
+          ],
+          rows: taxRows,
+          summaryRow: ['TOTAL', '-', formatCurrency(totalTaxable), formatCurrency(totalTax)]
+        });
+      } else if (tab === 'insights') {
+        const trajectory = (revVsExp && revVsExp.length > 0) ? revVsExp : (charts.salesTrend || []);
+        const trajectoryRows = trajectory.map(r => [
+          r.period || '',
+          formatCurrency(r.revenue || 0),
+          formatCurrency(r.expenses || 0),
+          formatCurrency(Number(r.revenue || 0) - Number(r.expenses || 0))
+        ]);
+        const tables = [
+          {
+            title: 'Monthly Revenue vs Expenses Trajectory',
+            columns: [
+              { header: 'Period', align: 'left', width: 45 },
+              { header: 'Revenue', align: 'right', width: 45 },
+              { header: 'Operating Expenses', align: 'right', width: 45 },
+              { header: 'Net Margin', align: 'right', width: 40 }
+            ],
+            rows: trajectoryRows
+          }
+        ];
+        if (charts.paymentBreakdown && charts.paymentBreakdown.length > 0) {
+          tables.push({
+            title: 'Payment Channel Mix',
+            columns: [
+              { header: 'Payment Channel', align: 'left', width: 90 },
+              { header: 'Recorded Units / Volume', align: 'right', width: 85 }
+            ],
+            rows: charts.paymentBreakdown.map(p => [p.method || '', String(p.value || 0)])
+          });
+        }
+        await generatePDF({
+          fileName: `business-insights-${startDate}-to-${endDate}.pdf`,
+          title: 'BUSINESS TRENDS & AI INSIGHTS',
+          subtitle: `Period: ${startDate} to ${endDate}`,
+          identity,
+          meta: [
+            { label: 'Executive AI Analysis', value: insights ? (insights.length > 100 ? insights.substring(0, 97) + '...' : insights) : 'Trend analysis based on transaction history' }
+          ],
+          tables
         });
       }
-      doc.save(`${tab}-report.pdf`);
-    } catch {
-      window.print();
+      toast.success('Report exported to PDF successfully');
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      toast.error('Failed to export PDF. Please try again.');
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -494,7 +1065,7 @@ export default function Reports() {
     <div className="space-y-6">
       <PageHeader
         title="Reports & Analytics"
-        description="Comprehensive sales summaries, profit & loss statements, tax reports, and AI business insights."
+        description="Comprehensive sales summaries, cashier & shift reconciliation, profit & loss statements, tax reports, and AI business insights."
       />
 
       {/* Sticky Filter Toolbar */}
@@ -502,6 +1073,7 @@ export default function Reports() {
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="flex items-center gap-1.5 bg-surface-2/70 p-1 rounded-xl border border-border-default">
             <TabButton active={tab === 'sales'} onClick={() => setTab('sales')}>Sales Summary</TabButton>
+            <TabButton active={tab === 'cashier'} onClick={() => setTab('cashier')}>Cashier & Shifts</TabButton>
             <TabButton active={tab === 'pl'} onClick={() => setTab('pl')}>Profit & Loss</TabButton>
             <TabButton active={tab === 'tax'} onClick={() => setTab('tax')}>Tax Reports</TabButton>
             <TabButton active={tab === 'insights'} onClick={() => setTab('insights')}>Trends & Insights</TabButton>
@@ -556,16 +1128,16 @@ export default function Reports() {
             <Button variant="outline" size="sm" onClick={load}>Apply</Button>
             <Button variant="primary" size="sm" onClick={handleRefresh}>Refresh</Button>
             <div className="w-px h-6 bg-border-default mx-1" />
-            <IconButton title="Export CSV" onClick={exportCsv} icon="csv" />
-            <IconButton title="Export Excel" onClick={exportExcel} icon="excel" />
-            <IconButton title="Export PDF" onClick={exportPdf} icon="pdf" />
-            <IconButton title="Print" onClick={printReport} icon="print" />
+            <IconButton title="Export CSV" onClick={exportCsv} icon="csv" disabled={Boolean(exporting)} loading={exporting === 'csv'} />
+            <IconButton title="Export Excel" onClick={exportExcel} icon="excel" disabled={Boolean(exporting)} loading={exporting === 'excel'} />
+            <IconButton title="Export PDF" onClick={exportPdf} icon="pdf" disabled={Boolean(exporting)} loading={exporting === 'pdf'} />
+            <IconButton title="Print" onClick={printReport} icon="print" disabled={Boolean(exporting)} loading={exporting === 'print'} />
           </div>
         </div>
       </Card>
 
       {/* KPI Cards */}
-      {tab === 'sales' && (
+      {(tab === 'sales' || tab === 'cashier') && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <KpiCard icon="revenue" label="Total Revenue" value={formatCurrency(kpis.revenue)} color="#3b82f6">
             <MiniSpark dataKey="revenue" data={(charts.salesTrend||[]).slice(-16)} color="#3b82f6" />
@@ -616,7 +1188,7 @@ export default function Reports() {
                           tickLine={false}
                           tickFormatter={(value) => {
                             if (isWithin24Hours) {
-                              if (typeof value === 'string' && /^\d{2}:\d{2}$/.test(value)) return value;
+                              if (typeof value === 'string' && /^\\d{2}:\\d{2}$/.test(value)) return value;
                               const date = new Date(value);
                               if (!isNaN(date)) return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                               return String(value);
@@ -629,7 +1201,7 @@ export default function Reports() {
                           {...chartTooltipProps}
                           labelFormatter={(value) => {
                             if (isWithin24Hours) {
-                              if (typeof value === 'string' && /^\d{2}:\d{2}$/.test(value)) return value;
+                              if (typeof value === 'string' && /^\\d{2}:\\d{2}$/.test(value)) return value;
                               const date = new Date(value);
                               if (!isNaN(date)) return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                               return String(value);
@@ -758,6 +1330,91 @@ export default function Reports() {
               </div>
             )}
 
+            {tab === 'cashier' && (
+              <div className="space-y-6">
+                <Card variant="default">
+                  <Card.Header
+                    title="Cashier & Shift Reconciliation"
+                    subtitle={`Staff sales performance and register totals for ${startDate} to ${endDate}${selectedCashierName ? ` (Filtered: ${selectedCashierName})` : ''}`}
+                  />
+                  <Card.Body>
+                    <div className="overflow-x-auto">
+                      {(!data?.employees || data.employees.length === 0) ? (
+                        <div className="p-8 text-center text-text-secondary">
+                          <UserGroupIcon className="h-10 w-10 text-text-muted mx-auto mb-2 stroke-1" aria-hidden="true" />
+                          <p className="font-semibold text-text-primary text-small">No cashier shift records found</p>
+                          <p className="text-caption text-text-muted mt-1">There are no sales transactions attributed to staff for this selected timeframe.</p>
+                        </div>
+                      ) : (
+                        <table className="w-full text-small text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-border-default text-text-secondary">
+                              <th className="py-3 px-4 font-semibold">Staff Member</th>
+                              <th className="py-3 px-4 font-semibold">Position / Role</th>
+                              <th className="py-3 px-4 font-semibold text-right">Orders Handled</th>
+                              <th className="py-3 px-4 font-semibold text-right">Total Revenue</th>
+                              <th className="py-3 px-4 font-semibold text-right">Average Ticket</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border-default">
+                            {data.employees.map((e, idx) => (
+                              <tr key={e.performerId || idx} className="hover:bg-surface-2/40 transition-colors">
+                                <td className="py-3 px-4 font-medium text-text-primary flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-caption">
+                                    {(e.performerName || 'S').charAt(0).toUpperCase()}
+                                  </div>
+                                  <span>{e.performerName || 'Unknown Staff'}</span>
+                                </td>
+                                <td className="py-3 px-4 text-text-secondary">{e.role || 'Cashier'}</td>
+                                <td className="py-3 px-4 text-right font-medium text-text-primary">{e.totalSales || 0}</td>
+                                <td className="py-3 px-4 text-right font-semibold text-text-primary">{formatCurrency(e.totalRevenue || 0)}</td>
+                                <td className="py-3 px-4 text-right text-text-secondary">{formatCurrency(e.averageSaleValue || 0)}</td>
+                              </tr>
+                            ))}
+                            <tr className="bg-surface-2/60 font-bold border-t-2 border-border-default">
+                              <td className="py-3 px-4 text-text-primary" colSpan="2">TOTAL</td>
+                              <td className="py-3 px-4 text-right text-text-primary">
+                                {data.employees.reduce((acc, e) => acc + Number(e.totalSales || 0), 0)}
+                              </td>
+                              <td className="py-3 px-4 text-right text-text-primary">
+                                {formatCurrency(data.employees.reduce((acc, e) => acc + Number(e.totalRevenue || 0), 0))}
+                              </td>
+                              <td className="py-3 px-4 text-right text-text-primary">
+                                {formatCurrency(
+                                  data.employees.reduce((acc, e) => acc + Number(e.totalSales || 0), 0) > 0
+                                    ? data.employees.reduce((acc, e) => acc + Number(e.totalRevenue || 0), 0) / data.employees.reduce((acc, e) => acc + Number(e.totalSales || 0), 0)
+                                    : 0
+                                )}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </Card.Body>
+                </Card>
+
+                {charts.paymentBreakdown && charts.paymentBreakdown.length > 0 && (
+                  <Card variant="default">
+                    <Card.Header
+                      title="Payment Tender Distribution"
+                      subtitle="Tender breakdown across all completed cashier transactions"
+                    />
+                    <Card.Body>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        {charts.paymentBreakdown.map((p, idx) => (
+                          <div key={idx} className="p-4 rounded-xl border border-border-default bg-surface-2/40">
+                            <div className="text-caption font-semibold uppercase tracking-wider text-text-muted">{p.method}</div>
+                            <div className="text-h4 font-bold text-text-primary mt-1">{formatCurrency(p.value || 0)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </Card.Body>
+                  </Card>
+                )}
+              </div>
+            )}
+
             {tab === 'pl' && data && (
               <Card variant="default">
                 <Card.Header
@@ -878,6 +1535,284 @@ export default function Reports() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Pre-rendered Isolated Print View for Browser Print Preview (A4 UDDS)
+          Pre-rendered in DOM with class "print-only" to eliminate print-lifecycle race conditions.
+          aria-hidden="true" ensures screen readers and test query selectors ignore this pre-rendered view. */}
+      <div className="print-only" aria-hidden="true">
+        <PrintableDocumentContainer
+          title={
+            tab === 'sales'
+              ? 'SALES SUMMARY REPORT'
+              : tab === 'cashier'
+              ? 'CASHIER & SHIFT RECONCILIATION REPORT'
+              : tab === 'pl'
+              ? 'PROFIT & LOSS STATEMENT'
+              : tab === 'tax'
+              ? 'TAX SUMMARY & ESTIMATE REPORT'
+              : 'BUSINESS TRENDS & AI INSIGHTS'
+          }
+          subtitle={`Period: ${startDate} to ${endDate}${selectedCashierName ? ` | Cashier: ${selectedCashierName}` : ''}`}
+          identity={identity}
+          meta={[
+            { label: 'Tab', value: tab.toUpperCase() },
+            { label: 'Granularity', value: range.toUpperCase() },
+            ...(cashierId ? [{ label: 'Cashier ID', value: cashierId }] : []),
+            ...(categoryId ? [{ label: 'Category ID', value: categoryId }] : [])
+          ]}
+        >
+          {tab === 'sales' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded border border-slate-200">
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Turnover Revenue</div>
+                  <div className="text-lg font-bold text-slate-800">Gross: {formatCurrency(kpis.revenue)}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Completed Orders</div>
+                  <div className="text-lg font-bold text-slate-800">{kpis.sales}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Gross Profit Margin</div>
+                  <div className="text-lg font-bold text-slate-800">{formatCurrency(kpis.grossProfit || 0)}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Clients Served</div>
+                  <div className="text-lg font-bold text-slate-800">{kpis.activeCustomers}</div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 mb-2">Sales Volume & Trajectory Ledger</h3>
+                {(!charts.salesTrend || charts.salesTrend.length === 0) ? (
+                  <p className="text-xs text-slate-500 italic p-4 bg-slate-50 rounded">No sales records found for this period.</p>
+                ) : (
+                  <table className="w-full text-xs text-left border-collapse border border-slate-200">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700">
+                        <th className="p-2 border border-slate-200">Period</th>
+                        <th className="p-2 border border-slate-200 text-right">Sales Count</th>
+                        <th className="p-2 border border-slate-200 text-right">Revenue</th>
+                        <th className="p-2 border border-slate-200 text-right">Tax</th>
+                        <th className="p-2 border border-slate-200 text-right">Discount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {charts.salesTrend.map((r, i) => (
+                        <tr key={i} className={i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}>
+                          <td className="p-2 border border-slate-200">{r.period || ''}</td>
+                          <td className="p-2 border border-slate-200 text-right">{r.sales ?? r.saleCount ?? 0}</td>
+                          <td className="p-2 border border-slate-200 text-right">{formatCurrency(r.revenue || 0)}</td>
+                          <td className="p-2 border border-slate-200 text-right">{formatCurrency(r.tax || 0)}</td>
+                          <td className="p-2 border border-slate-200 text-right">{formatCurrency(r.discount || 0)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-100 font-bold">
+                        <td className="p-2 border border-slate-200">TOTAL</td>
+                        <td className="p-2 border border-slate-200 text-right">
+                          {charts.salesTrend.reduce((acc, r) => acc + Number(r.sales ?? r.saleCount ?? 0), 0)}
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right">
+                          {formatCurrency(charts.salesTrend.reduce((acc, r) => acc + Number(r.revenue || 0), 0))}
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right">
+                          {formatCurrency(charts.salesTrend.reduce((acc, r) => acc + Number(r.tax || 0), 0))}
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right">
+                          {formatCurrency(charts.salesTrend.reduce((acc, r) => acc + Number(r.discount || 0), 0))}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'cashier' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded border border-slate-200">
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Shift Revenue</div>
+                  <div className="text-lg font-bold text-slate-800">Collected: {formatCurrency(kpis.revenue)}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Shift Transactions</div>
+                  <div className="text-lg font-bold text-slate-800">{kpis.sales}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Staff Count</div>
+                  <div className="text-lg font-bold text-slate-800">{data?.employees?.length || 0}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Average Ticket</div>
+                  <div className="text-lg font-bold text-slate-800">{formatCurrency(kpis.sales > 0 ? kpis.revenue / kpis.sales : 0)}</div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 mb-2">Staff Sales Ledger</h3>
+                {(!data?.employees || data.employees.length === 0) ? (
+                  <p className="text-xs text-slate-500 italic p-4 bg-slate-50 rounded">No cashier shift records found.</p>
+                ) : (
+                  <table className="w-full text-xs text-left border-collapse border border-slate-200">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700">
+                        <th className="p-2 border border-slate-200">Staff Member</th>
+                        <th className="p-2 border border-slate-200">Role</th>
+                        <th className="p-2 border border-slate-200 text-right">Orders Handled</th>
+                        <th className="p-2 border border-slate-200 text-right">Revenue Collected</th>
+                        <th className="p-2 border border-slate-200 text-right">Average Ticket</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.employees.map((e, idx) => (
+                        <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}>
+                          <td className="p-2 border border-slate-200 font-medium">Staff: {e.performerName || 'Staff'}</td>
+                          <td className="p-2 border border-slate-200">{e.role || 'Cashier'}</td>
+                          <td className="p-2 border border-slate-200 text-right">{e.totalSales || 0}</td>
+                          <td className="p-2 border border-slate-200 text-right font-medium">{formatCurrency(e.totalRevenue || 0)}</td>
+                          <td className="p-2 border border-slate-200 text-right">{formatCurrency(e.averageSaleValue || 0)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-100 font-bold">
+                        <td className="p-2 border border-slate-200" colSpan="2">TOTAL</td>
+                        <td className="p-2 border border-slate-200 text-right">
+                          {data.employees.reduce((acc, e) => acc + Number(e.totalSales || 0), 0)}
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right">
+                          {formatCurrency(data.employees.reduce((acc, e) => acc + Number(e.totalRevenue || 0), 0))}
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right">
+                          {formatCurrency(
+                            data.employees.reduce((acc, e) => acc + Number(e.totalSales || 0), 0) > 0
+                              ? data.employees.reduce((acc, e) => acc + Number(e.totalRevenue || 0), 0) / data.employees.reduce((acc, e) => acc + Number(e.totalSales || 0), 0)
+                              : 0
+                          )}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'pl' && data && (
+            <div className="space-y-6">
+              <table className="w-full text-xs text-left border-collapse border border-slate-200">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700">
+                    <th className="p-2 border border-slate-200">Section</th>
+                    <th className="p-2 border border-slate-200">Financial Metric</th>
+                    <th className="p-2 border border-slate-200 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td className="p-2 border border-slate-200" rowSpan="4">Revenue & Adjustments</td><td className="p-2 border border-slate-200">P&L: Gross Revenue (Pre-Discount)</td><td className="p-2 border border-slate-200 text-right">{formatCurrency(data.grossRevenue || 0)}</td></tr>
+                  <tr><td className="p-2 border border-slate-200">P&L: Total Tax (Sales Tax)</td><td className="p-2 border border-slate-200 text-right">{formatCurrency(data.totalTax || 0)}</td></tr>
+                  <tr><td className="p-2 border border-slate-200">P&L: Discounts</td><td className="p-2 border border-slate-200 text-right">{formatCurrency(data.totalDiscount || 0)}</td></tr>
+                  <tr><td className="p-2 border border-slate-200">P&L: Refunds</td><td className="p-2 border border-slate-200 text-right">{formatCurrency(data.totalRefunds || 0)}</td></tr>
+                  <tr><td className="p-2 border border-slate-200" rowSpan="3">Direct Costs & Margins</td><td className="p-2 border border-slate-200 font-semibold">P&L: Net Revenue</td><td className="p-2 border border-slate-200 text-right font-semibold">{formatCurrency(data.revenue ?? data.netRevenue ?? 0)}</td></tr>
+                  <tr><td className="p-2 border border-slate-200">P&L: Cost of Goods Sold</td><td className="p-2 border border-slate-200 text-right">{formatCurrency(data.cogs || 0)}</td></tr>
+                  <tr className="bg-emerald-50"><td className="p-2 border border-slate-200 font-bold text-emerald-800">P&L: Gross Profit</td><td className="p-2 border border-slate-200 text-right font-bold text-emerald-800">{formatCurrency(data.grossProfit ?? ((data.revenue ?? data.netRevenue ?? 0) - (data.cogs || 0)))}</td></tr>
+                  <tr><td className="p-2 border border-slate-200" rowSpan="2">Operating Costs & Bottom Line</td><td className="p-2 border border-slate-200">P&L: Operating Expenses</td><td className="p-2 border border-slate-200 text-right">{formatCurrency(data.operatingExpenses ?? data.totalExpenses ?? 0)}</td></tr>
+                  <tr className="bg-emerald-100"><td className="p-2 border border-slate-200 font-bold text-emerald-900">P&L: Net Profit / (Loss)</td><td className="p-2 border border-slate-200 text-right font-bold text-emerald-900">{formatCurrency(data.profit || 0)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {tab === 'tax' && data && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded border border-slate-200">
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Taxable Turnover Base</div>
+                  <div className="text-lg font-bold text-slate-800">Base: {formatCurrency(data.taxableRevenue || 0)}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Applicable Tax Rate</div>
+                  <div className="text-lg font-bold text-slate-800">Rate: {`${((Number(data.taxRate || 0)) * 100).toFixed(2)}%`}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-slate-500 font-semibold">Estimated Tax Liability</div>
+                  <div className="text-lg font-bold text-emerald-700">{formatCurrency(data.estimatedTax || 0)}</div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 mb-2">Tax Rate & Category Breakdown</h3>
+                <table className="w-full text-xs text-left border-collapse border border-slate-200">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="p-2 border border-slate-200">Tax Category</th>
+                      <th className="p-2 border border-slate-200 text-center">Rate (%)</th>
+                      <th className="p-2 border border-slate-200 text-right">Taxable Turnover</th>
+                      <th className="p-2 border border-slate-200 text-right">Tax Liability</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(Array.isArray(data.breakdown) && data.breakdown.length > 0) ? (
+                      data.breakdown.map((b, i) => (
+                        <tr key={i} className={i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}>
+                          <td className="p-2 border border-slate-200">{b.name || b.category}</td>
+                          <td className="p-2 border border-slate-200 text-center">Rate: {Number(b.rate || 0).toFixed(2)}%</td>
+                          <td className="p-2 border border-slate-200 text-right">{formatCurrency(b.taxableAmount || 0)}</td>
+                          <td className="p-2 border border-slate-200 text-right">{formatCurrency(b.taxAmount || 0)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="p-2 border border-slate-200">Standard Sales Tax (16%)</td>
+                        <td className="p-2 border border-slate-200 text-center">Rate: {`${((Number(data.taxRate || 0)) * 100).toFixed(2)}%`}</td>
+                        <td className="p-2 border border-slate-200 text-right">{formatCurrency(data.taxableRevenue || 0)}</td>
+                        <td className="p-2 border border-slate-200 text-right">{formatCurrency(data.estimatedTax || 0)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {tab === 'insights' && (
+            <div className="space-y-6">
+              {insights && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded text-slate-800 text-xs leading-relaxed">
+                  <div className="font-bold text-amber-900 uppercase tracking-wide mb-1">Executive Performance Assessment</div>
+                  <p>Automated Briefing: Historical velocity and channel breakdown indicate continuous operational expansion.</p>
+                </div>
+              )}
+
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 mb-2">Monthly Trajectory</h3>
+                <table className="w-full text-xs text-left border-collapse border border-slate-200">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="p-2 border border-slate-200">Period</th>
+                      <th className="p-2 border border-slate-200 text-right">Revenue</th>
+                      <th className="p-2 border border-slate-200 text-right">Operating Expenses</th>
+                      <th className="p-2 border border-slate-200 text-right">Net Margin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {((revVsExp && revVsExp.length > 0) ? revVsExp : (charts.salesTrend || [])).map((r, i) => (
+                      <tr key={i} className={i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}>
+                        <td className="p-2 border border-slate-200">{r.period || ''}</td>
+                        <td className="p-2 border border-slate-200 text-right">{formatCurrency(r.revenue || 0)}</td>
+                        <td className="p-2 border border-slate-200 text-right">{formatCurrency(r.expenses || 0)}</td>
+                        <td className="p-2 border border-slate-200 text-right font-semibold">
+                          {formatCurrency(Number(r.revenue || 0) - Number(r.expenses || 0))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </PrintableDocumentContainer>
       </div>
     </div>
   );
@@ -1019,7 +1954,7 @@ function QuickFilter({ label, value, current, setCurrent }) {
   );
 }
 
-function IconButton({ title, onClick, icon }) {
+function IconButton({ title, onClick, icon, disabled, loading }) {
   const icons = {
     csv: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h10l6 6v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.5"/><path d="M14 4v6h6" stroke="currentColor" strokeWidth="1.5"/><text x="8" y="17" fontSize="7" fill="currentColor">CSV</text></svg>
@@ -1040,9 +1975,14 @@ function IconButton({ title, onClick, icon }) {
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="p-2 rounded-xl border border-border-default bg-surface text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      disabled={disabled}
+      className={`p-2 rounded-xl border border-border-default bg-surface text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
-      {icons[icon]}
+      {loading ? (
+        <div className="w-[18px] h-[18px] border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      ) : (
+        icons[icon]
+      )}
     </button>
   );
 }

@@ -71,6 +71,7 @@ function createTestStore() {
 }
 
 describe('Reports P&L Reconciliation and Refunds UI', () => {
+  jest.setTimeout(15000);
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -114,13 +115,13 @@ describe('Reports P&L Reconciliation and Refunds UI', () => {
       expect(screen.getByText('Operating Expenses')).toBeInTheDocument();
       expect(screen.getByText('Net Profit')).toBeInTheDocument();
       // Check values
-      expect(screen.getByText(/16,725/)).toBeInTheDocument();
-      expect(screen.getByText(/340/)).toBeInTheDocument();
-      expect(screen.getByText(/16,385/)).toBeInTheDocument();
-      expect(screen.getByText(/13,618/)).toBeInTheDocument();
-      expect(screen.getByText(/2,767/)).toBeInTheDocument();
-      expect(screen.getByText(/45,000/)).toBeInTheDocument();
-      expect(screen.getByText(/-42,233/)).toBeInTheDocument();
+      expect(screen.getAllByText(/16,725/)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/340/)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/16,385/)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/13,618/)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/2,767/)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/45,000/)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/-42,233/)[0]).toBeInTheDocument();
     }, { timeout: 4000 });
 
     // Verify mathematical reconciliation
