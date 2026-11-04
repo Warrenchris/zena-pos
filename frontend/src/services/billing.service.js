@@ -61,6 +61,13 @@ const getInvoices = async ({ page = 1, limit = 10 } = {}) => {
   }
 };
 
+const downloadInvoicePdf = async (invoiceId) => {
+  const response = await api.get(`/api/billing/invoices/${invoiceId}/pdf`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
 const renewSubscription = async ({ channel = 'mpesa', phone, planId }) => {
   const response = await api.post('/api/billing/subscription/renew', {
     channel,
@@ -84,6 +91,7 @@ export default {
   getPlans,
   getSubscription,
   getInvoices,
+  downloadInvoicePdf,
   renewSubscription,
   cancelSubscription,
   reactivateSubscription,

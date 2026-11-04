@@ -556,4 +556,61 @@ describe('Read-Only Billing Endpoints (GET /plans, /subscription, /invoices)', (
       expect(res2.body.currentPage).toBe(2);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // ENDPOINT 4: GET /api/billing/invoices/:id/pdf
+  // -------------------------------------------------------------------------
+  describe('GET /api/billing/invoices/:id/pdf', () => {
+    test('requires authentication', async () => {
+      await request(app)
+        .get('/api/billing/invoices/1/pdf')
+        .expect(401);
+    });
+
+    test('rejects non-owner organization members', async () => {
+      const invoice = await SubscriptionInvoice.findOne({
+        where: { organizationId: invoicesOrg.id }
+      });
+      await request(app)
+        .get(`/api/billing/invoices/${invoice.id}/pdf`)
+        .set('Authorization', invoicesAdminToken)
+        .expect(403);
+    });
+
+    test('returns a PDF only for an invoice owned by the authenticated organization', async () => {
+      const invoice = await SubscriptionInvoice.findOne({
+        where: { organizationId: invoicesOrg.id },
+        order: [['createdAt', 'DESC']]
+      });
+      const response = await request(app)
+        .get(`/api/billing/invoices/${invoice.id}/pdf`)
+        .set('Authorization', invoicesOwnerToken)
+        .expect(200)
+        .expect('Content-Type', /application\/pdf/);
+
+      const pdf = Buffer.isBuffer(response.body)
+        ? response.body
+        : Buffer.from(response.text || '', 'binary');
+      expect(pdf.slice(0, 5).toString('ascii')).toBe('%PDF-');
+      expect(response.headers['content-disposition']).toMatch(/(?:subscription-invoice|payment-receipt)-/);
+      expect(response.headers['cache-control']).toContain('no-store');
+    });
+
+    test('returns 404 when another organization owner requests this invoice', async () => {
+      const invoice = await SubscriptionInvoice.findOne({
+        where: { organizationId: invoicesOrg.id }
+      });
+      await request(app)
+        .get(`/api/billing/invoices/${invoice.id}/pdf`)
+        .set('Authorization', gfOwnerToken)
+        .expect(404);
+    });
+
+    test('rejects malformed invoice identifiers without querying another tenant', async () => {
+      await request(app)
+        .get('/api/billing/invoices/not-a-number/pdf')
+        .set('Authorization', invoicesOwnerToken)
+        .expect(404);
+    });
+  });
 });
