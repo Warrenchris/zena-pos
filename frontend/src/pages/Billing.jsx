@@ -13,7 +13,8 @@ import {
   ExclamationTriangleIcon,
   PhoneIcon,
   XMarkIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
@@ -22,6 +23,8 @@ import Button from '../components/ui/Button';
 import Table from '../components/ui/Table';
 import Spinner from '../components/ui/Spinner';
 import { formatDateLong, formatDateShort } from '../utils/formatters';
+import { useToast } from '../components/Toast';
+import billingService from '../services/billing.service';
 import {
   fetchPlans,
   fetchSubscription,
@@ -41,7 +44,7 @@ const parseFeatures = (features) => {
       if (Array.isArray(parsed)) return parsed;
       if (typeof parsed === 'object') {
         return Object.entries(parsed)
-          .filter(([_, val]) => Boolean(val))
+          .filter(([, val]) => Boolean(val))
           .map(([key]) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()));
       }
     } catch {
@@ -50,7 +53,7 @@ const parseFeatures = (features) => {
   }
   if (typeof features === 'object') {
     return Object.entries(features)
-      .filter(([_, val]) => Boolean(val))
+      .filter(([, val]) => Boolean(val))
       .map(([key]) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()));
   }
   return [];
@@ -88,6 +91,7 @@ const getInvoiceStatusVariant = (status) => {
 
 export default function Billing() {
   const dispatch = useDispatch();
+  const { showToast } = useToast();
   const { user } = useSelector((state) => state.auth);
   const {
     plans,
@@ -108,6 +112,30 @@ export default function Billing() {
   const [paymentChannel, setPaymentChannel] = useState('mpesa');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState(null);
+
+  const handleDownloadInvoice = async (invoice) => {
+    if (!invoice?.id || downloadingInvoiceId !== null) return;
+    setDownloadingInvoiceId(invoice.id);
+    try {
+      const blob = await billingService.downloadInvoicePdf(invoice.id);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      const safeNumber = String(invoice.invoiceNumber || invoice.id).replace(/[^A-Za-z0-9._-]/g, '-');
+      const prefix = invoice.status === 'paid' ? 'payment-receipt' : 'subscription-invoice';
+      anchor.href = url;
+      anchor.download = `${prefix}-${safeNumber}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      showToast('success', 'Billing PDF downloaded.');
+    } catch (downloadError) {
+      showToast('error', downloadError.response?.data?.error || 'Unable to download this billing PDF. Please try again.');
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
+  };
 
   useEffect(() => {
     dispatch(fetchSubscription());
@@ -181,15 +209,11 @@ export default function Billing() {
   const shopCurrent = quotas?.shops?.current ?? 0;
   const isShopsUnlimited = isGrandfathered || quotas?.shops?.isUnlimited || quotas?.shops?.limit === -1 || currentPlan?.maxShops === -1;
   const shopLimit = quotas?.shops?.limit;
-  const shopLimitDisplay = isShopsUnlimited ? 'Unlimited' : (shopLimit !== undefined && shopLimit !== null ? shopLimit : '—');
-  const shopUsageDisplay = `${shopCurrent} / ${shopLimitDisplay}`;
   const shopUsagePercent = isShopsUnlimited ? 0 : (shopLimit > 0 ? Math.min(100, Math.round((shopCurrent / shopLimit) * 100)) : 0);
 
   const userCurrent = quotas?.users?.current ?? 0;
   const isUsersUnlimited = isGrandfathered || quotas?.users?.isUnlimited || quotas?.users?.limit === -1 || currentPlan?.maxUsers === -1;
   const userLimit = quotas?.users?.limit;
-  const userLimitDisplay = isUsersUnlimited ? 'Unlimited' : (userLimit !== undefined && userLimit !== null ? userLimit : '—');
-  const userUsageDisplay = `${userCurrent} / ${userLimitDisplay}`;
   const userUsagePercent = isUsersUnlimited ? 0 : (userLimit > 0 ? Math.min(100, Math.round((userCurrent / userLimit) * 100)) : 0);
 
   // Invoice table columns
@@ -236,6 +260,23 @@ export default function Billing() {
         </Badge>
       ),
     },
+    {
+      key: 'download',
+      label: 'Document',
+      className: 'whitespace-nowrap',
+      render: (_, row) => (
+        <Button
+          variant="outline"
+          size="sm"
+          leftIcon={ArrowDownTrayIcon}
+          loading={downloadingInvoiceId === row.id}
+          disabled={downloadingInvoiceId !== null && downloadingInvoiceId !== row.id}
+          onClick={() => handleDownloadInvoice(row)}
+        >
+          Download PDF
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -243,7 +284,7 @@ export default function Billing() {
       {/* Header */}
       <PageHeader
         title="Billing & Plans"
-        description="Monitor your organization's subscription tier, active resource quotas, and official billing invoices."
+        description="Monitor your organization's subscription tier, active resource quotas, and billing history."
         secondaryActions={
           <Button
             variant="outline"
@@ -645,12 +686,12 @@ export default function Billing() {
         )}
       </div>
 
-      {/* Section 3: Official Invoice History */}
+      {/* Section 3: Subscription Billing Documents */}
       <div>
         <div className="mb-4">
           <h2 className="text-h2 font-bold text-text-primary tracking-tight">Billing Invoices</h2>
           <p className="text-body text-text-secondary mt-1">
-            Official tax invoices and receipts issued for subscription renewal cycles.
+            Subscription invoices and payment receipts for your organization's billing history.
           </p>
         </div>
 
@@ -660,7 +701,7 @@ export default function Billing() {
             data={invoices}
             loading={loading.invoices}
             emptyTitle="No Invoices Found"
-            emptyDescription="Official billing invoices will appear here following subscription renewal cycles."
+            emptyDescription="Subscription invoices and payment receipts will appear here after billing activity."
             pagination={{
               currentPage: invoicesPagination.currentPage,
               totalPages: invoicesPagination.totalPages,
@@ -678,8 +719,8 @@ export default function Billing() {
               Invoice History Restricted
             </h3>
             <p className="text-small text-text-secondary max-w-md mx-auto leading-relaxed">
-              Subscription invoices and official billing statements can only be accessed by the organization owner.
-              Please contact your organization owner if you require past invoice receipts.
+              Subscription billing documents can only be accessed by the organization owner.
+              Please contact your organization owner if you need a copy of a past billing document.
             </p>
           </div>
         )}
