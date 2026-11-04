@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 const { auth, authzContext, authorize } = require('../middleware/auth');
 const { requireVerifiedEmail } = require('../middleware/requireVerifiedEmail');
 const billingService = require('../services/billingService');
+const { buildSubscriptionInvoicePdfDoc } = require('../services/subscriptionInvoicePdfService');
 const billingPaymentService = require('../services/billingPaymentService');
 const entitlementService = require('../services/entitlementService');
 const billingNotificationService = require('../services/billingNotificationService');
@@ -13,6 +14,7 @@ const {
   Plan,
   Subscription,
   SubscriptionInvoice,
+  Organization,
   Shop,
   OrganizationMembership,
   Employee,
@@ -245,6 +247,61 @@ router.get('/invoices', auth, authzContext, authorize({ requireOrgOwner: true })
   } catch (error) {
     console.error('Error fetching subscription invoices:', error);
     return res.status(500).json({ error: 'Failed to fetch subscription invoices.' });
+  }
+});
+
+/**
+ * GET /api/billing/invoices/:id/pdf
+ * Downloads a neutral subscription invoice or payment receipt.
+ * Access: Organization Owner ONLY; invoice lookup is always organization-scoped.
+ */
+router.get('/invoices/:id/pdf', auth, authzContext, authorize({ requireOrgOwner: true }), async (req, res) => {
+  try {
+    const organizationId = req.organizationId;
+    const invoiceId = Number(req.params.id);
+
+    if (!organizationId) {
+      return res.status(403).json({ error: 'Organization context required.' });
+    }
+    if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0) {
+      return res.status(404).json({ error: 'Subscription invoice not found.' });
+    }
+
+    const invoice = await SubscriptionInvoice.findOne({
+      where: { id: invoiceId, organizationId },
+      include: [
+        { model: Organization, attributes: ['id', 'name', 'currency'] },
+        { model: Plan, attributes: ['id', 'name', 'code'] },
+        { model: Subscription, attributes: ['id', 'billingCycle'] }
+      ]
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ error: 'Subscription invoice not found.' });
+    }
+
+    const doc = buildSubscriptionInvoicePdfDoc(invoice);
+    const safeInvoiceNumber = String(invoice.invoiceNumber || invoice.id)
+      .replace(/[^A-Za-z0-9._-]/g, '-')
+      .slice(0, 100);
+
+    const documentPrefix = invoice.status === 'paid' ? 'payment-receipt' : 'subscription-invoice';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${documentPrefix}-${safeInvoiceNumber}.pdf"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    doc.on('error', (error) => {
+      console.error('Error streaming subscription invoice PDF:', error);
+      if (!res.headersSent) res.status(500).end();
+      else res.destroy(error);
+    });
+    doc.pipe(res);
+    doc.end();
+    return undefined;
+  } catch (error) {
+    console.error('Error generating subscription invoice PDF:', error);
+    if (res.headersSent) return res.destroy(error);
+    return res.status(500).json({ error: 'Failed to generate subscription invoice PDF.' });
   }
 });
 
