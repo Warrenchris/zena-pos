@@ -34,45 +34,97 @@ export default function ExportButtons({
   /**
    * Fetches the complete filtered expense dataset across all pages if the current
    * paginated view only contains a subset of matching records.
-   * Pages through backend pagination safely until all records are retrieved.
+   * Pages through backend pagination safely using authoritative metadata until all records are retrieved.
+   * Never falls back to partial data on failure; aborts with a descriptive error.
    */
   const resolveAllExpenses = async () => {
-    if (total > expenses.length) {
-      try {
-        const pageSize = 500;
-        let fetchedRows = [];
-        let currentPage = 1;
-        let expectedTotal = total;
-
-        let hasMore = true;
-        while (hasMore) {
-          const { data } = await expensesAPI.getAll({
-            ...filters,
-            page: currentPage,
-            limit: pageSize,
-          });
-          const rows = data?.expenses || data?.rows || [];
-          if (!rows.length) {
-            hasMore = false;
-            break;
-          }
-          fetchedRows = fetchedRows.concat(rows);
-          if (typeof data?.total === 'number') {
-            expectedTotal = data.total;
-          }
-          if (fetchedRows.length >= expectedTotal || rows.length < pageSize) {
-            hasMore = false;
-            break;
-          }
-          currentPage += 1;
-        }
-        return fetchedRows.length > 0 ? fetchedRows : expenses;
-      } catch (err) {
-        console.warn('Failed to fetch full expense dataset, falling back to loaded records:', err);
-        return expenses;
-      }
+    if (typeof total === 'number' && total === 0) {
+      return [];
     }
-    return expenses;
+
+    if (typeof total === 'number' && total > 0 && total <= expenses.length) {
+      return expenses;
+    }
+
+    const pageSize = 500;
+    const seenIds = new Set();
+    const fetchedRows = [];
+    let currentPage = 1;
+    let expectedTotal = typeof total === 'number' ? total : null;
+    let expectedTotalPages = null;
+
+    let hasMore = true;
+    while (hasMore) {
+      let response;
+      try {
+        response = await expensesAPI.getAll({
+          ...filters,
+          page: currentPage,
+          limit: pageSize,
+        });
+      } catch (err) {
+        console.error(`Failed to fetch expenses page ${currentPage}:`, err);
+        throw new Error(
+          `Failed to retrieve expenses on page ${currentPage}. Export aborted to prevent incomplete financial data.`
+        );
+      }
+
+      const data = response?.data;
+      const rows = Array.isArray(data?.expenses)
+        ? data.expenses
+        : Array.isArray(data?.rows)
+          ? data.rows
+          : Array.isArray(data)
+            ? data
+            : [];
+
+      // Update authoritative metadata if returned by backend
+      if (typeof data?.total === 'number') {
+        expectedTotal = data.total;
+      }
+      if (typeof data?.totalPages === 'number') {
+        expectedTotalPages = data.totalPages;
+      }
+
+      // If backend returns no records, end of dataset is reached
+      if (rows.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      // Deduplicate records across pages in case of concurrent offset shifts
+      for (const row of rows) {
+        const idKey = row.id ?? `${row.date}-${row.description}-${row.amount}`;
+        if (!seenIds.has(idKey)) {
+          seenIds.add(idKey);
+          fetchedRows.push(row);
+        }
+      }
+
+      // Check authoritative termination conditions:
+      // 1. Authoritative total count reached
+      if (expectedTotal !== null && fetchedRows.length >= expectedTotal) {
+        hasMore = false;
+        break;
+      }
+
+      // 2. Authoritative totalPages reached
+      if (expectedTotalPages !== null && currentPage >= expectedTotalPages) {
+        hasMore = false;
+        break;
+      }
+
+      currentPage += 1;
+    }
+
+    // Completeness verification: abort if declared authoritative total was not fully retrieved
+    if (expectedTotal !== null && expectedTotal > 0 && fetchedRows.length < expectedTotal) {
+      throw new Error(
+        `Incomplete financial dataset: expected ${expectedTotal} records but retrieved ${fetchedRows.length}. Export aborted.`
+      );
+    }
+
+    return fetchedRows;
   };
 
   const exportCSV = async () => {
@@ -110,7 +162,7 @@ export default function ExportButtons({
       toast.success(`Exported ${records.length} expense records to CSV`);
     } catch (err) {
       console.error('CSV export failed:', err);
-      toast.error('Failed to export expenses to CSV');
+      toast.error(err.message || 'Failed to export expenses to CSV');
     } finally {
       setExporting(null);
     }
@@ -180,7 +232,7 @@ export default function ExportButtons({
       toast.success(`Exported ${records.length} expense records to Excel`);
     } catch (err) {
       console.error('Excel export failed:', err);
-      toast.error('Failed to export expenses to Excel');
+      toast.error(err.message || 'Failed to export expenses to Excel');
     } finally {
       setExporting(null);
     }
@@ -283,7 +335,7 @@ export default function ExportButtons({
       toast.success(`Exported ${records.length} expense records to PDF`);
     } catch (err) {
       console.error('PDF export failed:', err);
-      toast.error('Failed to export expenses to PDF');
+      toast.error(err.message || 'Failed to export expenses to PDF');
     } finally {
       setExporting(null);
     }
@@ -293,6 +345,10 @@ export default function ExportButtons({
     setExporting('print');
     try {
       const records = await resolveAllExpenses();
+      if (!records || records.length === 0) {
+        toast.error('No expense records to print');
+        return;
+      }
       setPrintRecords(records);
       setTimeout(() => {
         window.print();
@@ -300,12 +356,13 @@ export default function ExportButtons({
       }, 50);
     } catch (err) {
       console.error('Print preparation failed:', err);
-      window.print();
+      toast.error(err.message || 'Failed to prepare expenses for printing');
+    } finally {
       setExporting(null);
     }
   };
 
-  const activePrintRecords = printRecords || expenses;
+  const activePrintRecords = printRecords || (exporting === 'print' ? expenses : []);
   const printTotalAmount = activePrintRecords.reduce((sum, e) => sum + Number(e.amount || 0), 0);
   const printAvgExpense = activePrintRecords.length > 0 ? printTotalAmount / activePrintRecords.length : 0;
 

@@ -59,7 +59,7 @@ exports.getAllExpenses = async (req, res) => {
           required: false
         }
       ],
-      order: [['date', 'DESC']],
+      order: [['date', 'DESC'], ['id', 'DESC']],
       limit,
       offset
     });
