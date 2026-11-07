@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { isManagerTier } from '../utils/roles';
 import forecastingService from '../services/forecasting.service';
 import {
@@ -34,12 +34,13 @@ import { fetchSalesStatistics, fetchSales } from '../store/slices/salesSlice';
 import { fetchCustomers } from '../store/slices/customersSlice';
 import { fetchProducts } from '../store/slices/productsSlice';
 import { fetchSubscription } from '../store/slices/billingSlice';
-import api, { employeesAPI } from '../services/api';
-import { notifyLowStock } from '../utils/notifications';
+import api, { employeesAPI, productsAPI } from '../services/api';
+import { notifyRestockSummary } from '../utils/notifications';
 
 // Track notified product conditions (productId:stockQuantity) to alert once per new low-stock condition
 // and avoid duplicate toasts on data refetches, polls, or remounts.
 const notifiedStockConditions = new Set();
+export const clearNotifiedStockConditions = () => notifiedStockConditions.clear();
 
 export default function Dashboard() {
   const dispatch = useDispatch();
@@ -132,6 +133,40 @@ export default function Dashboard() {
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [restockData, setRestockData] = useState({
+    items: [],
+    total: 0,
+    status: 'loading'
+  });
+  const restockPromiseRef = React.useRef(null);
+
+  const fetchNeedsRestock = useCallback(async () => {
+    if (restockPromiseRef.current) {
+      return restockPromiseRef.current;
+    }
+    setRestockData((prev) => (prev.status === 'ok' ? prev : { ...prev, status: 'loading' }));
+    const promise = (async () => {
+      try {
+        const response = await productsAPI.getAll({ availability: 'needs_restock', pageSize: 5 });
+        if (response?.data?.availability === 'needs_restock') {
+          setRestockData({
+            items: Array.isArray(response.data.products) ? response.data.products : [],
+            total: response.data.pagination?.total ?? (response.data.products?.length || 0),
+            status: 'ok'
+          });
+        } else {
+          setRestockData((prev) => ({ ...prev, status: 'unsupported' }));
+        }
+      } catch (err) {
+        setRestockData((prev) => ({ ...prev, status: 'unsupported' }));
+      }
+    })();
+    restockPromiseRef.current = promise.finally(() => {
+      restockPromiseRef.current = null;
+    });
+    return restockPromiseRef.current;
+  }, []);
+
 
   const dashboardFilter = React.useMemo(() => ({
     period,
@@ -258,6 +293,7 @@ export default function Dashboard() {
       const salesPromise = dispatch(fetchSales({ limit: 5 }));
       const customersPromise = dispatch(fetchCustomers({ limit: 5 }));
       const productsPromise = dispatch(fetchProducts({ limit: 5 }));
+      const restockPromise = fetchNeedsRestock();
 
       // Await all operations so callers (e.g. handleRefresh) know when the full dashboard load completes
       await Promise.allSettled([
@@ -270,7 +306,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
-  }, [dispatch, userId, userShopId, fetchInsights, fetchForecast]);
+  }, [dispatch, userId, userShopId, fetchInsights, fetchForecast, fetchNeedsRestock]);
 
   useEffect(() => {
     loadDashboardData();
@@ -286,26 +322,42 @@ export default function Dashboard() {
     }
   }, [loadDashboardData]);
 
+    // Low-stock / restock computation
+  // If backend supports availability=needs_restock ('ok'), trust backend total and items.
+  // Otherwise ('unsupported'), fall back to client-side filtering over state.products.
+  const isRestockOk = restockData.status === 'ok';
+  const fallbackLowStock = Array.isArray(products)
+    ? products.filter((p) => p.stockQuantity <= p.reorderPoint)
+    : [];
+
+  const displayRestockItems = isRestockOk
+    ? restockData.items
+    : fallbackLowStock.slice(0, 5);
+
+  const displayRestockTotal = isRestockOk
+    ? restockData.total
+    : fallbackLowStock.length;
+
+  const isRestockLoading = restockData.status === 'loading'
+    ? true
+    : (restockData.status === 'unsupported' ? productsLoading : false);
+
   // Check for low stock products (alert only once per unique low-stock condition)
   useEffect(() => {
-    if (products && products.length > 0 && isManagerTier(userRole)) {
-      const lowStockProducts = products.filter(product =>
-        product.stockQuantity <= product.reorderPoint && product.active
-      );
-
-      lowStockProducts.forEach(product => {
-        const conditionKey = `${product.id}:${product.stockQuantity}`;
-        if (!notifiedStockConditions.has(conditionKey)) {
-          notifyLowStock(
-            product.name,
-            product.stockQuantity,
-            product.reorderPoint
-          );
-          notifiedStockConditions.add(conditionKey);
-        }
-      });
+    if (!isManagerTier(userRole) || isRestockLoading) {
+      return;
     }
-  }, [products, userRole]);
+
+    if (displayRestockTotal > 0 && displayRestockItems.length > 0) {
+      const itemIds = displayRestockItems.map((p) => p.id).join(',');
+      const conditionKey = `restock:${displayRestockTotal}:${itemIds}`;
+
+      if (!notifiedStockConditions.has(conditionKey)) {
+        notifyRestockSummary(displayRestockTotal, displayRestockItems);
+        notifiedStockConditions.add(conditionKey);
+      }
+    }
+  }, [userRole, isRestockLoading, displayRestockTotal, displayRestockItems]);
 
 
   // Combined UI flags
@@ -328,7 +380,8 @@ export default function Dashboard() {
     dispatch(fetchSales({ limit: 5 }));
     dispatch(fetchCustomers({ limit: 5 }));
     dispatch(fetchProducts({ limit: 5 }));
-  }, [dispatch]);
+    fetchNeedsRestock();
+  }, [dispatch, fetchNeedsRestock]);
 
   // Show loading while authentication is being verified
   if (authLoading) {
@@ -709,7 +762,7 @@ export default function Dashboard() {
             }
           />
           <Card.Body>
-            {productsLoading ? (
+            {isRestockLoading ? (
               <div className="animate-pulse space-y-3" role="status" aria-label="Loading low stock products">
                 {[...Array(5)].map((_, i) => (
                   <div key={i} className="flex items-center gap-3 py-2">
@@ -722,7 +775,7 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
-            ) : products.filter(p => p.stockQuantity <= p.reorderPoint).length === 0 ? (
+            ) : displayRestockTotal === 0 ? (
               <div className="text-center py-10">
                 <CubeIcon className="h-10 w-10 text-emerald-400 mx-auto mb-2" />
                 <p className="text-text-secondary font-medium">All products are well stocked!</p>
@@ -730,10 +783,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="space-y-1">
-                {products
-                  .filter(p => p.stockQuantity <= p.reorderPoint)
-                  .slice(0, 5)
-                  .map((product) => {
+                {displayRestockItems.slice(0, 5).map((product) => {
                     const isCritical = product.stockQuantity === 0;
                     const isVeryLow = product.stockQuantity > 0 && product.stockQuantity <= Math.ceil(product.reorderPoint * 0.5);
                     const urgencyLabel = isCritical ? 'Out of Stock' : isVeryLow ? 'Critical' : 'Low Stock';
@@ -796,6 +846,16 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
+                {displayRestockTotal > 5 && (
+                  <div className="pt-2 text-center border-t border-border-subtle mt-2">
+                    <Link
+                      to="/stock/manage"
+                      className="text-caption font-semibold text-danger hover:text-danger/80 transition-colors inline-block"
+                    >
+                      View all {displayRestockTotal}
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </Card.Body>
