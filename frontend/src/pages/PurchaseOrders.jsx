@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import {
   ClipboardDocumentCheckIcon,
   PlusIcon,
@@ -27,10 +28,22 @@ import Badge from '../components/ui/Badge';
 import Card from '../components/ui/Card';
 import { useToast } from '../components/Toast';
 import { format } from 'date-fns';
+import { generatePDF } from '../utils/documentGenerator';
+import { resolveBusinessIdentity } from '../utils/businessIdentity';
+import VoucherPrintLayout, { formatDocumentDate } from '../components/documents/VoucherPrintLayout';
+
+function createReceiveRequestId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return `receipt-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
 
 export default function PurchaseOrders() {
   const { format: formatCurrency } = useCurrency();
   const { showToast } = useToast();
+  const auth = useSelector((state) => state.auth);
+  const settings = useSelector((state) => state.settings);
+  const shop = useSelector((state) => state.shop?.currentShop || state.shop?.shop);
+  const identity = useMemo(() => resolveBusinessIdentity({ auth: { ...auth, shop }, settings }), [auth, settings, shop]);
 
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -56,15 +69,17 @@ export default function PurchaseOrders() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [receiveBatch, setReceiveBatch] = useState([]);
+  const [receiveRequestId, setReceiveRequestId] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   // New PO Form state
   const [supplierId, setSupplierId] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [supplierEmail, setSupplierEmail] = useState('');
   const [supplierPhone, setSupplierPhone] = useState('');
-  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [orderDate] = useState(new Date().toISOString().split('T')[0]);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
   const [notes, setNotes] = useState('');
   const [poItems, setPoItems] = useState([]);
@@ -276,6 +291,7 @@ export default function PurchaseOrders() {
       const prevRec = parseFloat(item.quantityReceived || 0);
       const remaining = Math.max(0, Math.round((ordered - prevRec) * 100) / 100);
       return {
+        id: item.id,
         productId: item.productId,
         productName: item.productName,
         sku: item.sku,
@@ -286,11 +302,13 @@ export default function PurchaseOrders() {
       };
     });
     setReceiveBatch(initialBatch);
+    setReceiveRequestId(createReceiveRequestId());
     setShowReceiveModal(true);
   };
 
   const handleBatchQuantityChange = (index, value) => {
     const val = parseFloat(value);
+    setReceiveRequestId(createReceiveRequestId());
     setReceiveBatch(prev => {
       const copy = [...prev];
       copy[index].quantityToReceive = isNaN(val) ? 0 : val;
@@ -304,8 +322,8 @@ export default function PurchaseOrders() {
     // Validate quantities
     for (const item of receiveBatch) {
       const qty = parseFloat(item.quantityToReceive || 0);
-      if (qty < 0) {
-        showToast({ type: 'error', title: 'Invalid Quantity', message: `Negative quantity for ${item.productName}` });
+      if (!Number.isFinite(qty) || qty < 0) {
+        showToast({ type: 'error', title: 'Invalid Quantity', message: `Enter a valid non-negative quantity for ${item.productName}.` });
         return;
       }
       if (qty > item.remaining) {
@@ -327,11 +345,12 @@ export default function PurchaseOrders() {
     setSubmitting(true);
     try {
       const payload = {
+        requestId: receiveRequestId || createReceiveRequestId(),
         receivedItems: receiveBatch
           .filter(i => parseFloat(i.quantityToReceive || 0) > 0)
           .map(i => ({
-            productId: i.productId,
-            quantityToReceive: parseFloat(i.quantityToReceive)
+            ...(i.id ? { purchaseOrderItemId: i.id } : { productId: i.productId }),
+            quantityReceived: Math.round((Number(i.quantityReceived || 0) + Number(i.quantityToReceive || 0)) * 100) / 100
           }))
       };
 
@@ -344,6 +363,7 @@ export default function PurchaseOrders() {
       });
 
       setShowReceiveModal(false);
+      setReceiveRequestId(null);
       setShowDetailModal(false);
       fetchOrders();
     } catch (err) {
@@ -394,18 +414,64 @@ export default function PurchaseOrders() {
     });
   };
 
+  const handleDownloadPurchaseOrderPdf = async () => {
+    if (!selectedPo) return;
+    setGeneratingPdf(true);
+    try {
+      const items = Array.isArray(selectedPo.lineItems) && selectedPo.lineItems.length > 0
+        ? selectedPo.lineItems
+        : (selectedPo.items || []);
+      const orderedUnits = items.reduce((sum, item) => sum + Number(item.quantityOrdered || 0), 0);
+      const receivedUnits = items.reduce((sum, item) => sum + Number(item.quantityReceived || 0), 0);
+      const safeReference = String(selectedPo.poNumber || 'purchase-order').replace(/[^a-zA-Z0-9-_]/g, '-');
+
+      const result = await generatePDF({
+        title: 'PURCHASE ORDER',
+        subtitle: 'Supplier procurement document — not a payment confirmation',
+        documentNumber: selectedPo.poNumber,
+        identity,
+        meta: [
+          { label: 'Supplier', value: selectedPo.supplierName || '—' },
+          { label: 'Supplier email', value: selectedPo.supplierEmail || 'Not supplied' },
+          { label: 'Supplier phone', value: selectedPo.supplierPhone || 'Not supplied' },
+          { label: 'Order date', value: formatDocumentDate(selectedPo.orderDate || selectedPo.createdAt) },
+          { label: 'Expected delivery', value: formatDocumentDate(selectedPo.expectedDeliveryDate) },
+          { label: 'Status', value: selectedPo.status || '—' },
+        ],
+        summaryCards: [
+          { label: 'Order value', value: formatCurrency(Number(selectedPo.totalAmount || 0)) },
+          { label: 'Units ordered', value: orderedUnits.toLocaleString('en-KE') },
+          { label: 'Units received', value: receivedUnits.toLocaleString('en-KE') },
+        ],
+        columns: [
+          { header: 'Product', dataKey: 'productName', width: 58 },
+          { header: 'Ordered', dataKey: 'quantityOrdered', align: 'right', width: 22 },
+          { header: 'Received', dataKey: 'quantityReceived', align: 'right', width: 22 },
+          { header: 'Unit cost', dataKey: 'unitCost', align: 'right', width: 32 },
+          { header: 'Line total', dataKey: 'lineTotal', align: 'right', width: 34 },
+        ],
+        rows: items.map(item => ({
+          productName: item.productName || 'Unnamed item',
+          quantityOrdered: Number(item.quantityOrdered || 0).toLocaleString('en-KE'),
+          quantityReceived: Number(item.quantityReceived || 0).toLocaleString('en-KE'),
+          unitCost: formatCurrency(Number(item.unitCost || 0)),
+          lineTotal: formatCurrency(Number(item.subtotal ?? Number(item.quantityOrdered || 0) * Number(item.unitCost || 0))),
+        })),
+        fileName: `purchase-order-${safeReference}.pdf`,
+      });
+
+      if (!result.success) throw result.error || new Error('PDF generation failed');
+      showToast({ type: 'success', title: 'PDF ready', message: 'Purchase order downloaded.' });
+    } catch (error) {
+      console.error('Failed to generate purchase order PDF:', error);
+      showToast({ type: 'error', title: 'PDF export failed', message: 'The purchase order could not be generated. Please try again.' });
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Print View Stylesheet */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #printable-po-voucher, #printable-po-voucher * { visibility: visible; }
-          #printable-po-voucher { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
-
       {/* Header */}
       <PageHeader
         title="Purchase Orders (PO Management)"
@@ -963,105 +1029,15 @@ export default function PurchaseOrders() {
           description={`Created on ${format(new Date(selectedPo.orderDate || selectedPo.createdAt), 'MMM dd, yyyy')}`}
           size="lg"
         >
-          <div className="space-y-4" id="printable-po-voucher">
-            {/* Header for print voucher */}
-            <div className="border-b border-border-default pb-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-h3 font-black text-text-primary">PURCHASE ORDER</h2>
-                  <p className="text-caption font-mono text-primary font-bold">{selectedPo.poNumber}</p>
-                </div>
-                <div className="text-right">
-                  <Badge variant={selectedPo.status === 'RECEIVED' ? 'success' : selectedPo.status === 'PARTIALLY_RECEIVED' ? 'warning' : selectedPo.status === 'ORDERED' ? 'info' : 'danger'}>
-                    {selectedPo.status}
-                  </Badge>
-                  <p className="text-caption text-text-muted mt-1">
-                    Date: {format(new Date(selectedPo.orderDate || selectedPo.createdAt), 'dd/MM/yyyy')}
-                  </p>
-                </div>
-              </div>
-            </div>
+                    <div className="space-y-4">
+            <VoucherPrintLayout
+              type="purchase-order"
+              document={selectedPo}
+              identity={identity}
+              formatCurrency={formatCurrency}
+            />
 
-            <div className="grid grid-cols-2 gap-3 p-3 bg-surface-2/40 border border-border-default rounded-xl text-small">
-              <div>
-                <p className="text-caption text-text-muted uppercase tracking-wider">Vendor / Supplier</p>
-                <p className="font-bold text-text-primary">{selectedPo.supplierName}</p>
-                {selectedPo.supplierEmail && (
-                  <p className="text-caption text-text-muted">{selectedPo.supplierEmail}</p>
-                )}
-                {selectedPo.supplierPhone && (
-                  <p className="text-caption text-text-muted">{selectedPo.supplierPhone}</p>
-                )}
-              </div>
-              <div className="text-right">
-                <p className="text-caption text-text-muted uppercase tracking-wider">Delivery Details</p>
-                {selectedPo.expectedDeliveryDate ? (
-                  <p className="font-semibold text-text-primary">
-                    Expected: {format(new Date(selectedPo.expectedDeliveryDate), 'MMM dd, yyyy')}
-                  </p>
-                ) : (
-                  <p className="text-text-muted">As soon as possible</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-caption font-semibold uppercase tracking-wider text-text-muted mb-2">Ordered Items</h4>
-              <div className="border border-border-default rounded-xl overflow-hidden bg-surface">
-                <table className="w-full text-left text-small">
-                  <thead className="bg-surface-2 text-text-secondary text-caption font-semibold uppercase border-b border-border-default">
-                    <tr>
-                      <th className="p-2.5">Product</th>
-                      <th className="p-2.5 text-center">Ordered</th>
-                      <th className="p-2.5 text-center">Received</th>
-                      <th className="p-2.5 text-right">Unit Cost</th>
-                      <th className="p-2.5 text-right">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-default">
-                    {(selectedPo.lineItems || selectedPo.items || []).map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="p-2.5 font-semibold text-text-primary">{item.productName}</td>
-                        <td className="p-2.5 text-center text-text-secondary">{item.quantityOrdered}</td>
-                        <td className="p-2.5 text-center font-bold text-primary">{item.quantityReceived || 0}</td>
-                        <td className="p-2.5 text-right text-text-secondary">{formatCurrency(item.unitCost)}</td>
-                        <td className="p-2.5 text-right font-bold text-primary">
-                          {formatCurrency((item.subtotal || item.quantityOrdered * item.unitCost))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="p-3 bg-surface-2/60 border border-border-default rounded-xl flex justify-between items-center text-body font-bold">
-              <span>Total PO Value:</span>
-              <span className="text-primary text-h3 font-extrabold">
-                {formatCurrency(parseFloat(selectedPo.totalAmount || 0))}
-              </span>
-            </div>
-
-            {selectedPo.notes && (
-              <div className="p-3 bg-surface-2/30 rounded-xl border border-border-default text-caption text-text-secondary">
-                <span className="font-semibold text-text-primary block mb-0.5">Order Notes & Terms:</span>
-                {selectedPo.notes}
-              </div>
-            )}
-
-            {/* Print Signatures */}
-            <div className="pt-6 border-t border-border-default grid grid-cols-2 gap-8 text-caption text-text-muted">
-              <div>
-                <div className="border-b border-text-muted/40 h-8"></div>
-                <p className="mt-1 font-semibold">Authorized Purchasing Officer</p>
-              </div>
-              <div className="text-right">
-                <div className="border-b border-text-muted/40 h-8"></div>
-                <p className="mt-1 font-semibold">Supplier Acceptance & Date</p>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center pt-3 border-t border-border-default no-print">
+            <div className="no-print flex justify-between items-center gap-2 border-t border-border-default pt-3">
               {(selectedPo.status === 'ORDERED' || selectedPo.status === 'PARTIALLY_RECEIVED') ? (
                 <Button
                   variant="success"
@@ -1073,11 +1049,15 @@ export default function PurchaseOrders() {
                 >
                   Receive Delivery Batch
                 </Button>
-              ) : (
-                <div></div>
-              )}
-
+              ) : <div />}
               <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadPurchaseOrderPdf}
+                  disabled={generatingPdf}
+                >
+                  {generatingPdf ? 'Preparing PDF…' : 'Download PDF'}
+                </Button>
                 <Button variant="outline" leftIcon={PrinterIcon} onClick={() => window.print()}>
                   Print PO Document
                 </Button>

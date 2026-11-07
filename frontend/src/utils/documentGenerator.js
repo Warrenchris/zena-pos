@@ -109,7 +109,7 @@ export async function generatePDF(options = {}) {
   if (identity.address) contactItems.push(identity.address);
   if (identity.phone) contactItems.push(`Tel: ${identity.phone}`);
   if (identity.email) contactItems.push(`Email: ${identity.email}`);
-  if (identity.kraPin) contactItems.push(`PIN: ${identity.kraPin}`);
+  if (identity.kraPin && identity.isValidPin === true) contactItems.push(`PIN: ${identity.kraPin}`);
 
   if (contactItems.length > 0) {
     doc.text(contactItems.join('  •  '), marginLeft, currentY + 1);
@@ -150,7 +150,15 @@ export async function generatePDF(options = {}) {
   // Metadata inline badges (e.g., Generated date, Cashier/Operator, Filters)
   const metaBadgeItems = [];
   const now = new Date();
-  const dateStr = now.toISOString().replace('T', ' ').substring(0, 16);
+  const dateStr = new Intl.DateTimeFormat('en-KE', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'Africa/Nairobi',
+  }).format(now);
   metaBadgeItems.push({ label: 'Generated', value: dateStr });
 
   if (identity.printedBy) {
@@ -169,10 +177,11 @@ export async function generatePDF(options = {}) {
     currentY += 2;
     doc.setFontSize(DOCUMENT_FONTS.sizes.metaLabel);
     const metaText = metaBadgeItems.map(m => `${m.label}: ${m.value}`).join('   |   ');
+    const metaLines = doc.splitTextToSize(metaText, printableWidth);
     doc.setFont(DOCUMENT_FONTS.family, DOCUMENT_FONTS.styles.normal);
     doc.setTextColor(...DOCUMENT_COLORS.textMutedRgb);
-    doc.text(metaText, marginLeft, currentY + 2);
-    currentY += 6;
+    doc.text(metaLines, marginLeft, currentY + 2);
+    currentY += Math.max(6, (metaLines.length * 3.5) + 2);
   }
 
   // 2. SUMMARY METRIC CARDS (if provided)

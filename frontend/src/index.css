@@ -463,6 +463,9 @@
 
 @media print {
   html, body {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
     background: #FFFFFF !important;
     color: #000000 !important;
   }
@@ -495,20 +498,110 @@
   body:has(#printable-document-area) * {
     visibility: hidden;
   }
-  #printable-document-area,
-  #printable-document-area * {
-    visibility: visible;
+  body:has(#printable-document-area) #printable-document-area,
+  body:has(#printable-document-area) #printable-document-area * {
+    visibility: visible !important;
   }
+
+  /* When printing from a modal portal (e.g. #headlessui-portal-root), hide #root completely
+     so it occupies 0px in normal document flow. Without this, #root occupies full viewport height (~800px+),
+     displacing the printable area down and pushing it onto page 2 (causing a blank page 1).
+     If the document is inside #root (e.g. Reports, Expense Exports), keep #root visible. */
+  body:has(#printable-document-area) #root {
+    display: none !important;
+  }
+  body:has(#root #printable-document-area) #root {
+    display: block !important;
+  }
+
+  /* Remove modal backdrop, overlay and close buttons */
+  body:has(#printable-document-area) [class*="bg-stone-950"] {
+    display: none !important;
+  }
+
+  /* Voucher documents are opened from inside the shared modal primitive.
+     Remove modal positioning, transforms and overflow clipping only while a
+     UDDS document is being printed so multi-page A4 content starts at (0,0) and paginates cleanly. */
+  body:has(#printable-document-area) .relative.z-50 {
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body:has(#printable-document-area) .fixed.inset-0.z-10.overflow-y-auto {
+    position: static !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body:has(#printable-document-area) .fixed.inset-0.z-10.overflow-y-auto > .flex.min-h-full {
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    text-align: left !important;
+  }
+  body:has(#printable-document-area) .responsive-modal {
+    position: static !important;
+    transform: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+  body:has(#printable-document-area) .responsive-modal > :not(.relative) {
+    display: none !important;
+  }
+  body:has(#printable-document-area) .responsive-modal > .relative {
+    position: static !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body:has(#printable-document-area) .space-y-4 {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* When printing a pre-rendered print-only document from inside #root (e.g. Reports, Expense Exports),
+     remove other siblings in the main layout container so they do not take vertical space. */
+  .print-only {
+    display: block !important;
+  }
+  body:has(.print-only #printable-document-area) #root > * > :not(:has(#printable-document-area)) {
+    display: none !important;
+  }
+
   #printable-document-area {
     display: block !important;
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: static !important;
     width: 100%;
+    max-width: none !important;
+    min-height: 0 !important;
     margin: 0;
     padding: 0;
     background: #FFFFFF !important;
     color: #0F172A !important;
+  }
+  #printable-document-area table {
+    width: 100%;
+    border-collapse: collapse;
+    page-break-inside: auto;
+  }
+  #printable-document-area thead {
+    display: table-header-group;
+  }
+  #printable-document-area tfoot {
+    display: table-footer-group;
+  }
+  #printable-document-area tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
   }
 }
 

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import {
   ShoppingBagIcon,
   PlusIcon,
@@ -27,10 +28,17 @@ import Badge from '../components/ui/Badge';
 import Card from '../components/ui/Card';
 import { useToast } from '../components/Toast';
 import { format } from 'date-fns';
+import { generatePDF } from '../utils/documentGenerator';
+import { resolveBusinessIdentity } from '../utils/businessIdentity';
+import VoucherPrintLayout, { formatDocumentDate } from '../components/documents/VoucherPrintLayout';
 
 export default function Purchases() {
   const { format: formatCurrency } = useCurrency();
   const { showToast } = useToast();
+  const auth = useSelector((state) => state.auth);
+  const settings = useSelector((state) => state.settings);
+  const shop = useSelector((state) => state.shop?.currentShop || state.shop?.shop);
+  const identity = useMemo(() => resolveBusinessIdentity({ auth: { ...auth, shop }, settings }), [auth, settings, shop]);
 
   const [purchases, setPurchases] = useState([]);
   const [products, setProducts] = useState([]);
@@ -58,6 +66,7 @@ export default function Purchases() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   // Payment Recording State
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -350,18 +359,63 @@ export default function Purchases() {
     }
   };
 
+  const handleDownloadPurchasePdf = async () => {
+    if (!selectedPurchase) return;
+    setGeneratingPdf(true);
+    try {
+      const items = Array.isArray(selectedPurchase.lineItems) && selectedPurchase.lineItems.length > 0
+        ? selectedPurchase.lineItems
+        : (selectedPurchase.items || []);
+      const total = Number(selectedPurchase.totalAmount || 0);
+      const paid = Number(selectedPurchase.paidAmount || 0);
+      const safeReference = String(selectedPurchase.referenceNo || 'purchase').replace(/[^a-zA-Z0-9-_]/g, '-');
+
+      const result = await generatePDF({
+        title: 'PURCHASE VOUCHER',
+        subtitle: selectedPurchase.status === 'RECEIVED'
+          ? 'Goods received record — supplier payment is recorded separately'
+          : 'Purchase record — supplier payment is recorded separately',
+        documentNumber: selectedPurchase.referenceNo,
+        identity,
+        meta: [
+          { label: 'Supplier', value: selectedPurchase.supplierName || '—' },
+          { label: 'Purchase date', value: formatDocumentDate(selectedPurchase.purchaseDate || selectedPurchase.createdAt) },
+          { label: 'Goods status', value: selectedPurchase.status || '—' },
+          { label: 'Payment status', value: selectedPurchase.paymentStatus || 'UNPAID' },
+          { label: 'Payment method', value: selectedPurchase.paymentMethod || 'Not recorded' },
+        ],
+        summaryCards: [
+          { label: 'Purchase total', value: formatCurrency(total) },
+          { label: 'Paid', value: formatCurrency(paid) },
+          { label: 'Outstanding', value: formatCurrency(Math.max(0, total - paid)) },
+        ],
+        columns: [
+          { header: 'Product', dataKey: 'productName', width: 68 },
+          { header: 'Quantity', dataKey: 'quantity', align: 'right', width: 24 },
+          { header: 'Unit cost', dataKey: 'unitCost', align: 'right', width: 34 },
+          { header: 'Line total', dataKey: 'lineTotal', align: 'right', width: 36 },
+        ],
+        rows: items.map(item => ({
+          productName: item.productName || 'Unnamed item',
+          quantity: Number(item.quantity || 0).toLocaleString('en-KE'),
+          unitCost: formatCurrency(Number(item.unitCost || 0)),
+          lineTotal: formatCurrency(Number(item.totalCost ?? Number(item.quantity || 0) * Number(item.unitCost || 0))),
+        })),
+        fileName: `purchase-voucher-${safeReference}.pdf`,
+      });
+
+      if (!result.success) throw result.error || new Error('PDF generation failed');
+      showToast({ type: 'success', title: 'PDF ready', message: 'Purchase voucher downloaded.' });
+    } catch (error) {
+      console.error('Failed to generate purchase voucher PDF:', error);
+      showToast({ type: 'error', title: 'PDF export failed', message: 'The purchase voucher could not be generated. Please try again.' });
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Print View Stylesheet */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #printable-purchase-voucher, #printable-purchase-voucher * { visibility: visible; }
-          #printable-purchase-voucher { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
-
       {/* Header */}
       <PageHeader
         title="Purchases & Inventory Receiving"
@@ -566,7 +620,7 @@ export default function Purchases() {
                             >
                               {purchase.paymentStatus}
                             </Badge>
-                            <div className="text-caption text-text-muted font-mono">{purchase.paymentMethod}</div>
+                            <div className="text-caption text-text-muted font-mono">{purchase.paymentMethod || 'Not recorded'}</div>
                           </div>
                         </td>
                         <td className="p-3.5">
@@ -997,108 +1051,22 @@ export default function Purchases() {
           description={`Recorded on ${format(new Date(selectedPurchase.purchaseDate || selectedPurchase.createdAt), 'MMM dd, yyyy')}`}
           size="lg"
         >
-          <div className="space-y-4" id="printable-purchase-voucher">
-            {/* Header for print voucher */}
-            <div className="border-b border-border-default pb-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-h3 font-black text-text-primary">PURCHASE VOUCHER</h2>
-                  <p className="text-caption font-mono text-primary font-bold">{selectedPurchase.referenceNo}</p>
-                </div>
-                <div className="text-right">
-                  <Badge variant={selectedPurchase.status === 'RECEIVED' ? 'success' : selectedPurchase.status === 'PENDING' ? 'warning' : 'danger'}>
-                    {selectedPurchase.status}
-                  </Badge>
-                  <p className="text-caption text-text-muted mt-1">
-                    {format(new Date(selectedPurchase.purchaseDate || selectedPurchase.createdAt), 'dd/MM/yyyy HH:mm')}
-                  </p>
-                </div>
-              </div>
-            </div>
+                    <div className="space-y-4">
+            <VoucherPrintLayout
+              type="purchase"
+              document={selectedPurchase}
+              identity={identity}
+              formatCurrency={formatCurrency}
+            />
 
-            <div className="grid grid-cols-2 gap-3 p-3 bg-surface-2/40 border border-border-default rounded-xl text-small">
-              <div>
-                <p className="text-caption text-text-muted uppercase tracking-wider">Supplier</p>
-                <p className="font-bold text-text-primary">{selectedPurchase.supplierName}</p>
-                {selectedPurchase.supplierContact && (
-                  <p className="text-caption text-text-muted">{selectedPurchase.supplierContact}</p>
-                )}
-              </div>
-              <div className="text-right">
-                <p className="text-caption text-text-muted uppercase tracking-wider">Payment Status</p>
-                <Badge variant={selectedPurchase.paymentStatus === 'PAID' ? 'success' : 'warning'}>
-                  {selectedPurchase.paymentStatus} ({selectedPurchase.paymentMethod})
-                </Badge>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-caption font-semibold uppercase tracking-wider text-text-muted mb-2">Itemized Products</h4>
-              <div className="border border-border-default rounded-xl overflow-hidden bg-surface">
-                <table className="w-full text-left text-small">
-                  <thead className="bg-surface-2 text-text-secondary text-caption font-semibold uppercase border-b border-border-default">
-                    <tr>
-                      <th className="p-2.5">Product</th>
-                      <th className="p-2.5 text-center">Qty</th>
-                      <th className="p-2.5 text-right">Unit Cost</th>
-                      <th className="p-2.5 text-right">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-default">
-                    {(selectedPurchase.lineItems || selectedPurchase.items || []).map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="p-2.5 font-semibold text-text-primary">{item.productName}</td>
-                        <td className="p-2.5 text-center text-text-secondary">{item.quantity}</td>
-                        <td className="p-2.5 text-right text-text-secondary">{formatCurrency(item.unitCost)}</td>
-                        <td className="p-2.5 text-right font-bold text-primary">
-                          {formatCurrency((item.totalCost || item.quantity * item.unitCost))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="p-3 bg-surface-2/60 border border-border-default rounded-xl space-y-1">
-              <div className="flex justify-between items-center text-body font-bold">
-                <span>Grand Total:</span>
-                <span className="text-primary text-h3 font-extrabold">
-                  {formatCurrency(parseFloat(selectedPurchase.totalAmount || 0))}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-small text-text-muted">
-                <span>Paid Amount:</span>
-                <span className="font-semibold text-text-primary">{formatCurrency(parseFloat(selectedPurchase.paidAmount || 0))}</span>
-              </div>
-              <div className="flex justify-between items-center text-small text-text-muted">
-                <span>Outstanding Balance:</span>
-                <span className="font-semibold text-danger">
-                  {formatCurrency(Math.max(0, parseFloat(selectedPurchase.totalAmount || 0) - parseFloat(selectedPurchase.paidAmount || 0)))}
-                </span>
-              </div>
-            </div>
-
-            {selectedPurchase.notes && (
-              <div className="p-3 bg-surface-2/30 rounded-xl border border-border-default text-caption text-text-secondary">
-                <span className="font-semibold text-text-primary block mb-0.5">Notes:</span>
-                {selectedPurchase.notes}
-              </div>
-            )}
-
-            {/* Print Voucher Signature Section */}
-            <div className="pt-6 border-t border-border-default grid grid-cols-2 gap-8 text-caption text-text-muted">
-              <div>
-                <div className="border-b border-text-muted/40 h-8"></div>
-                <p className="mt-1 font-semibold">Authorized Signature & Stamp</p>
-              </div>
-              <div className="text-right">
-                <div className="border-b border-text-muted/40 h-8"></div>
-                <p className="mt-1 font-semibold">Storekeeper / Receiver Signature</p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-border-default no-print">
+            <div className="no-print flex justify-end gap-2 border-t border-border-default pt-3">
+              <Button
+                variant="outline"
+                onClick={handleDownloadPurchasePdf}
+                disabled={generatingPdf}
+              >
+                {generatingPdf ? 'Preparing PDF…' : 'Download PDF'}
+              </Button>
               <Button variant="outline" leftIcon={PrinterIcon} onClick={() => window.print()}>
                 Print Voucher
               </Button>

@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { PurchaseOrder, PurchaseOrderItem, Purchase, PurchaseItem, Product, Supplier, Shop, sequelize } = require('../models');
 const { Op } = require('sequelize');
@@ -10,6 +11,14 @@ const {
   applyStockReceipt,
   invalidateShopProductCache
 } = require('../services/purchaseService');
+const {
+  ReceiptValidationError,
+  validateReceiptBatch,
+  createReceiptRequestHash,
+  validateReceiptRequestId,
+  buildReceiptReference,
+  buildReceiptRequestPrefix
+} = require('../services/purchaseOrderReceiving');
 const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 
 // All routes require authentication, canonical authorization context, and active subscription
@@ -463,16 +472,21 @@ router.patch('/:id/status',
   }
 
   if (status === 'RECEIVED') {
-    return handleReceiveOperation(req, res);
+    return handleReceiveOperation(req, res, { forceReceiveAll: true });
   }
 
   return res.status(400).json({ error: `Unsupported status transition to ${status}` });
 });
 
 /**
- * Core thread-safe receiving engine with row locking and strict remaining-quantity validation
+ * Core thread-safe receiving engine.
+ *
+ * New clients send cumulative quantityReceived targets and a stable requestId.
+ * A retry therefore resolves to a zero delta, while the request reference provides
+ * durable idempotency without adding schema columns or changing existing tables.
+ * Legacy quantityToReceive delta payloads remain supported.
  */
-async function handleReceiveOperation(req, res) {
+async function handleReceiveOperation(req, res, { forceReceiveAll = false } = {}) {
   const transaction = await sequelize.transaction();
   try {
     const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
@@ -481,11 +495,10 @@ async function handleReceiveOperation(req, res) {
       return res.status(403).json({ error: 'Shop context required' });
     }
     const organizationId = req.authz?.tenant?.organizationId;
-
-    // Row-level lock on the PO to prevent concurrent duplicate receiving requests
     const po = await PurchaseOrder.findOne({
       where: { id: req.params.id, shopId },
       include: [{ model: PurchaseOrderItem, as: 'lineItems' }],
+      order: [[{ model: PurchaseOrderItem, as: 'lineItems' }, 'id', 'ASC']],
       lock: transaction.LOCK.UPDATE,
       transaction
     });
@@ -494,127 +507,152 @@ async function handleReceiveOperation(req, res) {
       await transaction.rollback();
       return res.status(404).json({ error: 'Purchase Order not found' });
     }
+    if (po.status === 'CANCELLED') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Cannot receive stock on a cancelled Purchase Order' });
+    }
+
+    const body = req.body || {};
+    if (body.receivedItems !== undefined && body.items !== undefined) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Provide receivedItems or items, not both' });
+    }
+
+    const receivedItems = body.receivedItems !== undefined ? body.receivedItems : body.items;
+    const receiveAll = forceReceiveAll || body.receiveAll === true;
+    let requestId;
+    try {
+      requestId = validateReceiptRequestId(body.requestId);
+    } catch (validationError) {
+      await transaction.rollback();
+      return res.status(400).json({ error: validationError.message });
+    }
+
+    const requestHash = createReceiptRequestHash({
+      receivedItems: Array.isArray(receivedItems) ? receivedItems : null,
+      receiveAll
+    });
+
+    // A matching request key is checked while holding the PO lock. This makes
+    // a retried request return its original result rather than applying stock twice.
+    if (requestId) {
+      const requestPrefix = buildReceiptRequestPrefix({ purchaseOrderId: po.id, requestId });
+      const existingReceipt = await Purchase.findOne({
+        where: {
+          shopId,
+          referenceNo: { [Op.like]: `${requestPrefix}%` }
+        },
+        transaction
+      });
+
+      if (existingReceipt) {
+        const expectedReference = buildReceiptReference({
+          purchaseOrderId: po.id,
+          requestId,
+          requestHash
+        });
+        await transaction.rollback();
+
+        if (existingReceipt.referenceNo !== expectedReference) {
+          return res.status(409).json({
+            error: 'This receipt request ID was already used with a different receiving payload'
+          });
+        }
+
+        const currentPo = await PurchaseOrder.findOne({
+          where: { id: po.id, shopId },
+          include: [{ model: PurchaseOrderItem, as: 'lineItems' }],
+          order: [[{ model: PurchaseOrderItem, as: 'lineItems' }, 'id', 'ASC']]
+        });
+        if (!currentPo) return res.status(404).json({ error: 'Purchase Order not found' });
+        return res.json({ ...currentPo.toJSON(), idempotentReplay: true });
+      }
+    }
+
+    let receiptBatch;
+    try {
+      receiptBatch = validateReceiptBatch({
+        lineItems: po.lineItems || [],
+        receivedItems,
+        receiveAll
+      });
+    } catch (validationError) {
+      await transaction.rollback();
+      if (validationError instanceof ReceiptValidationError) {
+        return res.status(validationError.statusCode).json({ error: validationError.message });
+      }
+      throw validationError;
+    }
+
+    const stockReceiptBatch = [];
+    const jsonItems = Array.isArray(po.items) ? [...po.items] : [];
+
+    for (const receipt of receiptBatch) {
+      if (receipt.delta <= 0) continue;
+
+      const { lineItem, delta, newQuantityReceived } = receipt;
+      lineItem.quantityReceived = newQuantityReceived;
+      await lineItem.save({ transaction });
+
+      const lineItemIndex = po.lineItems.findIndex(item => String(item.id) === String(lineItem.id));
+      let jsonIndex = jsonItems.length === po.lineItems.length ? lineItemIndex : -1;
+      if (jsonIndex < 0) {
+        const matchingIndexes = jsonItems.reduce((matches, item, index) => {
+          const sameProduct = lineItem.productId !== null && lineItem.productId !== undefined
+            && String(item.productId) === String(lineItem.productId);
+          const sameSku = Boolean(lineItem.sku && item.sku && item.sku === lineItem.sku);
+          const sameName = item.productName === lineItem.productName;
+          if (sameName && (sameSku || sameProduct)) matches.push(index);
+          return matches;
+        }, []);
+        if (matchingIndexes.length === 1) jsonIndex = matchingIndexes[0];
+      }
+      if (jsonIndex >= 0) {
+        jsonItems[jsonIndex] = {
+          ...jsonItems[jsonIndex],
+          quantityReceived: newQuantityReceived
+        };
+      }
+
+      const unitCost = Number(lineItem.unitCost || 0);
+      stockReceiptBatch.push({
+        productId: lineItem.productId,
+        productName: lineItem.productName,
+        sku: lineItem.sku,
+        quantity: delta,
+        unitCost,
+        totalCost: Math.round(delta * unitCost * 100) / 100
+      });
+    }
+
+    // A repeated cumulative payload is a successful no-op, including when the
+    // PO was fully received by the original request.
+    if (stockReceiptBatch.length === 0) {
+      await transaction.rollback();
+      const currentPo = await PurchaseOrder.findOne({
+        where: { id: po.id, shopId },
+        include: [{ model: PurchaseOrderItem, as: 'lineItems' }],
+        order: [[{ model: PurchaseOrderItem, as: 'lineItems' }, 'id', 'ASC']]
+      });
+      if (!currentPo) return res.status(404).json({ error: 'Purchase Order not found' });
+      return res.json({ ...currentPo.toJSON(), idempotentReplay: true });
+    }
 
     if (po.status === 'RECEIVED') {
       await transaction.rollback();
       return res.status(400).json({ error: 'This Purchase Order has already been fully received' });
     }
 
-    if (po.status === 'CANCELLED') {
-      await transaction.rollback();
-      return res.status(400).json({ error: 'Cannot receive stock on a cancelled Purchase Order' });
-    }
-
-    const receivedItems = req.body.receivedItems || req.body.items;
-    const dbLineItems = po.lineItems && po.lineItems.length > 0 ? po.lineItems : [];
-    const jsonItems = Array.isArray(po.items) ? [...po.items] : [];
-
-    const stockReceiptBatch = [];
-    let anyReceived = false;
-
-    if (Array.isArray(receivedItems) && receivedItems.length > 0) {
-      // Partial / itemized receiving: validate each received item
-      for (const rec of receivedItems) {
-        const pId = rec.productId ? parseInt(rec.productId, 10) : null;
-        const lineItem = dbLineItems.find(li => (pId && li.productId === pId) || (rec.sku && li.sku === rec.sku) || li.productName === rec.productName);
-
-        if (!lineItem) continue;
-
-        const ordered = parseFloat(lineItem.quantityOrdered || 0);
-        const currentRec = parseFloat(lineItem.quantityReceived || 0);
-        const remaining = Math.max(0, Math.round((ordered - currentRec) * 100) / 100);
-
-        // Client may supply delta to receive ("quantityToReceive") or new cumulative ("quantityReceived")
-        let delta = 0;
-        if (rec.quantityToReceive !== undefined) {
-          delta = parseFloat(rec.quantityToReceive);
-        } else if (rec.quantityReceived !== undefined) {
-          const targetTotal = parseFloat(rec.quantityReceived);
-          delta = Math.round((targetTotal - currentRec) * 100) / 100;
-        }
-
-        if (isNaN(delta) || delta < 0) {
-          await transaction.rollback();
-          return res.status(400).json({ error: `Invalid quantity specified for ${lineItem.productName}` });
-        }
-
-        if (delta > remaining) {
-          await transaction.rollback();
-          return res.status(400).json({
-            error: `Cannot receive ${delta} units of ${lineItem.productName}. Maximum remaining to receive is ${remaining}.`
-          });
-        }
-
-        if (delta > 0) {
-          anyReceived = true;
-          const newRecTotal = Math.round((currentRec + delta) * 100) / 100;
-          lineItem.quantityReceived = newRecTotal;
-          await lineItem.save({ transaction });
-
-          // Update jsonItems representation as well
-          const jIdx = jsonItems.findIndex(ji => (pId && ji.productId === pId) || ji.productName === lineItem.productName);
-          if (jIdx >= 0) {
-            jsonItems[jIdx].quantityReceived = newRecTotal;
-          }
-
-          stockReceiptBatch.push({
-            productId: lineItem.productId,
-            productName: lineItem.productName,
-            sku: lineItem.sku,
-            quantity: delta,
-            unitCost: parseFloat(lineItem.unitCost || 0),
-            totalCost: Math.round(delta * parseFloat(lineItem.unitCost || 0) * 100) / 100
-          });
-        }
-      }
-    } else {
-      // Full receive all remaining items
-      for (const lineItem of dbLineItems) {
-        const ordered = parseFloat(lineItem.quantityOrdered || 0);
-        const currentRec = parseFloat(lineItem.quantityReceived || 0);
-        const remaining = Math.max(0, Math.round((ordered - currentRec) * 100) / 100);
-
-        if (remaining > 0) {
-          anyReceived = true;
-          lineItem.quantityReceived = ordered;
-          await lineItem.save({ transaction });
-
-          const jIdx = jsonItems.findIndex(ji => ji.productId === lineItem.productId || ji.productName === lineItem.productName);
-          if (jIdx >= 0) {
-            jsonItems[jIdx].quantityReceived = ordered;
-          }
-
-          stockReceiptBatch.push({
-            productId: lineItem.productId,
-            productName: lineItem.productName,
-            sku: lineItem.sku,
-            quantity: remaining,
-            unitCost: parseFloat(lineItem.unitCost || 0),
-            totalCost: Math.round(remaining * parseFloat(lineItem.unitCost || 0) * 100) / 100
-          });
-        }
-      }
-    }
-
-    if (!anyReceived) {
-      await transaction.rollback();
-      return res.status(400).json({ error: 'No new quantities were specified to receive' });
-    }
-
-    // Determine final status based on fulfillment ratio
-    const totalOrdered = dbLineItems.reduce((s, li) => s + parseFloat(li.quantityOrdered || 0), 0);
-    const totalReceived = dbLineItems.reduce((s, li) => s + parseFloat(li.quantityReceived || 0), 0);
-
-    let finalStatus = 'PARTIALLY_RECEIVED';
-    if (totalReceived >= totalOrdered && totalOrdered > 0) {
-      finalStatus = 'RECEIVED';
-    }
+    const totalOrdered = po.lineItems.reduce((sum, item) => sum + Number(item.quantityOrdered || 0), 0);
+    const totalReceived = po.lineItems.reduce((sum, item) => sum + Number(item.quantityReceived || 0), 0);
+    const finalStatus = totalOrdered > 0 && totalReceived >= totalOrdered
+      ? 'RECEIVED'
+      : 'PARTIALLY_RECEIVED';
 
     po.status = finalStatus;
     po.items = jsonItems;
     await po.save({ transaction });
 
-    // Apply stock increments & weighted average costing
     await applyStockReceipt({
       shopId,
       items: stockReceiptBatch,
@@ -623,13 +661,16 @@ async function handleReceiveOperation(req, res) {
       organizationId
     }, transaction);
 
-    await invalidateShopProductCache(shopId);
-    await invalidateShopInsightsCache(organizationId, shopId);
+    const batchTotalAmount = Math.round(
+      stockReceiptBatch.reduce((sum, item) => sum + item.totalCost, 0) * 100
+    ) / 100;
 
-    // Auto-create a linked Purchase record representing this receiving batch
-    const purchaseRef = `PUR-${po.poNumber.replace('PO-', '')}-${Date.now().toString().slice(-4)}`;
-    const batchTotalAmount = Math.round(stockReceiptBatch.reduce((s, i) => s + i.totalCost, 0) * 100) / 100;
+    const purchaseRef = requestId
+      ? buildReceiptReference({ purchaseOrderId: po.id, requestId, requestHash })
+      : `PUR-${po.poNumber.replace('PO-', '')}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
+    // This Purchase represents goods received, not money paid. A later payment
+    // must be explicitly recorded through /api/purchases/:id/payments.
     const generatedPurchase = await Purchase.create({
       shopId,
       referenceNo: purchaseRef,
@@ -638,23 +679,23 @@ async function handleReceiveOperation(req, res) {
       supplierContact: po.supplierPhone || po.supplierEmail,
       purchaseDate: new Date(),
       status: 'RECEIVED',
-      paymentStatus: 'PAID',
-      paymentMethod: 'BANK TRANSFER',
+      paymentStatus: 'UNPAID',
+      paymentMethod: null,
       totalAmount: batchTotalAmount,
-      paidAmount: batchTotalAmount,
-      notes: `Generated from PO ${po.poNumber} (${finalStatus})`,
+      paidAmount: 0,
+      notes: `Goods received from PO ${po.poNumber}. Supplier payment has not been recorded.`,
       items: stockReceiptBatch
     }, { transaction });
 
-    for (const sItem of stockReceiptBatch) {
+    for (const item of stockReceiptBatch) {
       await PurchaseItem.create({
         purchaseId: generatedPurchase.id,
-        productId: sItem.productId,
-        productName: sItem.productName,
-        sku: sItem.sku,
-        quantity: sItem.quantity,
-        unitCost: sItem.unitCost,
-        totalCost: sItem.totalCost,
+        productId: item.productId,
+        productName: item.productName,
+        sku: item.sku,
+        quantity: item.quantity,
+        unitCost: item.unitCost,
+        totalCost: item.totalCost,
         shopId
       }, { transaction });
     }
@@ -666,24 +707,28 @@ async function handleReceiveOperation(req, res) {
       action: finalStatus === 'RECEIVED' ? 'PO_FULLY_RECEIVED' : 'PO_PARTIALLY_RECEIVED',
       entity: 'PurchaseOrder',
       entityId: po.id,
-      details: `Received ${stockReceiptBatch.reduce((s, i) => s + i.quantity, 0)} units on PO ${po.poNumber}. Status is now ${finalStatus}.`
+      details: `Received ${stockReceiptBatch.reduce((sum, item) => sum + item.quantity, 0)} units on PO ${po.poNumber}. Status is now ${finalStatus}.`
     }, transaction);
 
     await transaction.commit();
 
-    // Reload with updated lineItems
+    await invalidateShopProductCache(shopId);
+    await invalidateShopInsightsCache(organizationId, shopId);
+
     const updatedPo = await PurchaseOrder.findOne({
       where: { id: po.id, shopId },
-      include: [{ model: PurchaseOrderItem, as: 'lineItems' }]
+      include: [{ model: PurchaseOrderItem, as: 'lineItems' }],
+      order: [[{ model: PurchaseOrderItem, as: 'lineItems' }, 'id', 'ASC']]
     });
+    if (!updatedPo) return res.status(404).json({ error: 'Purchase Order not found after receiving' });
 
-    res.json(updatedPo);
+    return res.json({ ...updatedPo.toJSON(), idempotentReplay: false });
   } catch (error) {
     if (transaction.finished !== 'commit' && transaction.finished !== 'rollback') {
       await transaction.rollback();
     }
     console.error('Error receiving purchase order:', error);
-    res.status(500).json({ error: error.message || 'Failed to receive purchase order' });
+    return res.status(500).json({ error: error.message || 'Failed to receive purchase order' });
   }
 }
 

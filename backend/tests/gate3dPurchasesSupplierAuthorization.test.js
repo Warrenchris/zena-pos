@@ -31,7 +31,8 @@ const {
 const tokenRevocationService = require('../src/services/tokenRevocationService');
 
 function tokenFor(payload) {
-  const privateKey = process.env.JWT_PRIVATE_KEY
+  const pemPath = path.join(__dirname, '../jwt_private_key.pem');
+  const privateKey = fs.existsSync(pemPath) ? fs.readFileSync(pemPath, 'utf8') : process.env.JWT_PRIVATE_KEY
     ? process.env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n')
     : (fs.existsSync(path.join(__dirname, '../jwt_private_key.pem'))
       ? fs.readFileSync(path.join(__dirname, '../jwt_private_key.pem'), 'utf8')
@@ -1076,11 +1077,10 @@ describe('Gate 3D: Purchases & Suppliers Domain Authorization Migration Verifica
       });
     });
 
-    it('6.1: Manager creates PO in Shop A1, receives goods, auto-creates Purchase, updates inventory', async () => {
+    it('6.1: Manager receives a PO once, safely replays the same request, and does not record a fictional payment', async () => {
       const initialInv = await Inventory.findOne({ where: { productId: productA1.id, shopId: shopA1.id } });
       const initialStock = parseFloat(initialInv.stockQuantity);
 
-      // 1. Create PO
       const createRes = await request(app)
         .post('/api/purchase-orders')
         .set('Authorization', tokenMgrA1)
@@ -1093,27 +1093,103 @@ describe('Gate 3D: Purchases & Suppliers Domain Authorization Migration Verifica
       const poId = createRes.body.id;
       expect(createRes.body.status).toBe('ORDERED');
 
-      // 2. Receive PO goods
+      const receiptPayload = {
+        requestId: 'gate3d-po-receipt-6-1',
+        receivedItems: [{
+          purchaseOrderItemId: createRes.body.lineItems[0].id,
+          quantityReceived: 20
+        }]
+      };
+
       const recRes = await request(app)
         .patch(`/api/purchase-orders/${poId}/receive`)
         .set('Authorization', tokenMgrA1)
-        .send({
-          receivedItems: [{ productId: productA1.id, quantityToReceive: 20 }]
-        });
+        .send(receiptPayload);
 
       expect(recRes.status).toBe(200);
       expect(recRes.body.status).toBe('RECEIVED');
+      expect(recRes.body.idempotentReplay).toBe(false);
 
-      // 3. Verify stock increased in Inventory
+      // Retry the exact request after the first response has committed.
+      const replayRes = await request(app)
+        .patch(`/api/purchase-orders/${poId}/receive`)
+        .set('Authorization', tokenMgrA1)
+        .send(receiptPayload);
+
+      expect(replayRes.status).toBe(200);
+      expect(replayRes.body.idempotentReplay).toBe(true);
+
+      const conflictingReplay = await request(app)
+        .patch(`/api/purchase-orders/${poId}/receive`)
+        .set('Authorization', tokenMgrA1)
+        .send({
+          requestId: receiptPayload.requestId,
+          receivedItems: [{
+            purchaseOrderItemId: createRes.body.lineItems[0].id,
+            quantityReceived: 19
+          }]
+        });
+      expect(conflictingReplay.status).toBe(409);
+
       const updatedInv = await Inventory.findOne({ where: { productId: productA1.id, shopId: shopA1.id } });
       expect(parseFloat(updatedInv.stockQuantity)).toBe(initialStock + 20);
 
-      // 4. Verify linked Purchase was auto-generated
       const generatedPur = await Purchase.findOne({
         where: { notes: { [require('sequelize').Op.like]: `%${recRes.body.poNumber}%` }, shopId: shopA1.id }
       });
       expect(generatedPur).not.toBeNull();
       expect(generatedPur.status).toBe('RECEIVED');
+      expect(generatedPur.paymentStatus).toBe('UNPAID');
+      expect(Number(generatedPur.paidAmount)).toBe(0);
+      expect(generatedPur.paymentMethod).toBeNull();
+
+      const generatedExpenses = await Expense.findAll({
+        where: { reference: generatedPur.referenceNo, shopId: shopA1.id }
+      });
+      expect(generatedExpenses).toHaveLength(0);
+
+      const linkedPurchases = await Purchase.findAll({
+        where: { notes: { [require('sequelize').Op.like]: `%${recRes.body.poNumber}%` }, shopId: shopA1.id }
+      });
+      expect(linkedPurchases).toHaveLength(1);
+    });
+
+    it('6.1b: Empty and unknown receiving batches are rejected without stock or PO mutations', async () => {
+      const initialInv = await Inventory.findOne({ where: { productId: productA1.id, shopId: shopA1.id } });
+      const initialStock = Number(initialInv.stockQuantity);
+
+      const createRes = await request(app)
+        .post('/api/purchase-orders')
+        .set('Authorization', tokenMgrA1)
+        .send({
+          supplierName: 'Validation Vendor',
+          items: [{ productId: productA1.id, quantityOrdered: 4, unitCost: 25 }]
+        });
+
+      expect(createRes.status).toBe(201);
+      const poId = createRes.body.id;
+
+      const emptyRes = await request(app)
+        .patch(`/api/purchase-orders/${poId}/receive`)
+        .set('Authorization', tokenMgrA1)
+        .send({ receivedItems: [] });
+      expect(emptyRes.status).toBe(400);
+
+      const unknownRes = await request(app)
+        .patch(`/api/purchase-orders/${poId}/receive`)
+        .set('Authorization', tokenMgrA1)
+        .send({ receivedItems: [{ productId: 999999, quantityToReceive: 1 }] });
+      expect(unknownRes.status).toBe(400);
+
+      const orderRes = await request(app)
+        .get(`/api/purchase-orders/${poId}`)
+        .set('Authorization', tokenMgrA1);
+      expect(orderRes.status).toBe(200);
+      expect(orderRes.body.status).toBe('ORDERED');
+      expect(Number(orderRes.body.lineItems[0].quantityReceived)).toBe(0);
+
+      const unchangedInv = await Inventory.findOne({ where: { productId: productA1.id, shopId: shopA1.id } });
+      expect(Number(unchangedInv.stockQuantity)).toBe(initialStock);
     });
 
     it('6.2: Org Admin creates partial purchase, records payments, and reconciles balance', async () => {

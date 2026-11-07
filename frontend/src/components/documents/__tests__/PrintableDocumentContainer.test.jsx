@@ -21,6 +21,7 @@ describe('PrintableDocumentContainer', () => {
       phone: '+254711223344',
       email: 'info@sokosafi.co.ke',
       kraPin: 'P051234567Z',
+      isValidPin: true,
     };
 
     render(
@@ -40,6 +41,32 @@ describe('PrintableDocumentContainer', () => {
     expect(screen.getByText('PIN: P051234567Z')).toBeInTheDocument();
     expect(screen.getByText('PAYMENT VOUCHER')).toBeInTheDocument();
     expect(screen.getByText('REF: PV-2026-99')).toBeInTheDocument();
+  });
+
+  it('does not display an unverified KRA PIN on commercial documents', () => {
+    render(
+      <PrintableDocumentContainer
+        title="PURCHASE VOUCHER"
+        identity={{ displayName: 'Example Shop', kraPin: 'INVALID-PIN', isValidPin: false }}
+      >
+        <div>Voucher Items</div>
+      </PrintableDocumentContainer>
+    );
+
+    expect(screen.queryByText('PIN: INVALID-PIN')).not.toBeInTheDocument();
+  });
+
+  it('renders a supplied shop logo without changing the document identity', () => {
+    render(
+      <PrintableDocumentContainer
+        title="PURCHASE ORDER"
+        identity={{ displayName: 'Example Shop', logoUrl: '/uploads/logos/shop.png' }}
+      >
+        <div>Order Items</div>
+      </PrintableDocumentContainer>
+    );
+
+    expect(screen.getByAltText('EXAMPLE SHOP logo')).toHaveAttribute('src', '/uploads/logos/shop.png');
   });
 
   it('renders children content and footer with Powered by Zana POS', () => {

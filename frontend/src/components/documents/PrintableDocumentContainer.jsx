@@ -28,7 +28,15 @@ export function PrintableDocumentContainer({
 
   const showPoweredBy = identity.showPoweredBy !== false;
   const now = new Date();
-  const dateStr = now.toISOString().replace('T', ' ').substring(0, 16);
+  const dateStr = new Intl.DateTimeFormat('en-KE', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'Africa/Nairobi',
+  }).format(now);
 
   return (
     <div
@@ -49,6 +57,13 @@ export function PrintableDocumentContainer({
       {/* Business Header */}
       <div className="flex justify-between items-start pb-4 border-b border-slate-200">
         <div>
+          {identity.logoUrl && (
+            <img
+              src={identity.logoUrl}
+              alt={`${businessName} logo`}
+              className="mb-2 max-h-12 max-w-28 object-contain object-left"
+            />
+          )}
           <h1
             className="text-xl font-bold tracking-tight"
             style={{ color: DOCUMENT_COLORS.primary }}
@@ -65,7 +80,7 @@ export function PrintableDocumentContainer({
                 {identity.email && <span>{identity.email}</span>}
               </div>
             )}
-            {identity.kraPin && (
+            {identity.kraPin && identity.isValidPin === true && (
               <div className="font-mono text-slate-600">
                 PIN: {identity.kraPin}
               </div>
