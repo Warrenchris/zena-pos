@@ -285,6 +285,15 @@ router.get('/returns/all',
   saleController.getAllReturns
 );
 
+// Get sales returns summary for shop
+router.get('/returns/summary',
+  authorize({
+    permissions: { any: ['process_refunds', 'manage_sales'] },
+    shopScope: 'current'
+  }),
+  saleController.getReturnsSummary
+);
+
 // Get payments for a specific sale
 router.get('/:saleId/payments',
   authorize({

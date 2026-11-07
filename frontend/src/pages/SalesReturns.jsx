@@ -133,6 +133,12 @@ export default function SalesReturns() {
   };
 
   const [returns, setReturns] = useState([]);
+  const [summary, setSummary] = useState({
+    totalCount: 0,
+    totalAmount: 0,
+    totalItems: 0,
+    uniqueSales: 0
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -175,12 +181,32 @@ export default function SalesReturns() {
   // Details Modal State
   const [selectedReturn, setSelectedReturn] = useState(null);
 
+  // Fetch Returns Summary
+  const fetchSummary = async () => {
+    try {
+      const res = await salesAPI.getReturnsSummary();
+      if (res?.data) {
+        setSummary({
+          totalCount: Number(res.data.totalCount) || 0,
+          totalAmount: Number(res.data.totalAmount) || 0,
+          totalItems: Number(res.data.totalItems) || 0,
+          uniqueSales: Number(res.data.uniqueSales) || 0
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch returns summary:', err);
+    }
+  };
+
   // Fetch Returns
   const fetchReturns = async () => {
     try {
       setLoading(true);
       setError('');
-      const res = await salesAPI.getAllReturns();
+      const [res] = await Promise.all([
+        salesAPI.getAllReturns(),
+        fetchSummary()
+      ]);
       setReturns(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Failed to fetch sales returns:', err);
@@ -314,15 +340,6 @@ export default function SalesReturns() {
     });
   }, [returns, searchTerm, filterMethod]);
 
-  // Stats Summary
-  const stats = useMemo(() => {
-    const totalCount = returns.length;
-    const totalAmount = returns.reduce((sum, r) => sum + (Number(r.amount || r.refundAmount) || 0), 0);
-    const totalItems = returns.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
-    const uniqueSales = new Set(returns.map(r => r.saleId)).size;
-
-    return { totalCount, totalAmount, totalItems, uniqueSales };
-  }, [returns]);
 
   // Fetch eligible managers for Priority 2 threshold approval
   const fetchEligibleManagers = async () => {
@@ -611,7 +628,7 @@ export default function SalesReturns() {
           </div>
           <div>
             <p className="text-caption font-semibold text-text-muted uppercase">Total Returns</p>
-            <p className="text-h2 font-bold text-text-primary">{stats.totalCount}</p>
+            <p className="text-h2 font-bold text-text-primary">{summary.totalCount}</p>
           </div>
         </Card>
 
@@ -621,7 +638,7 @@ export default function SalesReturns() {
           </div>
           <div>
             <p className="text-caption font-semibold text-text-muted uppercase">Total Refunded</p>
-            <p className="text-h2 font-bold text-text-primary">{formatCurrency(stats.totalAmount)}</p>
+            <p className="text-h2 font-bold text-text-primary">{formatCurrency(summary.totalAmount)}</p>
           </div>
         </Card>
 
@@ -631,7 +648,7 @@ export default function SalesReturns() {
           </div>
           <div>
             <p className="text-caption font-semibold text-text-muted uppercase">Items Returned</p>
-            <p className="text-h2 font-bold text-text-primary">{stats.totalItems}</p>
+            <p className="text-h2 font-bold text-text-primary">{summary.totalItems}</p>
           </div>
         </Card>
 
@@ -641,7 +658,7 @@ export default function SalesReturns() {
           </div>
           <div>
             <p className="text-caption font-semibold text-text-muted uppercase">Sales Affected</p>
-            <p className="text-h2 font-bold text-text-primary">{stats.uniqueSales}</p>
+            <p className="text-h2 font-bold text-text-primary">{summary.uniqueSales}</p>
           </div>
         </Card>
       </div>
