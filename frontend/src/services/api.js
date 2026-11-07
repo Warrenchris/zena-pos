@@ -506,6 +506,8 @@ export const salesAPI = {
     api.get(`/api/sales/${saleId}/refunds`),
   getAllReturns: () =>
     api.get('/api/sales/returns/all'),
+  getReturnsSummary: () =>
+    api.get('/api/sales/returns/summary'),
   getCreditNote: (saleId) =>
     api.get(`/api/sales/${saleId}/credit-note`),
 };
