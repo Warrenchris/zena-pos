@@ -2689,6 +2689,36 @@ exports.getAllReturns = async (req, res) => {
   }
 };
 
+exports.getReturnsSummary = async (req, res) => {
+  const shopId = req.shopId || req.user?.shopId;
+
+  try {
+    const summary = await SaleRefund.findOne({
+      where: {
+        shopId,
+        status: 'processed'
+      },
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('*')), 'totalCount'],
+        [sequelize.fn('SUM', sequelize.col('amount')), 'totalAmount'],
+        [sequelize.fn('SUM', sequelize.col('quantity')), 'totalItems'],
+        [sequelize.literal('COUNT(DISTINCT saleId)'), 'uniqueSales']
+      ],
+      raw: true
+    });
+
+    res.json({
+      totalCount: parseInt(summary?.totalCount || 0, 10) || 0,
+      totalAmount: parseFloat(summary?.totalAmount || 0) || 0,
+      totalItems: parseInt(summary?.totalItems || 0, 10) || 0,
+      uniqueSales: parseInt(summary?.uniqueSales || 0, 10) || 0
+    });
+  } catch (error) {
+    console.error('Error fetching returns summary:', error);
+    res.status(500).json({ error: 'Failed to fetch returns summary' });
+  }
+};
+
 exports.getCreditNote = async (req, res) => {
   const { saleId } = req.params;
   const shopId = req.shopId || req.user.shopId;
