@@ -35,7 +35,7 @@ jest.mock('../../services/billing.service', () => ({
   },
 }));
 
-jest.mock('../../utils/notifications', () => ({ notifyLowStock: jest.fn() }));
+jest.mock('../../utils/notifications', () => ({ notifyLowStock: jest.fn(), notifyRestockSummary: jest.fn() }));
 jest.mock('../../components/financial/BusinessInsights', () => () => null);
 jest.mock('../../components/dashboard/StatsGrid', () => () => null);
 jest.mock('../../components/dashboard/GettingStartedChecklist', () => () => null);
