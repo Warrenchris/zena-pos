@@ -2581,6 +2581,10 @@ exports.getSaleRefunds = async (req, res) => {
   }
 };
 
+function escapeLikePattern(str) {
+  return str.replace(/[\\%_]/g, '\\$&');
+}
+
 exports.getAllReturns = async (req, res) => {
   const shopId = req.shopId || req.user.shopId;
 
@@ -2589,8 +2593,48 @@ exports.getAllReturns = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const offset = (page - 1) * limit;
 
+    const where = { shopId };
+
+    // Method filter: whitelist against SaleRefund.refundMethod enum values
+    const VALID_REFUND_METHODS = ['cash', 'card', 'mobile_money', 'store_credit'];
+    if (typeof req.query.method === 'string') {
+      const normalizedMethod = req.query.method.trim().toLowerCase();
+      if (VALID_REFUND_METHODS.includes(normalizedMethod)) {
+        where.refundMethod = normalizedMethod;
+      }
+    }
+
+    // Search filter: case-insensitive substring on Sale.invoiceNumber, Sale.customerName,
+    // Product.name, SaleRefund.reason, SaleRefund.reasonCode.
+    // If term matches /^(ret-?)?\d+$/i, also match SaleRefund.id equal to parseInt of digits.
+    if (typeof req.query.search === 'string') {
+      const rawSearch = req.query.search.trim().slice(0, 100);
+      if (rawSearch) {
+        const escaped = escapeLikePattern(rawSearch);
+        const likeTerm = `%${escaped}%`;
+
+        const orConditions = [
+          { '$sale.invoiceNumber$': { [Op.like]: likeTerm } },
+          { '$sale.customerName$': { [Op.like]: likeTerm } },
+          { '$product.name$': { [Op.like]: likeTerm } },
+          { reason: { [Op.like]: likeTerm } },
+          { reasonCode: { [Op.like]: likeTerm } }
+        ];
+
+        const idMatch = rawSearch.match(/^(?:ret-?)?(\d+)$/i);
+        if (idMatch) {
+          const parsedId = parseInt(idMatch[1], 10);
+          if (Number.isFinite(parsedId)) {
+            orConditions.push({ id: parsedId });
+          }
+        }
+
+        where[Op.or] = orConditions;
+      }
+    }
+
     const { count, rows: refunds } = await SaleRefund.findAndCountAll({
-      where: { shopId },
+      where,
       include: [
         {
           model: Product,
@@ -2603,7 +2647,7 @@ exports.getAllReturns = async (req, res) => {
           attributes: ['id', 'invoiceNumber', 'customerName', 'total', 'paymentMethod', 'createdAt']
         }
       ],
-      order: [['createdAt', 'DESC']],
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
       limit,
       offset
     });
