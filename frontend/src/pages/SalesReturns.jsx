@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import {
   ArrowPathIcon,
@@ -142,9 +142,22 @@ export default function SalesReturns() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterMethod, setFilterMethod] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 10;
+  const latestRequestIdRef = useRef(0);
+
+  // Debounce search input by 300ms and reset to page 1
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   // Process Return Modal State
   const [showProcessModal, setShowProcessModal] = useState(false);
@@ -181,8 +194,8 @@ export default function SalesReturns() {
   // Details Modal State
   const [selectedReturn, setSelectedReturn] = useState(null);
 
-  // Fetch Returns Summary
-  const fetchSummary = async () => {
+  // Fetch Returns Summary (global stat cards, independent of filters/pagination)
+  const fetchSummary = useCallback(async () => {
     try {
       const res = await salesAPI.getReturnsSummary();
       if (res?.data) {
@@ -196,30 +209,70 @@ export default function SalesReturns() {
     } catch (err) {
       console.error('Failed to fetch returns summary:', err);
     }
-  };
+  }, []);
 
-  // Fetch Returns
-  const fetchReturns = async () => {
+  // Fetch summary once on mount
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
+  // Fetch Returns with server-side pagination, search, and method filtering
+  const fetchReturns = useCallback(async () => {
+    const requestId = ++latestRequestIdRef.current;
     try {
       setLoading(true);
       setError('');
-      const [res] = await Promise.all([
-        salesAPI.getAllReturns(),
-        fetchSummary()
-      ]);
-      setReturns(Array.isArray(res.data) ? res.data : []);
-    } catch (err) {
-      console.error('Failed to fetch sales returns:', err);
-      setError('Could not load sales returns. Please refresh.');
-      setReturns([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
+      const params = {
+        format: 'paginated',
+        page: currentPage,
+        limit: itemsPerPage
+      };
+      if (debouncedSearch.trim()) {
+        params.search = debouncedSearch.trim();
+      }
+      if (filterMethod && filterMethod !== 'all') {
+        params.method = filterMethod;
+      }
+
+      const res = await salesAPI.getAllReturns(params);
+
+      // Discard stale response if a newer request was dispatched
+      if (requestId !== latestRequestIdRef.current) {
+        return;
+      }
+
+      const payload = res.data;
+      if (payload?.pagination) {
+        setReturns(Array.isArray(payload.data) ? payload.data : []);
+        setTotalItems(payload.pagination.total ?? 0);
+        setTotalPages(payload.pagination.totalPages ?? 1);
+      } else if (Array.isArray(payload)) {
+        setReturns(payload);
+        setTotalItems(payload.length);
+        setTotalPages(1);
+      } else {
+        setReturns([]);
+        setTotalItems(0);
+        setTotalPages(1);
+      }
+    } catch (err) {
+      if (requestId === latestRequestIdRef.current) {
+        console.error('Failed to fetch sales returns:', err);
+        setError('Could not load sales returns. Please refresh.');
+        setReturns([]);
+      }
+    } finally {
+      if (requestId === latestRequestIdRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [currentPage, debouncedSearch, filterMethod]);
+
+  // Trigger fetchReturns when pagination, debounced search, or method filter changes
   useEffect(() => {
     fetchReturns();
-  }, []);
+  }, [fetchReturns]);
 
   // Fetch Sales when opening process modal
   useEffect(() => {
@@ -322,23 +375,7 @@ export default function SalesReturns() {
     }, 0);
   }, [returnItemsState]);
 
-  // Filtered Returns
-  const filteredReturns = useMemo(() => {
-    return returns.filter(ret => {
-      const matchSearch =
-        String(ret.id).includes(searchTerm) ||
-        (ret.sale?.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ret.sale?.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ret.product?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ret.reason || ret.reasonCode || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchMethod =
-        filterMethod === 'all' ||
-        ret.refundMethod?.toLowerCase() === filterMethod.toLowerCase();
-
-      return matchSearch && matchMethod;
-    });
-  }, [returns, searchTerm, filterMethod]);
 
 
   // Fetch eligible managers for Priority 2 threshold approval
@@ -404,7 +441,12 @@ export default function SalesReturns() {
           ? window.crypto.randomUUID()
           : 'ref_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
       );
-      fetchReturns();
+      if (currentPage === 1) {
+        fetchReturns();
+      } else {
+        setCurrentPage(1);
+      }
+      fetchSummary();
     } catch (err) {
       console.error('Error processing refund:', err);
       const status = err?.response?.status;
@@ -607,7 +649,10 @@ export default function SalesReturns() {
             variant="outline"
             size="md"
             leftIcon={ArrowPathIcon}
-            onClick={fetchReturns}
+            onClick={() => {
+              fetchReturns();
+              fetchSummary();
+            }}
           >
             Refresh
           </Button>
@@ -671,10 +716,7 @@ export default function SalesReturns() {
               type="search"
               placeholder="Search by return ID, invoice #, customer name, product, or reason..."
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setSearchTerm(e.target.value)}
               leftIcon={MagnifyingGlassIcon}
             />
           </div>
@@ -700,7 +742,7 @@ export default function SalesReturns() {
       {/* Returns Table */}
       <Table
         columns={columns}
-        data={filteredReturns.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+        data={returns}
         loading={loading}
         emptyTitle="No Sales Returns Found"
         emptyDescription="When customer returns or refunds are processed, they will be tracked here."
@@ -710,8 +752,8 @@ export default function SalesReturns() {
         }}
         pagination={{
           currentPage,
-          totalPages: Math.ceil(filteredReturns.length / itemsPerPage) || 1,
-          totalItems: filteredReturns.length,
+          totalPages,
+          totalItems,
           pageSize: itemsPerPage,
           onPageChange: (p) => setCurrentPage(p)
         }}
