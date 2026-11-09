@@ -77,50 +77,51 @@ exports.getAllSales = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    // Get the sales with their items
-    const sales = await Sale.findAndCountAll({
-      where: {
-        shopId: req.user.shopId
-      },
-      attributes: {
-        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
-      },
-      include: [
-        {
-          model: SaleItem,
-          required: false, // Make this LEFT JOIN to get sales even without items
-          include: [{
-            model: Product,
-            required: false, // Also make this LEFT JOIN
-            attributes: ['id', 'name', 'sku', 'price']
-          }]
+    // Lean count query separated from eager-loaded page query (H-05 optimization)
+    const where = { shopId: req.user.shopId };
+    const [total, rows] = await Promise.all([
+      Sale.count({ where }),
+      Sale.findAll({
+        where,
+        attributes: {
+          exclude: ['UserId', 'CustomerId']
         },
-        {
-          model: Customer,
-          required: false, // Make this a LEFT JOIN
-          attributes: ['id', 'name', 'email', 'phone']
-        },
-        {
-          model: Employee,
-          attributes: ['id', 'firstName', 'lastName', 'email'],
-          required: false
-        },
-        {
-          model: User,
-          attributes: ['id', 'name', 'email'],
-          required: false
-        }
-      ],
-      distinct: true, // This ensures correct count with eager loading
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset
-    });
+        include: [
+          {
+            model: SaleItem,
+            required: false,
+            include: [{
+              model: Product,
+              required: false,
+              attributes: ['id', 'name', 'sku', 'price']
+            }]
+          },
+          {
+            model: Customer,
+            required: false,
+            attributes: ['id', 'name', 'email', 'phone']
+          },
+          {
+            model: Employee,
+            attributes: ['id', 'firstName', 'lastName', 'email'],
+            required: false
+          },
+          {
+            model: User,
+            attributes: ['id', 'name', 'email'],
+            required: false
+          }
+        ],
+        order: [['createdAt', 'DESC']],
+        limit,
+        offset
+      })
+    ]);
 
     res.json({
-      sales: sales.rows,
-      total: sales.count,
-      totalPages: Math.ceil(sales.count / limit),
+      sales: rows,
+      total,
+      totalPages: Math.ceil(total / limit),
       currentPage: page
     });
   } catch (error) {
