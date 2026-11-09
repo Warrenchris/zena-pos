@@ -259,9 +259,9 @@ describe('Stage A2: authzContext Per-Request WeakSet Guard & Pool Config Validat
       expect(orgQueries).toHaveLength(1);
       expect(ownerShopQueries).toHaveLength(1);
 
-      // Total warm queries = 4 pre-handler (authzContext once) + 3 handler (getSalesStatistics) = 7
+      // Total warm queries = 4 pre-handler (authzContext once) + 1 handler (getSalesStatistics) = 5
       try {
-        expect(recordedSql).toHaveLength(7);
+        expect(recordedSql).toHaveLength(5);
       } finally {
         if (origCache === undefined) delete process.env.AUTHZ_CONTEXT_CACHE_ENABLED;
         else process.env.AUTHZ_CONTEXT_CACHE_ENABLED = origCache;

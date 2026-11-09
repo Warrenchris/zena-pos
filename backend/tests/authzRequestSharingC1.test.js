@@ -459,8 +459,8 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
       expect(coldUserReads).toHaveLength(1);
       expect(coldUserReads[0]).not.toMatch(/password|emailVerificationTokenHash/i);
 
-      // Total cold SQL on /api/sales/statistics = 5 pre-handler + 3 handler = 8 (down from 12)
-      expect(coldSql).toHaveLength(8);
+      // Total cold SQL on /api/sales/statistics = 5 pre-handler + 1 handler = 6 (down from 12)
+      expect(coldSql).toHaveLength(6);
 
       // --- WARM REQUEST ---
       const warmSql = [];
@@ -491,8 +491,8 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
       }
 
       expect(warmRes.status).toBe(200);
-      // Warm SQL at 7 (4 pre-handler + 3 handler)
-      expect(warmSql).toHaveLength(7);
+      // Warm SQL at 5 (4 pre-handler + 1 handler)
+      expect(warmSql).toHaveLength(5);
       // Warm Redis commands = 7 (down from 8: 1 rate-limit EVAL + 5 auth/authz GETs + 1 entitlement GET)
       expect(warmRedis).toHaveLength(7);
       const orgStatusGets = warmRedis.filter(
@@ -501,7 +501,7 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
       expect(orgStatusGets).toHaveLength(1);
     });
 
-    test('Warm 11-request dashboard burst executes 64 SQL queries', async () => {
+    test('Warm 11-request dashboard burst executes 62 SQL queries', async () => {
       const dashboardEndpoints = [
         '/api/analytics/orders?period=week',
         '/api/analytics/visitors?period=week',
@@ -543,7 +543,7 @@ describe('Stage C1: Per-Request Auth State Sharing (WeakMap on req)', () => {
       for (const res of responses) {
         expect(res.status).toBe(200);
       }
-      expect(burstSql).toHaveLength(64);
+      expect(burstSql).toHaveLength(62);
     });
   });
 
