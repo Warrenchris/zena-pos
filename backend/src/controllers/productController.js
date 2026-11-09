@@ -23,7 +23,7 @@ function formatProductWithInventory(product) {
   return plain;
 }
 const redisClient = require('../config/redis');
-const { invalidateShopProductCache, invalidateOrgProductCaches } = require('../services/productCache');
+const { invalidateShopProductCache, invalidateOrgProductCaches, getShopProductVersion } = require('../services/productCache');
 const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 const logger = require('../utils/logger');
 
@@ -53,38 +53,24 @@ exports.getAllProducts = async (req, res) => {
     const offset = (numericPage - 1) * numericPageSize;
 
     const isDefaultQuery = !search && !categoryId && !availability && !minPrice && !maxPrice;
-    const cacheKey = `products:shop:${shopId}`;
-    const pageCacheKey = `products:shop:${shopId}:p:${numericPage}:s:${numericPageSize}`;
+    let version = 1;
+    if (isDefaultQuery) {
+      version = await getShopProductVersion(shopId);
+    }
+    const pageCacheKey = `products:shop:${shopId}:v${version}:p:${numericPage}:s:${numericPageSize}`;
 
     if (isDefaultQuery) {
       try {
         let cachedData = redisClient.status === 'ready' ? await redisClient.get(pageCacheKey) : null;
         if (cachedData) {
-          logger.debug(`Product catalogue page cache HIT for shop: ${shopId}, page: ${numericPage}`);
+          logger.debug(`Product catalogue page cache HIT for shop: ${shopId}, page: ${numericPage}, version: ${version}`);
           return res.json(JSON.parse(cachedData));
-        }
-
-        cachedData = redisClient.status === 'ready' ? await redisClient.get(cacheKey) : null;
-        if (cachedData) {
-          const cachedResult = JSON.parse(cachedData);
-          const totalPages = Math.ceil(cachedResult.count / numericPageSize) || 1;
-          const paginatedProducts = cachedResult.rows.slice(offset, offset + numericPageSize);
-          logger.debug(`Product catalogue cache HIT for shop: ${shopId}`);
-          return res.json({
-            products: paginatedProducts,
-            searchType: 'exact',
-            pagination: {
-              currentPage: numericPage,
-              totalPages,
-              total: cachedResult.count,
-            },
-          });
         }
       } catch (err) {
         logger.warn(`Redis error fetching product cache for shop ${shopId}:`, err);
       }
 
-      logger.debug(`Product catalogue cache MISS for shop: ${shopId}, querying database with pagination`);
+      logger.debug(`Product catalogue cache MISS for shop: ${shopId}, version: ${version}, querying database with pagination`);
       try {
         const catalogWhere = { active: true };
         if (organizationId) {

@@ -3,23 +3,43 @@ const logger = require('../utils/logger');
 const { invalidateShopForecastCache, invalidateOrgForecastCache } = require('./aiCacheService');
 
 /**
+ * Gets the current product catalogue cache version for a shop.
+ * Incremented on stock/product mutations to invalidate without blocking KEYS scans.
+ * @param {number|string} shopId
+ * @returns {Promise<number>}
+ */
+async function getShopProductVersion(shopId) {
+  if (!shopId) return 1;
+  try {
+    if (redisClient && redisClient.status === 'ready') {
+      const ver = await redisClient.get(`products:ver:${shopId}`);
+      if (ver) return parseInt(ver, 10);
+      await redisClient.set(`products:ver:${shopId}`, '1');
+      return 1;
+    }
+  } catch (err) {
+    logger.warn(`Redis error fetching product cache version for shop ${shopId}:`, err);
+  }
+  return 1;
+}
+
+/**
  * Invalidates the cached product catalogue and AI forecast cache for a specific shop.
+ * Uses atomic INCR on the version counter (O(1)) instead of scanning KEYS.
  * @param {number|string} shopId - The ID of the shop to invalidate.
  */
 async function invalidateShopProductCache(shopId) {
   if (!shopId) return;
-  const cacheKey = `products:shop:${shopId}`;
   try {
-    if (redisClient.status === 'ready') {
-      await redisClient.del(cacheKey);
-      const pageKeys = await redisClient.keys(`products:shop:${shopId}:*`);
-      if (pageKeys && pageKeys.length > 0) {
-        await redisClient.del(...pageKeys);
-      }
-      logger.info(`Invalidated product catalogue cache in Redis for shop: ${shopId}`);
+    if (redisClient && redisClient.status === 'ready') {
+      await Promise.all([
+        redisClient.incr(`products:ver:${shopId}`),
+        redisClient.del(`products:shop:${shopId}`)
+      ]);
+      logger.info(`Incremented product catalogue cache version and cleared direct key for shop: ${shopId}`);
     }
   } catch (error) {
-    logger.warn(`Redis error invalidating product cache for shop ${shopId}:`, error);
+    logger.warn(`Redis error incrementing product cache version for shop ${shopId}:`, error);
   }
 
   // Also invalidate distributed AI forecast cache for this shop post-mutation
@@ -55,6 +75,7 @@ async function invalidateOrgProductCaches(organizationId) {
 }
 
 module.exports = {
+  getShopProductVersion,
   invalidateShopProductCache,
   invalidateOrgProductCaches
 };

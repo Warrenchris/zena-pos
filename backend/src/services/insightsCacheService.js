@@ -1,7 +1,7 @@
 const redisClient = require('../config/redis');
 const logger = require('../utils/logger');
 
-const DEFAULT_TTL_SECONDS = 60;
+const DEFAULT_TTL_SECONDS = 300;
 
 function isInsightsCacheEnabled() {
   return process.env.INSIGHTS_CACHE_ENABLED === 'true';
@@ -12,6 +12,35 @@ function buildInsightsCacheKey(orgId, shopId) {
     return null;
   }
   return `insights:org:${orgId}:shop:${shopId}`;
+}
+
+function buildStaleInsightsCacheKey(orgId, shopId) {
+  if (!orgId || orgId === 'no-org' || !shopId || shopId === 'no-shop') {
+    return null;
+  }
+  return `insights:stale:org:${orgId}:shop:${shopId}`;
+}
+
+async function getStaleInsightsCache(source, shopId) {
+  if (!isInsightsCacheEnabled()) return null;
+  if (!redisClient || redisClient.status !== 'ready') return null;
+
+  const targetShopId = shopId || (source && typeof source === 'object' ? (source.shopId || source.authz?.scope?.activeShopId || source.user?.shopId) : null);
+  const orgId = await resolveOrganizationId(source, targetShopId);
+  if (!orgId || !targetShopId) return null;
+
+  const staleKey = buildStaleInsightsCacheKey(orgId, targetShopId);
+  if (!staleKey) return null;
+
+  try {
+    const raw = await redisClient.get(staleKey);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    logger.warn(`[insightsCache] Redis get failed for ${staleKey}: ${err.message}`);
+  }
+  return null;
 }
 
 const shopOrgMap = new Map();
@@ -95,7 +124,7 @@ async function getInsightsCache(source, shopId) {
   return null;
 }
 
-async function setInsightsCache(source, shopId, data, ttlSeconds = DEFAULT_TTL_SECONDS) {
+async function setInsightsCache(source, shopId, data, ttlSeconds = DEFAULT_TTL_SECONDS, options = {}) {
   if (!isInsightsCacheEnabled()) return false;
   if (!redisClient || redisClient.status !== 'ready') return false;
 
@@ -107,7 +136,15 @@ async function setInsightsCache(source, shopId, data, ttlSeconds = DEFAULT_TTL_S
   if (!key) return false;
 
   try {
-    await redisClient.setex(key, ttlSeconds, JSON.stringify(data));
+    const serialized = JSON.stringify(data);
+    await redisClient.setex(key, ttlSeconds, serialized);
+    const shouldWriteStale = options && typeof options === 'object' ? Boolean(options.keepStale) : false;
+    if (shouldWriteStale) {
+      const staleKey = buildStaleInsightsCacheKey(orgId, targetShopId);
+      if (staleKey) {
+        await redisClient.setex(staleKey, 86400, serialized);
+      }
+    }
     return true;
   } catch (err) {
     logger.warn(`[insightsCache] Redis set failed for ${key}: ${err.message}`);
@@ -125,9 +162,13 @@ async function invalidateShopInsightsCache(source, shopId) {
     if (!orgId) return 0;
 
     const key = buildInsightsCacheKey(orgId, targetShopId);
+    const staleKey = buildStaleInsightsCacheKey(orgId, targetShopId);
     if (!key) return 0;
 
     const res = await redisClient.del(key);
+    if (staleKey) {
+      try { await redisClient.del(staleKey); } catch (_) {}
+    }
     return res;
   } catch (err) {
     logger.warn(`[insightsCache] Redis invalidation failed for shop ${targetShopId}: ${err.message}`);
@@ -143,6 +184,8 @@ module.exports = {
   clearOrgCache,
   getInsightsCache,
   setInsightsCache,
+  getStaleInsightsCache,
+  buildStaleInsightsCacheKey,
   invalidateShopInsightsCache,
   DEFAULT_TTL_SECONDS
 };
