@@ -1487,46 +1487,49 @@ exports.getAllSalesForAdmin = async (req, res) => {
       }
     }
 
-    const sales = await Sale.findAndCountAll({
-      where: whereClause,
-      attributes: {
-        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
-      },
-      include: [
-        {
-          model: SaleItem,
-          required: false,
-          as: 'SaleItems', // Explicitly set the alias
-          include: [{
-            model: Product,
-            as: 'Product',
-            attributes: ['id', 'name', 'sku', 'price'],
+    const [total, rows] = await Promise.all([
+      Sale.count({ where: whereClause }),
+      Sale.findAll({
+        where: whereClause,
+        attributes: {
+          exclude: ['UserId', 'CustomerId']
+        },
+        include: [
+          {
+            model: SaleItem,
+            required: false,
+            as: 'SaleItems',
+            include: [{
+              model: Product,
+              as: 'Product',
+              attributes: ['id', 'name', 'sku', 'price'],
+              required: false
+            }]
+          },
+          {
+            model: Customer,
+            as: 'Customer',
+            attributes: ['id', 'name', 'email', 'phone'],
             required: false
-          }]
-        },
-        {
-          model: Customer,
-          as: 'Customer',
-          attributes: ['id', 'name', 'email', 'phone'],
-          required: false
-        },
-        {
-          model: Employee,
-          attributes: ['id', 'firstName', 'lastName', 'email'],
-          as: 'Employee',
-          required: false
-        },
-        {
-          model: User,
-          attributes: ['id', 'name', 'email'],
-          required: false
-        }
-      ],
-      distinct: true,
-      order: [[sortBy, sortOrder.toUpperCase()]],
-      limit,
-      offset
-    });
+          },
+          {
+            model: Employee,
+            attributes: ['id', 'firstName', 'lastName', 'email'],
+            as: 'Employee',
+            required: false
+          },
+          {
+            model: User,
+            attributes: ['id', 'name', 'email'],
+            required: false
+          }
+        ],
+        order: [[sortBy, sortOrder.toUpperCase()]],
+        limit,
+        offset
+      })
+    ]);
+    const sales = { count: total, rows };
 
     // Log for debugging
     console.log('Fetched sales:', {
