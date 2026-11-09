@@ -112,7 +112,7 @@ exports.getAllSales = async (req, res) => {
             required: false
           }
         ],
-        order: [['createdAt', 'DESC']],
+        order: [['createdAt', 'DESC'], ['id', 'DESC']],
         limit,
         offset
       })
