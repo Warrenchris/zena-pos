@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../../src/app');
 const { Sale, Product, Inventory, Expense, SaleItem, SalePayment, SaleRefund, Invoice, Shop, User } = require('../../src/models');
 const sequelize = require('../../src/config/database');
+const redisClient = require('../../src/config/redis');
 
 describe('Insights Controller', () => {
   let token;
@@ -40,6 +41,10 @@ describe('Insights Controller', () => {
   });
 
   beforeEach(async () => {
+    if (redisClient && redisClient.status === 'ready') {
+      await redisClient.del('insights:org:1:shop:1').catch(() => {});
+      await redisClient.del('insights:stale:org:1:shop:1').catch(() => {});
+    }
     await Invoice.destroy({ where: { shopId: 1 } }).catch(() => {});
     await SaleRefund.destroy({ where: { shopId: 1 } }).catch(() => {});
     await SalePayment.destroy({ where: { shopId: 1 } }).catch(() => {});

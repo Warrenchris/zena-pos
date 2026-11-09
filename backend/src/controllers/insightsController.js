@@ -12,7 +12,8 @@ const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
 const aiClient = require('../utils/aiClient');
 const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER, NET_SALE_REVENUE_SQL } = require('../constants/saleFilters');
-const { getInsightsCache, setInsightsCache } = require('../services/insightsCacheService');
+const logger = require('../utils/logger');
+const { getInsightsCache, setInsightsCache, getStaleInsightsCache } = require('../services/insightsCacheService');
 
 const formatCurrency = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`;
 const AI_SERVICE_URL = process.env.AI_SERVICE_BASE_URL || process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
@@ -195,7 +196,7 @@ const generateRuleBasedAlerts = async (shopId) => {
 /**
  * AI-powered sales anomaly detection using Isolation Forest
  */
-const generateSmartAlerts = async (shopId, userOrId, aiTracker) => {
+const generateSmartAlerts = async (shopId, userOrId, aiTracker, options = {}) => {
   const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : null;
   const userId = user?.id || (typeof userOrId === 'number' || typeof userOrId === 'string' ? userOrId : null);
   const ninetyDaysAgo = new Date();
@@ -226,10 +227,11 @@ const generateSmartAlerts = async (shopId, userOrId, aiTracker) => {
     const aiResponse = await aiClient.post(
       `/api/insights/anomalies`,
       { daily_data: dailySales, contamination: 0.05 },
-      { timeout: insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId, user: user || (userId ? { id: userId } : null) }
+      { timeout: options.timeoutMs || insightsConfig.AI_SERVICE_TIMEOUT_MS, shopId, userId, user: user || (userId ? { id: userId } : null) }
     );
 
-    return aiResponse.data.anomalies.slice(0, 3).map((anomaly) => ({
+    const anomaliesList = aiResponse.data?.anomalies || (Array.isArray(aiResponse.data) ? aiResponse.data : []);
+    return anomaliesList.slice(0, 3).map((anomaly) => ({
       type: 'sales_anomaly',
       severity: anomaly.severity,
       title: `Unusual sales pattern detected on ${anomaly.date}`,
@@ -319,7 +321,7 @@ const buildNetDemandQuery = (shopId, sinceDate, groupByDate = true) => {
 /**
  * Prophet-based stock depletion forecast via AI service
  */
-const getStockDepletionForecast = async (shopId, userOrId, aiTracker) => {
+const getStockDepletionForecast = async (shopId, userOrId, aiTracker, options = {}) => {
   const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : null;
   const userId = user?.id || (typeof userOrId === 'number' || typeof userOrId === 'string' ? userOrId : null);
   const ninetyDaysAgo = new Date();
@@ -412,7 +414,7 @@ const getStockDepletionForecast = async (shopId, userOrId, aiTracker) => {
 /**
  * Generate business alerts based on critical metrics
  */
-const generateAlerts = async (shopId, userOrId, aiTracker) => {
+const generateAlerts = async (shopId, userOrId, aiTracker, options = {}) => {
   const alerts = [];
 
   const criticalInventories = await Inventory.findAll({
@@ -443,11 +445,103 @@ const generateAlerts = async (shopId, userOrId, aiTracker) => {
     });
   }
 
-  const salesAlerts = await generateSmartAlerts(shopId, userOrId, aiTracker);
+  const salesAlerts = await generateSmartAlerts(shopId, userOrId, aiTracker, options);
   alerts.push(...salesAlerts);
 
   return alerts;
 };
+
+const inflightAiShops = new Set();
+
+function triggerBackgroundAiInsights(req, shopId, basePayload, metrics) {
+  const numericShopId = Number(shopId);
+  if (!numericShopId) return;
+  if (inflightAiShops.has(numericShopId)) return;
+  inflightAiShops.add(numericShopId);
+
+  const user = req.user ? { ...req.user } : null;
+  const authz = req.authz ? { ...req.authz } : null;
+
+  setImmediate(async () => {
+    try {
+      const safeMetrics = metrics || {};
+      const aiPromise = aiClient.post(
+        '/api/insights/analyze',
+        {
+          revenue: safeMetrics.revenue || [],
+          costs: safeMetrics.costs || [],
+          customer_count: safeMetrics.customer_count || [],
+          transaction_count: safeMetrics.transaction_count || [],
+          average_transaction_value: safeMetrics.average_transaction_value || [],
+          repeat_customer_rate: safeMetrics.repeatCustomerRate || 0,
+          retention_rate: safeMetrics.activeRetentionRate || 0,
+          total_customers: safeMetrics.totalUniqueCustomers || 0,
+          repeat_customers: safeMetrics.repeatCustomers || 0,
+        },
+        {
+          timeout: insightsConfig.AI_BACKGROUND_TIMEOUT_MS,
+          shopId,
+          userId: user?.id,
+          user,
+          authz
+        }
+      ).catch(err => {
+        logger.warn(`[InsightsController] Background AI analyze failed for shop ${shopId}: ${err.message}`);
+        return null;
+      });
+
+      const depletionPromise = getStockDepletionForecast(shopId, user, null, {
+        timeoutMs: insightsConfig.AI_BACKGROUND_TIMEOUT_MS
+      }).catch(err => {
+        logger.warn(`[InsightsController] Background Prophet depletion failed for shop ${shopId}: ${err.message}`);
+        return null;
+      });
+
+      const [aiResponse, bgDepletion] = await Promise.all([aiPromise, depletionPromise]);
+
+      let updatedRecs = [...basePayload.recommendations];
+
+      const ai = aiResponse?.data;
+      if (Array.isArray(ai) && ai.length > 0) {
+        const bgAiRecs = ai.map((x) => ({
+          type: x.insight_type || 'AI',
+          priority: 'MEDIUM',
+          message: x.description || 'AI insight',
+          details: x.recommendations || [],
+        }));
+        updatedRecs = [
+          ...updatedRecs.filter(r => r.type !== 'AI'),
+          ...bgAiRecs
+        ];
+      }
+
+      if (Array.isArray(bgDepletion) && bgDepletion.length > 0) {
+        updatedRecs = [
+          ...updatedRecs.filter(r => r.type !== 'FORECAST'),
+          {
+            type: 'FORECAST',
+            priority: 'HIGH',
+            message: 'Stock depletion forecast',
+            details: bgDepletion
+          }
+        ];
+      }
+
+      const updatedPayload = {
+        ...basePayload,
+        recommendations: updatedRecs,
+        generatedAt: new Date().toISOString(),
+      };
+
+      await setInsightsCache(req, numericShopId, updatedPayload, insightsConfig.AI_CACHE_TTL_SECONDS, { keepStale: true });
+      logger.info(`[InsightsController] Background AI insights completed and cached for shop ${shopId}`);
+    } catch (bgErr) {
+      logger.warn(`[InsightsController] Background AI insights handler error for shop ${shopId}: ${bgErr.message}`);
+    } finally {
+      inflightAiShops.delete(numericShopId);
+    }
+  });
+}
 
 /**
  * Get all business insights
@@ -461,21 +555,20 @@ const getInsights = async (req, res) => {
 
     const cached = await getInsightsCache(req, shopId);
     if (cached) {
+      if (typeof res.setHeader === 'function') res.setHeader('X-Insights-Cache', 'hit');
       return res.json(cached);
+    }
+
+    const stale = await getStaleInsightsCache(req, shopId);
+    if (stale) {
+      if (typeof res.setHeader === 'function') res.setHeader('X-Insights-Cache', 'stale');
+      // Trigger background refresh so fresh cache is repopulated
+      triggerBackgroundAiInsights(req, shopId, stale, {});
+      return res.json(stale);
     }
 
     const aiTracker = { failed: false };
 
-    const [trends, recommendations, alerts] = await Promise.all([
-      calculateTrends(shopId),
-      generateRecommendations(shopId),
-      generateAlerts(shopId, req.user, aiTracker)
-    ]);
-
-    // Smart dashboard insights (heuristics)
-    const smartRecommendations = [];
-
-    // 1) Week-over-week sales change
     const now = new Date();
     const startThisWeek = new Date(now);
     startThisWeek.setDate(now.getDate() - 6);
@@ -483,7 +576,24 @@ const getInsights = async (req, res) => {
     const startPrevWeek = new Date(startThisWeek);
     startPrevWeek.setDate(startPrevWeek.getDate() - 7);
 
-    const [thisWeekRevenueRow, prevWeekRevenueRow] = await Promise.all([
+    // Parallelize independent calculations, DB aggregations, and bounded AI heuristics
+    const [
+      trends,
+      recommendations,
+      alerts,
+      soonOut,
+      thisWeekRevenueRow,
+      prevWeekRevenueRow,
+      profitRows,
+      salesByMonth,
+      expenseByMonth,
+      custByMonth,
+      uniqueCustomerSales
+    ] = await Promise.all([
+      calculateTrends(shopId),
+      generateRecommendations(shopId),
+      generateAlerts(shopId, req.user, aiTracker),
+      getStockDepletionForecast(shopId, req.user, aiTracker),
       Sale.findOne({
         where: { shopId, ...NON_CANCELLED_SALE_FILTER, createdAt: { [Op.gte]: startThisWeek } },
         attributes: [[sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue']],
@@ -494,7 +604,68 @@ const getInsights = async (req, res) => {
         attributes: [[sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'revenue']],
         raw: true
       }),
+      SaleItem.findAll({
+        where: { shopId },
+        attributes: [
+          'ProductId',
+          [sequelize.fn('SUM', sequelize.literal('(SaleItem.unitPrice - Product.cost - SaleItem.discount) * SaleItem.quantity')), 'profit']
+        ],
+        include: [
+          { model: Sale, required: true, attributes: [], where: { shopId, ...REALIZED_SALE_FILTER } },
+          { model: Product, attributes: ['id', 'name', 'cost'], required: true }
+        ],
+        group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.cost'],
+        order: [[sequelize.literal('profit'), 'DESC']],
+        limit: 1,
+      }),
+      Sale.findAll({
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
+        attributes: [
+          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
+          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
+          [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'sumTotal'],
+          [sequelize.fn('COUNT', sequelize.col('id')), 'countSales'],
+        ],
+        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
+      }),
+      Expense.findAll({
+        where: { shopId },
+        attributes: [
+          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
+          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
+          [sequelize.fn('SUM', sequelize.col('amount')), 'sumAmount'],
+        ],
+        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
+      }),
+      Sale.findAll({
+        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
+        attributes: [
+          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
+          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
+          [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('CustomerId'))), 'distinctCustomers'],
+        ],
+        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
+      }),
+      Sale.findAll({
+        where: {
+          shopId,
+          ...NON_CANCELLED_SALE_FILTER,
+          customerId: { [Op.ne]: null }
+        },
+        attributes: [
+          'customerId',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'orderCount'],
+          [sequelize.fn('MAX', sequelize.col('createdAt')), 'lastVisit']
+        ],
+        group: ['customerId'],
+        raw: true
+      })
     ]);
+
+    // Smart dashboard insights (heuristics)
+    const smartRecommendations = [];
+
+    // 1) Week-over-week sales change
     const thisWeekRevenue = parseFloat(thisWeekRevenueRow?.revenue || 0);
     const prevWeekRevenue = parseFloat(prevWeekRevenueRow?.revenue || 0);
     if (thisWeekRevenue != null && prevWeekRevenue) {
@@ -513,20 +684,6 @@ const getInsights = async (req, res) => {
     }
 
     // 2) Most profitable product (approx)
-    const profitRows = await SaleItem.findAll({
-      where: { shopId },
-      attributes: [
-        'ProductId',
-        [sequelize.fn('SUM', sequelize.literal('(SaleItem.unitPrice - Product.cost - SaleItem.discount) * SaleItem.quantity')), 'profit']
-      ],
-      include: [
-        { model: Sale, required: true, attributes: [], where: { shopId, ...REALIZED_SALE_FILTER } },
-        { model: Product, attributes: ['id', 'name', 'cost'], required: true }
-      ],
-      group: ['SaleItem.productId', 'Product.id', 'Product.name', 'Product.cost'],
-      order: [[sequelize.literal('profit'), 'DESC']],
-      limit: 1,
-    });
     if (profitRows && profitRows.length > 0) {
       const pr = profitRows[0];
       const name = pr.Product?.name || pr.ProductId;
@@ -539,9 +696,8 @@ const getInsights = async (req, res) => {
       });
     }
 
-    // 3) Stock depletion forecast (Prophet via AI service)
-    const soonOut = await getStockDepletionForecast(shopId, req.user, aiTracker);
-    if (soonOut.length) {
+    // 3) Stock depletion forecast
+    if (soonOut && soonOut.length) {
       smartRecommendations.push({
         type: 'FORECAST',
         priority: 'HIGH',
@@ -550,7 +706,7 @@ const getInsights = async (req, res) => {
       });
     }
 
-    // 4) Decision support suggestions (simple rules)
+    // 4) Decision support suggestions
     if (profitRows && profitRows.length > 0) {
       smartRecommendations.push({
         type: 'DECISION',
@@ -576,114 +732,77 @@ const getInsights = async (req, res) => {
       }
     }
 
-    // Try augmenting with AI-driven insights
+    // Build monthly aggregates for the last 6 months
+    const months = [];
+    for (let i = 5; i >= 0; i -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    }
+
+    const salesMap = new Map();
+    for (const row of salesByMonth) {
+      const y = row.getDataValue('y');
+      const m = row.getDataValue('m');
+      salesMap.set(`${y}-${m}`, {
+        revenue: parseFloat(row.getDataValue('sumTotal') || 0),
+        tx: parseInt(row.getDataValue('countSales') || 0, 10),
+      });
+    }
+
+    const expMap = new Map();
+    for (const row of expenseByMonth) {
+      const y = row.getDataValue('y');
+      const m = row.getDataValue('m');
+      expMap.set(`${y}-${m}`, parseFloat(row.getDataValue('sumAmount') || 0));
+    }
+
+    const custMap = new Map();
+    for (const row of custByMonth) {
+      const y = row.getDataValue('y');
+      const m = row.getDataValue('m');
+      custMap.set(`${y}-${m}`, parseInt(row.getDataValue('distinctCustomers') || 0, 10));
+    }
+
+    const revenue = [];
+    const costs = [];
+    const customer_count = [];
+    const transaction_count = [];
+    const average_transaction_value = [];
+
+    for (const { year, month } of months) {
+      const key = `${year}-${month}`;
+      const s = salesMap.get(key) || { revenue: 0, tx: 0 };
+      const c = expMap.get(key) || 0;
+      const cust = custMap.get(key) || 0;
+      revenue.push(s.revenue);
+      costs.push(c);
+      customer_count.push(cust);
+      transaction_count.push(s.tx);
+      average_transaction_value.push(s.tx > 0 ? s.revenue / s.tx : 0);
+    }
+
+    // Customer repeat and retention metrics
+    const totalUniqueCustomers = uniqueCustomerSales.length;
+    const repeatCustomers = uniqueCustomerSales.filter(c => Number(c.orderCount) > 1).length;
+    const repeatCustomerRate = totalUniqueCustomers > 0 ? (repeatCustomers / totalUniqueCustomers) : 0;
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const activeCustomersCount = uniqueCustomerSales.filter(c => new Date(c.lastVisit) >= thirtyDaysAgo).length;
+    const activeRetentionRate = totalUniqueCustomers > 0 ? (activeCustomersCount / totalUniqueCustomers) : 0;
+
+    const metrics = {
+      revenue,
+      costs,
+      customer_count,
+      transaction_count,
+      average_transaction_value,
+      repeatCustomerRate,
+      activeRetentionRate,
+      totalUniqueCustomers,
+      repeatCustomers
+    };
+
     let aiRecs = [];
     try {
-      // Build simple monthly aggregates for the last 6 months
-      const months = [];
-      const now = new Date();
-      for (let i = 5; i >= 0; i -= 1) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        months.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
-      }
-
-      // Revenue and transactions from Sales
-      const salesByMonth = await Sale.findAll({
-        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
-        attributes: [
-          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
-          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
-          [sequelize.literal(`SUM(${NET_SALE_REVENUE_SQL})`), 'sumTotal'],
-          [sequelize.fn('COUNT', sequelize.col('id')), 'countSales'],
-        ],
-        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
-      });
-
-      const salesMap = new Map();
-      for (const row of salesByMonth) {
-        const y = row.getDataValue('y');
-        const m = row.getDataValue('m');
-        salesMap.set(`${y}-${m}`, {
-          revenue: parseFloat(row.getDataValue('sumTotal') || 0),
-          tx: parseInt(row.getDataValue('countSales') || 0, 10),
-        });
-      }
-
-      // Costs from Expenses
-      const expenseByMonth = await Expense.findAll({
-        where: { shopId },
-        attributes: [
-          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
-          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
-          [sequelize.fn('SUM', sequelize.col('amount')), 'sumAmount'],
-        ],
-        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
-      });
-
-      const expMap = new Map();
-      for (const row of expenseByMonth) {
-        const y = row.getDataValue('y');
-        const m = row.getDataValue('m');
-        expMap.set(`${y}-${m}`, parseFloat(row.getDataValue('sumAmount') || 0));
-      }
-
-      // Customers per month (distinct)
-      const custByMonth = await Sale.findAll({
-        where: { shopId, ...NON_CANCELLED_SALE_FILTER },
-        attributes: [
-          [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
-          [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],
-          [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('CustomerId'))), 'distinctCustomers'],
-        ],
-        group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
-      });
-      const custMap = new Map();
-      for (const row of custByMonth) {
-        const y = row.getDataValue('y');
-        const m = row.getDataValue('m');
-        custMap.set(`${y}-${m}`, parseInt(row.getDataValue('distinctCustomers') || 0, 10));
-      }
-
-      const revenue = [];
-      const costs = [];
-      const customer_count = [];
-      const transaction_count = [];
-      const average_transaction_value = [];
-
-      for (const { year, month } of months) {
-        const key = `${year}-${month}`;
-        const s = salesMap.get(key) || { revenue: 0, tx: 0 };
-        const c = expMap.get(key) || 0;
-        const cust = custMap.get(key) || 0;
-        revenue.push(s.revenue);
-        costs.push(c);
-        customer_count.push(cust);
-        transaction_count.push(s.tx);
-        average_transaction_value.push(s.tx > 0 ? s.revenue / s.tx : 0);
-      }
-
-      // Customer repeat and retention metrics
-      const uniqueCustomerSales = await Sale.findAll({
-        where: {
-          shopId,
-          ...NON_CANCELLED_SALE_FILTER,
-          customerId: { [Op.ne]: null }
-        },
-        attributes: [
-          'customerId',
-          [sequelize.fn('COUNT', sequelize.col('id')), 'orderCount'],
-          [sequelize.fn('MAX', sequelize.col('createdAt')), 'lastVisit']
-        ],
-        group: ['customerId'],
-        raw: true
-      });
-      const totalUniqueCustomers = uniqueCustomerSales.length;
-      const repeatCustomers = uniqueCustomerSales.filter(c => Number(c.orderCount) > 1).length;
-      const repeatCustomerRate = totalUniqueCustomers > 0 ? (repeatCustomers / totalUniqueCustomers) : 0;
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const activeCustomersCount = uniqueCustomerSales.filter(c => new Date(c.lastVisit) >= thirtyDaysAgo).length;
-      const activeRetentionRate = totalUniqueCustomers > 0 ? (activeCustomersCount / totalUniqueCustomers) : 0;
-
       const aiResponse = await aiClient.post(
         '/api/insights/analyze',
         {
@@ -726,10 +845,14 @@ const getInsights = async (req, res) => {
       trends,
       recommendations: [...smartRecommendations, ...recommendations, ...aiRecs],
       alerts: [...alerts, ...marketAlerts],
+      generatedAt: new Date().toISOString(),
     };
 
     if (!aiTracker.failed) {
-      await setInsightsCache(req, shopId, payload);
+      await setInsightsCache(req, shopId, payload, insightsConfig.AI_CACHE_TTL_SECONDS, { keepStale: true });
+    } else {
+      await setInsightsCache(req, shopId, payload, insightsConfig.FALLBACK_CACHE_TTL_SECONDS, { keepStale: false });
+      triggerBackgroundAiInsights(req, shopId, payload, metrics);
     }
 
     res.json(payload);
@@ -943,6 +1066,8 @@ const getStockDepletion = async (req, res) => {
 };
 
 module.exports = {
+  triggerBackgroundAiInsights,
+  inflightAiShops,
   getInsights,
   getCustomerSegments,
   getMonthlyRevenue,

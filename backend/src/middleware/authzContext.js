@@ -486,18 +486,41 @@ async function authzContext(req, res, next) {
 
       if (resolvedOrgId) {
         const fallbackOrgRole = (!isEmployee && rawRole === 'admin') ? 'owner' : 'member';
-        [membership] = await OrganizationMembership.findOrCreate({
-          where: isEmployee
-            ? { organizationId: resolvedOrgId, employeeId: id }
-            : { organizationId: resolvedOrgId, userId: id },
-          defaults: {
-            organizationId: resolvedOrgId,
-            userId: isEmployee ? null : id,
-            employeeId: isEmployee ? id : null,
-            orgRole: fallbackOrgRole,
-            status: 'active'
+        const membershipWhere = isEmployee
+          ? { organizationId: resolvedOrgId, employeeId: id }
+          : { organizationId: resolvedOrgId, userId: id };
+
+        try {
+          [membership] = await OrganizationMembership.findOrCreate({
+            where: membershipWhere,
+            defaults: {
+              organizationId: resolvedOrgId,
+              userId: isEmployee ? null : id,
+              employeeId: isEmployee ? id : null,
+              orgRole: fallbackOrgRole,
+              status: 'active'
+            }
+          });
+        } catch (findOrCreateErr) {
+          const isRaceError =
+            findOrCreateErr?.name === 'SequelizeUniqueConstraintError' ||
+            findOrCreateErr?.code === 'ER_LOCK_DEADLOCK' ||
+            findOrCreateErr?.original?.code === 'ER_LOCK_DEADLOCK' ||
+            findOrCreateErr?.parent?.code === 'ER_LOCK_DEADLOCK' ||
+            findOrCreateErr?.code === 'ER_DUP_ENTRY' ||
+            findOrCreateErr?.original?.code === 'ER_DUP_ENTRY' ||
+            (typeof findOrCreateErr?.message === 'string' &&
+              findOrCreateErr.message.includes('Transaction cannot be committed'));
+
+          if (isRaceError) {
+            membership = await OrganizationMembership.findOne({ where: membershipWhere });
+            if (!membership) {
+              throw findOrCreateErr;
+            }
+          } else {
+            throw findOrCreateErr;
           }
-        });
+        }
       }
     }
 

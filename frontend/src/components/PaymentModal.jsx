@@ -57,7 +57,7 @@ export default function PaymentModal({
     location: currentSale.customer?.location || ''
   });
 
-  // Debounced Customer Search in Checkout
+  // Debounced Customer Search in Checkout with AbortController
   useEffect(() => {
     if (!customerSearchQuery.trim()) {
       setCustomerSearchResults([]);
@@ -66,22 +66,33 @@ export default function PaymentModal({
     }
 
     setIsSearchingCustomer(true);
+    const abortController = new AbortController();
+
     const handler = setTimeout(async () => {
       try {
         const response = await api.get('/api/customers', {
-          params: { search: customerSearchQuery }
+          params: { search: customerSearchQuery },
+          signal: abortController.signal
         });
         const fetched = response.data.customers || response.data || [];
         setCustomerSearchResults(fetched);
       } catch (err) {
+        if (err.name === 'CanceledError' || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+          return;
+        }
         console.error('Customer search error in checkout:', err);
         setCustomerSearchResults([]);
       } finally {
-        setIsSearchingCustomer(false);
+        if (!abortController.signal.aborted) {
+          setIsSearchingCustomer(false);
+        }
       }
     }, 300);
 
-    return () => clearTimeout(handler);
+    return () => {
+      clearTimeout(handler);
+      abortController.abort();
+    };
   }, [customerSearchQuery]);
 
   const handleSelectExistingCustomer = (c) => {
