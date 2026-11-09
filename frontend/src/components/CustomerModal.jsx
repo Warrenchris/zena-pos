@@ -20,7 +20,7 @@ const CustomerModal = ({ isOpen = false, customer, onClose, onSubmit }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-  // Debounced search effect
+  // Debounced search effect with AbortController to cancel stale in-flight requests
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -29,22 +29,33 @@ const CustomerModal = ({ isOpen = false, customer, onClose, onSubmit }) => {
     }
 
     setIsSearching(true);
+    const abortController = new AbortController();
+
     const handler = setTimeout(async () => {
       try {
         const response = await api.get('/api/customers', {
-          params: { search: searchQuery }
+          params: { search: searchQuery },
+          signal: abortController.signal
         });
         const fetchedCustomers = response.data.customers || response.data || [];
         setSearchResults(fetchedCustomers);
       } catch (err) {
+        if (err.name === 'CanceledError' || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+          return;
+        }
         console.error('Customer search failed:', err);
         setSearchResults([]);
       } finally {
-        setIsSearching(false);
+        if (!abortController.signal.aborted) {
+          setIsSearching(false);
+        }
       }
     }, 300);
 
-    return () => clearTimeout(handler);
+    return () => {
+      clearTimeout(handler);
+      abortController.abort();
+    };
   }, [searchQuery]);
 
   useEffect(() => {
