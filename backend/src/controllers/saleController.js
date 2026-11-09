@@ -1524,7 +1524,7 @@ exports.getAllSalesForAdmin = async (req, res) => {
             required: false
           }
         ],
-        order: [[sortBy, sortOrder.toUpperCase()]],
+        order: [[sortBy, sortOrder.toUpperCase()], ['id', 'DESC']],
         limit,
         offset
       })
