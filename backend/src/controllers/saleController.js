@@ -1429,24 +1429,24 @@ exports.getSalesStatistics = async (req, res) => {
     const whereClause = withSaleFilter(baseWhere, REALIZED_SALE_FILTER);
     const netTotalExpr = `GREATEST(0, total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`;
 
-    const [totalSales, totalRevenueResult, averageTicket] = await Promise.all([
-      Sale.count({ where: whereClause }),
-      Sale.findOne({
-        where: whereClause,
-        attributes: [[sequelize.literal(`SUM(${netTotalExpr})`), 'totalRevenue']]
-      }),
-      Sale.findOne({
-        where: whereClause,
-        attributes: [[sequelize.literal(`AVG(${netTotalExpr})`), 'average']]
-      })
-    ]);
+    const statsResult = await Sale.findOne({
+      where: whereClause,
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('id')), 'totalSales'],
+        [sequelize.literal(`COALESCE(SUM(${netTotalExpr}), 0)`), 'totalRevenue'],
+        [sequelize.literal(`COALESCE(AVG(${netTotalExpr}), 0)`), 'averageTicket']
+      ],
+      raw: true
+    });
 
-    const totalRevenue = totalRevenueResult ? Number(totalRevenueResult.getDataValue('totalRevenue') || 0) : 0;
+    const totalSales = parseInt(statsResult?.totalSales || 0, 10);
+    const totalRevenue = parseFloat(statsResult?.totalRevenue || 0);
+    const averageTicket = parseFloat(statsResult?.averageTicket || 0);
 
     res.json({
       totalSales,
       totalRevenue,
-      averageTicket: averageTicket ? Number(averageTicket.getDataValue('average') || 0) : 0
+      averageTicket
     });
   } catch (error) {
     console.error('Sales statistics error:', error);
