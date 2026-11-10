@@ -117,7 +117,7 @@ const buildInvoicePdfDoc = (invoice, settings = {}) => {
   if (shopAddress) doc.text(shopAddress, { width: headerWidth });
   const contacts = [];
   if (shopPhone) contacts.push(`Tel: ${shopPhone}`);
-  if (validPin && vatRegistered) contacts.push(`KRA PIN: ${pin}`);
+  if (validPin) contacts.push(`KRA PIN: ${pin}`);
   if (contacts.length) doc.text(contacts.join('  |  '), { width: headerWidth });
   if (logoBuffer) doc.y = Math.max(doc.y, PAGE_MARGIN + 62);
 

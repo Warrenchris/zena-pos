@@ -155,46 +155,64 @@ describe('Backend A4 Invoice PDF Generator (Unit Tests)', () => {
     expect(pdfBuffer.slice(0, 5).toString('ascii')).toBe('%PDF-');
   });
 
-  test('renders "TAX INVOICE" only when shop has a VAT PIN AND vatRegistered is true', async () => {
+  test('prints valid KRA PIN regardless of VAT status, but renders TAX INVOICE only when vatRegistered is true', async () => {
     const PDFDocument = require('pdfkit');
     const textSpy = jest.spyOn(PDFDocument.prototype, 'text');
 
-    const taxInvoice = {
+    const validPinInvoice = {
       invoiceNumber: 'INV-TAX-01',
       total: 1160,
       shop: { name: 'KRA Store', kraPin: 'P051234567X' },
       items: [{ name: 'Item A', quantity: 1, price: 1160, total: 1160 }],
     };
 
-    // 1. Both PIN and vatRegistered = true -> renders "TAX INVOICE"
+    // (a) valid PIN + vatRegistered -> TAX INVOICE and PIN line
     textSpy.mockClear();
-    const docTax = buildInvoicePdfDoc(taxInvoice, { vatRegistered: true });
-    await drainPdfDoc(docTax);
-    const calledTextsTax = textSpy.mock.calls.map((c) => c[0]);
-    expect(calledTextsTax).toContain('TAX INVOICE');
-    expect(calledTextsTax).not.toContain('INVOICE');
+    const docA = buildInvoicePdfDoc(validPinInvoice, { vatRegistered: true });
+    await drainPdfDoc(docA);
+    const textA = textSpy.mock.calls.map((c) => String(c[0])).join(' ');
+    expect(textA).toContain('TAX INVOICE');
+    expect(textA).toContain('KRA PIN: P051234567X');
 
-    // 2. Has PIN but vatRegistered = false -> renders "INVOICE"
+    // (b) valid PIN + not registered -> INVOICE and PIN line
     textSpy.mockClear();
-    const docRegular1 = buildInvoicePdfDoc(taxInvoice, { vatRegistered: false });
-    await drainPdfDoc(docRegular1);
-    const calledTextsReg1 = textSpy.mock.calls.map((c) => c[0]);
-    expect(calledTextsReg1).toContain('INVOICE');
-    expect(calledTextsReg1).not.toContain('TAX INVOICE');
+    const docB = buildInvoicePdfDoc(validPinInvoice, { vatRegistered: false });
+    await drainPdfDoc(docB);
+    const textB = textSpy.mock.calls.map((c) => String(c[0])).join(' ');
+    expect(textB).toContain('INVOICE');
+    expect(textB).not.toContain('TAX INVOICE');
+    expect(textB).toContain('KRA PIN: P051234567X');
 
-    // 3. vatRegistered = true but NO PIN -> renders "INVOICE"
+    // (c) malformed PIN + registered -> INVOICE and NO PIN line
+    textSpy.mockClear();
+    const malformedInvoice = {
+      invoiceNumber: 'INV-MALFORMED-01',
+      total: 1160,
+      shop: { name: 'Malformed Store', kraPin: 'not-a-valid-pin' },
+      items: [{ name: 'Item C', quantity: 1, price: 1160, total: 1160 }],
+    };
+    const docC = buildInvoicePdfDoc(malformedInvoice, { vatRegistered: true });
+    await drainPdfDoc(docC);
+    const textC = textSpy.mock.calls.map((c) => String(c[0])).join(' ');
+    expect(textC).toContain('INVOICE');
+    expect(textC).not.toContain('TAX INVOICE');
+    expect(textC).not.toContain('KRA PIN:');
+    expect(textC).not.toContain('not-a-valid-pin');
+
+    // (d) no PIN -> INVOICE and no PIN line
     textSpy.mockClear();
     const noPinInvoice = {
       invoiceNumber: 'INV-NOPIN-02',
       total: 500,
       shop: { name: 'No PIN Store', kraPin: '' },
-      items: [{ name: 'Item B', quantity: 1, price: 500, total: 500 }],
+      items: [{ name: 'Item D', quantity: 1, price: 500, total: 500 }],
     };
-    const docRegular2 = buildInvoicePdfDoc(noPinInvoice, { vatRegistered: true });
-    await drainPdfDoc(docRegular2);
-    const calledTextsReg2 = textSpy.mock.calls.map((c) => c[0]);
-    expect(calledTextsReg2).toContain('INVOICE');
-    expect(calledTextsReg2).not.toContain('TAX INVOICE');
+    const docD = buildInvoicePdfDoc(noPinInvoice, { vatRegistered: true });
+    await drainPdfDoc(docD);
+    const textD = textSpy.mock.calls.map((c) => String(c[0])).join(' ');
+    expect(textD).toContain('INVOICE');
+    expect(textD).not.toContain('TAX INVOICE');
+    expect(textD).not.toContain('KRA PIN:');
 
     textSpy.mockRestore();
   });
