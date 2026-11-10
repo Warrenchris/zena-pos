@@ -67,14 +67,28 @@ const addContentPage = (doc, withTableHeader = true) => {
 };
 
 const drawFooter = (doc, pageNumber, pageCount, showPoweredBy) => {
-  const y = doc.page.height - 48;
-  drawRule(doc, y, '#cbd5e1');
-  const text = showPoweredBy
-    ? 'Thank you for your business  |  Powered by Zana POS'
-    : 'Thank you for your business';
-  doc.font('Helvetica').fontSize(8).fillColor('#64748b')
-    .text(text, PAGE_MARGIN, y + 9, { width: doc.page.width - PAGE_MARGIN * 2 - 75, align: 'left' });
-  doc.text(`Page ${pageNumber} of ${pageCount}`, doc.page.width - PAGE_MARGIN - 70, y + 9, { width: 70, align: 'right' });
+  const originalBottomMargin = doc.page.margins.bottom;
+  doc.page.margins.bottom = 0;
+  try {
+    const y = doc.page.height - 48;
+    drawRule(doc, y, '#cbd5e1');
+    const text = showPoweredBy
+      ? 'Thank you for your business  |  Powered by Zana POS'
+      : 'Thank you for your business';
+    doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+      .text(text, PAGE_MARGIN, y + 9, {
+        width: doc.page.width - PAGE_MARGIN * 2 - 75,
+        align: 'left',
+        lineBreak: false,
+      });
+    doc.text(`Page ${pageNumber} of ${pageCount}`, doc.page.width - PAGE_MARGIN - 70, y + 9, {
+      width: 70,
+      align: 'right',
+      lineBreak: false,
+    });
+  } finally {
+    doc.page.margins.bottom = originalBottomMargin;
+  }
 };
 
 const buildInvoicePdfDoc = (invoice, settings = {}) => {

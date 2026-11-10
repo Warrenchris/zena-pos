@@ -48,7 +48,10 @@ describe('Subscription invoice and payment receipt PDF', () => {
       metadata: { billingCycle: 'yearly', callbackToken: 'must-never-appear-in-document' }
     });
 
+    expect(doc.bufferedPageRange().count).toBe(1);
     const pdf = await drainPdfDoc(doc);
+    const pageMatches = pdf.toString('binary').match(/\/Type\s*\/Page\b(?!\s*s)/g);
+    expect(pageMatches ? pageMatches.length : 0).toBe(1);
     const renderedText = textSpy.mock.calls.map(([value]) => String(value)).join(' ');
 
     expect(pdf.slice(0, 5).toString('ascii')).toBe('%PDF-');
@@ -85,7 +88,10 @@ describe('Subscription invoice and payment receipt PDF', () => {
       metadata: { callbackToken: 'private-token' }
     });
 
+    expect(doc.bufferedPageRange().count).toBe(1);
     const pdf = await drainPdfDoc(doc);
+    const pageMatches = pdf.toString('binary').match(/\/Type\s*\/Page\b(?!\s*s)/g);
+    expect(pageMatches ? pageMatches.length : 0).toBe(1);
     const renderedText = textSpy.mock.calls.map(([value]) => String(value)).join(' ');
 
     expect(pdf.slice(0, 5).toString('ascii')).toBe('%PDF-');

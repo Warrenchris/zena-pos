@@ -91,10 +91,14 @@ describe('Backend A4 Invoice PDF Generator (Unit Tests)', () => {
 
     const doc = buildInvoicePdfDoc(fullInvoice, settings);
     expect(doc).toBeDefined();
+    expect(doc.bufferedPageRange().count).toBe(1);
 
     const pdfBuffer = await drainPdfDoc(doc);
     expect(pdfBuffer).toBeInstanceOf(Buffer);
     expect(pdfBuffer.length).toBeGreaterThan(100);
+
+    const pageMatches = pdfBuffer.toString('binary').match(/\/Type\s*\/Page\b(?!\s*s)/g);
+    expect(pageMatches ? pageMatches.length : 0).toBe(1);
 
     // Standard PDF signature
     const headerString = pdfBuffer.slice(0, 5).toString('ascii');
@@ -213,18 +217,77 @@ describe('Backend A4 Invoice PDF Generator (Unit Tests)', () => {
       shop: { name: 'Pagination Test Shop' },
     }, { currencySymbol: 'USD', showPoweredBy: false });
 
-    expect(doc.bufferedPageRange().count).toBeGreaterThan(1);
+    expect(doc.bufferedPageRange().count).toBe(4);
     const pdfBuffer = await drainPdfDoc(doc);
+    const pageMatches = pdfBuffer.toString('binary').match(/\/Type\s*\/Page\b(?!\s*s)/g);
+    expect(pageMatches ? pageMatches.length : 0).toBe(4);
     const renderedText = textSpy.mock.calls.map(([value]) => String(value)).join(' ');
 
     expect(pdfBuffer.slice(0, 5).toString('ascii')).toBe('%PDF-');
     expect(renderedText).toContain('ITEM');
     expect(renderedText).toContain('UNIT PRICE');
-    expect(renderedText).toContain('Page 1 of');
+    expect(renderedText).toContain('Page 1 of 4');
     expect(renderedText).toContain('USD 125.00');
     expect(renderedText).toContain('USD 16,250.00');
     expect(textSpy.mock.calls.filter(([value]) => value === 'ITEM').length).toBeGreaterThan(1);
     textSpy.mockRestore();
+  });
+
+  test('paginates a 60-item synthetic invoice across exactly 3 pages with matching "Page i of N" on every page', async () => {
+    const pageTextCalls = [];
+    let activePage = 0;
+    const origSwitchToPage = PDFDocument.prototype.switchToPage;
+    const origAddPage = PDFDocument.prototype.addPage;
+    const origText = PDFDocument.prototype.text;
+
+    const addPageSpy = jest.spyOn(PDFDocument.prototype, 'addPage').mockImplementation(function (...args) {
+      const res = origAddPage.apply(this, args);
+      activePage = this._pageBuffer ? this._pageBuffer.length - 1 : 0;
+      return res;
+    });
+    const switchSpy = jest.spyOn(PDFDocument.prototype, 'switchToPage').mockImplementation(function (n) {
+      activePage = n;
+      return origSwitchToPage.apply(this, [n]);
+    });
+    const textSpy = jest.spyOn(PDFDocument.prototype, 'text').mockImplementation(function (str, ...args) {
+      pageTextCalls.push({ page: activePage, text: String(str) });
+      return origText.apply(this, [str, ...args]);
+    });
+
+    try {
+      const items = Array.from({ length: 60 }, (_, i) => ({
+        name: `Standard inventory line item ${i + 1}`,
+        quantity: 1,
+        price: 100,
+        total: 100,
+      }));
+      const doc = buildInvoicePdfDoc({
+        invoiceNumber: 'INV-SYNTHETIC-60',
+        createdAt: '2026-11-04T08:00:00.000Z',
+        status: 'paid',
+        subtotal: 6000,
+        total: 6000,
+        shop: { name: 'Test Shop 60' },
+        items,
+      });
+
+      const pageRange = doc.bufferedPageRange();
+      expect(pageRange.count).toBe(3);
+
+      const pdfBuffer = await drainPdfDoc(doc);
+      const pageMatches = pdfBuffer.toString('binary').match(/\/Type\s*\/Page\b(?!\s*s)/g);
+      expect(pageMatches ? pageMatches.length : 0).toBe(3);
+
+      for (let i = 1; i <= 3; i++) {
+        const expected = `Page ${i} of 3`;
+        const found = pageTextCalls.find((call) => call.page === i - 1 && call.text === expected);
+        expect(found).toBeDefined();
+      }
+    } finally {
+      addPageSpy.mockRestore();
+      switchSpy.mockRestore();
+      textSpy.mockRestore();
+    }
   });
 
   test('does not print malformed or unverified shop PINs as tax identity', async () => {
