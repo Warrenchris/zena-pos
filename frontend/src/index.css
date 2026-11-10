@@ -488,6 +488,28 @@
     left: 0;
     width: 100%;
   }
+
+  /* UDDS Document print isolation (A4 invoices, vouchers, statements):
+     Hides the background application and displays only #printable-document-area.
+     Strictly isolated from #pos-receipt-print-area to preserve thermal receipt printing. */
+  body:has(#printable-document-area) * {
+    visibility: hidden;
+  }
+  #printable-document-area,
+  #printable-document-area * {
+    visibility: visible;
+  }
+  #printable-document-area {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

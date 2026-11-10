@@ -17,3 +17,10 @@ if (typeof global.TextEncoder === 'undefined' || typeof window.TextEncoder === '
   global.TextDecoder = TextDecoder;
   window.TextDecoder = TextDecoder;
 }
+
+if (typeof window.URL.createObjectURL === 'undefined') {
+  window.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
+}
+if (typeof window.URL.revokeObjectURL === 'undefined') {
+  window.URL.revokeObjectURL = jest.fn();
+}
