@@ -123,6 +123,33 @@ export const notifyLowStock = (productName, currentStock, reorderPoint) => {
     id: `low-stock-${productName}`
   });
 };
+/**
+ * Restock summary notification (single alert for multiple low-stock products)
+ */
+export const notifyRestockSummary = (total, items = []) => {
+  const count = Number(total) || 0;
+  if (count <= 0) return;
+
+  const title = 'Low Stock Alert';
+  let message;
+  if (count === 1 && items.length > 0) {
+    const item = items[0];
+    message = `${item.name} is running low. Current stock: ${item.stockQuantity} (Reorder at: ${item.reorderPoint})`;
+  } else {
+    const names = items.slice(0, 3).map((p) => p.name).filter(Boolean);
+    const namesStr = names.length > 0 ? ` (${names.join(', ')}${count > names.length ? '...' : ''})` : '';
+    message = `${count} products need restocking${namesStr}.`;
+  }
+
+  notify({
+    type: 'low_stock',
+    title,
+    message,
+    duration: 6000,
+    id: `restock-summary-${count}`
+  });
+};
+
 
 /**
  * Payment notification

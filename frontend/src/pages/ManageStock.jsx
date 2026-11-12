@@ -45,13 +45,24 @@ export default function ManageStock() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/api/products');
-      const list = Array.isArray(res.data)
-        ? res.data
-        : (Array.isArray(res.data?.products)
-            ? res.data.products
-            : (Array.isArray(res.data?.rows) ? res.data.rows : []));
-      setProducts(list);
+      const allProducts = [];
+      let totalPages = 1;
+      const MAX_PAGES = 20;
+
+      for (let page = 1; page <= Math.min(totalPages, MAX_PAGES); page += 1) {
+        const res = await api.get('/api/products', {
+          params: { page, pageSize: 100 }
+        });
+        const list = Array.isArray(res.data)
+          ? res.data
+          : (Array.isArray(res.data?.products)
+              ? res.data.products
+              : (Array.isArray(res.data?.rows) ? res.data.rows : []));
+        allProducts.push(...list);
+        totalPages = Number(res.data?.pagination?.totalPages) || 1;
+        if (page >= totalPages || list.length === 0) break;
+      }
+      setProducts(allProducts);
     } catch (err) {
       console.error('Error fetching inventory stock:', err);
       showToast({ type: 'error', title: 'Error', message: 'Failed to load inventory stock.' });

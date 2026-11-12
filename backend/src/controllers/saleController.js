@@ -77,50 +77,51 @@ exports.getAllSales = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    // Get the sales with their items
-    const sales = await Sale.findAndCountAll({
-      where: {
-        shopId: req.user.shopId
-      },
-      attributes: {
-        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
-      },
-      include: [
-        {
-          model: SaleItem,
-          required: false, // Make this LEFT JOIN to get sales even without items
-          include: [{
-            model: Product,
-            required: false, // Also make this LEFT JOIN
-            attributes: ['id', 'name', 'sku', 'price']
-          }]
+    // Lean count query separated from eager-loaded page query (H-05 optimization)
+    const where = { shopId: req.user.shopId };
+    const [total, rows] = await Promise.all([
+      Sale.count({ where }),
+      Sale.findAll({
+        where,
+        attributes: {
+          exclude: ['UserId', 'CustomerId']
         },
-        {
-          model: Customer,
-          required: false, // Make this a LEFT JOIN
-          attributes: ['id', 'name', 'email', 'phone']
-        },
-        {
-          model: Employee,
-          attributes: ['id', 'firstName', 'lastName', 'email'],
-          required: false
-        },
-        {
-          model: User,
-          attributes: ['id', 'name', 'email'],
-          required: false
-        }
-      ],
-      distinct: true, // This ensures correct count with eager loading
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset
-    });
+        include: [
+          {
+            model: SaleItem,
+            required: false,
+            include: [{
+              model: Product,
+              required: false,
+              attributes: ['id', 'name', 'sku', 'price']
+            }]
+          },
+          {
+            model: Customer,
+            required: false,
+            attributes: ['id', 'name', 'email', 'phone']
+          },
+          {
+            model: Employee,
+            attributes: ['id', 'firstName', 'lastName', 'email'],
+            required: false
+          },
+          {
+            model: User,
+            attributes: ['id', 'name', 'email'],
+            required: false
+          }
+        ],
+        order: [['createdAt', 'DESC'], ['id', 'DESC']],
+        limit,
+        offset
+      })
+    ]);
 
     res.json({
-      sales: sales.rows,
-      total: sales.count,
-      totalPages: Math.ceil(sales.count / limit),
+      sales: rows,
+      total,
+      totalPages: Math.ceil(total / limit),
       currentPage: page
     });
   } catch (error) {
@@ -1428,24 +1429,24 @@ exports.getSalesStatistics = async (req, res) => {
     const whereClause = withSaleFilter(baseWhere, REALIZED_SALE_FILTER);
     const netTotalExpr = `GREATEST(0, total - COALESCE((SELECT SUM(amount) FROM SaleRefunds WHERE SaleRefunds.saleId = Sale.id AND SaleRefunds.status = 'processed'), 0))`;
 
-    const [totalSales, totalRevenueResult, averageTicket] = await Promise.all([
-      Sale.count({ where: whereClause }),
-      Sale.findOne({
-        where: whereClause,
-        attributes: [[sequelize.literal(`SUM(${netTotalExpr})`), 'totalRevenue']]
-      }),
-      Sale.findOne({
-        where: whereClause,
-        attributes: [[sequelize.literal(`AVG(${netTotalExpr})`), 'average']]
-      })
-    ]);
+    const statsResult = await Sale.findOne({
+      where: whereClause,
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('id')), 'totalSales'],
+        [sequelize.literal(`COALESCE(SUM(${netTotalExpr}), 0)`), 'totalRevenue'],
+        [sequelize.literal(`COALESCE(AVG(${netTotalExpr}), 0)`), 'averageTicket']
+      ],
+      raw: true
+    });
 
-    const totalRevenue = totalRevenueResult ? Number(totalRevenueResult.getDataValue('totalRevenue') || 0) : 0;
+    const totalSales = parseInt(statsResult?.totalSales || 0, 10);
+    const totalRevenue = parseFloat(statsResult?.totalRevenue || 0);
+    const averageTicket = parseFloat(statsResult?.averageTicket || 0);
 
     res.json({
       totalSales,
       totalRevenue,
-      averageTicket: averageTicket ? Number(averageTicket.getDataValue('average') || 0) : 0
+      averageTicket
     });
   } catch (error) {
     console.error('Sales statistics error:', error);
@@ -1486,46 +1487,49 @@ exports.getAllSalesForAdmin = async (req, res) => {
       }
     }
 
-    const sales = await Sale.findAndCountAll({
-      where: whereClause,
-      attributes: {
-        exclude: ['UserId', 'CustomerId'] // Explicitly exclude any duplicate columns
-      },
-      include: [
-        {
-          model: SaleItem,
-          required: false,
-          as: 'SaleItems', // Explicitly set the alias
-          include: [{
-            model: Product,
-            as: 'Product',
-            attributes: ['id', 'name', 'sku', 'price'],
+    const [total, rows] = await Promise.all([
+      Sale.count({ where: whereClause }),
+      Sale.findAll({
+        where: whereClause,
+        attributes: {
+          exclude: ['UserId', 'CustomerId']
+        },
+        include: [
+          {
+            model: SaleItem,
+            required: false,
+            as: 'SaleItems',
+            include: [{
+              model: Product,
+              as: 'Product',
+              attributes: ['id', 'name', 'sku', 'price'],
+              required: false
+            }]
+          },
+          {
+            model: Customer,
+            as: 'Customer',
+            attributes: ['id', 'name', 'email', 'phone'],
             required: false
-          }]
-        },
-        {
-          model: Customer,
-          as: 'Customer',
-          attributes: ['id', 'name', 'email', 'phone'],
-          required: false
-        },
-        {
-          model: Employee,
-          attributes: ['id', 'firstName', 'lastName', 'email'],
-          as: 'Employee',
-          required: false
-        },
-        {
-          model: User,
-          attributes: ['id', 'name', 'email'],
-          required: false
-        }
-      ],
-      distinct: true,
-      order: [[sortBy, sortOrder.toUpperCase()]],
-      limit,
-      offset
-    });
+          },
+          {
+            model: Employee,
+            attributes: ['id', 'firstName', 'lastName', 'email'],
+            as: 'Employee',
+            required: false
+          },
+          {
+            model: User,
+            attributes: ['id', 'name', 'email'],
+            required: false
+          }
+        ],
+        order: [[sortBy, sortOrder.toUpperCase()], ['id', 'DESC']],
+        limit,
+        offset
+      })
+    ]);
+    const sales = { count: total, rows };
 
     // Log for debugging
     console.log('Fetched sales:', {
@@ -2581,6 +2585,10 @@ exports.getSaleRefunds = async (req, res) => {
   }
 };
 
+function escapeLikePattern(str) {
+  return str.replace(/[\\%_]/g, '\\$&');
+}
+
 exports.getAllReturns = async (req, res) => {
   const shopId = req.shopId || req.user.shopId;
 
@@ -2589,8 +2597,48 @@ exports.getAllReturns = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const offset = (page - 1) * limit;
 
+    const where = { shopId };
+
+    // Method filter: whitelist against SaleRefund.refundMethod enum values
+    const VALID_REFUND_METHODS = ['cash', 'card', 'mobile_money', 'store_credit'];
+    if (typeof req.query.method === 'string') {
+      const normalizedMethod = req.query.method.trim().toLowerCase();
+      if (VALID_REFUND_METHODS.includes(normalizedMethod)) {
+        where.refundMethod = normalizedMethod;
+      }
+    }
+
+    // Search filter: case-insensitive substring on Sale.invoiceNumber, Sale.customerName,
+    // Product.name, SaleRefund.reason, SaleRefund.reasonCode.
+    // If term matches /^(ret-?)?\d+$/i, also match SaleRefund.id equal to parseInt of digits.
+    if (typeof req.query.search === 'string') {
+      const rawSearch = req.query.search.trim().slice(0, 100);
+      if (rawSearch) {
+        const escaped = escapeLikePattern(rawSearch);
+        const likeTerm = `%${escaped}%`;
+
+        const orConditions = [
+          { '$sale.invoiceNumber$': { [Op.like]: likeTerm } },
+          { '$sale.customerName$': { [Op.like]: likeTerm } },
+          { '$product.name$': { [Op.like]: likeTerm } },
+          { reason: { [Op.like]: likeTerm } },
+          { reasonCode: { [Op.like]: likeTerm } }
+        ];
+
+        const idMatch = rawSearch.match(/^(?:ret-?)?(\d+)$/i);
+        if (idMatch) {
+          const parsedId = parseInt(idMatch[1], 10);
+          if (Number.isFinite(parsedId)) {
+            orConditions.push({ id: parsedId });
+          }
+        }
+
+        where[Op.or] = orConditions;
+      }
+    }
+
     const { count, rows: refunds } = await SaleRefund.findAndCountAll({
-      where: { shopId },
+      where,
       include: [
         {
           model: Product,
@@ -2603,7 +2651,7 @@ exports.getAllReturns = async (req, res) => {
           attributes: ['id', 'invoiceNumber', 'customerName', 'total', 'paymentMethod', 'createdAt']
         }
       ],
-      order: [['createdAt', 'DESC']],
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
       limit,
       offset
     });
@@ -2654,7 +2702,11 @@ exports.getAllReturns = async (req, res) => {
         quantity: r.quantity,
         amount: parseFloat(r.amount || 0),
         refundAmount: parseFloat(r.refundAmount || 0),
+        disposition: r.disposition ?? null,
         reason: r.reason || 'Customer Return',
+        reasonCode: r.reasonCode ?? null,
+        reasonNotes: r.reasonNotes ?? null,
+        managerApprovalId: r.managerApprovalId ?? null,
         refundMethod: r.refundMethod || 'cash',
         refundedBy: r.refundedBy,
         refunderName: performerName,
@@ -2686,6 +2738,36 @@ exports.getAllReturns = async (req, res) => {
   } catch (error) {
     console.error('Error fetching all returns:', error);
     res.status(500).json({ error: 'Failed to fetch sales returns' });
+  }
+};
+
+exports.getReturnsSummary = async (req, res) => {
+  const shopId = req.shopId || req.user?.shopId;
+
+  try {
+    const summary = await SaleRefund.findOne({
+      where: {
+        shopId,
+        status: 'processed'
+      },
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('*')), 'totalCount'],
+        [sequelize.fn('SUM', sequelize.col('amount')), 'totalAmount'],
+        [sequelize.fn('SUM', sequelize.col('quantity')), 'totalItems'],
+        [sequelize.literal('COUNT(DISTINCT saleId)'), 'uniqueSales']
+      ],
+      raw: true
+    });
+
+    res.json({
+      totalCount: parseInt(summary?.totalCount || 0, 10) || 0,
+      totalAmount: parseFloat(summary?.totalAmount || 0) || 0,
+      totalItems: parseInt(summary?.totalItems || 0, 10) || 0,
+      uniqueSales: parseInt(summary?.uniqueSales || 0, 10) || 0
+    });
+  } catch (error) {
+    console.error('Error fetching returns summary:', error);
+    res.status(500).json({ error: 'Failed to fetch returns summary' });
   }
 };
 

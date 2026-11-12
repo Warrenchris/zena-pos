@@ -47,6 +47,11 @@ const getCache = new Map();
 const originalGet = api.get;
 
 api.get = function (url, config = {}) {
+  // Bypass cache for returns endpoints so fresh data is always fetched
+  if (config?.skipCache || (typeof url === 'string' && url.startsWith('/api/sales/returns'))) {
+    return originalGet.call(this, url, config);
+  }
+
   // De-duplicate and cache GET requests for 3 seconds
   const cacheKey = JSON.stringify({ url, params: config?.params });
   
@@ -504,8 +509,10 @@ export const salesAPI = {
     api.post(`/api/sales/${saleId}/refund`, refundData, config),
   getRefunds: (saleId) =>
     api.get(`/api/sales/${saleId}/refunds`),
-  getAllReturns: () =>
-    api.get('/api/sales/returns/all'),
+  getAllReturns: (params) =>
+    api.get('/api/sales/returns/all', { params }),
+  getReturnsSummary: () =>
+    api.get('/api/sales/returns/summary'),
   getCreditNote: (saleId) =>
     api.get(`/api/sales/${saleId}/credit-note`),
 };
