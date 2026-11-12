@@ -366,15 +366,11 @@ export default function Purchases() {
       <PageHeader
         title="Purchases & Inventory Receiving"
         description="Track supplier orders, receive warehouse stock, and maintain financial inventory balances"
-        action={
-          <Button
-            variant="primary"
-            leftIcon={PlusIcon}
-            onClick={() => setShowCreateModal(true)}
-          >
-            Record Purchase
-          </Button>
-        }
+        primaryAction={{
+          icon: PlusIcon,
+          label: 'Record Purchase',
+          onClick: () => setShowCreateModal(true)
+        }}
       />
 
       {/* Global Metrics Grid (Server-Side Aggregations) */}

@@ -410,15 +410,11 @@ export default function PurchaseOrders() {
       <PageHeader
         title="Purchase Orders (PO Management)"
         description="Issue formal purchase orders to vendors, track shipment fulfillment, and receive partial or complete deliveries"
-        action={
-          <Button
-            variant="primary"
-            leftIcon={PlusIcon}
-            onClick={() => setShowCreateModal(true)}
-          >
-            New Purchase Order
-          </Button>
-        }
+        primaryAction={{
+          icon: PlusIcon,
+          label: 'New Purchase Order',
+          onClick: () => setShowCreateModal(true)
+        }}
       />
 
       {/* Metrics Grid (Server-Side Summary KPIs) */}
