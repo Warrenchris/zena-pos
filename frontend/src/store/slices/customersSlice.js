@@ -81,11 +81,16 @@ const customersSlice = createSlice({
       })
       .addCase(fetchCustomers.fulfilled, (state, action) => {
         state.loading = false
-        state.customers = action.payload.customers || action.payload
-        state.pagination = action.payload.pagination || {
-          currentPage: 1,
-          totalPages: 1,
-          total: action.payload.length
+        const payload = action.payload || {}
+        const rows = Array.isArray(payload) ? payload : (payload.customers || [])
+        state.customers = rows
+        const pageInfo = payload.pagination || payload
+        const total = pageInfo.totalItems ?? pageInfo.total ?? rows.length
+        state.pagination = {
+          currentPage: pageInfo.currentPage || 1,
+          totalPages: pageInfo.totalPages || 1,
+          total,
+          totalItems: total
         }
       })
       .addCase(fetchCustomers.rejected, (state, action) => {

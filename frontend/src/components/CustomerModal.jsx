@@ -59,16 +59,18 @@ const CustomerModal = ({ isOpen = false, customer, onClose, onSubmit }) => {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (searchQuery === '' && !selectedCustomer) {
-      setCustomerData({
-        id: null,
-        name: '',
-        location: '',
-        phone: '',
-        email: ''
-      });
-    }
-  }, [searchQuery, selectedCustomer]);
+    if (!isOpen) return;
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedCustomer(null);
+    setCustomerData({
+      id: customer?.id || null,
+      name: customer?.name || '',
+      location: customer?.location || '',
+      phone: customer?.phone || '',
+      email: customer?.email || ''
+    });
+  }, [isOpen, customer]);
 
   const handleSubmit = (e) => {
     e.preventDefault();

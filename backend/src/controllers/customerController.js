@@ -367,7 +367,7 @@ exports.getCustomerStatistics = async (req, res) => {
       }
     } : {};
 
-    const [totalCustomers, newCustomers, activeCustomers] = await Promise.all([
+    const [totalCustomers, newCustomers, activeCustomers, totalSpent] = await Promise.all([
       Customer.count({ where: { active: true, organizationId } }),
       Customer.count({
         where: {
@@ -384,13 +384,15 @@ exports.getCustomerStatistics = async (req, res) => {
             [Op.gte]: new Date(new Date() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
           }
         }
-      })
+      }),
+      Customer.sum('totalPurchases', { where: { active: true, organizationId } })
     ]);
 
     res.json({
       totalCustomers,
       newCustomers,
       activeCustomers,
+      totalSpent: Number(totalSpent) || 0,
       retentionRate: totalCustomers > 0 
         ? (activeCustomers / totalCustomers * 100).toFixed(2) 
         : 0
