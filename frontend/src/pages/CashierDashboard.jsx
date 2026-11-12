@@ -50,6 +50,7 @@ import MetricCard from '../components/pos/MetricCard';
 import { usePersistedCart } from '../hooks/usePersistedCart';
 import { getNextReceiptNumber, bumpAndGetNextReceiptNumber } from '../offline/offlineNumbering';
 import { prepareSalePayload } from '../sales/prepareSalePayload';
+import { saleWithLinkedCustomer } from '../sales/linkedCustomer';
 import { generateReceiptToken } from '../utils/receiptToken';
 import { calculateChange, roundToTwoDecimals, isCashPaymentValid } from '../utils/changeCalculation';
 import { usePendingSales } from '../hooks/usePendingSales';
@@ -80,6 +81,25 @@ export default function CashierDashboard() {
 
   // Sales workflow state
   const [salesMode, setSalesMode] = useState('idle'); // 'idle', 'customer-info', 'product-selection', 'payment'
+
+  // New Sale from Customers opens /pos?customerId=. Attach that customer once the cart is empty.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('customerId');
+    if (!id) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/api/customers/${id}`);
+        if (cancelled) return;
+        const customer = res.data?.customer || res.data;
+        setCurrentSale(prev => saleWithLinkedCustomer(prev, customer));
+        setSalesMode(mode => (mode === 'idle' ? 'product-selection' : mode));
+      } catch {
+        // The register still opens. The customer stays unselected.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [setCurrentSale]);
 
   // Held Carts workflow state
   const [heldCarts, setHeldCarts] = useState([]);
