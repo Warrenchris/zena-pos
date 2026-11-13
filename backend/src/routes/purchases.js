@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Purchase, PurchaseItem, Product, Supplier, Shop, sequelize } = require('../models');
+const { Purchase, PurchaseItem, PurchaseOrder, PurchaseOrderItem, Product, Supplier, Shop, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { auth, authzContext, authorize } = require('../middleware/auth');
 const { requireActiveSubscription } = require('../middleware/subscriptionEnforcement');
@@ -10,6 +10,8 @@ const {
   applyStockReceipt,
   reverseStockReceipt,
   recordPaymentExpense,
+  reversePaymentExpense,
+  validatePurchasePayment,
   invalidateShopProductCache
 } = require('../services/purchaseService');
 const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
@@ -199,6 +201,11 @@ router.post('/',
       items = []
     } = req.body;
 
+    if (!['PENDING', 'RECEIVED'].includes(status)) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Status must be PENDING or RECEIVED' });
+    }
+
     // Strict Validation 1: Supplier Name
     if (!supplierName || typeof supplierName !== 'string' || !supplierName.trim()) {
       await transaction.rollback();
@@ -262,14 +269,17 @@ router.post('/',
       return res.status(409).json({ error: `Purchase reference '${referenceNo}' already exists in this shop` });
     }
 
-    // Determine initial paidAmount
-    let parsedPaidAmount = 0.00;
-    if (paymentStatus === 'PAID') {
-      parsedPaidAmount = totalAmount;
-    } else if (paymentStatus === 'PARTIAL') {
-      const p = parseFloat(initialPaidAmount);
-      parsedPaidAmount = (!isNaN(p) && p > 0 && p < totalAmount) ? Math.round(p * 100) / 100 : 0.00;
+    const paymentValidation = validatePurchasePayment({
+      paymentStatus,
+      paymentMethod,
+      paidAmount: initialPaidAmount,
+      totalAmount
+    });
+    if (paymentValidation.error) {
+      await transaction.rollback();
+      return res.status(400).json({ error: paymentValidation.error });
     }
+    const parsedPaidAmount = paymentValidation.paidAmount;
 
     // Explicit supplier validation if supplierId provided
     if (supplierId) {
@@ -300,8 +310,8 @@ router.post('/',
       supplierContact: supplierContact ? supplierContact.trim() : null,
       purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
       status,
-      paymentStatus,
-      paymentMethod,
+      paymentStatus: paymentValidation.paymentStatus,
+      paymentMethod: paymentValidation.paymentMethod,
       totalAmount,
       paidAmount: parsedPaidAmount,
       notes: notes ? notes.trim() : null,
@@ -341,7 +351,7 @@ router.post('/',
         shopId,
         purchase,
         amount: parsedPaidAmount,
-        paymentMethod,
+        paymentMethod: paymentValidation.paymentMethod,
         userId: req.user?.id
       }, transaction);
     }
@@ -644,12 +654,14 @@ router.patch('/:id/cancel',
       return res.status(400).json({ error: 'Purchase is already cancelled' });
     }
 
+    const itemsToReverse = purchase.lineItems && purchase.lineItems.length > 0
+      ? purchase.lineItems
+      : (purchase.items || []);
+
+    await reversePurchaseOrderReceipt({ purchase, items: itemsToReverse, shopId, transaction });
+
     // If stock was previously received, atomically reverse inventory & record reversal movements
     if (purchase.status === 'RECEIVED') {
-      const itemsToReverse = purchase.lineItems && purchase.lineItems.length > 0
-        ? purchase.lineItems
-        : (purchase.items || []);
-
       await reverseStockReceipt({
         shopId,
         items: itemsToReverse,
@@ -661,6 +673,8 @@ router.patch('/:id/cancel',
       await invalidateShopProductCache(shopId);
       await invalidateShopInsightsCache(organizationId, shopId);
     }
+
+    await reversePaymentExpense({ shopId, purchase, userId: req.user?.id }, transaction);
 
     purchase.status = 'CANCELLED';
     await purchase.save({ transaction });
@@ -682,9 +696,80 @@ router.patch('/:id/cancel',
       await transaction.rollback();
     }
     console.error('Error cancelling purchase:', error);
-    res.status(500).json({ error: error.message || 'Failed to cancel purchase' });
+    const response = { error: error.message || 'Failed to cancel purchase' };
+    if (error.shortages) response.shortages = error.shortages;
+    res.status(error.statusCode || 500).json(response);
   }
 });
+
+async function reversePurchaseOrderReceipt({ purchase, items, shopId, transaction }) {
+  if (!purchase.purchaseOrderId) {
+    return;
+  }
+
+  const po = await PurchaseOrder.findOne({
+    where: { id: purchase.purchaseOrderId, shopId },
+    lock: transaction.LOCK.UPDATE,
+    transaction
+  });
+  if (!po) {
+    throw new Error(`Purchase Order ${purchase.purchaseOrderId} linked to purchase ${purchase.referenceNo} was not found`);
+  }
+
+  const poItems = await PurchaseOrderItem.findAll({
+    where: { purchaseOrderId: po.id, shopId },
+    order: [['id', 'ASC']],
+    lock: transaction.LOCK.UPDATE,
+    transaction
+  });
+  const receivedByProduct = new Map();
+  for (const item of items) {
+    const productId = Number(item.productId);
+    const quantity = parseFloat(item.quantity || item.quantityReceived || 0);
+    if (!item.productId || quantity <= 0) continue;
+    receivedByProduct.set(productId, (receivedByProduct.get(productId) || 0) + quantity);
+  }
+
+  for (const [productId, quantity] of receivedByProduct) {
+    let remaining = quantity;
+    for (const poItem of poItems.filter(item => Number(item.productId) === productId)) {
+      const currentReceived = parseFloat(poItem.quantityReceived || 0);
+      const reversed = Math.min(currentReceived, remaining);
+      if (reversed > 0) {
+        poItem.quantityReceived = Math.max(0, Math.round((currentReceived - reversed) * 100) / 100);
+        await poItem.save({ transaction });
+        remaining -= reversed;
+      }
+      if (remaining <= 0) break;
+    }
+  }
+
+  const poJsonItems = Array.isArray(po.items) ? po.items.map(item => ({ ...item })) : [];
+  for (const [productId, quantity] of receivedByProduct) {
+    let remaining = quantity;
+    for (const item of poJsonItems.filter(entry => Number(entry.productId) === productId)) {
+      const currentReceived = parseFloat(item.quantityReceived || 0);
+      const reversed = Math.min(currentReceived, remaining);
+      if (reversed > 0) {
+        item.quantityReceived = Math.max(0, Math.round((currentReceived - reversed) * 100) / 100);
+        remaining -= reversed;
+      }
+      if (remaining <= 0) break;
+    }
+  }
+
+  if (po.status !== 'CANCELLED') {
+    const totalOrdered = poItems.reduce((sum, item) => sum + parseFloat(item.quantityOrdered || 0), 0);
+    const totalReceived = poItems.reduce((sum, item) => sum + parseFloat(item.quantityReceived || 0), 0);
+    po.status = totalReceived <= 0
+      ? 'ORDERED'
+      : totalOrdered > 0 && totalReceived < totalOrdered
+        ? 'PARTIALLY_RECEIVED'
+        : 'RECEIVED';
+  }
+  po.items = poJsonItems;
+  await po.save({ transaction });
+}
 
 // DELETE /api/purchases/:id — Soft-cancel and audit (enforces inventory integrity)
 router.delete('/:id',
@@ -698,68 +783,8 @@ router.delete('/:id',
       antiOracle: true
     }
   }),
-  async (req, res) => {
-  const transaction = await sequelize.transaction();
-  try {
-    const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
-    if (!shopId) {
-      await transaction.rollback();
-      return res.status(403).json({ error: 'Shop context required' });
-    }
-    const organizationId = req.authz?.tenant?.organizationId;
-
-    const purchase = await Purchase.findOne({
-      where: { id: req.params.id, shopId },
-      include: [{ model: PurchaseItem, as: 'lineItems' }],
-      lock: transaction.LOCK.UPDATE,
-      transaction
-    });
-
-    if (!purchase) {
-      await transaction.rollback();
-      return res.status(404).json({ error: 'Purchase not found' });
-    }
-
-    // If previously received, reverse stock before destroying
-    if (purchase.status === 'RECEIVED') {
-      const itemsToReverse = purchase.lineItems && purchase.lineItems.length > 0
-        ? purchase.lineItems
-        : (purchase.items || []);
-
-      await reverseStockReceipt({
-        shopId,
-        items: itemsToReverse,
-        reference: purchase.referenceNo,
-        userId: req.user?.id,
-        organizationId
-      }, transaction);
-
-      await invalidateShopProductCache(shopId);
-      await invalidateShopInsightsCache(organizationId, shopId);
-    }
-
-    await logActivity({
-      shopId,
-      performedBy: req.user?.id,
-      performedByType: req.user?.isEmployee ? 'employee' : 'user',
-      action: 'PURCHASE_DELETED',
-      entity: 'Purchase',
-      entityId: purchase.id,
-      details: `Deleted purchase record ${purchase.referenceNo}`
-    }, transaction);
-
-    await purchase.destroy({ transaction });
-
-    await transaction.commit();
-    res.json({ message: 'Purchase record deleted and stock safely adjusted' });
-  } catch (error) {
-    if (transaction.finished !== 'commit' && transaction.finished !== 'rollback') {
-      await transaction.rollback();
-    }
-    console.error('Error deleting purchase:', error);
-    res.status(500).json({ error: 'Failed to delete purchase' });
-  }
-});
+  async (req, res) => res.status(405).json({ error: 'Use PATCH /api/purchases/:id/cancel' })
+);
 
 function formatCurrencyAmount(val) {
   return typeof val === 'number' ? val.toFixed(2) : String(val);

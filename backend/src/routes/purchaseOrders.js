@@ -8,7 +8,9 @@ const { logActivity } = require('../middleware/logger');
 const {
   resolveSupplier,
   applyStockReceipt,
-  invalidateShopProductCache
+  invalidateShopProductCache,
+  recordPaymentExpense,
+  validatePurchasePayment
 } = require('../services/purchaseService');
 const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 
@@ -495,6 +497,11 @@ async function handleReceiveOperation(req, res) {
       return res.status(404).json({ error: 'Purchase Order not found' });
     }
 
+    if (po.status === 'DRAFT') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Move this PO to ORDERED before receiving.' });
+    }
+
     if (po.status === 'RECEIVED') {
       await transaction.rollback();
       return res.status(400).json({ error: 'This Purchase Order has already been fully received' });
@@ -503,6 +510,11 @@ async function handleReceiveOperation(req, res) {
     if (po.status === 'CANCELLED') {
       await transaction.rollback();
       return res.status(400).json({ error: 'Cannot receive stock on a cancelled Purchase Order' });
+    }
+
+    if (!['ORDERED', 'PARTIALLY_RECEIVED'].includes(po.status)) {
+      await transaction.rollback();
+      return res.status(400).json({ error: `Cannot receive stock on a Purchase Order with status ${po.status}` });
     }
 
     const receivedItems = req.body.receivedItems || req.body.items;
@@ -610,6 +622,27 @@ async function handleReceiveOperation(req, res) {
       finalStatus = 'RECEIVED';
     }
 
+    const batchTotalAmount = Math.round(stockReceiptBatch.reduce((s, i) => s + i.totalCost, 0) * 100) / 100;
+    const paymentInput = req.body.payment;
+    let payment;
+    if (paymentInput === undefined) {
+      payment = { paymentStatus: 'UNPAID', paymentMethod: 'CASH', paidAmount: 0 };
+    } else if (!paymentInput || typeof paymentInput !== 'object' || Array.isArray(paymentInput)) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Payment must be an object' });
+    } else {
+      payment = validatePurchasePayment({
+        paymentStatus: paymentInput.status,
+        paymentMethod: paymentInput.method,
+        paidAmount: paymentInput.paidAmount,
+        totalAmount: batchTotalAmount
+      });
+      if (payment.error) {
+        await transaction.rollback();
+        return res.status(400).json({ error: payment.error });
+      }
+    }
+
     po.status = finalStatus;
     po.items = jsonItems;
     await po.save({ transaction });
@@ -628,7 +661,6 @@ async function handleReceiveOperation(req, res) {
 
     // Auto-create a linked Purchase record representing this receiving batch
     const purchaseRef = `PUR-${po.poNumber.replace('PO-', '')}-${Date.now().toString().slice(-4)}`;
-    const batchTotalAmount = Math.round(stockReceiptBatch.reduce((s, i) => s + i.totalCost, 0) * 100) / 100;
 
     const generatedPurchase = await Purchase.create({
       shopId,
@@ -638,10 +670,11 @@ async function handleReceiveOperation(req, res) {
       supplierContact: po.supplierPhone || po.supplierEmail,
       purchaseDate: new Date(),
       status: 'RECEIVED',
-      paymentStatus: 'PAID',
-      paymentMethod: 'BANK TRANSFER',
+      paymentStatus: payment.paymentStatus,
+      paymentMethod: payment.paymentMethod,
       totalAmount: batchTotalAmount,
-      paidAmount: batchTotalAmount,
+      paidAmount: payment.paidAmount,
+      purchaseOrderId: po.id,
       notes: `Generated from PO ${po.poNumber} (${finalStatus})`,
       items: stockReceiptBatch
     }, { transaction });
@@ -657,6 +690,16 @@ async function handleReceiveOperation(req, res) {
         totalCost: sItem.totalCost,
         shopId
       }, { transaction });
+    }
+
+    if (payment.paidAmount > 0) {
+      await recordPaymentExpense({
+        shopId,
+        purchase: generatedPurchase,
+        amount: payment.paidAmount,
+        paymentMethod: payment.paymentMethod,
+        userId: req.user?.id
+      }, transaction);
     }
 
     await logActivity({
@@ -704,22 +747,35 @@ router.patch('/:id/cancel',
 });
 
 async function handleCancelOperation(req, res) {
+  const transaction = await sequelize.transaction();
   try {
     const shopId = req.authz?.scope?.activeShopId || req.shopId || req.user?.shopId;
-    if (!shopId) return res.status(403).json({ error: 'Shop context required' });
+    if (!shopId) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Shop context required' });
+    }
 
-    const po = await PurchaseOrder.findOne({ where: { id: req.params.id, shopId } });
-    if (!po) return res.status(404).json({ error: 'Purchase Order not found' });
+    const po = await PurchaseOrder.findOne({
+      where: { id: req.params.id, shopId },
+      lock: transaction.LOCK.UPDATE,
+      transaction
+    });
+    if (!po) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Purchase Order not found' });
+    }
 
     if (po.status === 'RECEIVED') {
+      await transaction.rollback();
       return res.status(400).json({ error: 'Cannot cancel a fully received Purchase Order' });
     }
     if (po.status === 'CANCELLED') {
+      await transaction.rollback();
       return res.status(400).json({ error: 'Purchase Order is already cancelled' });
     }
 
     po.status = 'CANCELLED';
-    await po.save();
+    await po.save({ transaction });
 
     await logActivity({
       shopId,
@@ -729,10 +785,14 @@ async function handleCancelOperation(req, res) {
       entity: 'PurchaseOrder',
       entityId: po.id,
       details: `Cancelled Purchase Order ${po.poNumber}`
-    });
+    }, transaction);
 
+    await transaction.commit();
     res.json({ message: 'Purchase Order cancelled successfully', po });
   } catch (error) {
+    if (transaction.finished !== 'commit' && transaction.finished !== 'rollback') {
+      await transaction.rollback();
+    }
     console.error('Error cancelling purchase order:', error);
     res.status(500).json({ error: 'Failed to cancel purchase order' });
   }

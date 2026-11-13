@@ -481,4 +481,291 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
       });
     expect(unknownProdRes.status).toBe(404);
   });
+
+  test('BATCH A — Purchase status and payment input are validated without fallback values', async () => {
+    const basePayload = {
+      supplierName: 'Batch A Validation Supplier',
+      status: 'PENDING',
+      items: [{ productId: prodShop1.id, quantity: 3, unitCost: 10 }]
+    };
+
+    const invalidStatus = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({ ...basePayload, status: 'CANCELLED' });
+    expect(invalidStatus.status).toBe(400);
+
+    const zeroPartial = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({ ...basePayload, paymentStatus: 'PARTIAL', paidAmount: 0, paymentMethod: 'CASH' });
+    expect(zeroPartial.status).toBe(400);
+
+    const fullPartial = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({ ...basePayload, paymentStatus: 'PARTIAL', paidAmount: 30, paymentMethod: 'CASH' });
+    expect(fullPartial.status).toBe(400);
+
+    const emptyMethod = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({ ...basePayload, paymentStatus: 'UNPAID', paymentMethod: '   ' });
+    expect(emptyMethod.status).toBe(400);
+
+    const longMethod = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({ ...basePayload, paymentStatus: 'UNPAID', paymentMethod: 'x'.repeat(51) });
+    expect(longMethod.status).toBe(400);
+
+    const unpaid = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        ...basePayload,
+        paymentStatus: 'UNPAID',
+        paymentMethod: 'CASH',
+        paidAmount: 20
+      });
+    expect(unpaid.status).toBe(201);
+    expect(unpaid.body.paymentStatus).toBe('UNPAID');
+    expect(Number(unpaid.body.paidAmount)).toBe(0);
+    expect(await Expense.count({ where: { reference: unpaid.body.referenceNo, shopId: 1 } })).toBe(0);
+  });
+
+  test('BATCH A — PO receipt defaults unpaid, records supplied payments, and rolls linked batches back', async () => {
+    const unpaidPo = await request(app)
+      .post('/api/purchase-orders')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'Batch A Unpaid PO Supplier',
+        items: [{ productId: prodShop1.id, quantityOrdered: 4, unitCost: 10 }]
+      });
+    expect(unpaidPo.status).toBe(201);
+
+    const unpaidReceive = await request(app)
+      .patch(`/api/purchase-orders/${unpaidPo.body.id}/receive`)
+      .set('Authorization', adminTokenShop1)
+      .send({ receivedItems: [{ productId: prodShop1.id, quantityToReceive: 2 }] });
+    expect(unpaidReceive.status).toBe(200);
+
+    let generatedPurchase = await Purchase.findOne({
+      where: { purchaseOrderId: unpaidPo.body.id, shopId: 1 }
+    });
+    expect(generatedPurchase).not.toBeNull();
+    expect(generatedPurchase.paymentStatus).toBe('UNPAID');
+    expect(Number(generatedPurchase.paidAmount)).toBe(0);
+    expect(await Expense.count({ where: { reference: generatedPurchase.referenceNo, shopId: 1 } })).toBe(0);
+
+    const unpaidCancel = await request(app)
+      .patch(`/api/purchases/${generatedPurchase.id}/cancel`)
+      .set('Authorization', adminTokenShop1);
+    expect(unpaidCancel.status).toBe(200);
+    expect(await Expense.count({ where: { reference: generatedPurchase.referenceNo, shopId: 1 } })).toBe(0);
+
+    let poAfterCancel = await PurchaseOrder.findByPk(unpaidPo.body.id);
+    let poItemsAfterCancel = await PurchaseOrderItem.findAll({
+      where: { purchaseOrderId: unpaidPo.body.id }
+    });
+    expect(poAfterCancel.status).toBe('ORDERED');
+    expect(Number(poItemsAfterCancel[0].quantityReceived)).toBe(0);
+    expect(Number(poAfterCancel.items[0].quantityReceived)).toBe(0);
+
+    const partialPo = await request(app)
+      .post('/api/purchase-orders')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'Batch A Partial PO Supplier',
+        items: [{ productId: prodShop1.id, quantityOrdered: 5, unitCost: 10 }]
+      });
+    expect(partialPo.status).toBe(201);
+
+    const invalidPartialReceive = await request(app)
+      .patch(`/api/purchase-orders/${partialPo.body.id}/receive`)
+      .set('Authorization', adminTokenShop1)
+      .send({
+        receivedItems: [{ productId: prodShop1.id, quantityToReceive: 2 }],
+        payment: { status: 'PARTIAL', method: 'CASH', paidAmount: 0 }
+      });
+    expect(invalidPartialReceive.status).toBe(400);
+
+    const partialReceive = await request(app)
+      .patch(`/api/purchase-orders/${partialPo.body.id}/receive`)
+      .set('Authorization', adminTokenShop1)
+      .send({
+        receivedItems: [{ productId: prodShop1.id, quantityToReceive: 2 }],
+        payment: { status: 'PARTIAL', method: 'CASH', paidAmount: 5 }
+      });
+    expect(partialReceive.status).toBe(200);
+
+    generatedPurchase = await Purchase.findOne({
+      where: { purchaseOrderId: partialPo.body.id, shopId: 1 }
+    });
+    expect(generatedPurchase.paymentStatus).toBe('PARTIAL');
+    expect(Number(generatedPurchase.paidAmount)).toBe(5);
+    let expenses = await Expense.findAll({
+      where: { reference: generatedPurchase.referenceNo, shopId: 1, category: 'inventory' }
+    });
+    expect(expenses).toHaveLength(1);
+    expect(Number(expenses[0].amount)).toBe(5);
+
+    const partialCancel = await request(app)
+      .patch(`/api/purchases/${generatedPurchase.id}/cancel`)
+      .set('Authorization', adminTokenShop1);
+    expect(partialCancel.status).toBe(200);
+
+    poAfterCancel = await PurchaseOrder.findByPk(partialPo.body.id);
+    poItemsAfterCancel = await PurchaseOrderItem.findAll({
+      where: { purchaseOrderId: partialPo.body.id }
+    });
+    expect(poAfterCancel.status).toBe('ORDERED');
+    expect(Number(poItemsAfterCancel[0].quantityReceived)).toBe(0);
+    expect(Number(poAfterCancel.items[0].quantityReceived)).toBe(0);
+    expenses = await Expense.findAll({
+      where: { reference: generatedPurchase.referenceNo, shopId: 1, category: 'inventory' }
+    });
+    expect(expenses).toHaveLength(2);
+    expect(expenses.reduce((sum, expense) => sum + Number(expense.amount), 0)).toBe(0);
+
+    const paidPo = await request(app)
+      .post('/api/purchase-orders')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'Batch A Paid PO Supplier',
+        items: [{ productId: prodShop1.id, quantityOrdered: 3, unitCost: 10 }]
+      });
+    expect(paidPo.status).toBe(201);
+
+    const paidReceive = await request(app)
+      .patch(`/api/purchase-orders/${paidPo.body.id}/receive`)
+      .set('Authorization', adminTokenShop1)
+      .send({ payment: { status: 'PAID', method: 'CASH' } });
+    expect(paidReceive.status).toBe(200);
+
+    generatedPurchase = await Purchase.findOne({
+      where: { purchaseOrderId: paidPo.body.id, shopId: 1 }
+    });
+    expect(generatedPurchase.paymentStatus).toBe('PAID');
+    expect(Number(generatedPurchase.paidAmount)).toBe(30);
+    expenses = await Expense.findAll({
+      where: { reference: generatedPurchase.referenceNo, shopId: 1, category: 'inventory' }
+    });
+    expect(expenses).toHaveLength(1);
+    expect(Number(expenses[0].amount)).toBe(30);
+  });
+
+  test('BATCH A — DRAFT PO receiving is rejected and cancellation uses the locked lifecycle operation', async () => {
+    const draftPo = await request(app)
+      .post('/api/purchase-orders')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'Batch A Draft Supplier',
+        status: 'DRAFT',
+        items: [{ productId: prodShop1.id, quantityOrdered: 2, unitCost: 10 }]
+      });
+    expect(draftPo.status).toBe(201);
+
+    const receive = await request(app)
+      .patch(`/api/purchase-orders/${draftPo.body.id}/receive`)
+      .set('Authorization', adminTokenShop1)
+      .send({});
+    expect(receive.status).toBe(400);
+    expect(receive.body.error).toBe('Move this PO to ORDERED before receiving.');
+
+    const receiveByStatus = await request(app)
+      .patch(`/api/purchase-orders/${draftPo.body.id}/status`)
+      .set('Authorization', adminTokenShop1)
+      .send({ status: 'RECEIVED' });
+    expect(receiveByStatus.status).toBe(400);
+    expect(receiveByStatus.body.error).toBe('Move this PO to ORDERED before receiving.');
+
+    const cancel = await request(app)
+      .patch(`/api/purchase-orders/${draftPo.body.id}/cancel`)
+      .set('Authorization', adminTokenShop1);
+    expect(cancel.status).toBe(200);
+    expect(cancel.body.po.status).toBe('CANCELLED');
+    expect((await PurchaseOrder.findByPk(draftPo.body.id)).status).toBe('CANCELLED');
+  });
+
+  test('BATCH A — Cancellation rejects aggregated stock shortages and reverses the net expense for pending purchases', async () => {
+    const inventory = await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } });
+    const originalStock = Number(inventory.stockQuantity);
+    const shortagePurchase = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'Batch A Stock Shortage Supplier',
+        status: 'RECEIVED',
+        paymentStatus: 'UNPAID',
+        items: [
+          { productId: prodShop1.id, quantity: 4, unitCost: 10 },
+          { productId: prodShop1.id, quantity: 3, unitCost: 10 }
+        ]
+      });
+    expect(shortagePurchase.status).toBe(201);
+
+    await inventory.update({ stockQuantity: 6 });
+    const movementCountBefore = await StockMovement.count({
+      where: { reference: shortagePurchase.body.referenceNo, shopId: 1 }
+    });
+    const shortageCancel = await request(app)
+      .patch(`/api/purchases/${shortagePurchase.body.id}/cancel`)
+      .set('Authorization', adminTokenShop1);
+    expect(shortageCancel.status).toBe(409);
+    expect(shortageCancel.body.error).toContain('needed 7, available 6');
+    expect(shortageCancel.body.shortages).toEqual([
+      expect.objectContaining({ needed: 7, available: 6 })
+    ]);
+    expect(Number((await Inventory.findOne({ where: { productId: prodShop1.id, shopId: 1 } })).stockQuantity)).toBe(6);
+    expect(await StockMovement.count({
+      where: { reference: shortagePurchase.body.referenceNo, shopId: 1 }
+    })).toBe(movementCountBefore);
+    expect((await Purchase.findByPk(shortagePurchase.body.id)).status).toBe('RECEIVED');
+    await inventory.update({ stockQuantity: originalStock + 7 });
+
+    const pendingPaid = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'Batch A Pending Paid Supplier',
+        status: 'PENDING',
+        paymentStatus: 'PAID',
+        paymentMethod: 'CASH',
+        paidAmount: 1,
+        items: [{ productId: prodShop1.id, quantity: 3, unitCost: 10 }]
+      });
+    expect(pendingPaid.status).toBe(201);
+    expect(Number(pendingPaid.body.paidAmount)).toBe(30);
+
+    await Expense.create({
+      description: 'Reversal: Prior payment adjustment',
+      amount: -5,
+      category: 'inventory',
+      paymentMethod: 'cash',
+      reference: pendingPaid.body.referenceNo,
+      shopId: 1
+    });
+
+    const pendingCancel = await request(app)
+      .patch(`/api/purchases/${pendingPaid.body.id}/cancel`)
+      .set('Authorization', adminTokenShop1);
+    expect(pendingCancel.status).toBe(200);
+
+    const expenses = await Expense.findAll({
+      where: { reference: pendingPaid.body.referenceNo, shopId: 1, category: 'inventory' }
+    });
+    expect(expenses).toHaveLength(3);
+    const reversal = expenses.find(expense => Number(expense.amount) === -25);
+    expect(reversal).toBeDefined();
+    expect(reversal.description).toMatch(/^Reversal: /);
+    expect(expenses.reduce((sum, expense) => sum + Number(expense.amount), 0)).toBe(0);
+
+    const deleteResponse = await request(app)
+      .delete(`/api/purchases/${pendingPaid.body.id}`)
+      .set('Authorization', adminTokenShop1);
+    expect(deleteResponse.status).toBe(405);
+    expect(deleteResponse.body.error).toBe('Use PATCH /api/purchases/:id/cancel');
+    expect(await Purchase.findByPk(pendingPaid.body.id)).not.toBeNull();
+  });
 });

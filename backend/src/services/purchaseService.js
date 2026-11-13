@@ -191,62 +191,84 @@ async function reverseStockReceipt({ shopId, items, reference, userId, employeeI
     }
   }
 
-  // Sort items by productId ascending before acquiring row locks.
-  // Consistent with applyStockReceipt, processRefund, and restoreSaleInventoryIfNeeded (H-01).
-  const sortedItems = [...items].sort((a, b) => Number(a.productId) - Number(b.productId));
+  const requiredByProduct = new Map();
+  for (const item of items) {
+    const qty = parseFloat(item.quantity || item.quantityReceived || 0);
+    if (qty <= 0 || !item.productId) continue;
+
+    const productId = Number(item.productId);
+    const required = requiredByProduct.get(productId) || {
+      productId,
+      productName: item.productName || 'Product',
+      quantity: 0
+    };
+    required.quantity += qty;
+    requiredByProduct.set(productId, required);
+  }
+
+  const lockedInventory = [];
+  const shortages = [];
+  const sortedItems = [...requiredByProduct.values()].sort((a, b) => a.productId - b.productId);
 
   for (const item of sortedItems) {
-    const qty = parseFloat(item.quantity || 0);
-
-    if (qty > 0 && item.productId) {
-      const productWhere = { id: item.productId };
-      if (organizationId) {
-        productWhere.organizationId = organizationId;
-      }
-      const product = await Product.findOne({
-        where: productWhere,
-        lock: transaction.LOCK.UPDATE,
-        transaction
-      });
-
-      if (product) {
-        let inventory = await Inventory.findOne({
-          where: { productId: product.id, shopId },
-          lock: transaction.LOCK.UPDATE,
-          transaction
-        });
-
-        if (!inventory) {
-          logger.warn(`[purchaseService:reverseStockReceipt] Inventory row missing for productId=${product.id}, shopId=${shopId}; creating fallback`);
-          inventory = await Inventory.create({
-            productId: product.id,
-            shopId,
-            stockQuantity: 0,
-            reorderPoint: 10
-          }, { transaction });
-        }
-
-        const prevStock = parseFloat(inventory.stockQuantity || 0);
-        const newStock = Math.max(0, Math.round((prevStock - qty) * 100) / 100);
-
-        // Primary mutation: Inventory
-        await inventory.update({ stockQuantity: newStock }, { transaction });
-
-        await StockMovement.create({
-          shopId,
-          organizationId: organizationId || product.organizationId,
-          productId: product.id,
-          quantity: -qty,
-          previousStock: prevStock,
-          newStock: newStock,
-          type: 'PURCHASE_REVERSAL',
-          reference: reference || null,
-          notes: `Reversal / cancellation of ${reference}`,
-          userId: validUserId,
-          employeeId: validEmployeeId
-        }, { transaction });
-      }
+    const productWhere = { id: item.productId };
+    if (organizationId) {
+      productWhere.organizationId = organizationId;
     }
+    const product = await Product.findOne({
+      where: productWhere,
+      lock: transaction.LOCK.UPDATE,
+      transaction
+    });
+
+    if (!product) continue;
+
+    const inventory = await Inventory.findOne({
+      where: { productId: product.id, shopId },
+      lock: transaction.LOCK.UPDATE,
+      transaction
+    });
+    const available = inventory ? parseFloat(inventory.stockQuantity || 0) : 0;
+    const needed = Math.round(item.quantity * 100) / 100;
+
+    if (available < needed) {
+      shortages.push({
+        productId: product.id,
+        productName: product.name || item.productName,
+        needed,
+        available
+      });
+    } else {
+      lockedInventory.push({ product, inventory, quantity: needed });
+    }
+  }
+
+  if (shortages.length > 0) {
+    const error = new Error(`Insufficient stock to reverse purchase: ${shortages.map(item => `${item.productName} (needed ${item.needed}, available ${item.available})`).join('; ')}`);
+    error.statusCode = 409;
+    error.shortages = shortages;
+    throw error;
+  }
+
+  for (const { product, inventory, quantity } of lockedInventory) {
+    const prevStock = parseFloat(inventory.stockQuantity || 0);
+    const newStock = Math.round((prevStock - quantity) * 100) / 100;
+
+    await inventory.update({ stockQuantity: newStock }, { transaction });
+
+    await StockMovement.create({
+      shopId,
+      organizationId: organizationId || product.organizationId,
+      productId: product.id,
+      quantity: -quantity,
+      previousStock: prevStock,
+      newStock,
+      type: 'PURCHASE_REVERSAL',
+      reference: reference || null,
+      notes: `Reversal / cancellation of ${reference}`,
+      userId: validUserId,
+      employeeId: validEmployeeId
+    }, { transaction });
   }
 }
 
@@ -285,10 +307,74 @@ async function recordPaymentExpense({ shopId, purchase, amount, paymentMethod, u
   return expense;
 }
 
+async function reversePaymentExpense({ shopId, purchase, userId }, transaction) {
+  const netAmount = Number(await Expense.sum('amount', {
+    where: {
+      shopId,
+      reference: purchase.referenceNo,
+      category: 'inventory'
+    },
+    transaction
+  }) || 0);
+
+  if (!Number.isFinite(netAmount) || netAmount <= 0) return null;
+
+  let validUserId = null;
+  let validEmployeeId = null;
+  if (isIntegerId(userId)) {
+    const existingUser = await User.findByPk(parseInt(userId, 10), { attributes: ['id'], transaction });
+    if (existingUser) validUserId = existingUser.id;
+  } else if (isUuid(userId)) {
+    validEmployeeId = String(userId).trim();
+  }
+
+  return Expense.create({
+    description: `Reversal: Purchase Payment: ${purchase.referenceNo} (${purchase.supplierName})`,
+    amount: -Math.round(netAmount * 100) / 100,
+    category: 'inventory',
+    date: new Date(),
+    paymentMethod: mapPaymentMethodToExpense(purchase.paymentMethod),
+    reference: purchase.referenceNo,
+    notes: `Reversal of inventory purchase payments for ${purchase.referenceNo}`,
+    shopId,
+    userId: validUserId,
+    employeeId: validEmployeeId
+  }, { transaction });
+}
+
+function validatePurchasePayment({ paymentStatus, paymentMethod, paidAmount, totalAmount }) {
+  if (!['PAID', 'PARTIAL', 'UNPAID'].includes(paymentStatus)) {
+    return { error: 'Payment status must be PAID, PARTIAL, or UNPAID' };
+  }
+
+  const normalizedPaymentMethod = typeof paymentMethod === 'string' ? paymentMethod.trim() : '';
+  if (!normalizedPaymentMethod || normalizedPaymentMethod.length > 50) {
+    return { error: 'Payment method is required and must be 50 characters or fewer' };
+  }
+
+  const total = Number(totalAmount);
+  if (paymentStatus === 'PARTIAL') {
+    const parsedPaidAmount = Number(paidAmount);
+    const amount = Math.round(parsedPaidAmount * 100) / 100;
+    if (!Number.isFinite(parsedPaidAmount) || amount <= 0 || amount >= total) {
+      return { error: 'Partial payment amount must be greater than 0 and less than total amount' };
+    }
+    return { paymentStatus, paymentMethod: normalizedPaymentMethod, paidAmount: amount };
+  }
+
+  return {
+    paymentStatus,
+    paymentMethod: normalizedPaymentMethod,
+    paidAmount: paymentStatus === 'PAID' ? total : 0
+  };
+}
+
 module.exports = {
   resolveSupplier,
   applyStockReceipt,
   reverseStockReceipt,
   recordPaymentExpense,
+  reversePaymentExpense,
+  validatePurchasePayment,
   invalidateShopProductCache
 };
