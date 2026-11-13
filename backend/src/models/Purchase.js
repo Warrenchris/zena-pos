@@ -15,6 +15,10 @@ const Purchase = sequelize.define('Purchase', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
+  purchaseOrderId: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
   supplierName: {
     type: DataTypes.STRING,
     allowNull: false

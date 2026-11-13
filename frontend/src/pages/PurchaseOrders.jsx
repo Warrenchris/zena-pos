@@ -56,6 +56,9 @@ export default function PurchaseOrders() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [receiveBatch, setReceiveBatch] = useState([]);
+  const [receivePaymentStatus, setReceivePaymentStatus] = useState('UNPAID');
+  const [receivePaymentMethod, setReceivePaymentMethod] = useState('CASH');
+  const [receivePaidAmount, setReceivePaidAmount] = useState('');
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -73,6 +76,16 @@ export default function PurchaseOrders() {
   const [selectedProductId, setSelectedProductId] = useState('');
   const [itemQty, setItemQty] = useState('1');
   const [itemCost, setItemCost] = useState('');
+
+  const getReceiveBatchTotal = () => {
+    const poItems = selectedPo?.lineItems?.length ? selectedPo.lineItems : (selectedPo?.items || []);
+    const total = receiveBatch.reduce((sum, item, index) => {
+      const quantity = parseFloat(item.quantityToReceive || 0);
+      const unitCost = parseFloat(poItems[index]?.unitCost || 0);
+      return quantity > 0 ? sum + quantity * unitCost : sum;
+    }, 0);
+    return Math.round(total * 100) / 100;
+  };
 
   const fetchOrders = async (targetPage = currentPage) => {
     setLoading(true);
@@ -286,6 +299,9 @@ export default function PurchaseOrders() {
       };
     });
     setReceiveBatch(initialBatch);
+    setReceivePaymentStatus('UNPAID');
+    setReceivePaymentMethod('CASH');
+    setReceivePaidAmount('');
     setShowReceiveModal(true);
   };
 
@@ -324,6 +340,17 @@ export default function PurchaseOrders() {
       return;
     }
 
+    const batchTotalAmount = getReceiveBatchTotal();
+    const paidAmount = parseFloat(receivePaidAmount);
+    if (receivePaymentStatus === 'PARTIAL' && (!Number.isFinite(paidAmount) || paidAmount <= 0 || paidAmount >= batchTotalAmount)) {
+      showToast({
+        type: 'error',
+        title: 'Invalid Payment',
+        message: 'Partial payment must be greater than 0 and less than the batch total.'
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payload = {
@@ -332,7 +359,16 @@ export default function PurchaseOrders() {
           .map(i => ({
             productId: i.productId,
             quantityToReceive: parseFloat(i.quantityToReceive)
-          }))
+          })),
+        payment: {
+          status: receivePaymentStatus,
+          method: receivePaymentStatus === 'UNPAID' ? 'CASH' : receivePaymentMethod,
+          paidAmount: receivePaymentStatus === 'PARTIAL'
+            ? paidAmount
+            : receivePaymentStatus === 'PAID'
+              ? batchTotalAmount
+              : 0
+        }
       };
 
       await api.patch(`/api/purchase-orders/${selectedPo.id}/receive`, payload);
@@ -932,6 +968,51 @@ export default function PurchaseOrders() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="flex justify-between items-center text-small font-semibold text-text-primary">
+              <span>Batch Total</span>
+              <span>{formatCurrency(getReceiveBatchTotal())}</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input
+                label="Payment Status"
+                type="select"
+                value={receivePaymentStatus}
+                onChange={(e) => {
+                  setReceivePaymentStatus(e.target.value);
+                  if (e.target.value === 'UNPAID') setReceivePaymentMethod('CASH');
+                }}
+                options={[
+                  { value: 'UNPAID', label: 'Unpaid' },
+                  { value: 'PAID', label: 'Paid' },
+                  { value: 'PARTIAL', label: 'Partial' }
+                ]}
+              />
+              <Input
+                label="Payment Method"
+                type="select"
+                value={receivePaymentMethod}
+                onChange={(e) => setReceivePaymentMethod(e.target.value)}
+                disabled={receivePaymentStatus === 'UNPAID'}
+                options={[
+                  { value: 'CASH', label: 'Cash' },
+                  { value: 'M-PESA', label: 'M-Pesa' },
+                  { value: 'BANK TRANSFER', label: 'Bank Transfer' }
+                ]}
+              />
+              {receivePaymentStatus === 'PARTIAL' && (
+                <Input
+                  label="Paid Amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={receivePaidAmount}
+                  onChange={(e) => setReceivePaidAmount(e.target.value)}
+                  required
+                />
+              )}
             </div>
 
             <div className="p-3 bg-surface-2/40 rounded-xl border border-border-default text-caption text-text-muted">
