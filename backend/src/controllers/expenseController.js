@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Employee = require('../models/Employee');
 const sequelize = require('../config/database');
 const { parseDate } = require('../utils/dateUtils');
+const { operatingExpenseCategoryFilter } = require('../utils/expenseScope');
 const { logActivity } = require('../middleware/logger');
 const { invalidateShopInsightsCache } = require('../services/insightsCacheService');
 
@@ -30,7 +31,7 @@ exports.getAllExpenses = async (req, res) => {
     const { organizationId, shopId } = getAuthContext(req);
     
     // Build where clause based on filters with strict multi-tenant & branch scoping
-    const whereClause = {};
+    const whereClause = { ...operatingExpenseCategoryFilter(category) };
     if (shopId) whereClause.shopId = shopId;
     if (organizationId) whereClause.organizationId = organizationId;
 
@@ -39,10 +40,6 @@ exports.getAllExpenses = async (req, res) => {
         [Op.between]: [parseDate(startDate), parseDate(endDate)]
       };
     }
-    if (category) {
-      whereClause.category = category;
-    }
-
     const expenses = await Expense.findAndCountAll({
       where: whereClause,
       include: [
@@ -301,7 +298,7 @@ exports.getExpenseStatistics = async (req, res) => {
           [Op.between]: [parseDate(startDate), parseDate(endDate)]
         }
       } : {}),
-      ...(category ? { category } : {})
+      ...operatingExpenseCategoryFilter(category)
     };
 
     // Get total expenses and category breakdown with strict multi-tenant & shop scoping

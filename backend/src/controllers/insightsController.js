@@ -12,6 +12,7 @@ const insightsConfig = require('../config/insightsConfig');
 const axios = require('axios');
 const aiClient = require('../utils/aiClient');
 const { NON_CANCELLED_SALE_FILTER, REALIZED_SALE_FILTER, NET_SALE_REVENUE_SQL } = require('../constants/saleFilters');
+const { operatingExpenseCategoryFilter } = require('../utils/expenseScope');
 const logger = require('../utils/logger');
 const { getInsightsCache, setInsightsCache, getStaleInsightsCache } = require('../services/insightsCacheService');
 
@@ -117,6 +118,7 @@ const generateRecommendations = async (shopId) => {
   const monthlyExpenses = await Expense.findAll({
     where: {
       shopId,
+      ...operatingExpenseCategoryFilter(),
       createdAt: {
         [Op.gte]: new Date(new Date().setMonth(new Date().getMonth() - 1))
       }
@@ -629,7 +631,7 @@ const getInsights = async (req, res) => {
         group: [sequelize.fn('YEAR', sequelize.col('createdAt')), sequelize.fn('MONTH', sequelize.col('createdAt'))],
       }),
       Expense.findAll({
-        where: { shopId },
+        where: { shopId, ...operatingExpenseCategoryFilter() },
         attributes: [
           [sequelize.fn('YEAR', sequelize.col('createdAt')), 'y'],
           [sequelize.fn('MONTH', sequelize.col('createdAt')), 'm'],

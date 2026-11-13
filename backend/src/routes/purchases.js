@@ -349,6 +349,7 @@ router.post('/',
     if (parsedPaidAmount > 0) {
       await recordPaymentExpense({
         shopId,
+        organizationId,
         purchase,
         amount: parsedPaidAmount,
         paymentMethod: paymentValidation.paymentMethod,
@@ -540,6 +541,7 @@ router.post('/:id/payments',
       await transaction.rollback();
       return res.status(403).json({ error: 'Shop context required' });
     }
+    const organizationId = req.authz?.tenant?.organizationId;
 
     const purchase = await Purchase.findOne({
       where: { id: req.params.id, shopId },
@@ -584,6 +586,7 @@ router.post('/:id/payments',
     // Record in Expenses table
     await recordPaymentExpense({
       shopId,
+      organizationId,
       purchase,
       amount: payAmount,
       paymentMethod,
@@ -674,7 +677,7 @@ router.patch('/:id/cancel',
       await invalidateShopInsightsCache(organizationId, shopId);
     }
 
-    await reversePaymentExpense({ shopId, purchase, userId: req.user?.id }, transaction);
+    await reversePaymentExpense({ shopId, organizationId, purchase, userId: req.user?.id }, transaction);
 
     purchase.status = 'CANCELLED';
     await purchase.save({ transaction });
