@@ -768,4 +768,80 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
     expect(deleteResponse.body.error).toBe('Use PATCH /api/purchases/:id/cancel');
     expect(await Purchase.findByPk(pendingPaid.body.id)).not.toBeNull();
   });
+
+  test('BATCH A — legacy PAID purchase with no Expense rows cancels without writing any Expense', async () => {
+    const inventoryBeforeReceipt = await Inventory.findOne({
+      where: { productId: prodShop1.id, shopId: 1 }
+    });
+    const stockBeforeReceipt = Number(inventoryBeforeReceipt.stockQuantity);
+
+    const poResponse = await request(app)
+      .post('/api/purchase-orders')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'Batch A Legacy Paid PO Supplier',
+        items: [{ productId: prodShop1.id, quantityOrdered: 4, unitCost: 10 }]
+      });
+    expect(poResponse.status).toBe(201);
+
+    const receiveResponse = await request(app)
+      .patch(`/api/purchase-orders/${poResponse.body.id}/receive`)
+      .set('Authorization', adminTokenShop1)
+      .send({ receivedItems: [{ productId: prodShop1.id, quantityToReceive: 4 }] });
+    expect(receiveResponse.status).toBe(200);
+
+    const purchase = await Purchase.findOne({
+      where: { purchaseOrderId: poResponse.body.id, shopId: 1 }
+    });
+    expect(purchase).not.toBeNull();
+    expect(purchase.paymentStatus).toBe('UNPAID');
+    expect(Number(purchase.paidAmount)).toBe(0);
+
+    purchase.paymentStatus = 'PAID';
+    purchase.paidAmount = purchase.totalAmount;
+    await purchase.save();
+
+    const expensesBeforeCancel = await Expense.count({
+      where: { reference: purchase.referenceNo, shopId: 1 }
+    });
+    expect(expensesBeforeCancel).toBe(0);
+
+    const inventoryBeforeCancel = await Inventory.findOne({
+      where: { productId: prodShop1.id, shopId: 1 }
+    });
+    const stockBeforeCancel = Number(inventoryBeforeCancel.stockQuantity);
+    const poItemBeforeCancel = await PurchaseOrderItem.findOne({
+      where: { purchaseOrderId: poResponse.body.id, productId: prodShop1.id, shopId: 1 }
+    });
+    const receivedBeforeCancel = Number(poItemBeforeCancel.quantityReceived);
+    expect(stockBeforeCancel).toBe(stockBeforeReceipt + 4);
+    expect(receivedBeforeCancel).toBe(4);
+
+    const cancelResponse = await request(app)
+      .patch(`/api/purchases/${purchase.id}/cancel`)
+      .set('Authorization', adminTokenShop1);
+    expect(cancelResponse.status).toBe(200);
+
+    const expensesAfterCancel = await Expense.count({
+      where: { reference: purchase.referenceNo, shopId: 1 }
+    });
+    expect(expensesAfterCancel).toBe(0);
+
+    const poAfterCancel = await PurchaseOrder.findByPk(poResponse.body.id);
+    const poItemAfterCancel = await PurchaseOrderItem.findByPk(poItemBeforeCancel.id);
+    const inventoryAfterCancel = await Inventory.findOne({
+      where: { productId: prodShop1.id, shopId: 1 }
+    });
+    expect(poAfterCancel.status).toBe('ORDERED');
+    expect(Number(poItemAfterCancel.quantityReceived)).toBe(0);
+    expect(Number(inventoryAfterCancel.stockQuantity)).toBe(stockBeforeReceipt);
+    expect(await StockMovement.count({
+      where: {
+        reference: purchase.referenceNo,
+        type: 'PURCHASE_REVERSAL',
+        productId: prodShop1.id,
+        shopId: 1
+      }
+    })).toBe(1);
+  });
 });
