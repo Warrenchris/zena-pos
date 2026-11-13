@@ -11,6 +11,7 @@ const SystemSettings = require('../models/SystemSettings');
 const SaleRefund = require('../models/SaleRefund');
 const Inventory = require('../models/Inventory');
 const { NON_CANCELLED_SALE_FILTER } = require('../constants/saleFilters');
+const { operatingExpenseCategoryFilter } = require('../utils/expenseScope');
 
 // GET /api/reports/sales-summary?range=daily|monthly&startDate=&endDate=
 exports.getSalesSummary = async (req, res) => {
@@ -406,7 +407,7 @@ exports.getProfitAndLoss = async (req, res) => {
 
     const where = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
     const nonCancelledParentWhere = { shopId: targetShopId, ...NON_CANCELLED_SALE_FILTER };
-    const expenseWhere = { shopId: targetShopId, category: { [Op.ne]: 'inventory' } };
+    const expenseWhere = { shopId: targetShopId, ...operatingExpenseCategoryFilter() };
     if (startDate || endDate) {
       const s = startDate ? new Date(startDate) : new Date('1970-01-01');
       const e = endDate ? new Date(endDate) : new Date();

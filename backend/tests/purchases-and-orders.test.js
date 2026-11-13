@@ -844,4 +844,241 @@ describe('Purchases & Purchase Orders Production Remediation Tests', () => {
       }
     })).toBe(1);
   });
+
+  test('BATCH A-2 — paid purchase payments do not change P&L operating expenses', async () => {
+    await Expense.create({
+      description: 'BATCH A-2 test rent',
+      amount: 100,
+      category: 'rent',
+      paymentMethod: 'cash',
+      shopId: 1,
+      organizationId: 1,
+      userId: 101
+    });
+
+    const before = await request(app)
+      .get('/api/reports/profit-loss')
+      .set('Authorization', adminTokenShop1);
+    expect(before.status).toBe(200);
+
+    const purchaseResponse = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'BATCH A-2 P&L Supplier',
+        status: 'PENDING',
+        paymentStatus: 'PAID',
+        paymentMethod: 'CASH',
+        paidAmount: 30,
+        items: [{ productId: prodShop1.id, quantity: 3, unitCost: 10 }]
+      });
+    expect(purchaseResponse.status).toBe(201);
+    expect(await Expense.count({
+      where: { reference: purchaseResponse.body.referenceNo, shopId: 1, category: 'inventory' }
+    })).toBe(1);
+
+    const after = await request(app)
+      .get('/api/reports/profit-loss')
+      .set('Authorization', adminTokenShop1);
+    expect(after.status).toBe(200);
+    expect(after.body.operatingExpenses).toBe(before.body.operatingExpenses);
+  });
+
+  test('BATCH A-2 — expense list and statistics exclude inventory by default and include it when requested', async () => {
+    const statisticsBefore = await request(app)
+      .get('/api/expenses/statistics')
+      .set('Authorization', adminTokenShop1);
+    expect(statisticsBefore.status).toBe(200);
+    const inventoryStatisticsBefore = await request(app)
+      .get('/api/expenses/statistics?category=inventory')
+      .set('Authorization', adminTokenShop1);
+    expect(inventoryStatisticsBefore.status).toBe(200);
+
+    const purchaseResponse = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'BATCH A-2 Expense Scope Supplier',
+        status: 'PENDING',
+        paymentStatus: 'PAID',
+        paymentMethod: 'CASH',
+        paidAmount: 30,
+        items: [{ productId: prodShop1.id, quantity: 3, unitCost: 10 }]
+      });
+    expect(purchaseResponse.status).toBe(201);
+
+    const defaultList = await request(app)
+      .get('/api/expenses?limit=100')
+      .set('Authorization', adminTokenShop1);
+    const defaultStatistics = await request(app)
+      .get('/api/expenses/statistics')
+      .set('Authorization', adminTokenShop1);
+    const inventoryList = await request(app)
+      .get('/api/expenses?category=inventory&limit=100')
+      .set('Authorization', adminTokenShop1);
+    const inventoryStatisticsAfter = await request(app)
+      .get('/api/expenses/statistics?category=inventory')
+      .set('Authorization', adminTokenShop1);
+    expect(defaultList.status).toBe(200);
+    expect(defaultStatistics.status).toBe(200);
+    expect(inventoryList.status).toBe(200);
+    expect(inventoryStatisticsAfter.status).toBe(200);
+
+    expect(defaultList.body.expenses.some(expense => expense.reference === purchaseResponse.body.referenceNo)).toBe(false);
+    expect(Number(defaultStatistics.body.totalExpenses)).toBe(Number(statisticsBefore.body.totalExpenses));
+    expect(inventoryList.body.expenses.some(expense => expense.reference === purchaseResponse.body.referenceNo)).toBe(true);
+    expect(Number(inventoryStatisticsAfter.body.totalExpenses) - Number(inventoryStatisticsBefore.body.totalExpenses)).toBe(30);
+  });
+
+  test('BATCH A-2 — cancelling a paid purchase nets inventory expenses to zero with an organization-scoped reversal', async () => {
+    const purchaseResponse = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'BATCH A-2 Reversal Supplier',
+        status: 'PENDING',
+        paymentStatus: 'PAID',
+        paymentMethod: 'CASH',
+        paidAmount: 30,
+        items: [{ productId: prodShop1.id, quantity: 3, unitCost: 10 }]
+      });
+    expect(purchaseResponse.status).toBe(201);
+
+    const cancelResponse = await request(app)
+      .patch(`/api/purchases/${purchaseResponse.body.id}/cancel`)
+      .set('Authorization', adminTokenShop1);
+    expect(cancelResponse.status).toBe(200);
+
+    const expenses = await Expense.findAll({
+      where: { reference: purchaseResponse.body.referenceNo, shopId: 1, category: 'inventory' }
+    });
+    const reversal = expenses.find(expense => Number(expense.amount) < 0);
+    expect(expenses.reduce((sum, expense) => sum + Number(expense.amount), 0)).toBe(0);
+    expect(reversal).toBeDefined();
+    expect(reversal.description).toMatch(/^Reversal: /);
+    expect(Number(reversal.organizationId)).toBe(1);
+  });
+
+  test('BATCH A-2 — purchase, payment endpoint, and PO receipt expenses use the shop organization', async () => {
+    const purchaseResponse = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'BATCH A-2 Organization Scope Supplier',
+        status: 'PENDING',
+        paymentStatus: 'PAID',
+        paymentMethod: 'CASH',
+        paidAmount: 20,
+        items: [{ productId: prodShop1.id, quantity: 2, unitCost: 10 }]
+      });
+    expect(purchaseResponse.status).toBe(201);
+
+    const unpaidPurchaseResponse = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'BATCH A-2 Payment Endpoint Supplier',
+        status: 'PENDING',
+        paymentStatus: 'UNPAID',
+        items: [{ productId: prodShop1.id, quantity: 2, unitCost: 10 }]
+      });
+    expect(unpaidPurchaseResponse.status).toBe(201);
+
+    const paymentResponse = await request(app)
+      .post(`/api/purchases/${unpaidPurchaseResponse.body.id}/payments`)
+      .set('Authorization', adminTokenShop1)
+      .send({ amount: 10, paymentMethod: 'CASH' });
+    expect(paymentResponse.status).toBe(200);
+
+    const poResponse = await request(app)
+      .post('/api/purchase-orders')
+      .set('Authorization', adminTokenShop1)
+      .send({
+        supplierName: 'BATCH A-2 PO Organization Scope Supplier',
+        items: [{ productId: prodShop1.id, quantityOrdered: 2, unitCost: 10 }]
+      });
+    expect(poResponse.status).toBe(201);
+
+    const receiveResponse = await request(app)
+      .patch(`/api/purchase-orders/${poResponse.body.id}/receive`)
+      .set('Authorization', adminTokenShop1)
+      .send({ payment: { status: 'PAID', method: 'CASH' } });
+    expect(receiveResponse.status).toBe(200);
+
+    const generatedPurchase = await Purchase.findOne({
+      where: { purchaseOrderId: poResponse.body.id, shopId: 1 }
+    });
+    expect(generatedPurchase).not.toBeNull();
+
+    const expenses = await Expense.findAll({
+      where: {
+        reference: [
+          purchaseResponse.body.referenceNo,
+          unpaidPurchaseResponse.body.referenceNo,
+          generatedPurchase.referenceNo
+        ],
+        shopId: 1,
+        category: 'inventory'
+      }
+    });
+    expect(expenses).toHaveLength(3);
+    expect(expenses.every(expense => Number(expense.organizationId) === 1)).toBe(true);
+  });
+
+  test('BATCH A-2 — insights monthly costs exclude supplier payment expenses', async () => {
+    await Expense.create({
+      description: 'BATCH A-2 insights rent',
+      amount: 100,
+      category: 'rent',
+      paymentMethod: 'cash',
+      shopId: 1,
+      organizationId: 1,
+      userId: 101
+    });
+
+    const aiClient = require('../src/utils/aiClient');
+    const { invalidateShopInsightsCache } = require('../src/services/insightsCacheService');
+    const postSpy = jest.spyOn(aiClient, 'post').mockImplementation(async endpoint => (
+      endpoint === '/api/insights/analyze'
+        ? { data: [] }
+        : { data: { alerts: [], anomalies: [] } }
+    ));
+
+    const fetchMonthlyCosts = async () => {
+      const callStart = postSpy.mock.calls.length;
+      await invalidateShopInsightsCache(1, 1);
+      const response = await request(app)
+        .get('/api/insights')
+        .set('Authorization', adminTokenShop1);
+      expect(response.status).toBe(200);
+      const analyzeCall = postSpy.mock.calls
+        .slice(callStart)
+        .find(([endpoint]) => endpoint === '/api/insights/analyze');
+      expect(analyzeCall).toBeDefined();
+      return analyzeCall[1].costs;
+    };
+
+    try {
+      const costsBefore = await fetchMonthlyCosts();
+      expect(Number(costsBefore[costsBefore.length - 1])).toBeGreaterThanOrEqual(100);
+
+      const purchaseResponse = await request(app)
+        .post('/api/purchases')
+        .set('Authorization', adminTokenShop1)
+        .send({
+          supplierName: 'BATCH A-2 Insights Supplier',
+          status: 'PENDING',
+          paymentStatus: 'PAID',
+          paymentMethod: 'CASH',
+          paidAmount: 30,
+          items: [{ productId: prodShop1.id, quantity: 3, unitCost: 10 }]
+        });
+      expect(purchaseResponse.status).toBe(201);
+
+      const costsAfter = await fetchMonthlyCosts();
+      expect(costsAfter).toEqual(costsBefore);
+    } finally {
+      postSpy.mockRestore();
+    }
+  });
 });

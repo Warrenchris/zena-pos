@@ -695,6 +695,7 @@ async function handleReceiveOperation(req, res) {
     if (payment.paidAmount > 0) {
       await recordPaymentExpense({
         shopId,
+        organizationId,
         purchase: generatedPurchase,
         amount: payment.paidAmount,
         paymentMethod: payment.paymentMethod,

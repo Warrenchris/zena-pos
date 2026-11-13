@@ -275,9 +275,10 @@ async function reverseStockReceipt({ shopId, items, reference, userId, employeeI
 /**
  * Records purchase payment in Expenses table for financial ledger reconciliation.
  */
-async function recordPaymentExpense({ shopId, purchase, amount, paymentMethod, userId }, transaction) {
+async function recordPaymentExpense({ shopId, purchase, amount, paymentMethod, userId, organizationId: suppliedOrganizationId }, transaction) {
   const payAmount = parseFloat(amount);
   if (isNaN(payAmount) || payAmount <= 0) return null;
+  const organizationId = await resolveExpenseOrganizationId(shopId, suppliedOrganizationId, transaction);
 
   let validUserId = null;
   let validEmployeeId = null;
@@ -300,6 +301,7 @@ async function recordPaymentExpense({ shopId, purchase, amount, paymentMethod, u
     reference: purchase.referenceNo,
     notes: `Inventory purchase payment for ${purchase.referenceNo}`,
     shopId,
+    organizationId,
     userId: validUserId,
     employeeId: validEmployeeId
   }, { transaction });
@@ -307,7 +309,7 @@ async function recordPaymentExpense({ shopId, purchase, amount, paymentMethod, u
   return expense;
 }
 
-async function reversePaymentExpense({ shopId, purchase, userId }, transaction) {
+async function reversePaymentExpense({ shopId, purchase, userId, organizationId: suppliedOrganizationId }, transaction) {
   const netAmount = Number(await Expense.sum('amount', {
     where: {
       shopId,
@@ -318,6 +320,7 @@ async function reversePaymentExpense({ shopId, purchase, userId }, transaction) 
   }) || 0);
 
   if (!Number.isFinite(netAmount) || netAmount <= 0) return null;
+  const organizationId = await resolveExpenseOrganizationId(shopId, suppliedOrganizationId, transaction);
 
   let validUserId = null;
   let validEmployeeId = null;
@@ -337,9 +340,20 @@ async function reversePaymentExpense({ shopId, purchase, userId }, transaction) 
     reference: purchase.referenceNo,
     notes: `Reversal of inventory purchase payments for ${purchase.referenceNo}`,
     shopId,
+    organizationId,
     userId: validUserId,
     employeeId: validEmployeeId
   }, { transaction });
+}
+
+async function resolveExpenseOrganizationId(shopId, organizationId, transaction) {
+  if (organizationId) return organizationId;
+  if (shopId) {
+    const { Shop } = require('../models');
+    const shop = await Shop.findByPk(shopId, { attributes: ['organizationId'], transaction });
+    if (shop?.organizationId) return shop.organizationId;
+  }
+  throw new Error(`Organization not found for shop ${shopId}`);
 }
 
 function validatePurchasePayment({ paymentStatus, paymentMethod, paidAmount, totalAmount }) {
